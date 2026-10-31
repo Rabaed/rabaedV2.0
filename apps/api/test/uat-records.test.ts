@@ -91,9 +91,9 @@ beforeAll(async () => {
   await drainOutbox(worker, { documental_record: quick });
 
   const c1 = await api.projectCreator();
-  const onboarded = await api.onboardCompany({ legalName: bilingual("UAT Records Consultants") });
+  const onboarded = await api.onboardCompany({ legalName: bilingual("Records Container Consultants") });
   const k1: Company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
-  at = await buildTower(api, { c1, k1 }, "UAT");
+  at = await buildTower(api, { c1, k1 }, "RCC");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
   const k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
   const c1Engineer = (await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"], { name: "Omar Haddad" })).caller;
@@ -110,7 +110,7 @@ beforeAll(async () => {
   });
   const handlers: Record<string, OutboxHandler> = { documental_record: documentalRecordHandler({ ...uat, validator: veraPdf }) };
 
-  id = await draft(at, c1Engineer, "Cable trays for the UAT round");
+  id = await draft(at, c1Engineer, "Cable trays for Building C");
   await take(c1Engineer, id, "send_for_review");
   await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
@@ -141,8 +141,8 @@ describe("scenario RP-1042-1: a Documental Record made by the UAT Records contai
   it("prints UAT on every page", () => {
     expect(pages.length).toBeGreaterThan(1);
     pages.forEach((text, i) => {
-      // Once in each of the four corners.
-      expect(text.split(UAT_MARK).length - 1, `page ${i + 1}`).toBeGreaterThanOrEqual(4);
+      // Once in each of the four corners, and nowhere else: no other text of this record says it.
+      expect(text.split(UAT_MARK).length - 1, `page ${i + 1}`).toBe(4);
     });
   });
 

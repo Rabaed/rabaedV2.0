@@ -12,7 +12,7 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 //   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
 //                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
-//   node scripts/uat-deploy.ts records-env        the Records container's secrets (VERSION too), as NAME=VALUE lines (RP-1042)
+//   node scripts/uat-deploy.ts records-env        the Records container's secrets (APP_VERSION from VERSION), as NAME=VALUE lines (RP-1042)
 //   node scripts/uat-deploy.ts project <web|api|admin>   apply the project's settings and Sensitive variables
 //   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret while it has
 //                                                 Password Protection, else an empty line (mask it first)

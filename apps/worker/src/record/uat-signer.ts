@@ -71,6 +71,10 @@ export async function uatSigner(authority: UatAuthority, now: Date = new Date())
   const name = commonNameOf(certificate) ?? "";
   if (!/\bUAT\b/.test(name)) throw new Error(`the UAT sealing authority's certificate is not a UAT one (its name is "${name}")`);
   if (!isAuthority(certificate)) throw new Error("the UAT sealing authority's certificate is not an authority's (cA)");
+  // Its own root: issued by itself and signed with its own key, never an intermediate of another authority.
+  if (!certificate.issuer.isEqual(certificate.subject) || !(await certificate.verify())) {
+    throw new Error("the UAT sealing authority's certificate is not self-signed");
+  }
   if (certificate.notAfter.value.getTime() <= now.getTime()) throw new Error("the UAT sealing authority's certificate has expired");
   const privateKey = await subtle.importKey("pkcs8", toArrayBuffer(keyDer(authority.key)), RSA_SHA256, false, ["sign"]);
   const probe = new TextEncoder().encode("RP-1042 key probe");

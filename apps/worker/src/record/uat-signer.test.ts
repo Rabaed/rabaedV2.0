@@ -1,6 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
-import { commonNameOf, parseCertificate, pemToDer } from "./pki.ts";
+import { asn1js, certificateDer, commonNameOf, OID, parseCertificate, pemToDer, pkijs, RSA_SHA256, subtle } from "./pki.ts";
 import { sealPdf, verifySeal } from "./seal.ts";
 import { kmsSealSigner, localSealSigner } from "./signer.ts";
 import { localTimestampAuthority } from "./timestamp.ts";
@@ -51,6 +51,19 @@ describe("the UAT signer", () => {
   it("refuses a certificate that is not a UAT authority's", async () => {
     const other = await newUatAuthority({ commonName: "Rabaed Documental Records" });
     await expect(uatSigner(other)).rejects.toThrow(/UAT/);
+  });
+
+  it("refuses an authority that is not self-signed (an intermediate under another root), even with UAT in its name", async () => {
+    // The UAT authority's own certificate and key, made to name another issuer and signed again.
+    const certificate = parseCertificate(pemToDer(authority.certificate));
+    certificate.issuer = new pkijs.RelativeDistinguishedNames({
+      typesAndValues: [new pkijs.AttributeTypeAndValue({ type: OID.commonName, value: new asn1js.Utf8String({ value: "Some other UAT root" }) })],
+    });
+    const der = Buffer.from(authority.key.replace(/-----[A-Z ]+-----|\s/g, ""), "base64");
+    const key = await subtle.importKey("pkcs8", der, RSA_SHA256, false, ["sign"]);
+    await certificate.sign(key, "SHA-256");
+    const pem = `-----BEGIN CERTIFICATE-----\n${Buffer.from(certificateDer(certificate)).toString("base64")}\n-----END CERTIFICATE-----\n`;
+    await expect(uatSigner({ key: authority.key, certificate: pem })).rejects.toThrow(/self-signed/);
   });
 
   it("refuses a key that is not the certificate's", async () => {
