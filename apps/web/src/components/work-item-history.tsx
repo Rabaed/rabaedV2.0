@@ -1,8 +1,5 @@
 import {
-  answerFields,
   formatFormValue,
-  linksChangeField,
-  linksChangeValue,
   type DocumentSummary,
   type FormSchema,
   type Locale,
@@ -12,19 +9,11 @@ import {
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import { changeText, replyAnswers, replyFiles } from "@/lib/history-details";
 import { historyMoveLabel } from "@/lib/history-move-label";
 
 type Event = History["events"][number];
 type Change = NonNullable<Event["changes"]>[number];
-
-// Answers that hold ids (Built-in Fields, people and Companies) are named only on
-// the Form itself; a diff says they changed, never the ids.
-const idTypes = new Set(["trade", "location", "scopes", "member", "participant", "approved_supplier", "checklist_template"]);
-/**
- * Answers the history gives an event as its own line (app.work_item_history's `reason`
- * and `remarks`, read from the same answers), so a reply's answers don't repeat them.
- */
-const ownLines: ReadonlySet<string> = new Set(["reason", "remarks"] satisfies (keyof Event)[]);
 
 /**
  * A Work Item's history as the viewer may see it. The API already leaves out
@@ -59,45 +48,8 @@ export async function WorkItemHistory({
   const format = await getFormatter();
 
   const what = (e: Event) => historyMoveLabel(e, locale, t);
-  const fields = new Map(answerFields(schema).map((f) => [f.key, f]));
-  const value = (change: Change, v: unknown) => {
-    const field = fields.get(change.field);
-    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return t("emptyAnswer");
-    return field ? formatFormValue(field, v, locale, undefined, optionLists) : String(v);
-  };
-  // The free Links (the Links System Field): each Link by its Document Number and Subject, never an id.
-  const linksText = (v: unknown) => {
-    const links = linksChangeValue.safeParse(v);
-    if (!links.success || links.data.length === 0) return t("emptyAnswer");
-    return links.data.map((l) => `\u2066${l.documentNumber}\u2069 ${l.subject}`).join(", ");
-  };
-  const changeText = (change: Change) => {
-    if (change.field === linksChangeField) {
-      return `${t("linksField")}: ${linksText(change.old)} ${locale === "ar" ? "←" : "→"} ${linksText(change.new)}`;
-    }
-    const field = fields.get(change.field);
-    const label = field?.label[locale] ?? change.field;
-    if (field && idTypes.has(field.type)) return `${label}: ${t("changedValue")}`;
-    return `${label}: ${value(change, change.old)} ${locale === "ar" ? "←" : "→"} ${value(change, change.new)}`;
-  };
-  // A reply's answers (RP-437): the Cover Note with a Submit, the final verification with
-  // a Code, a reply's internal answers for its own Company; labelled from the Action Form
-  // they were given in, each answered field once.
-  const replyAnswers = (e: Event) => {
-    const answers = e.answers;
-    if (!answers || !e.answersForm) return [];
-    return answerFields(e.answersForm)
-      .filter((f) => !ownLines.has(f.key) && answers[f.key] !== undefined && answers[f.key] !== null && answers[f.key] !== "")
-      .map((f) => [f, answers[f.key]] as const);
-  };
-  // The reply files a Transition took (ADR 0024), by the Screen field they were added to.
-  const byId = new Map(documents.map((d) => [d.id, d]));
-  const replyFiles = (e: Event) => {
-    const taken = (e.files ?? []).flatMap((id) => byId.get(id) ?? []);
-    const labels = new Map(e.answersForm ? answerFields(e.answersForm).map((f) => [f.key, f.label[locale]]) : []);
-    const keys = [...new Set(taken.map((d) => d.fieldKey ?? ""))];
-    return keys.map((key) => [labels.get(key) ?? t("files"), taken.filter((d) => (d.fieldKey ?? "") === key).map((d) => d.fileName)] as const);
-  };
+  const words = { emptyAnswer: t("emptyAnswer"), changedValue: t("changedValue"), linksField: t("linksField"), files: t("files") };
+  const describe = (change: Change) => changeText(change, schema, optionLists, locale, words);
   const who = (e: Event) =>
     [e.by.memberName?.[locale], e.by.companyName?.[locale]].filter((part): part is string => Boolean(part)).join(" · ");
 
@@ -107,7 +59,7 @@ export async function WorkItemHistory({
       <ol className="divide-y divide-border border-y border-border" data-testid="work-item-history">
         {[...events].reverse().map((e) => {
           const answers = replyAnswers(e);
-          const files = replyFiles(e);
+          const files = replyFiles(e, documents, locale, words);
           return (
           <li key={e.seq} className="space-y-1 py-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -171,7 +123,7 @@ export async function WorkItemHistory({
               <ul className="space-y-0.5 text-sm" data-testid="answer-changes">
                 {e.changes.map((change) => (
                   <li key={change.field} className="whitespace-pre-wrap">
-                    <bdi>{changeText(change)}</bdi>
+                    <bdi>{describe(change)}</bdi>
                   </li>
                 ))}
               </ul>

@@ -12,7 +12,8 @@ import { useDocuments } from "./use-documents";
 // edits the Form, with Attach). Submitted, the Documents are frozen (ADR 0020). The Form's own
 // `attachments` fields show theirs inside the Form (RP-281).
 
-export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: string; list: DocumentList; locale: Locale }) {
+/** `titleHidden`: its heading names the section for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
+export function WorkItemAttachments({ workItemId, list, locale, titleHidden = false }: { workItemId: string; list: DocumentList; locale: Locale; titleHidden?: boolean }) {
   const t = useTranslations("workItems.attachments");
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -21,7 +22,7 @@ export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: 
 
   return (
     <section className="space-y-3" aria-labelledby={`${inputId}-title`} data-testid="work-item-attachments">
-      <h2 id={`${inputId}-title`} className="text-h6 font-semibold">
+      <h2 id={`${inputId}-title`} className={titleHidden ? "sr-only" : "text-h6 font-semibold"}>
         {t("title")}
       </h2>
       {documents.length === 0 ? (

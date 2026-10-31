@@ -60,7 +60,7 @@ export type SubmittalTimelineOutcomes = readonly Pick<Outcome, "code" | "polarit
 const toneOfLook: Record<OutcomeLook, SubmittalTimelineTone> = { a: "ok", b: "warn", c: "bad", d: "bad" };
 
 /** A Code's dot, by its place in its set (`outcomeLook`); null for a code the set doesn't have. */
-function toneOfCode(code: string | null, outcomes: SubmittalTimelineOutcomes): SubmittalTimelineTone | null {
+export function toneOfCode(code: string | null, outcomes: SubmittalTimelineOutcomes): SubmittalTimelineTone | null {
   const outcome = code === null ? undefined : outcomes.find((o) => o.code === code);
   return outcome ? toneOfLook[outcomeLook(outcome, outcomes)] : null;
 }
@@ -70,10 +70,10 @@ export type SubmittalTimelineText = { kind: "coverNote" | "remarks" | "internalN
 /** The Cover Note's key in the Submit's Action Form (the Rabaed Default `cover_note` Screen). */
 export const coverNoteKey = "cover_note";
 
-const written = (text: unknown): text is string => typeof text === "string" && text.trim() !== "";
+export const written = (text: unknown): text is string => typeof text === "string" && text.trim() !== "";
 
 /** The log's text: the Cover Note and the Remarks only (gap A7); a text box only when one was written. */
-function sharedTexts(event: SubmittalTimelineEvent): SubmittalTimelineText[] {
+export function sharedTexts(event: SubmittalTimelineEvent): SubmittalTimelineText[] {
   const cover = event.answers?.[coverNoteKey];
   return [
     ...(written(cover) ? [{ kind: "coverNote" as const, text: cover }] : []),
@@ -81,7 +81,8 @@ function sharedTexts(event: SubmittalTimelineEvent): SubmittalTimelineText[] {
   ];
 }
 
-const sameName = (a: BilingualText | null, b: BilingualText | null) => a !== null && b !== null && a.en === b.en && a.ar === b.ar;
+/** Two names the reads give, the same in both languages: how a Company or person is told apart (the reads give no ids). */
+export const sameName = (a: BilingualText | null, b: BilingualText | null) => a !== null && b !== null && a.en === b.en && a.ar === b.ar;
 
 /**
  * The approval log, newest first: the shared moves only (internal ones are Internal Communication),

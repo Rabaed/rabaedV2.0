@@ -267,7 +267,7 @@ export function SubmittalPanelHost({
  * Create Revision (only where the API offers it: after Code C), the item page's own call
  * (`useCreateRevision`): the new Revision opens on its own page, as a Draft.
  */
-function CreateRevisionButton({ workItemId }: { workItemId: string }) {
+export function CreateRevisionButton({ workItemId }: { workItemId: string }) {
   const t = useTranslations("revision");
   const create = useCreateRevision(workItemId);
   const [pending, setPending] = useState(false);

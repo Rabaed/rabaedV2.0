@@ -34,6 +34,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `verification/` | The public verification page of a Documental Record (RP-157): `RecordVerificationView` (genuine or replaced, its first-page facts and signers), `CopyCheck` (a dropped PDF fingerprinted in the browser), `VerificationCodeForm` |
 | `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |
 | `watch/` | `WatchButton` |
+| `work-item-page/` | The Work Item page (RP-1151), the Submittal Panel at page size: `WorkItemPageFrame` (top bar, rail, bottom bar; classes prefixed `wip`), the Transitions card, The Issued Code card, the numbered History, and their models (`history-model.ts`, `page-model.ts`) |
 | `workflow/` | The Workflow builder: `WorkflowBuilder`, `WorkflowCanvas`, `WorkflowStepList`, `WorkflowCompareDialog`, rule dialog and labels |
 
 Elsewhere (the paths in the first column are checked to exist):

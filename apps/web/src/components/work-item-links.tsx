@@ -27,6 +27,7 @@ export function WorkItemLinks({
   list,
   locale,
   questionLabels,
+  titleHidden = false,
   children,
 }: {
   workItemId: string;
@@ -35,6 +36,8 @@ export function WorkItemLinks({
   locale: Locale;
   /** Each link question's label, by field key, to list its Links under (RP-293). */
   questionLabels?: Readonly<Record<string, string>>;
+  /** Its heading for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
+  titleHidden?: boolean;
   /** Shown below the Links: "Linked from". */
   children?: ReactNode;
 }) {
@@ -79,6 +82,7 @@ export function WorkItemLinks({
       hrefFor={(link) => linkHref(workItemId, link)}
       linkAs={Link}
       questionLabels={questionLabels}
+      titleHidden={titleHidden}
       pending={pending}
       message={message}
     >

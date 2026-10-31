@@ -3,6 +3,7 @@
 import type { FieldError, FormSchema, FormValue, Locale } from "@rabaed/domain";
 import { Field } from "../form/field.tsx";
 import { Textarea } from "../form/textarea.tsx";
+import { Icon } from "../icon/icon.tsx";
 import { FormRenderer, type FormFiles, type FormRendererLabels } from "./form-renderer.tsx";
 
 // A Transition's pop-up (RP-300; form-engine.md §4 "Settled 2026-10-05 (part 3)"):
@@ -72,7 +73,17 @@ export function ActionForm({
           {...(files ? { files } : {})}
         />
       )}
-      <Field label={text.internalNote} help={text.internalNoteHelp} id={`${idPrefix}-internal-note`}>
+      <Field
+        label={text.internalNote}
+        // Amber, with a lock: it stays inside the taker's own Company, whoever the Transition goes to (V5; RP-1151 row 36).
+        help={
+          <span className="flex items-start gap-1.5 rounded-[8px] bg-warning-tint px-2.5 py-1.5 font-semibold text-warning-fg">
+            <Icon name="lock" size={14} className="mt-0.5 shrink-0" />
+            {text.internalNoteHelp}
+          </span>
+        }
+        id={`${idPrefix}-internal-note`}
+      >
         <Textarea
           name="internalNote"
           rows={3}
