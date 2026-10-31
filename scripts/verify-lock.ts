@@ -34,7 +34,7 @@ export function lockFile(worktree: string): string {
 }
 
 const hhmm = (date: Date) => `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-const describeHolder = ({ pid, started, command }: LockHolder) => `pid ${pid}, started ${hhmm(started)}, \`${command}\``;
+export const describeHolder = ({ pid, started, command }: LockHolder) => `pid ${pid}, started ${hhmm(started)}, \`${command}\``;
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 /** Links `from` to `file`; false when `file` is already there. */
@@ -194,6 +194,17 @@ export async function waitForLock(
     await sleep(pollMs);
   }
 }
+
+/**
+ * The live run holding the lock `file`, for a caller that only asks and never takes it (RP-1169: another worktree's
+ * lock). Undefined when there is no lock, it can't be read, or its holder is stale (gone, `self`'s own, or a reused pid).
+ */
+export function liveHolder(file: string, self: LockHolder, processes: Processes): LockHolder | undefined {
+  const holder = parseHolder(readText(file));
+  if (holder === undefined) return undefined;
+  return holderStatus(holder, self, file, processes).live ? holder : undefined;
+}
+
 
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */
 export function releaseLock(file: string, pid: number): void {

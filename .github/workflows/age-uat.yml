@@ -1,0 +1,103 @@
+# Age UAT items (RP-922 comment 15225): by hand only. Runs the UAT tool's own code against Vercel
+# UAT's database, never another: `uat:age` moves items back so they read Step Age N, and
+# `uat:run-job` sends the daily digest or the weekly Step Age report now, through UAT's SendGrid.
+# scripts/uat-guard.ts refuses anything but UAT's database (Supabase's pooler, rabaed_uat, inside
+# GitHub Actions with RABAED_ENVIRONMENT=uat) and production everywhere. Its inputs reach the
+# commands through the environment only, never pasted into the script. Dry run is on by default.
+# Run it on main: Actions > Age UAT items > Run workflow.
+name: Age UAT items
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: What to run
+        required: true
+        type: choice
+        options: [age, digest, weekly-report]
+      items:
+        description: "age: Document Numbers or exact Subjects, separated by commas (a Subject with a comma in it: give its Document Number)"
+        required: false
+        type: string
+      weeks:
+        description: "age: leave each item at this Step Age (1 to 52)"
+        required: false
+        type: string
+      member:
+        description: "digest or weekly-report: only this Member's email (empty: everyone the job would send to)"
+        required: false
+        type: string
+      dry_run:
+        description: Dry run (show what it would do; change and send nothing)
+        required: true
+        type: boolean
+        default: true
+permissions:
+  contents: read
+
+jobs:
+  refused:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Run it on main; nothing was changed."
+          exit 1
+
+  run:
+    name: Age UAT items (environment uat)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    timeout-minutes: 15
+    # Shared with Deploy UAT, Reset UAT and the Supabase gate: never two at once on UAT's database.
+    concurrency:
+      group: uat-database
+      cancel-in-progress: false
+    steps:
+      # First, before any step prints its env block: the member input is an email, and the repository's
+      # run logs are public. Read from the event file, so this step's own env shows nothing.
+      - name: Mask the member's email
+        run: |
+          member="$(jq -r '.inputs.member // ""' "$GITHUB_EVENT_PATH")"
+          if [ -n "$member" ]; then echo "::add-mask::$member"; fi
+      - uses: actions/checkout@v7
+        with: { ref: main, persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Run the UAT tool
+        env:
+          RABAED_ENVIRONMENT: uat
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          UAT_WEB_URL: ${{ vars.UAT_WEB_URL }}
+          COMMAND: ${{ inputs.command }}
+          ITEMS: ${{ inputs.items }}
+          WEEKS: ${{ inputs.weeks }}
+          MEMBER: ${{ inputs.member }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        # The repository is public, and so are its run logs: every email is masked (the member input
+        # by the first step, the recipients the tool prints by sed). GitHub's bash runs with pipefail,
+        # so the tool's exit code is the step's.
+        run: |
+          masked() { sed -E 's/[^[:space:]",:<>]+@[^[:space:]",:<>]+/<email>/g'; }
+          trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+          args=(--uat)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ "$COMMAND" = "age" ]; then
+            IFS=',' read -ra list <<< "$ITEMS"
+            for item in "${list[@]}"; do
+              item="$(trim "$item")"
+              if [ -n "$item" ]; then args+=(--item "$item"); fi
+            done
+            node scripts/uat-age.ts --weeks "$WEEKS" "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            if [ -n "$MEMBER" ]; then args+=(--member "$MEMBER"); fi
+            node scripts/uat-run-job.ts "$COMMAND" "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
+          fi

@@ -175,7 +175,7 @@ export type StepRun = { status: number; output: string };
 export type StepOutcome = { passed: true; label: string } | { passed: false; status: number; output: string; reran: boolean };
 
 /**
- * Runs `step` through `run` (called with the step's script, then the test files to run, if any) and
+ * Runs `step` through `run` (sync or async, RP-1169; called with the step's script, then the test files to run, if any) and
  * judges it. A seam step that failed only on timeouts or worker start-up, with its test files named
  * (RP-979), is re-run once: only those files, same script (so the same Vitest project). If they pass
  * the step passes, its label saying so; if they fail again, or anything failed other than a timeout,
@@ -183,12 +183,12 @@ export type StepOutcome = { passed: true; label: string } | { passed: false; sta
  * terminated (a 57P01 error line in its output) or no longer answers (`postgresAnswers`, RP-994): the first
  * output, which names it, is kept.
  */
-export async function runStep(step: string, run: (args: string[]) => StepRun, postgresAnswers: () => Promise<boolean> = async () => true): Promise<StepOutcome> {
-  const first = run([step]);
+export async function runStep(step: string, run: (args: string[]) => StepRun | Promise<StepRun>, postgresAnswers: () => Promise<boolean> = async () => true): Promise<StepOutcome> {
+  const first = await run([step]);
   if (first.status === 0) return { passed: true, label: step };
   const files = [...(readLoadFailure(step, first.output)?.files ?? [])];
   if (files.length === 0 || !(await postgresAnswers())) return { passed: false, ...first, reran: false };
-  const second = run([step, ...files]);
+  const second = await run([step, ...files]);
   if (second.status !== 0) return { passed: false, ...second, reran: true };
   return { passed: true, label: `${step} (re-ran ${files.length} timed-out file${files.length === 1 ? "" : "s"})` };
 }
