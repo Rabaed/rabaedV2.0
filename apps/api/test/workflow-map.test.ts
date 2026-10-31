@@ -135,13 +135,12 @@ describe("the map of an item moving through C1 and K1", () => {
     expect(inInternalReview.position).toEqual({ kind: "own", stepKey: "internal_review" });
   });
 
-  it("shows K1's Members the Step K1 holds it at", () => {
+  it("RP-438-1: shows K1's Members the Step K1 holds it at", () => {
     expect(atK1Manager.k1Engineer.position).toEqual({ kind: "own", stepKey: "consultant_manager" });
     expect(atK1Manager.k1Manager.position).toEqual({ kind: "own", stepKey: "consultant_manager" });
   });
 
-  // Scenario RP-438-1.
-  it("shows a Contractor an item at the Consultant's Manager Step as with Design Consultants LLC, not which internal Step", () => {
+  it("RP-438-1: shows a Contractor an item at the Consultant's Manager Step as with Design Consultants LLC, not which internal Step", () => {
     expect(atK1Manager.pm.position).toEqual({ kind: "company", role: "consultant", companyName: bilingual(CONSULTANT) });
     expect(atK1Manager.owner.position).toEqual(atK1Manager.pm.position);
     // K1's move from its Engineer to its Manager changes nothing C1 or the Owner read.

@@ -6,11 +6,12 @@
 // 1 closed / 1 open". Open Snags never block a code: Rev 1 is issued Code A with one still open. The
 // counts follow what the viewer sees (RP-653-1, seam 2: packages/db/test/revision-follow-ups-rls.test.ts).
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { ChecklistTemplates, WorkItemList } from "@rabaed/domain";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import type { ChecklistTemplates, WorkItemDetail, WorkItemList } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, detail, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
+import { all, bilingual, detail, memberOnProject, ok, only, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -37,6 +38,10 @@ let ali: { id: string; caller: Caller }; // C1's only Project Manager: Submits, 
 let ahmed: { id: string; caller: Caller }; // K1 Consultant Engineer.
 let mohammed: { id: string; caller: Caller }; // K1's only Manager: issues the code.
 let yousef: { id: string; caller: Caller }; // C2, another Contractor covering all of Electrical.
+let c1: Company;
+let k1: Company;
+let c1Participant = "";
+let k1Participant = "";
 
 const answer = (by: Caller, id: string, answers: object) => by.request("PUT", `/v1/work-items/${id}/reply-checklists/${FIELD}`, { answers });
 const snagList = async (by: Caller, query = ""): Promise<WorkItemList["items"]> =>
@@ -86,8 +91,8 @@ async function codeCWithTwoSnags(title: string): Promise<{ wir: string; closed: 
 }
 
 beforeAll(async () => {
-  const c1: Company = await api.projectCreator();
-  const k1 = await api.authorizedPerson();
+  c1 = await api.projectCreator();
+  k1 = await api.authorizedPerson();
   const c2 = await api.authorizedPerson();
   projectId = (await api.createProject(c1.caller, { code: "RFC" })).id;
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
@@ -107,6 +112,8 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
   const k1ParticipantId = await participant(k1, "consultant");
   const c2ParticipantId = await participant(c2, "contractor");
+  c1Participant = c1ParticipantId;
+  k1Participant = k1ParticipantId;
   hafiz = await memberOnProject(api, c1, c1ParticipantId, ["engineer"], { name: "Hafiz Hamdan" });
   ali = await memberOnProject(api, c1, c1ParticipantId, ["project_manager"], { name: "Ali Sonour" });
   ahmed = await memberOnProject(api, k1, k1ParticipantId, ["engineer"], { name: "Ahmed bin Said" });
@@ -196,5 +203,65 @@ describe("a Revision lists each follow-up its previous item left (seam 1)", () =
   it("Rev 0 itself lists none", async () => {
     const chain = await codeCWithTwoSnags("Wall chases, third");
     expect((await detail(hafiz.caller, chain.wir)).previousRaisedItems).toBeNull();
+  });
+});
+
+// Scenarios RP-653-1 and RP-655-1 (visibility.md): Rev 0's two Snags are in two Buildings, A and B. A C1 Member
+// and a K1 Member covering Building A only count and list the one there; C1's and K1's engineers both; C2 and
+// another Project's Member read neither Rev 1 nor a count or a row (seam 2: packages/db/test/revision-follow-ups-rls.test.ts).
+describe("RP-653-1, RP-655-1: a Revision counts and lists only the previous item's Snags the viewer sees", () => {
+  let chain: Awaited<ReturnType<typeof codeCWithTwoSnags>>;
+  let c1BuildingA: { id: string; caller: Caller };
+  let k1BuildingA: { id: string; caller: Caller };
+  let outsider: { id: string; caller: Caller };
+  const named = new Map<string, string>();
+  const name = (m: { id: string }) => named.get(m.id) ?? m.id;
+  /** The previous item's Snag rows on Rev 1 that `m` reads, none when Rev 1 is hidden from them. */
+  const rowsOf = async (m: { caller: Caller }) =>
+    (await readById<WorkItemDetail>(`/v1/work-items/${chain.revision}`)(m.caller)).flatMap((d) => d.previousRaisedItems?.raised ?? []);
+
+  beforeAll(async () => {
+    chain = await codeCWithTwoSnags("Two buildings");
+    // The open Snag moves to Building B, which the two narrowed Members below do not cover.
+    const buildingB = (await ok(c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BB", name: bilingual("Building B"), parentId: null }), 201)).json().id as string;
+    await sql`
+      update work_item_dimension_value set dimension_value_id = ${buildingB}::uuid
+      where work_item_id = ${chain.open}::uuid and dimension_id = (select dimension_id from dimension_value where id = ${buildingB}::uuid)
+    `.execute(migrator);
+    // Submitted, so K1 sees Rev 1 too.
+    await take(hafiz.caller, chain.revision, "send_for_review");
+    await take(ali.caller, chain.revision, "submit", { answers: { cover_note: "Ready again" } });
+    const narrowed = async (company: Company, participantId: string, label: string) => {
+      const m = await memberOnProject(api, company, participantId, ["engineer"], { name: label });
+      await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${m.id}/visibility`, { trade: all, location: only(buildingA) }));
+      named.set(m.id, label);
+      return m;
+    };
+    c1BuildingA = await narrowed(c1, c1Participant, "C1, Building A only");
+    k1BuildingA = await narrowed(k1, k1Participant, "K1, Building A only");
+    const other = await api.projectCreator();
+    await api.createProject(other.caller, { code: "RFO" });
+    outsider = { id: "another Project's Member", caller: other.caller };
+    for (const [m, label] of [[hafiz, "Hafiz (C1)"], [ahmed, "Ahmed (K1)"], [mohammed, "Mohammed (K1)"], [yousef, "Yousef (C2)"]] as const) named.set(m.id, label);
+  });
+
+  it("RP-653-1: the Member covering Building A only counts the one Snag there; C1's engineer counts both", async () => {
+    // The open Snag, now in Building B, is read by C1's engineer and not by the narrowed Member, by id.
+    await expectHiddenFrom({ read: (m) => readById(`/v1/work-items/${chain.open}`)(m.caller), target: chain.open, seenBy: hafiz, hiddenFrom: c1BuildingA, name, label: "the Snag in Building B" });
+    expect((await previousSnags(hafiz.caller, chain.revision))?.snags).toEqual({ open: 1, closed: 1 });
+    expect((await previousSnags(c1BuildingA.caller, chain.revision))?.snags).toEqual({ open: 0, closed: 1 });
+  });
+
+  it("RP-655-1: the engineers list both Snags; the Members covering Building A only list the one there, never the other", async () => {
+    for (const reader of [hafiz, ahmed]) expect((await rowsOf(reader)).map((r) => r.id).sort(), name(reader)).toEqual([chain.closed, chain.open].sort());
+    await expectHiddenFrom({ read: rowsOf, target: chain.open, seenBy: [hafiz, ahmed], hiddenFrom: [c1BuildingA, k1BuildingA], name, label: "the row of the Snag in Building B" });
+    for (const reader of [c1BuildingA, k1BuildingA]) expect((await rowsOf(reader)).map((r) => r.id), name(reader)).toEqual([chain.closed]);
+  });
+
+  it("C2 and another Project's Member read neither Rev 1 nor a count or a row of it (RP-653-1, RP-655-1)", async () => {
+    await expectHiddenFrom({ read: (m) => readById(`/v1/work-items/${chain.revision}`)(m.caller), target: chain.revision, seenBy: [hafiz, mohammed], hiddenFrom: [yousef, outsider], name, label: "Rev 1" });
+    for (const target of [chain.closed, chain.open]) {
+      await expectHiddenFrom({ read: rowsOf, target, seenBy: hafiz, hiddenFrom: [yousef, outsider], name, label: "Rev 0's Snag rows" });
+    }
   });
 });

@@ -300,7 +300,7 @@ describe("what may be annotated, and by whom", () => {
 });
 
 // visibility.md RP-656-1: the annotated copy is read exactly where the original is.
-describe("once Submitted", () => {
+describe("RP-656-1: once Submitted", () => {
   let id = "";
   let original = "";
   let copy = "";

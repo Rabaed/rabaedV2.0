@@ -273,7 +273,7 @@ describe("the Members list", () => {
 });
 
 // RP-413-1: the Projects column counts the Projects of the Member's own Company only.
-describe("the Projects count", () => {
+describe("RP-413-1: the Projects count", () => {
   type Row = { id: string; projectCount: number };
   const rows = async (by: Caller) => (await by.get("/v1/members")).json().members as Row[];
   const countOf = (list: Row[], id: string) => list.find((m) => m.id === id)?.projectCount;

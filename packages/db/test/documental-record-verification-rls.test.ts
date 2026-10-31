@@ -148,7 +148,7 @@ describe("scenario RP-1083-4: the app role reads nothing new", () => {
 });
 
 describe("scenario RP-1083-4: app.verify_documental_record_by_token", () => {
-  it("answers a published record with exactly the page's fields, with no Member set", async () => {
+  it("RP-23-4: answers a published record with exactly the page's fields, with no Member set", async () => {
     const v = await byToken(records.published.token);
     expect(Object.keys(v!).sort()).toEqual(["documentNumber", "fingerprints", "outcome", "project", "sealedAt", "signers", "status", "subject"].sort());
     // Its printed face, as the worker kept it: never the live item's Subject or Project.
@@ -177,7 +177,7 @@ describe("scenario RP-1083-4: app.verify_documental_record_by_code", () => {
     expect(found.verification).toEqual(await byToken(records.published.token));
   });
 
-  it("is not_found for the code alone, a wrong pair, and a record not published", async () => {
+  it("RP-23-4: is not_found for the code alone, a wrong pair, and a record not published", async () => {
     for (const [code, number] of [
       [records.published.code, ""],
       [records.published.code, records.preparing.documentNumber],

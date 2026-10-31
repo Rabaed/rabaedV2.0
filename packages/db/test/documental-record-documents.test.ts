@@ -150,9 +150,9 @@ async function document(id: string, fileName: string): Promise<string> {
   return started!.document_id;
 }
 
-/** The record's Documents of closed item `id`, by file name in the order added, as the owner (the record job) reads them. */
+/** The record's Documents of closed item `id`, by Document id in the order added, as the owner (the record job) reads them. */
 const recordDocuments = async (id: string): Promise<string[]> =>
-  (await migrator.query("select file_name from app.documents_shared_before_close($1) order by created_at, id", [id])).rows.map((r) => r.file_name as string);
+  (await migrator.query("select id from app.documents_shared_before_close($1) order by created_at, id", [id])).rows.map((r) => r.id as string);
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -205,14 +205,14 @@ afterAll(async () => {
 });
 
 describe("app.documents_shared_before_close: the Documents a closed item's record holds", () => {
-  it("holds the Draft's files once the item was Submitted, never one removed in the Draft", async () => {
+  it("RP-147-1: holds the Draft's files once the item was Submitted, never one removed in the Draft", async () => {
     const id = await draft("Draft files");
-    await document(id, "kept.pdf");
+    const kept = await document(id, "kept.pdf");
     const removed = await document(id, "removed.pdf");
     expect(await outcome(c1.member, sql`select app.remove_document(${id}::uuid, ${removed}::uuid, now()) as outcome`)).toBe("removed");
     await submit(id);
     await code(id, "approve_a");
-    expect(await recordDocuments(id)).toEqual(["kept.pdf"]);
+    expect(await recordDocuments(id)).toEqual([kept]);
   });
 
   it("holds nothing of an item Cancelled in its Draft: nobody else ever saw it", async () => {
@@ -222,26 +222,27 @@ describe("app.documents_shared_before_close: the Documents a closed item's recor
     expect(await recordDocuments(id)).toEqual([]);
   });
 
-  it("holds one added after a Send Back once the item was Submitted again", async () => {
+  it("RP-147-1: holds one added after a Send Back once the item was Submitted again", async () => {
     const id = await draft("Resubmitted");
-    await document(id, "first.pdf");
+    const first = await document(id, "first.pdf");
     await submit(id);
     await sendBackToDraft(id);
-    await document(id, "after-send-back.pdf");
+    const afterSendBack = await document(id, "after-send-back.pdf");
     await submit(id);
     await code(id, "approve_a");
-    expect(await recordDocuments(id)).toEqual(["first.pdf", "after-send-back.pdf"]);
+    expect(await recordDocuments(id)).toEqual([first, afterSendBack]);
   });
 
-  it("never holds one its holder added while it held the item at the close", async () => {
+  it("RP-147-2: never holds one its holder added while it held the item at the close", async () => {
     const id = await draft("Held at the close");
-    await document(id, "shared.pdf");
+    const shared = await document(id, "shared.pdf");
     await submit(id);
     await sendBackToDraft(id);
     await document(id, "holder-only.pdf");
+    await document(id, "holder-only.txt");
     // Rabaed's cancel when a Company leaves the Project (workflow-engine.md §9; its command isn't built yet).
     await migrator.query("update work_item set outcome = 'cancelled', closed_at = now() where id = $1", [id]);
-    expect(await recordDocuments(id)).toEqual(["shared.pdf"]);
+    expect(await recordDocuments(id)).toEqual([shared]);
   });
 
   it("holds a Revision's copies once the Revision was Submitted and closed", async () => {
@@ -258,7 +259,9 @@ describe("app.documents_shared_before_close: the Documents a closed item's recor
     await migrator.query("update document set confirmed_at = coalesce(confirmed_at, now()) where work_item_id = $1", [revision!.work_item_id]);
     await submit(revision!.work_item_id);
     await code(revision!.work_item_id, "approve_a");
-    expect(await recordDocuments(revision!.work_item_id)).toEqual(["revised.pdf"]);
+    const copies = (await migrator.query("select id from document where work_item_id = $1", [revision!.work_item_id])).rows.map((r) => r.id as string);
+    expect(copies).toHaveLength(1); // not hidden-from: the Revision holds one copy
+    expect(await recordDocuments(revision!.work_item_id)).toEqual(copies);
   });
 
   it("answers nothing for an item still open", async () => {

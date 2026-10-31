@@ -317,6 +317,64 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
   });
 });
 
+// Scenario RP-1081-1 (visibility.md): the Snag's "Raised from" card shows the failed check item's
+// photos, the WIR's own Documents, the annotated copy too, never a passed item's; only to a reader
+// who sees both the Snag and the WIR, through a Link not removed (V19). Seam 2:
+// `packages/db/test/reply-checklist-rls.test.ts`.
+describe("RP-1081-1: the Raised from card's check item photos are the WIR's, read where the WIR is", () => {
+  let wir = "";
+  let snag = "";
+  let item: string[] = [];
+  let other: Caller;
+  /** The check item photo ids the Snag's Raised from card shows `m`, none when the Snag is hidden from them. */
+  const cardPhotos = async (m: { caller: Caller }) =>
+    (await readById<WorkItemDetail>(`/v1/work-items/${snag}`)(m.caller)).flatMap((d) => d.raisedFrom?.checkItem?.photos ?? []);
+
+  beforeAll(async () => {
+    wir = await atManager("Card photos", ONE_FAIL);
+    const original = (await documentsOf(ahmed.caller, wir)).documents.find((d) => d.itemKey === "formwork")!.id;
+    const copy = await uploadDocument(ahmed.caller, wir, { annotatedFromId: original, fileName: "formwork-annotated.png", contentType: "image/png", body: DRAWN });
+    // A photo of the passed item: no Snag of its own, never on this Snag's card.
+    await addPhoto(wir, "cover", SECOND_PHOTO, "cover.jpg");
+    await sendToManager(wir, "C");
+    await take(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
+    snag = (await raisedFrom(hafiz.caller, wir, "SNG"))[0]!.id;
+    item = [original, copy];
+    const outsider = await api.projectCreator();
+    await api.createProject(outsider.caller, { code: "WSO" });
+    other = outsider.caller;
+  });
+
+  it("C1, K1 and the Owner read the failed item's photos, its annotated copy too, never the passed item's", async () => {
+    for (const reader of [hafiz, ali, ahmed, mohammed, faisal]) {
+      expect((await cardPhotos(reader)).map((p) => p.id), reader.id).toEqual(item);
+    }
+  });
+
+  it("C2 and another Project's Member are shown none: the Snag is a 404 to them", async () => {
+    const outsider = { id: "another Project's Member", caller: other };
+    for (const target of item) {
+      await expectHiddenFrom({ read: cardPhotos, target, seenBy: hafiz, hiddenFrom: [yousef, outsider], name: (m) => m.id, label: "the card's check item photos" });
+    }
+  });
+
+  it("shows none to the Owner once it sees the Snag but not the WIR, and none to anyone once the Link is removed", async () => {
+    const o1 = await sql<{ participant_id: string }>`
+      select a.participant_id from work_item_access a join participant p on p.id = a.participant_id join project_role r on r.id = p.project_role_id
+      where a.work_item_id = ${wir}::uuid and r.base_role = 'owner_representative'
+    `.execute(migrator);
+    expect(o1.rows).toHaveLength(1); // not hidden-from: the Owner's one access row to the WIR, which this test takes off
+    await sql`delete from work_item_access where work_item_id = ${wir}::uuid and participant_id = ${o1.rows[0]!.participant_id}::uuid`.execute(migrator);
+    // The Owner still reads the Snag; its card names no photo of the WIR it no longer sees.
+    expect((await readById(`/v1/work-items/${snag}`)(faisal.caller)).map((d) => d.id)).toEqual([snag]);
+    for (const target of item) await expectHiddenFrom({ read: cardPhotos, target, seenBy: [hafiz, mohammed], hiddenFrom: faisal, name: (m) => m.id, label: "no WIR" });
+    await sql`update work_item_link set removed_at = now() where from_id = ${snag}::uuid and kind = 'raised_from'`.execute(migrator);
+    for (const reader of [hafiz, mohammed]) {
+      expect(await cardPhotos(reader), reader.id).toEqual([]); // not hidden-from: both read them just above; the removed Link names them to nobody
+    }
+  });
+});
+
 // Last in the file: it binds the Snag Type, for K1 on this Project, to a Workflow K1 can't raise
 // on, and nothing after it raises a Snag.
 describe("a Snag Type that can't take them refuses the code (seam 1)", () => {

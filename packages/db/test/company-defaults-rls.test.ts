@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -86,7 +86,7 @@ afterAll(async () => {
   await migrator?.end();
 });
 
-describe("Company defaults through the app role", () => {
+describe("scenario RP-517-1: Company defaults through the app role", () => {
   it("are written only through the commands, by the Authorized Person", async () => {
     await expect(
       call(tmc.ap, sql<object>`insert into company_default (company_id, work_item_type_id, kind, workflow_definition_id) values (${tmc.id}::uuid, ${typeId}::uuid, 'workflow', ${tmcWorkflow}::uuid)`),
@@ -106,22 +106,26 @@ describe("Company defaults through the app role", () => {
   });
 
   it("are read by the Company's Members and nobody else (V18)", async () => {
+    const defaults = (as: string) => call<{ id: string }>(as, sql`select id from company_default`);
+    const idsOf = async (companyId: string) => (await migrator.query("select id from company_default where company_id = $1", [companyId])).rows.map((r) => r.id as string);
     expect(await seen(tmc.member)).toEqual([tmc.id, tmc.id]);
     expect(await seen(tmc.ap)).toEqual([tmc.id, tmc.id]);
-    expect(await seen(rival.ap)).toEqual([]);
-    expect(await seen(rival.member)).toEqual([]);
+    for (const target of await idsOf(tmc.id)) {
+      await expectHiddenFrom({ read: defaults, target, seenBy: [tmc.member, tmc.ap], hiddenFrom: [rival.ap, rival.member], label: "TMC's default" });
+    }
     await setDefault(rival.ap, "workflow", rivalWorkflow);
     expect(await seen(rival.ap)).toEqual([rival.id]);
     expect(await seen(tmc.ap)).toEqual([tmc.id, tmc.id]);
+    const [rivals] = await idsOf(rival.id);
+    await expectHiddenFrom({ read: defaults, target: rivals!, seenBy: [rival.ap, rival.member], hiddenFrom: [tmc.ap, tmc.member], label: "Rival's default" });
   });
 
   it("keep a Library Form to its own Company, and Rabaed Defaults to all (V18)", async () => {
-    const forms = (as: string) => call<{ id: string }>(as, sql`select id from form_definition where id = ${tmcForm}::uuid`).then((r) => r.length);
-    expect(await forms(tmc.member)).toBe(1);
-    expect(await forms(rival.member)).toBe(0);
-    const versions = (as: string) => call<{ id: string }>(as, sql`select id from form_version where form_definition_id = ${tmcForm}::uuid`).then((r) => r.length);
-    expect(await versions(tmc.member)).toBe(1);
-    expect(await versions(rival.member)).toBe(0);
+    const forms = (as: string) => call<{ id: string }>(as, sql`select id from form_definition where id = ${tmcForm}::uuid`);
+    await expectHiddenFrom({ read: forms, target: tmcForm, seenBy: tmc.member, hiddenFrom: rival.member, label: "TMC's Library Form" });
+    const versions = (as: string) => call<{ id: string }>(as, sql`select id from form_version where form_definition_id = ${tmcForm}::uuid`);
+    const version = await one("select id from form_version where form_definition_id = $1", [tmcForm]);
+    await expectHiddenFrom({ read: versions, target: version, seenBy: tmc.member, hiddenFrom: rival.member, label: "TMC's Library Form's version" });
     const rabaed = await call<{ id: string }>(rival.member, sql`select id from form_definition where owner_kind = 'rabaed'`);
     expect(rabaed.length).toBeGreaterThan(0);
   });

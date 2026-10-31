@@ -7,7 +7,7 @@
 // Transition, validates, publishes Version 1 of the Project's copy and binds it
 // (through WF-4's API: binding in Project Settings is RP-441), and a new MAR follows it.
 import { createDb } from "@rabaed/db";
-import { LEGACY_MAR, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
 import {
   addStep,
   connectSteps,
@@ -19,7 +19,7 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -136,22 +136,27 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
   });
 });
 
-describe("only the Workflow's authors open the builder", () => {
-  // Scenario RP-439-1.
+describe("RP-439-1: only the Workflow's authors open the builder", () => {
   it("a Project Member, another Project's Project Admin, a Rabaed Default and a made-up or malformed id are the same 404", async () => {
     const res = await c1.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: at.projectId, name: { en: "Kept", ar: "محفوظ" } });
-    const id = res.json().id;
-    await ok(c1.caller.get(`/v1/workflows/${id}/builder`), 200);
-    await expectHidden(at.c1Engineer.get(`/v1/workflows/${id}/builder`));
-    await expectHidden(k1Engineer.get(`/v1/workflows/${id}/builder`));
+    const id = res.json().id as string;
     // Another Project: its Project Admin can't open Tower's Workflow, nor Tower's its own.
     const other: Company = await api.projectCreator();
     const otherProjectId = (await api.createProject(other.caller, { code: "WFO" })).id;
     const otherCopy = await other.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: otherProjectId, name: { en: "Elsewhere", ar: "في مكان آخر" } });
     expect(otherCopy.statusCode, otherCopy.body).toBe(201);
-    await ok(other.caller.get(`/v1/workflows/${otherCopy.json().id}/builder`), 200);
-    await expectHidden(other.caller.get(`/v1/workflows/${id}/builder`));
-    await expectHidden(c1.caller.get(`/v1/workflows/${otherCopy.json().id}/builder`));
+    const otherId = otherCopy.json().id as string;
+    // A Workflow's builder, by id: [{ id }] for whoever opens it, [] after the plain 404.
+    const builder = (workflow: string) => async (by: Caller) => (await readById(`/v1/workflows/${workflow}/builder`)(by)).map(() => ({ id: workflow }));
+    const named = new Map<Caller, string>([
+      [c1.caller, "Tower's Project Admin"],
+      [at.c1Engineer, "a Tower Project Member"],
+      [k1Engineer, "K1's engineer"],
+      [other.caller, "the other Project's Project Admin"],
+    ]);
+    const name = (by: Caller) => named.get(by) ?? "a caller";
+    await expectHiddenFrom({ read: builder(id), target: id, seenBy: c1.caller, hiddenFrom: [at.c1Engineer, k1Engineer, other.caller], name, label: "Tower's copy" });
+    await expectHiddenFrom({ read: builder(otherId), target: otherId, seenBy: other.caller, hiddenFrom: c1.caller, name, label: "the other Project's copy" });
     await expectHidden(c1.caller.get(`/v1/workflows/${marDefault}/builder`));
     await expectHidden(c1.caller.get(`/v1/workflows/${crypto.randomUUID()}/builder`));
     await expectHidden(c1.caller.get(`/v1/workflows/not-an-id/builder`));
