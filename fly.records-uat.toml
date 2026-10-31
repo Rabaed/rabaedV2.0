@@ -1,0 +1,29 @@
+# The UAT Records container on Fly.io (RP-1042, ADR 0026): the worker image (`docker build
+# --target worker`, with the Thmanyah fonts baked in) as one always-on machine in Frankfurt,
+# taking only the Documental Record jobs. Vercel Cron delivers everything else (RP-1039).
+#
+# Deployed by .github/workflows/deploy-records-uat.yml after each UAT deploy, which names the app
+# (`--app`, the uat variable FLY_RECORDS_APP) and imports the database and file-store secrets
+# (scripts/uat-deploy.ts records-env). The UAT sealing authority (UAT_SEALING_AUTHORITY_KEY and
+# UAT_SEALING_AUTHORITY_CERTIFICATE) is a Fly secret the owner sets once, never in the repo or
+# in GitHub. No secret is in this file.
+
+primary_region = "fra"
+
+[env]
+  # The UAT signer under the UAT authority, the timestamp stand-in, "UAT" on every page.
+  RECORD_SEALING = "uat"
+  # Only the Record job kinds; no scheduled job.
+  WORKER_OUTBOX = "records"
+  # Baked in by the image's fonts stage; empty, the free fallback font.
+  RECORD_FONTS_DIR = "/opt/record-fonts/thmanyah"
+  WORKER_POLL_INTERVAL_MS = "5000"
+  NODE_ENV = "production"
+
+# No [http_service]: nothing to serve, and a machine without services is never stopped for
+# lack of traffic, so the worker loop always runs.
+
+[[vm]]
+  # Chromium and veraPDF's Java; a 100 MB appendix needs about 1 GB (RP-957).
+  size = "shared-cpu-2x"
+  memory = "2gb"
