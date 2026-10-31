@@ -1,5 +1,8 @@
 name: Verify gate
-# A required check on the main ruleset (RP-1094): fails unless the PR body holds a stamped
+# A required check on the main ruleset (RP-1094). Passes when GitHub CI (ci.yml on pull_request)
+# passed on the PR's exact head and the PR changes none of CI's own files (RP-1190,
+# scripts/ci-green.ts); it runs at the push, before CI finishes, so reviewed-add re-runs it once
+# CI is green. Otherwise it fails unless the PR body holds a stamped
 # `pnpm verify passed on <sha>:` line for its head, or for a commit only clean merges of main led
 # to it from. It applies the same rule as `pnpm queue` (scripts/verify-gate.ts), so a PR added to
 # the merge queue from GitHub cannot skip it (14 PRs merged without a valid line, retro 2026-10-29).
@@ -27,6 +30,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # The head's CI run, its jobs and the main ruleset's required checks (RP-1190: CI green counts).
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
