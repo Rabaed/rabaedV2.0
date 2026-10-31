@@ -65,6 +65,10 @@ export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Loca
       newOnly: t("newOnly"),
       openSettings: t("openSettings"),
       close: tMap("close"),
+      stepsTab: t("stepsTab"),
+      mapTab: t("mapTab"),
+      hereNow: t("hereNow"),
+      privateSteps: t("privateSteps"),
     }),
     [t, tMap, tRoles],
   );
@@ -92,6 +96,8 @@ export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Loca
           locale={locale}
           labels={labels}
           map={map}
+          // The holder of the viewer's own Step, a Member of their own Company: the item read names them only then (V14).
+          {...(map.position?.kind === "own" && item.heldBy?.memberName ? { holder: item.heldBy.memberName[locale] } : {})}
           // Only a Project Admin edits the Project's Workflows (the settings read's canEdit).
           settingsHref={project?.isProjectAdmin ? `/projects/${item.projectId}/settings/workflows` : undefined}
           linkAs={Link}

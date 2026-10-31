@@ -1435,7 +1435,11 @@
     "youAreHere": "You are here",
     "happens": "What happens here",
     "newOnly": "Changes apply to new submittals only.",
-    "openSettings": "Open in Workflow settings"
+    "openSettings": "Open in Workflow settings",
+    "stepsTab": "Steps",
+    "mapTab": "Map",
+    "hereNow": "Here now",
+    "privateSteps": "Who works on these Steps, and which one has it, stays with them."
   },
   "workflowMap": {
     "line": "Workflow: {name} · Version {version}",
