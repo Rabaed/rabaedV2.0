@@ -182,6 +182,7 @@ export const scanStaged = (repo: string) => scanDiff(git(repo, ["diff", "--cache
  * 512 MB one read can hold. A line a merge brings in again from its other parent is reported once.
  */
 export function scanRange(repo: string, range: string, commitsPerRead = 200): Finding[] {
+  if (!Number.isInteger(commitsPerRead) || commitsPerRead < 1) throw new RangeError(`commitsPerRead must be a whole number of 1 or more, not ${commitsPerRead}.`);
   const commits = git(repo, ["rev-list", range, "--"]).split("\n").filter(Boolean);
   const seen = new Map<string, Finding>();
   for (let start = 0; start < commits.length; start += commitsPerRead) {

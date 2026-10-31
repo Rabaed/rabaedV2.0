@@ -269,6 +269,11 @@ describe("scanRange on real git history", () => {
     expect(sorted(scanRange(repo, "HEAD"))).toEqual(expected);
   });
 
+  it("refuses to read fewer than one commit at a time, which would never finish", () => {
+    expect(() => scanRange(repo, "HEAD", 0)).toThrow(RangeError);
+    expect(() => scanRange(repo, "HEAD", 1.5)).toThrow(RangeError);
+  });
+
   describe("node scripts/check-secrets.ts --range", () => {
     const check = (...args: string[]) => spawnSync("node", [join(import.meta.dirname, "check-secrets.ts"), "--range", ...args], { cwd: repo, encoding: "utf8" });
 
