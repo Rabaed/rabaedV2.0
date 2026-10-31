@@ -47,6 +47,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # With the api's own R2 key, the api the command builds stores the demo's
+      # images, as the api stores anyone's (ADR 0007, RP-672).
       - name: Drop, migrate and seed the demo
         env:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
@@ -56,8 +58,20 @@ jobs:
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
           DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
-        # Then, as rabaed_app: it cannot bypass row-level security or rewrite the audit trail.
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
+          FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
+        run: node scripts/uat-deploy.ts demo reset
+      # Then, as rabaed_app: it cannot bypass row-level security or rewrite the audit trail.
+      - name: Check the app role
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
         run: |
-          node scripts/uat-deploy.ts demo reset
           node scripts/uat-deploy.ts app-role-check
           echo "### UAT's demo was seeded again" >> "$GITHUB_STEP_SUMMARY"
