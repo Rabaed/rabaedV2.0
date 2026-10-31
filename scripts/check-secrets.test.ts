@@ -246,8 +246,8 @@ describe("scanRange on real git history", () => {
   });
 
   // main's whole history is one range on a push to main: its `git log -p` passed 366 MB at 3,438
-  // commits, near the 512 MB a single read (and a V8 string) can hold, so it is read in batches.
-  it("reads a range in batches of commits and finds the same, merges and the root commit included", () => {
+  // commits, near the 512 MB a single read (and a V8 string) can hold, so it is read a few commits at a time.
+  it("reads a range a few commits at a time and finds the same, merges and the root commit included", () => {
     writeFileSync(join(repo, "README.md"), `# repo\n${tokens.sendgrid}\n`);
     git("commit", "-q", "-a", "--amend", "-m", "start");
     git("checkout", "-q", "-b", "side");

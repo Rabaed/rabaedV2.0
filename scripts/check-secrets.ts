@@ -177,15 +177,15 @@ const DIFF_OPTIONS = ["-U0", "--no-color", "--no-ext-diff", "--diff-filter=ACMR"
 export const scanStaged = (repo: string) => scanDiff(git(repo, ["diff", "--cached", ...DIFF_OPTIONS]));
 
 /**
- * The findings in the lines a range's commits add; a merge is read against its first parent. Read `batch` commits at a
+ * The findings in the lines a range's commits add; a merge is read against its first parent. Read `commitsPerRead` commits at a
  * time: main's whole history (a push to main) is one range, and its `git log -p` passed 366 MB at 3,438 commits, near the
  * 512 MB one read can hold. A line a merge brings in again from its other parent is reported once.
  */
-export function scanRange(repo: string, range: string, batch = 200): Finding[] {
+export function scanRange(repo: string, range: string, commitsPerRead = 200): Finding[] {
   const commits = git(repo, ["rev-list", range, "--"]).split("\n").filter(Boolean);
   const seen = new Map<string, Finding>();
-  for (let start = 0; start < commits.length; start += batch) {
-    const diff = git(repo, ["log", "-p", "--no-walk=unsorted", "--format=", "--diff-merges=first-parent", ...DIFF_OPTIONS, ...commits.slice(start, start + batch), "--"]);
+  for (let start = 0; start < commits.length; start += commitsPerRead) {
+    const diff = git(repo, ["log", "-p", "--no-walk=unsorted", "--format=", "--diff-merges=first-parent", ...DIFF_OPTIONS, ...commits.slice(start, start + commitsPerRead), "--"]);
     for (const finding of scanDiff(diff)) seen.set(`${finding.file}\0${finding.line}\0${finding.rule}`, finding);
   }
   return [...seen.values()];
