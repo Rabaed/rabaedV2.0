@@ -1,6 +1,6 @@
 "use client";
 
-import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
+import { backwardKinds, type Locale, type OutcomeLook, type WorkItemActions as Actions } from "@rabaed/domain";
 import { Badge, Button, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
@@ -24,9 +24,15 @@ export const phoneButton = "max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:
  * message that its Authorized Person must add it (RP-617); a Transition waits until that
  * message's Company is read, and says so if it can't be. `open(transition, choices)`: with
  * `choices`, the pop-up offers those Transitions to pick from, `transition` picked first (the
- * WIR's codes, RP-655). `dialogs` is what to render for it, once.
+ * WIR's codes, RP-655). `dialogs` is what to render for it, once. `heading`: the Work Item page's
+ * pop-up header for a Transition (RP-1151): the code it issues and the item's number.
  */
-export function useTransitionOpener(workItemId: string, actions: Actions, locale: Locale) {
+export function useTransitionOpener(
+  workItemId: string,
+  actions: Actions,
+  locale: Locale,
+  heading?: (transition: Transition) => { code: string | null; look?: OutcomeLook | undefined; documentNumber: string | null },
+) {
   const calls = useWorkItemCalls(workItemId);
   const [asking, setAsking] = useState<{ transition: Transition; choices?: TransitionChoice[] } | null>(null);
   // No Signature, no Transition (RP-85): the pop-up asks for one before the Action Form opens.
@@ -55,6 +61,7 @@ export function useTransitionOpener(workItemId: string, actions: Actions, locale
           calls={calls}
           locale={locale}
           recommendedCode={actions.recommendedCode}
+          {...(heading ? { heading: heading(asking.transition) } : {})}
           idPrefix="transition"
           onClose={() => setAsking(null)}
         />

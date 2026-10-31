@@ -12,6 +12,8 @@ export type SubmittalPanelTabItem = {
   icon?: IconName;
   /** A count after the label, e.g. Internal Communication's events. */
   count?: number;
+  /** A shorter label for the Compact band (< 560px), e.g. "Internal" (the Work Item page, RP-1151). */
+  shortLabel?: string;
   content: ReactNode;
 };
 
@@ -47,7 +49,14 @@ export function SubmittalPanelTabs({ locale, label, tabs, value, onValueChange }
             count={tab.count === undefined ? undefined : formatNumber(tab.count, locale)}
             className="h-[42px] gap-1.5 px-2.5 text-[13px] [&>svg]:size-[15px]"
           >
-            {tab.label}
+            {tab.shortLabel ? (
+              <>
+                <span className="@max-[559px]/sdp:hidden">{tab.label}</span>
+                <span className="hidden @max-[559px]/sdp:inline">{tab.shortLabel}</span>
+              </>
+            ) : (
+              tab.label
+            )}
           </TabsTrigger>
         ))}
       </TabsList>

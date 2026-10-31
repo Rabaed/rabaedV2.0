@@ -24,6 +24,7 @@
 @import "@xyflow/react/dist/base.css";
 @import "./workflow-canvas.css";
 @import "./submittal-panel.css";
+@import "./work-item-page.css";
 
 /* Let Tailwind see the classes used by ui components. */
 @source "../";

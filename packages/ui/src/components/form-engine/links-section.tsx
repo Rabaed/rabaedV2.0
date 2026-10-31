@@ -58,6 +58,8 @@ export type LinksSectionProps = {
   debounceMs?: number;
   /** Shown after the Links, e.g. "Linked from" (RP-292). */
   children?: ReactNode;
+  /** Its heading for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
+  titleHidden?: boolean;
   className?: string;
 };
 
@@ -81,6 +83,7 @@ export function LinksSection({
   message,
   debounceMs,
   children,
+  titleHidden = false,
   className,
 }: LinksSectionProps) {
   const titleId = useId();
@@ -110,7 +113,7 @@ export function LinksSection({
   );
   return (
     <section aria-labelledby={titleId} className={cn("flex flex-col gap-3", className)} data-testid="work-item-links">
-      <h2 id={titleId} className="text-h6 font-semibold text-text">
+      <h2 id={titleId} className={titleHidden ? "sr-only" : "text-h6 font-semibold text-text"}>
         {text.title}
       </h2>
       {links.length === 0 && <p className="text-sm text-muted">{text.none}</p>}

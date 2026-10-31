@@ -18,6 +18,8 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 export type LinkedItemRowLabels = {
   /** Said of an item the viewer can't see. */
   hidden: string;
+  /** "No access": shown beside the lock on such an item (the Work Item page, RP-1151 row 54); only the lock without it. */
+  noAccess?: string;
 };
 
 export type LinkedItemRowProps = {
@@ -67,7 +69,15 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, hid
             {label}
           </button>
         )}
-        {hidden && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
+        {hidden &&
+          (text.noAccess ? (
+            <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] font-semibold whitespace-nowrap text-muted">
+              <Icon name="lock" size={14} label={text.hidden} />
+              {text.noAccess}
+            </span>
+          ) : (
+            <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />
+          ))}
         {remove && (
           <IconButton label={remove.label} size="sm" disabled={remove.disabled} onClick={remove.onRemove}>
             <Icon name={remove.icon} size={16} />

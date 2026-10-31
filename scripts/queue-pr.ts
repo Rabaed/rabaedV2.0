@@ -201,7 +201,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     }
     return fail(
       `PR #${pr}: ${gate.reason}. planning/parallel-sessions.md rule 6 queues a PR only after a finished /code-review.`,
-      `Fix: run /code-review, push its fixes, then \`gh pr edit ${pr} --add-label ${REVIEWED_LABEL}\` and run \`pnpm queue ${pr}\` again. A new push removes the label. ${docsOnlyFix}`,
+      `Fix: run /code-review, push its fixes, post its summary with \`node scripts/review-post.ts ${pr} <summary-file>\` and put the stamped verify line in the body; CI's reviewed-add then adds '${REVIEWED_LABEL}' (a hand label does not count, RP-1167). Then run \`pnpm queue ${pr}\` again. A new push removes the label. ${docsOnlyFix}`,
     );
   }
   if (gate.via === DOCS_ONLY_LABEL) {

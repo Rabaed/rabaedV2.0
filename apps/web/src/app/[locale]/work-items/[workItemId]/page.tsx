@@ -4,7 +4,6 @@ import {
   isOpenStageCategory,
   moduleNames,
   moduleTabPaths,
-  sortedByName,
   stepAgeLabel,
   watchOutcomeNames,
   workItemListHref,
@@ -26,6 +25,7 @@ import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
+import { WorkItemPage as SubmittalItemPage } from "@/components/work-item-page";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
 import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
@@ -38,6 +38,7 @@ import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { WirDraftBar, WirDraftSide, WirNextSteps, WirRequestColumns } from "@/components/wir-request";
 import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, requestActions, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
+import { notPickedUpYetValues } from "@/lib/pool-line";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
   getLinkedFrom,
@@ -140,6 +141,184 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     wir && !item.outcome && !answering && !issuing && item.checklistCopies.length > 0 && item.documentNumber !== null && item.heldBy?.memberName === null && item.heldBy.pool === null
       ? item.heldBy.companyName
       : null;
+
+  // The rows of the System Fields beyond the Subject and number, and of the facts after "With": both
+  // layouts list them, the new page in its Details card (RP-1151, gap table row 22).
+  const draftRows = (
+    <>
+      {/* The Paper ref (RP-639): its old paper number, never its Document Number; changed only while a Draft. */}
+      {(item.paperRef !== null || item.actions.editPaperRef) && (
+        <>
+          <dt className="text-muted">{t("fields.paperRef")}</dt>
+          <dd>
+            <WorkItemPaperRef workItemId={item.id} value={item.paperRef} canEdit={item.actions.editPaperRef} />
+          </dd>
+        </>
+      )}
+      {/* Where a Duplicate came from: the raiser's own Company only, and no time (RP-409). */}
+      {item.duplicatedFrom && (
+        <>
+          <dt className="text-muted">{t("fields.duplicatedFrom")}</dt>
+          <dd>
+            <Link href={`/work-items/${item.duplicatedFrom.workItemId}`} className="text-brand-fg underline underline-offset-4">
+              {item.duplicatedFrom.documentNumber ? <DocNo value={item.duplicatedFrom.documentNumber} /> : <bdi>{item.duplicatedFrom.subject}</bdi>}
+            </Link>
+          </dd>
+        </>
+      )}
+    </>
+  );
+  const raisedRows = (
+    <>
+      <dt className="text-muted">{t("fields.raisedBy")}</dt>
+      <dd>{item.raisedBy.companyName[locale]}</dd>
+      {/* Its Package (RP-659): only where the API gives it, which is only where the viewer sees the Package. */}
+      {item.package && (
+        <>
+          <dt className="text-muted">{t("fields.package")}</dt>
+          <dd className="min-w-0">
+            <PackageChip
+              number={item.package.number}
+              name={item.package.name[locale]}
+              companyName={item.package.companyName[locale]}
+              href={`/packages/${item.package.id}`}
+              label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale], company: item.package.companyName[locale] })}
+              linkAs={Link}
+            />
+          </dd>
+        </>
+      )}
+      {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees;
+          each opens the Snag List filtered to them (RP-628), where the viewer again sees only its own. */}
+      {!wir && item.raisedItems.map((f) => {
+        const counts = t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) });
+        return (
+          <Fragment key={f.type.code}>
+            <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
+            <dd data-testid={`raised-item-counts-${f.type.code}`}>
+              {item.documentNumber ? (
+                <Link
+                  href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })}
+                  className="text-brand-fg underline underline-offset-4"
+                >
+                  {counts}
+                </Link>
+              ) : (
+                counts
+              )}
+            </dd>
+          </Fragment>
+        );
+      })}
+      {/* A Revision: what its previous item in the chain left (RP-653), one line per Type, counting only what the viewer sees.
+          It never blocks the code; each opens the Snag List filtered to that item. */}
+      {!wir && previous?.items.map((f) => {
+        const counts = t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) });
+        const typeName = t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale];
+        return (
+          <Fragment key={`previous-${f.type.code}`}>
+            <dt className="text-muted">{t("fields.previousRaisedItems", { type: typeName, revision: formatNumber(previous.revisionNo, locale) })}</dt>
+            <dd data-testid={`previous-raised-item-counts-${f.type.code}`}>
+              {previous.documentNumber ? (
+                <Link
+                  href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [previous.documentNumber] })}
+                  className="text-brand-fg underline underline-offset-4"
+                >
+                  {counts}
+                </Link>
+              ) : (
+                counts
+              )}
+            </dd>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+
+  // The Submittal layout (RP-1151): the owner's Work Item page, the Submittal Panel at page size. Snag and WIR keep theirs.
+  if (!snag && !wir) {
+    const outcomes = typeOutcomes ?? (await getTypeOutcomes(item.projectId, item.type.code));
+    return (
+      <WorkItemFormProvider
+        workItemId={item.id}
+        projectId={item.projectId}
+        documentNumber={item.documentNumber}
+        linkTargets={linkTargetNames(links.links)}
+        hiddenLinks={hiddenLinkHrefs(item.id, links.links)}
+        schema={form.schema}
+        choices={choices}
+        people={people}
+        optionLists={optionLists}
+        suppliers={suppliers}
+        checklistTemplates={checklistTemplates}
+        answers={item.answers}
+        named={item.namedAnswers}
+        editable={editing}
+        editableSections={form.editableSections}
+        fixedByNumber={item.fixedByNumber}
+        canCancel={item.actions.transitions.some((tr) => tr.kind === "cancel")}
+        fieldTimes={item.fieldTimes}
+        autosave={item.autosave}
+      >
+        <SubmittalItemPage
+          item={item}
+          locale={locale}
+          me={me}
+          list={{ href: listHref, label: t("title") }}
+          history={history}
+          chain={chain}
+          watch={watch}
+          workflowMap={workflowMap}
+          outcomes={outcomesOfType(item.type.code, outcomes?.outcomes ?? [])}
+          schema={form.schema}
+          optionLists={optionLists}
+          documents={documents}
+          links={links}
+          linkedFrom={linkedFrom.items}
+          questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
+          replyChecklists={shownChecklists}
+          notices={
+            <>
+              {/* Sent Back to a "Comment only" Step (ADR 0021): why its Form is read-only, for the raiser's Members only. */}
+              {item.sentBackForComment && <SentBackNotice>{t("sentBackForComment")}</SentBackNotice>}
+              <WorkItemReplacement workItemId={item.id} canCreate={item.actions.createReplacement} />
+              {item.versionsChanged && (
+                <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
+                  <p>{t("versionsChanged")}</p>
+                  {item.droppedFields.length > 0 && (
+                    <>
+                      <p>{t("droppedFields")}</p>
+                      <ul className="list-disc ps-5">
+                        {item.droppedFields.map((f) => (
+                          <li key={f.key}>{f.label[locale]}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+              {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19). */}
+              <ReplyChecklists workItemId={item.id} checklists={item.replyChecklists} documents={documents} locale={locale} />
+            </>
+          }
+          details={
+            <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-[13.5px]">
+              <dt className="text-muted">{t("fields.type")}</dt>
+              <dd>
+                {item.type.name[locale]}{" "}
+                <bdi dir="ltr" className="text-sm text-muted">
+                  {item.type.code}
+                </bdi>
+              </dd>
+              {draftRows}
+              {raisedRows}
+            </dl>
+          }
+        />
+      </WorkItemFormProvider>
+    );
+  }
 
   const page = (
     <WorkItemFormProvider
@@ -343,26 +522,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             {/* The Revision drop-down: only the Revisions of the chain the viewer may see (V1 each). */}
             {chain && <WorkItemRevisionPicker chain={chain} workItemId={item.id} locale={locale} />}
           </dd>
-          {/* The Paper ref (RP-639): its old paper number, never its Document Number; changed only while a Draft. */}
-          {(item.paperRef !== null || item.actions.editPaperRef) && (
-            <>
-              <dt className="text-muted">{t("fields.paperRef")}</dt>
-              <dd>
-                <WorkItemPaperRef workItemId={item.id} value={item.paperRef} canEdit={item.actions.editPaperRef} />
-              </dd>
-            </>
-          )}
-          {/* Where a Duplicate came from: the raiser's own Company only, and no time (RP-409). */}
-          {item.duplicatedFrom && (
-            <>
-              <dt className="text-muted">{t("fields.duplicatedFrom")}</dt>
-              <dd>
-                <Link href={`/work-items/${item.duplicatedFrom.workItemId}`} className="text-brand-fg underline underline-offset-4">
-                  {item.duplicatedFrom.documentNumber ? <DocNo value={item.duplicatedFrom.documentNumber} /> : <bdi>{item.duplicatedFrom.subject}</bdi>}
-                </Link>
-              </dd>
-            </>
-          )}
+          {draftRows}
         </dl>
 
         {/* Sent Back to a "Comment only" Step (ADR 0021): why its Form is read-only, for the raiser's Members only. */}
@@ -428,82 +588,12 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                   : item.heldBy.pool && item.heldBy.pool.names.length > 0
                     ? // Pooled at the viewer's own Participant: who it waits on (§3.4), three
                       // names in the viewer's language's order, then how many more.
-                      t("fields.notPickedUpYet", {
-                        company: item.heldBy.companyName[locale],
-                        names: sortedByName(item.heldBy.pool.names, (n) => n[locale], locale)
-                          .slice(0, 3)
-                          .map((n) => n[locale])
-                          .join(locale === "ar" ? "، " : ", "),
-                        more: Math.max(item.heldBy.pool.names.length - 3, 0),
-                        n: formatNumber(Math.max(item.heldBy.pool.names.length - 3, 0), locale),
-                      })
+                      t("fields.notPickedUpYet", notPickedUpYetValues(item.heldBy.companyName, item.heldBy.pool.names, locale))
                     : item.heldBy.companyName[locale]}
               </dd>
             </>
           )}
-          <dt className="text-muted">{t("fields.raisedBy")}</dt>
-          <dd>{item.raisedBy.companyName[locale]}</dd>
-          {/* Its Package (RP-659): only where the API gives it, which is only where the viewer sees the Package. */}
-          {item.package && (
-            <>
-              <dt className="text-muted">{t("fields.package")}</dt>
-              <dd className="min-w-0">
-                <PackageChip
-                  number={item.package.number}
-                  name={item.package.name[locale]}
-                  companyName={item.package.companyName[locale]}
-                  href={`/packages/${item.package.id}`}
-                  label={tViews("board.openPackage", { number: item.package.number, name: item.package.name[locale], company: item.package.companyName[locale] })}
-                  linkAs={Link}
-                />
-              </dd>
-            </>
-          )}
-          {/* The items raised from it (its Comments, its Snags), one line per Type, counting only those the viewer sees;
-              each opens the Snag List filtered to them (RP-628), where the viewer again sees only its own. */}
-          {!wir && item.raisedItems.map((f) => {
-            const counts = t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) });
-            return (
-              <Fragment key={f.type.code}>
-                <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
-                <dd data-testid={`raised-item-counts-${f.type.code}`}>
-                  {item.documentNumber ? (
-                    <Link
-                      href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })}
-                      className="text-brand-fg underline underline-offset-4"
-                    >
-                      {counts}
-                    </Link>
-                  ) : (
-                    counts
-                  )}
-                </dd>
-              </Fragment>
-            );
-          })}
-          {/* A Revision: what its previous item in the chain left (RP-653), one line per Type, counting only what the viewer sees.
-              It never blocks the code; each opens the Snag List filtered to that item. */}
-          {!wir && previous?.items.map((f) => {
-            const counts = t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) });
-            const typeName = t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale];
-            return (
-              <Fragment key={`previous-${f.type.code}`}>
-                <dt className="text-muted">{t("fields.previousRaisedItems", { type: typeName, revision: formatNumber(previous.revisionNo, locale) })}</dt>
-                <dd data-testid={`previous-raised-item-counts-${f.type.code}`}>
-                  {previous.documentNumber ? (
-                    <Link
-                      href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [previous.documentNumber] })}
-                      className="text-brand-fg underline underline-offset-4"
-                    >
-                      {counts}
-                    </Link>
-                  ) : (
-                    counts
-                  )}
-                </dd>
-              </Fragment>
-            );
-          })}
+          {raisedRows}
         </dl>
 
         {history && (

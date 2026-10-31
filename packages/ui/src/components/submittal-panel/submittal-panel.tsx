@@ -221,6 +221,8 @@ export type SubmittalPanelIdentityProps = {
   subjectId?: string;
   /** Next to the number: the ⓘ "How this number is built" card (`SubmittalPanelNumberCard`, RP-1065). */
   numberInfo?: ReactNode;
+  /** The Subject's heading level: `h1` on the Work Item page, where it heads the page (RP-1151); `h2` in the panel. */
+  subjectAs?: "h1" | "h2";
 };
 
 /**
@@ -228,7 +230,7 @@ export type SubmittalPanelIdentityProps = {
  * in Arabic too, with a Revision's revision word inline after it in brand orange (`DocNo`'s
  * wording: "Rev 1", «مراجعة 1»; Rev 0 shows nothing), then the Subject and the chips.
  */
-export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo }: SubmittalPanelIdentityProps) {
+export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo, subjectAs: Subject = "h2" }: SubmittalPanelIdentityProps) {
   return (
     <div className="sdp-identity px-5 pt-[18px] pb-4">
       <div className="relative flex items-center gap-1">
@@ -251,9 +253,9 @@ export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chip
         </p>
         {numberInfo}
       </div>
-      <h2 id={subjectId} dir="auto" className="sdp-subject mt-2 mb-2.5 text-[20px] leading-tight font-bold text-pretty">
+      <Subject id={subjectId} dir="auto" className="sdp-subject mt-2 mb-2.5 text-[20px] leading-tight font-bold text-pretty">
         {subject}
-      </h2>
+      </Subject>
       {chips && <div className="sdp-chips flex flex-wrap items-center gap-1.5">{chips}</div>}
     </div>
   );
@@ -278,6 +280,11 @@ export type SubmittalPanelFactsProps = {
   stepAgeWeeks: number | null;
   /** The plan location, top level first; empty when it has none. */
   place: string[];
+  /**
+   * The Step it waits at, in place of Step Age (the Work Item page, RP-1151 row 19: its Step Age is a
+   * pill beside the Stage). Left out, the panel's Step Age fact.
+   */
+  step?: { label: string; name: string | null };
 };
 
 /**
@@ -285,7 +292,7 @@ export type SubmittalPanelFactsProps = {
  * the Location. No due date. Another Company is named by its Company name only, with no person
  * and no avatar (V14).
  */
-export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks, place }: SubmittalPanelFactsProps) {
+export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks, place, step }: SubmittalPanelFactsProps) {
   const none = <span className="text-faint">{labels.none}</span>;
   const fact = (key: string, label: string, value: ReactNode) => (
     <div key={key} data-fact={key} className="min-w-0 bg-surface px-3 py-2.5">
@@ -318,7 +325,7 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
           <span className="min-w-0">{holder.name}</span>
         ),
       )}
-      {fact(
+      {step ? fact("step", step.label, step.name === null ? none : <span className="min-w-0">{step.name}</span>) : fact(
         "stepAge",
         labels.stepAge,
         stepAgeWeeks === null ? (
