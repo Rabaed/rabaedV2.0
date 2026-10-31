@@ -205,7 +205,7 @@ beforeAll(async () => {
   const later: Forbidden = { id: laterStep, kind: "step", what: "K1's later internal Step (consultant_approval)", seenBy: [v.k1Manager] };
   worlds = [
     await world(x, "5", [v.c2Engineer, v.c2Ap], [
-      { id: c1.participantId, kind: "participant", what: "C1's Participant", seenBy: [v.c1Pm, v.k1Manager] },
+      { id: c1.participantId, kind: "participant", what: "C1's Participant (the Host Company's)", seenBy: [v.c1Pm, v.k1Manager] },
       { id: c1.id, kind: "company", what: "C1's Company", seenBy: [v.c1Pm] },
       { id: c1.members.project_manager, kind: "member", what: "C1's PM", seenBy: [v.c1Pm] },
       { id: k1.participantId, kind: "participant", what: "K1's Participant", seenBy: [v.k1Manager, v.c1Pm] },

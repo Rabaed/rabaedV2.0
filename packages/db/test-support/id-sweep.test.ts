@@ -60,6 +60,13 @@ describe("sweepProblems", () => {
     expect(sweepProblems([fn("app.a")], [call("app.a", [hit], "RP-1166-1")], allow)).toHaveLength(2); // the hit, and the entry excusing nothing
   });
 
+  it("excuses only the ids an entry's `whats` names, when it names some", () => {
+    const allow: AllowEntry[] = [{ name: "app.a", kinds: ["participant"], whats: ["the Host Company's Participant"], reason: "V15" }];
+    expect(sweepProblems([fn("app.a")], [call("app.a", [hit])], allow)).toHaveLength(2); // OW's Participant is not the Host's: the hit stays, the entry excuses nothing
+    const host = { ...hit, what: "the Host Company's Participant" };
+    expect(sweepProblems([fn("app.a")], [call("app.a", [host])], allow)).toEqual([]);
+  });
+
   it("fails an allow entry for a function that no longer exists, or one that excuses nothing", () => {
     const allow: AllowEntry[] = [
       { name: "app.gone", skip: "was here" },

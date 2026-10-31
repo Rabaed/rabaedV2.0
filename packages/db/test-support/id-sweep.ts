@@ -29,18 +29,28 @@ export type SweepCall = { name: string; signature: string; world: string; viewer
 
 /**
  * An allow-list entry. `skip`: the function is not called at all, for that reason. Otherwise the entry excuses
- * the id `kinds` it names, from this function only, in the `worlds` it names (all when left out), for `reason`;
+ * the id `kinds` it names, from this function only, in the `worlds` it names (all when left out), and only the
+ * ids its `whats` names (a world's ForbiddenId.what; all of those kinds when left out), for `reason`;
  * `pending` names the ticket that will make it give them no more.
  */
 export type AllowEntry =
   | { name: string; skip: string }
-  | { name: string; kinds: readonly IdKind[]; worlds?: readonly string[]; reason: string; pending?: string };
+  | { name: string; kinds: readonly IdKind[]; worlds?: readonly string[]; whats?: readonly string[]; reason: string; pending?: string };
 
 /**
  * What the sweep allows, each with its reason. A function the app role may execute is either swept or here
  * (the ratchet), and an entry that excuses nothing, or names a function that is gone, fails the sweep too.
  */
-export const SWEEP_ALLOW: readonly AllowEntry[] = [];
+export const SWEEP_ALLOW: readonly AllowEntry[] = [
+  {
+    name: "app.form_participant_choices",
+    kinds: ["participant"],
+    worlds: ["5"],
+    whats: ["C1's Participant (the Host Company's)"],
+    reason:
+      "a participant field offers the Host Company to every Participant (V15: another Company's name appears as the Host Company; scenario 43); only the item's other Companies need the item, and those C2 never gets",
+  },
+];
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -68,7 +78,13 @@ const reasonOf = (entry: AllowEntry) => ("skip" in entry ? entry.skip : entry.re
 type Excusing = Extract<AllowEntry, { kinds: readonly IdKind[] }>;
 const excusingEntries = (allow: readonly AllowEntry[]) => allow.filter((e): e is Excusing => "kinds" in e);
 const excuseFor = (allow: readonly Excusing[], call: SweepCall, hit: IdHit) =>
-  allow.find((e) => e.name === call.name && e.kinds.includes(hit.kind) && (e.worlds === undefined || e.worlds.includes(call.world)));
+  allow.find(
+    (e) =>
+      e.name === call.name &&
+      e.kinds.includes(hit.kind) &&
+      (e.worlds === undefined || e.worlds.includes(call.world)) &&
+      (e.whats === undefined || e.whats.includes(hit.what)),
+  );
 
 /** The hits of `call` that no allow entry excuses. */
 export function unexcusedHits(call: SweepCall, allow: readonly AllowEntry[]): IdHit[] {
