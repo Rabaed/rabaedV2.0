@@ -1,6 +1,6 @@
 /* eslint-disable rabaed/no-avoid-terms -- git's and the CI checks' names and a text delimiter, by their own names, as in verify-gate.ts */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -109,10 +109,19 @@ export function realMergeChecksSeam(cwd: string = process.cwd(), spawn: typeof s
         rmSync(dir, { recursive: true, force: true });
         throw error;
       }
+      // The checks import workspace packages (typescript, say); a fresh checkout has no node_modules, so link this repo's.
+      const modules = join(git(["rev-parse", "--show-toplevel"]), "node_modules");
+      if (existsSync(modules)) symlinkSync(modules, join(path, "node_modules"), "junction");
       folders.set(path, dir);
       return path;
     },
     remove: (path) => {
+      // Unlink first: removing the checkout must never follow the link into this repo's node_modules.
+      try {
+        unlinkSync(join(path, "node_modules"));
+      } catch {
+        // no link
+      }
       spawn("git", ["worktree", "remove", "--force", path], { cwd, encoding: "utf8" });
       const dir = folders.get(path);
       if (dir) rmSync(dir, { recursive: true, force: true });

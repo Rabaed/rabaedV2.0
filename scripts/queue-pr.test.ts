@@ -90,6 +90,19 @@ describe("queuePr: main's newest checks on the merge (RP-1171)", () => {
     expect(ran).toBe(false);
   });
 
+  it("refuses with a fix, not a crash, when the checkout of the merge fails", () => {
+    const { seam, enqueued } = fakeSeam({
+      mergeChecks: () => {
+        throw new Error("git worktree add failed: Filename too long");
+      },
+    });
+    const result = queuePr(7, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("Filename too long");
+    expect(result.lines.join("\n")).toContain("core.longpaths");
+    expect(enqueued).toEqual([]);
+  });
+
   it("warns, and still queues, when a check is not on the merge", () => {
     const { seam, enqueued } = fakeSeam({ mergeChecks: () => ({ ok: true, skipped: ["check-scenario-seams"] }) });
     const result = queuePr(1, seam);

@@ -273,7 +273,15 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   // dropped from it on checks that landed on main while it was queued.
   // Extension point (RP-1172): the open-PR overlap finder (scripts/check-claims.ts) can be called here, to push a
   // warning on `warnings`; it must not refuse.
-  const onMerge = seam.mergeChecks(merge.output, head);
+  let onMerge: MergeChecksResult;
+  try {
+    onMerge = seam.mergeChecks(merge.output, head);
+  } catch (error) {
+    return fail(
+      `PR #${pr}: could not run main's checks on the merge of the PR and main: ${error instanceof Error ? error.message.trim() : String(error)}`,
+      "Fix: check that git can add a worktree in the temp folder (disk space, long paths: `git config core.longpaths true`), then run `pnpm queue` again.",
+    );
+  }
   if (!onMerge.ok) {
     return fail(
       `PR #${pr} fails ${onMerge.failures.length === 1 ? "a check" : "checks"} of origin/main on the merge of the PR and main, the merge the queue would test:`,
