@@ -41,7 +41,7 @@ export { Field, type ChoiceOption, type FieldProps } from "./components/form/fie
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
 export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFormProps } from "./components/form-engine/action-form.tsx";
 export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
-export { ChecklistTemplateItems, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
+export { ChecklistTemplateItems, ChecklistTemplatePreview, type ChecklistTemplateFieldLabels } from "./components/form-engine/checklist-template-field.tsx";
 export { FormPdfOptions, type FormPdfOptionsLabels, type FormPdfOptionsProps } from "./components/form-engine/form-pdf-options.tsx";
 export { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./components/form-engine/checklist-field.tsx";
 export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
@@ -310,6 +310,8 @@ export {
   type SubmittalPanelSizeLabels,
   type SubmittalPanelSizeState,
 } from "./components/submittal-panel/panel-resize.tsx";
+export { SubmittalPanelNumberCard, type SubmittalPanelNumberCardLabels, type SubmittalPanelNumberCardProps } from "./components/submittal-panel/number-card.tsx";
+export { submittalNumberCard, submittalNumberPlace, type SubmittalNumberSegment } from "./components/submittal-panel/number-card-model.ts";
 export { submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
 export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
 export {
@@ -362,6 +364,13 @@ export {
   type SubmittalTimelineLabels,
 } from "./components/submittal-panel/panel-timeline.tsx";
 export { SubmittalPanelMapLink, SubmittalPanelRail, SubmittalPanelWorkflowAndLog, type SubmittalPanelRailLabels } from "./components/submittal-panel/panel-rail.tsx";
+export {
+  SubmittalPanelAttachments,
+  type SubmittalPanelAttachmentFile,
+  type SubmittalPanelAttachmentsLabels,
+  type SubmittalPanelAttachmentsProps,
+} from "./components/submittal-panel/panel-attachments.tsx";
+export { attachmentKind, submittalPanelAttachmentDocuments, type SubmittalPanelAttachmentKind } from "./components/submittal-panel/attachments-model.ts";
 export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
 export {
   WorkflowBuilder,

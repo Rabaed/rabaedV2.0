@@ -1,0 +1,3 @@
+empty RP-82-1: an inspector reads an Approved submittal they can't see as its Document Number and Subject (E1) > gives K1's inspector, covering Building A only, the WIR with the MAR as its number and Subject, never its id :: expect(JSON.stringify(read)).not.toContain(mar);
+empty RP-82-2: which link questions a Project makes required > turned off, is gone; turned on again, is back; on a Closed Project, refused :: expect(await requiredRows(k1.ap)).toEqual([]);
+text RP-82-2: which link questions a Project makes required > writes one setup_event per change, with from and to, and none for a repeat or a refusal :: expect((await events(projectId)).slice(before)).toHaveLength(1);

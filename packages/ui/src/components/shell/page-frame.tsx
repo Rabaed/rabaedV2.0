@@ -82,11 +82,15 @@ export type PageContentProps = {
   className?: string;
 };
 
-/** The page's content area inside AppShell: side padding, full width unless `narrow`. */
+/**
+ * The page's content area inside AppShell: side padding, full width unless `narrow`. Holding a
+ * board that fills the window (RP-1092), it passes the board the rest of the window, with no
+ * bottom padding, so the board reaches the window's bottom edge.
+ */
 export function PageContent({ children, narrow = false, className }: PageContentProps) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-7 sm:py-7", className)}>
-      <div className={cn("w-full min-w-0", narrow && "max-w-3xl")}>{children}</div>
+    <div className={cn("flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-7 sm:py-7 fills-window:min-h-0 fills-window:pb-0", className)}>
+      <div className={cn("w-full min-w-0 fills-window:flex fills-window:min-h-0 fills-window:flex-1 fills-window:flex-col", narrow && "max-w-3xl")}>{children}</div>
     </div>
   );
 }

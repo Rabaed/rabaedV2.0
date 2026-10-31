@@ -1,0 +1,4 @@
+empty reading a link question's answer (scenario 81) > replaces an item the reader can't see by its Document Number and Subject, never its id :: expect(JSON.stringify(read)).not.toContain(a.hidden);
+empty reading a link question's answer (scenario 81) > never names an item of another Project, nor an id that names no item :: expect(read).not.toContain(b.seen);
+empty reading a link question's answer (scenario 81) > never names an item of another Project, nor an id that names no item :: expect(read).not.toContain("BBB-MAR");
+empty saving a link question's answer > keeps an item already chosen that has been Sent Back to its raiser's Draft, and takes it as a new choice too :: expect(await reliesOn(a)).toEqual([]);

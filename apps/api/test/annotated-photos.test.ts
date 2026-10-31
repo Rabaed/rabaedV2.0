@@ -11,13 +11,13 @@
 // Rabaed Default Type (the MAR's Workflow) whose Form has one, of at most 2.
 import { createHash, randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, DocumentSummary, StartedDocumentUpload } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -130,6 +130,17 @@ const ofItem = async (by: Caller, itemId: string, id: string): Promise<DocumentS
   (await list(by, itemId)).documents.find((d) => d.id === id);
 const downloadUrl = async (by: Caller, itemId: string, id: string) => (await ok(by.get(`${documentUrl(itemId, id)}/download`), 200)).json().url as string;
 const bytesOf = async (by: Caller, itemId: string, id: string) => new Uint8Array(await (await fetch(await downloadUrl(by, itemId, id))).arrayBuffer());
+/** Reads for expectHiddenFrom: the item's Documents `by` lists, and [the Document] when `by` gets its download link; [] for the plain 404. */
+const documentsOf = (itemId: string) => async (by: Caller) => (await readById<DocumentList>(documentsUrl(itemId))(by)).flatMap((l) => l.documents);
+const downloadOf = (itemId: string, id: string) => async (by: Caller) => (await readById<{ url: string }>(`${documentUrl(itemId, id)}/download`)(by)).map(() => ({ id }));
+const names = new Map<Caller, string>();
+const named = (by: Caller) => names.get(by) ?? "someone";
+/** Each of `documents` listed and downloaded by every one of `seenBy` first, and by none of `hiddenFrom`. */
+async function expectDocumentsHidden(itemId: string, documents: string[], seenBy: Caller[], hiddenFrom: Caller[], label: string) {
+  for (const target of documents) {
+    for (const read of [documentsOf(itemId), downloadOf(itemId, target)]) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, name: named, label });
+  }
+}
 const refusedWith = async (res: Promise<LightMyRequestResponse>) => {
   const r = await res;
   return { status: r.statusCode, body: r.json() };
@@ -168,6 +179,7 @@ beforeAll(async () => {
   k1Manager = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const c2 = await other("contractor");
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
+  for (const [by, name] of [[engineer, "C1 engineer"], [consultant, "K1 engineer"], [c2Engineer, "C2 engineer"]] as const) names.set(by, name);
 });
 
 describe("saving an annotated copy", () => {
@@ -198,7 +210,7 @@ describe("saving an annotated copy", () => {
     const first = await annotate(id, original, drawn("arrow"));
     const second = await annotate(id, original, drawn("circle"));
     expect((await list(engineer, id)).documents.map((d) => d.id)).toEqual([original, second]);
-    await expectHidden(engineer.get(`${documentUrl(id, first)}/download`));
+    await expectHidden(engineer.get(`${documentUrl(id, first)}/download`)); // not hidden-from: the replaced copy is gone, for its uploader too
   });
 
   it("doesn't count toward the field's maximum of photos", async () => {
@@ -235,8 +247,8 @@ describe("saving an annotated copy", () => {
     const original = await photo(id);
     const copy = await annotate(id, original);
     await ok(engineer.request("DELETE", documentUrl(id, original)));
-    expect((await list(engineer, id)).documents).toEqual([]);
-    await expectHidden(engineer.get(`${documentUrl(id, copy)}/download`));
+    expect((await list(engineer, id)).documents).toEqual([]); // not hidden-from: both are removed, for their uploader too
+    await expectHidden(engineer.get(`${documentUrl(id, copy)}/download`)); // not hidden-from: the removed copy is gone
   });
 
   it("can be removed alone, leaving the original", async () => {
@@ -255,7 +267,7 @@ describe("what may be annotated, and by whom", () => {
     expect(await refusedWith(startCopy(engineer, id, datasheet))).toEqual({ status: 422, body: { error: "content_type_not_allowed" } });
     const original = await photo(id, null);
     const copy = await annotate(id, original);
-    await expectHidden(startCopy(engineer, id, copy));
+    await expectHidden(startCopy(engineer, id, copy)); // not hidden-from: a copy is no photo to annotate, for its own uploader
   });
 
   it("is drawn as an image", async () => {
@@ -276,8 +288,8 @@ describe("what may be annotated, and by whom", () => {
   it("is a photo of this item", async () => {
     const [here, there] = [await draft(), await draft()];
     const original = await photo(there);
-    await expectHidden(startCopy(engineer, here, original));
-    await expectHidden(startCopy(engineer, here, randomUUID()));
+    await expectHidden(startCopy(engineer, here, original)); // not hidden-from: another item's photo, refused to the Member who sees both
+    await expectHidden(startCopy(engineer, here, randomUUID())); // not hidden-from: no such photo
   });
 
   it("is refused to a Member who may not change the item's Documents", async () => {
@@ -297,12 +309,8 @@ describe("once Submitted", () => {
     id = await draft();
     original = await photo(id);
     copy = await annotate(id, original);
-    // While it is C1's Draft, nobody outside C1 reads either.
-    for (const who of [consultant, c2Engineer]) {
-      await expectHidden(who.get(documentsUrl(id)));
-      await expectHidden(who.get(`${documentUrl(id, original)}/download`));
-      await expectHidden(who.get(`${documentUrl(id, copy)}/download`));
-    }
+    // While it is C1's Draft, C1's engineer lists and downloads both, and nobody outside C1 does.
+    await expectDocumentsHidden(id, [original, copy], [engineer], [consultant, c2Engineer], "C1's Draft");
     await submit(id);
   });
 
@@ -316,10 +324,8 @@ describe("once Submitted", () => {
   });
 
   it("another Contractor reads neither copy, by the API or by the file link", async () => {
-    await expectHidden(c2Engineer.get(documentsUrl(id)));
-    await expectHidden(c2Engineer.get(`${documentUrl(id, original)}/download`));
-    await expectHidden(c2Engineer.get(`${documentUrl(id, copy)}/download`));
-    await expectHidden(startCopy(c2Engineer, id, original));
+    await expectDocumentsHidden(id, [original, copy], [engineer, consultant], [c2Engineer], "Submitted");
+    await expectHidden(startCopy(c2Engineer, id, original)); // not hidden-from: a refused write; the reads above prove the photo with expectHiddenFrom
     // The file store answers only a URL the api signed.
     const unsigned = new URL(await downloadUrl(engineer, id, copy));
     unsigned.search = "";

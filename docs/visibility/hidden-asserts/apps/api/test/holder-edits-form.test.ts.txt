@@ -1,0 +1,6 @@
+empty scenario RP-514-1: Drafts visible to the author only > another TMC engineer, the PM, the Authorized Person and K1 get 404, and don't list or count it; Hafiz does :: await expectHidden(by.get(`/v1/work-items/${id}`));
+empty scenario RP-514-1: Drafts visible to the author only > another TMC engineer, the PM, the Authorized Person and K1 get 404, and don't list or count it; Hafiz does :: await expectHidden(k1Manager.get(`/v1/work-items/${id}`));
+empty scenario RP-514-1: Drafts visible to the author only > the Authorized Person hands over a Draft they don't see by its Step and Project; the new holder sees and edits it :: await expectHidden(c1.caller.get(`/v1/work-items/${id}`));
+empty scenario RP-514-1: Drafts visible to the author only > the Authorized Person hands over a Draft they don't see by its Step and Project; the new holder sees and edits it :: expect(refused.body).not.toContain(id);
+empty scenario RP-514-1: Drafts visible to the author only > the Authorized Person hands over a Draft they don't see by its Step and Project; the new holder sees and edits it :: expect(refused.body).not.toContain("Badr's Draft");
+empty scenario RP-514-1: Drafts visible to the author only > the Authorized Person hands over a Draft they don't see by its Step and Project; the new holder sees and edits it :: await expectHidden(hafiz.get(`/v1/work-items/${id}`));

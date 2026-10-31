@@ -6,11 +6,11 @@
 // asks exactly what it did before: a reason on the Return, nothing elsewhere,
 // and an Internal Note under every pop-up that stays inside the writer's Company.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { workflowActionFormProblems, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 
@@ -50,6 +50,14 @@ async function createDraft(title: string): Promise<string> {
   await attachDatasheet(engineer, res.json().id);
   return res.json().id;
 }
+
+/** How a reader is named in a hidden-from failure. */
+const nameOf = (by: Caller) =>
+  new Map<Caller, string>([
+    [engineer, "C1 Engineer"],
+    [pm, "C1 PM"],
+    [k1Manager, "K1 manager"],
+  ]).get(by) ?? "another Member";
 
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
   const res = await by.get(`/v1/work-items/${id}/history`);
@@ -114,7 +122,7 @@ describe("publish check 7", () => {
     `.execute(migrator);
     const lists = await sql<{ id: string }>`select id from option_list`.execute(migrator);
     expect(rows.length).toBeGreaterThan(0);
-    expect(workflowActionFormProblems(rows, { optionListIds: new Set(lists.rows.map((l) => l.id)) })).toEqual([]);
+    expect(workflowActionFormProblems(rows, { optionListIds: new Set(lists.rows.map((l) => l.id)) })).toEqual([]); // not hidden-from: a list of publish problems, none
   });
 });
 
@@ -180,7 +188,9 @@ describe("taking a Transition with its Action Form", () => {
     const res = await tryTake(engineer, id, "return", { answers: {} });
     expect(res.statusCode, res.body).toBe(409);
     expect(res.json()).toEqual({ error: "not_holder" });
-    await expectHidden(tryTake(k1Manager, id, "return", { answers: {} }));
+    // At C1's Internal Review the item is C1's alone: K1 is answered as for a made-up id.
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: [engineer, pm], hiddenFrom: k1Manager, name: nameOf, label: "C1's item at Internal Review" });
+    await expectHidden(tryTake(k1Manager, id, "return", { answers: {} })); // not hidden-from: a refused write; the read above proves the row with expectHiddenFrom
   });
 
   it("keeps the Internal Note out of the shared payload, as its own internal event (V5, scenario 34)", async () => {
@@ -196,5 +206,10 @@ describe("taking a Transition with its Action Form", () => {
     ]);
     expect(rows[0]!.payload).not.toHaveProperty("internal_note");
     expect((await history(k1Manager, id)).some((e) => e.internalNote !== null)).toBe(false);
+    // The note's event, as a row: read by C1, who wrote it, and not by K1, who reads the item's history.
+    const note = `${id}/internal_note`;
+    const noteRead = async (by: Caller) =>
+      (await history(by, id)).filter((e) => e.internalNote === "Checked against the drawings").map(() => ({ id: note }));
+    await expectHiddenFrom({ read: noteRead, target: note, seenBy: [pm, engineer], hiddenFrom: k1Manager, name: nameOf, label: "the Internal Note" });
   });
 });

@@ -36,7 +36,8 @@ import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
-import { lookOf, placeText, type Places } from "./snag-look.ts";
+import { lookOf, placeText, questionLook, type Places } from "./snag-look.ts";
+import { chipChosen, typeChipsOf } from "./snag-type-chips.ts";
 import { SnagPhoneList, type SnagPhoneLabels, type SnagSwipe } from "./snag-phone.tsx";
 import { saveFile } from "./work-item-export.ts";
 import { ownerOf, placesOf } from "./work-item-board.tsx";
@@ -44,8 +45,8 @@ import { locationLevels, WorkItemPager } from "./work-item-list.tsx";
 
 // The Snag List's desktop views (RP-94, SNAG-8; design/reference/claude-design/ui_kits/app/snag-list.html):
 // a toolbar ("+ New" with only the Types the viewer may raise, search, Filters, Need My Action,
-// List / Kanban), the type chips (All and each of the Module's Types, with how many the viewer
-// sees), the List grouped by Stage in folding groups, and the Kanban with a column per Stage.
+// List / Kanban), the type chips (All, each of the Module's Types and one "Questions" chip for
+// the Question Types, with how many the viewer sees), the List grouped by Stage in folding groups, and the Kanban with a column per Stage.
 // Every count is the API's, of the items the viewer sees (V1); "With" follows V14 (ownerOf).
 // No due date, deadline or "overdue": Step Age dots only.
 
@@ -73,6 +74,8 @@ export type SnagListLabels = {
   types: string;
   /** The chip of every Type. */
   allTypes: string;
+  /** The one chip of the Question Types (QSN, QSC, QSO), e.g. "Questions". */
+  questions: string;
   stage: string;
   trade: string;
   company: string;
@@ -387,7 +390,8 @@ export function SnagList({
   // Below `md` the List is the phone's cards (RP-630); the Kanban, and a Module with no item at all, look the same everywhere.
   const phone = data.view === "list" && !(total === 0 && !filtered);
   const desktop = (
-    <div className={cn("flex min-w-0 flex-col gap-3", phone && "max-md:hidden")}>
+    // The Kanban takes the rest of the window under the type chips (RP-1092).
+    <div className={cn("flex min-w-0 flex-col gap-3 fills-window:min-h-0 fills-window:flex-1", phone && "max-md:hidden")}>
       <ListToolbar label={labels.toolbar} end={viewSwitch} className="gap-1.5">
         {newTypes.length > 0 && newAction}
         <ToolbarSearch
@@ -527,8 +531,9 @@ function NewMenu({ types, locale, labels, newHref, linkAs: Link }: { types: read
 
 /**
  * The type chips: All, then each of the Module's Types (a new Type shows as a chip with no
- * change here), each with how many items the viewer sees with the other filters on. Under a
- * search the API counts nothing beyond what it shows, so the chips carry no number then.
+ * change here), the three Question Types as one "Questions" chip (RP-1109), each with how many
+ * items the viewer sees with the other filters on. Under a search the API counts nothing beyond
+ * what it shows, so the chips carry no number then.
  */
 function TypeChips({
   list,
@@ -549,7 +554,6 @@ function TypeChips({
   phone?: boolean;
 }) {
   const counts = list.typeCounts;
-  const countOf = (code: string) => counts?.find((c) => c.code === code)?.count ?? 0;
   const all = counts?.reduce((sum, c) => sum + c.count, 0);
   const { cursor: _cursor, page: _page, ...rest } = query;
   const chip = (key: string, chosen: boolean, type: string[], content: ReactNode, count: number | undefined, next = { ...rest, type }) => (
@@ -572,17 +576,17 @@ function TypeChips({
     <nav aria-label={labels.types}>
       <ul className={cn("flex items-center gap-2", phone ? "flex-nowrap pb-1" : "flex-wrap")}>
         {chip("all", query.type.length === 0, [], labels.allTypes, all)}
-        {list.filters.types.map((t) => {
-          const look = lookOf(t.code);
+        {typeChipsOf(list.filters.types, counts).map((c) => {
+          const look = c.kind === "questions" ? questionLook : lookOf(c.type.code);
           return chip(
-            t.code,
-            query.type.length === 1 && query.type[0] === t.code,
-            [t.code],
+            c.key,
+            chipChosen(c, query.type),
+            c.codes,
             <>
               <Icon name={look.icon} size={15} className={look.mark} />
-              {t.name[locale]}
+              {c.kind === "questions" ? labels.questions : c.type.name[locale]}
             </>,
-            counts ? countOf(t.code) : undefined,
+            c.count,
           );
         })}
         {phone &&
@@ -857,7 +861,11 @@ function SnagTable({
   );
 }
 
-/** The Kanban: a column per Stage (Drafts left out, as on every board), each with its count and its cards. */
+/**
+ * The Kanban: a column per Stage (Drafts left out, as on every board), each with its count and its cards.
+ * On its page it fills the window (RP-1092) and scrolls down and sideways in its own region, its
+ * scrollbar on the window's bottom edge; a column reaches the board's foot and grows with its cards.
+ */
 function SnagBoard({
   board,
   locale,
@@ -878,13 +886,21 @@ function SnagBoard({
   const n = (value: number) => formatNumber(value, locale);
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
   return (
-    <section aria-label={labels.board} tabIndex={0} className={cn("flex min-w-0 gap-3 overflow-x-auto pb-2", focusRing)}>
+    <section
+      aria-label={labels.board}
+      tabIndex={0}
+      // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
+      data-fills-window=""
+      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", focusRing, "focus-visible:-outline-offset-2")}
+    >
       {board.stages
         .filter((s) => s.category !== "draft")
         .map((stage) => {
           const cards = (columns.get(stage.key)?.lanes ?? []).flatMap((l) => l.cards);
           return (
-            <section key={stage.key} aria-label={stage.name[locale]} className="flex w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle">
+            // Stretched to the board's height, and never shorter than its cards.
+            <section key={stage.key} aria-label={stage.name[locale]} className="flex min-h-fit w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle">
               <h2 className="flex h-11 items-center gap-2 px-3 text-[13.5px] font-semibold text-text">
                 <StageDot stage={stageColour(stage)} />
                 {stage.name[locale]}

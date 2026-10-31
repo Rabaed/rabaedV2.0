@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestWorkflow, bilingual, buildSeamTwoTower, digits, joinProject, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestWorkflow, bilingual, buildSeamTwoTower, digits, expectHiddenFrom, joinProject, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
@@ -66,20 +66,39 @@ const events = (as: string, id: string) =>
   );
 const stepAsSeen = async (as: string, id: string) =>
   (await call<{ stage_key: string; entered_at: Date }>(as, sql`select stage_key, entered_at from app.step_as_seen(${id}::uuid)`))[0];
-/** Everything `as` reads of item `id` through the tables and the List's functions: none of it, for an item it does not see. */
-const readsOf = async (as: string, id: string) => ({
-  row: await seen(as, id),
-  events: await events(as, id),
-  steps: await call(as, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
-  documents: await call(as, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
-  links: await call(as, sql<{ id: string }>`select id from app.work_item_links(${id}::uuid)`),
-  companies: await call(as, sql<{ participant_id: string }>`select participant_id from app.work_item_companies(${id}::uuid)`),
-  holder: await call(as, sql<{ participant_id: string }>`select participant_id from app.work_item_holder(${id}::uuid)`),
-  photos: await call(as, sql<{ document_id: string }>`select document_id from app.document_times(${id}::uuid)`),
-  counts: await call(as, sql<{ type_code: string }>`select type_code from app.work_item_raised_item_counts(${id}::uuid)`),
-  stage: await stepAsSeen(as, id),
-});
-const nothing = { row: [], events: [], steps: [], documents: [], links: [], companies: [], holder: [], photos: [], counts: [], stage: undefined };
+type Rows = Promise<readonly unknown[]>;
+/** Each read `as` makes of item `id` through the tables and the List's functions. */
+const itemReads = {
+  row: (as: string, id: string): Rows => seen(as, id),
+  events: (as: string, id: string): Rows => events(as, id),
+  steps: (as: string, id: string): Rows => call(as, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
+  documents: (as: string, id: string): Rows => call(as, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
+  links: (as: string, id: string): Rows => call(as, sql<{ id: string }>`select id from app.work_item_links(${id}::uuid)`),
+  companies: (as: string, id: string): Rows => call(as, sql<{ participant_id: string }>`select participant_id from app.work_item_companies(${id}::uuid)`),
+  holder: (as: string, id: string): Rows => call(as, sql<{ participant_id: string }>`select participant_id from app.work_item_holder(${id}::uuid)`),
+  photos: (as: string, id: string): Rows => call(as, sql<{ document_id: string }>`select document_id from app.document_times(${id}::uuid)`),
+  counts: (as: string, id: string): Rows => call(as, sql<{ type_code: string }>`select type_code from app.work_item_raised_item_counts(${id}::uuid)`),
+  stage: async (as: string, id: string): Rows => {
+    const stage = await stepAsSeen(as, id);
+    return stage ? [stage] : [];
+  },
+};
+type ItemRead = keyof typeof itemReads;
+/** The reads an open Snag has rows in, with no Document or Link. */
+const openSnag: ItemRead[] = ["row", "events", "steps", "companies", "holder", "stage"];
+/** How a Member is named in a failure. */
+const whoIs = (as: string) =>
+  ({ [c1Pm]: "C1 PM", [c1Engineer]: "C1 engineer", [k1]: "K1 engineer", [c2]: "C2 engineer", [outsider]: "the outsider" })[as] ?? `Member ${as}`;
+
+/**
+ * Item `id` through each read in `reads`: read first by every one of `seenBy`, then by none of `hiddenFrom` (RP-1095).
+ * `reads` are the reads the item has rows in: one it has none in would prove nothing.
+ */
+async function hiddenIn(id: string, { seenBy, hiddenFrom, reads, label }: { seenBy: string | string[]; hiddenFrom: string | string[]; reads: ItemRead[]; label: string }) {
+  for (const read of reads) {
+    await expectHiddenFrom({ read: async (as: string) => (await itemReads[read](as, id)).map(() => ({ id })), target: id, seenBy, hiddenFrom, name: whoIs, label: `${label}, ${read}` });
+  }
+}
 /**
  * The Tower's items `as` reads through `work_item` (its row-level security): the rows the work item query's List,
  * Kanban and export start from before their own filters.
@@ -196,7 +215,13 @@ describe("a Snag raised on C1 stays with C1 when C3 is widened over it (scenario
   });
 
   it("RP-90-4: every move, the Resolve and K1's Return keep the Steps with C1; C3 reads no row, event, Step, Document, Link or Stage of it", async () => {
-    const id = await raised("Overlap after the Raise");
+    // With a photo, raised from a Snag and with a Snag raised from it, so its Documents, Links and counts have rows C1 reads.
+    const id = await draft("Overlap after the Raise");
+    await photo(id);
+    expect(await take(k1, id, "raise")).toBe("applied");
+    await raiseFrom(id, await raised("The overlap's source"));
+    await raiseFrom(await raised("Raised from the overlap"), id);
+    const reads: ItemRead[] = [...openSnag, "documents", "photos", "links", "counts"];
     await participantCovers(c3Participant, "location", "all");
     try {
       const openSteps = () => call<{ participant_id: string }>(c1Pm, sql`select participant_id from step_assignment where work_item_id = ${id}::uuid and status <> 'done'`);
@@ -205,15 +230,16 @@ describe("a Snag raised on C1 stays with C1 when C3 is widened over it (scenario
         expect(await take(c1Pm, id, transition), transition).toBe("applied");
         await pickUp(c1Pm, id);
         expect(await openSteps(), transition).toEqual([{ participant_id: tower.c1.participantId }]);
-        expect(await readsOf(c3, id), transition).toEqual(nothing);
+        await hiddenIn(id, { seenBy: c1Pm, hiddenFrom: c3, reads, label: transition });
       }
       expect(await take(c1Pm, id, "resolve", { resolution_note: "Done" })).toBe("applied");
-      expect(await readsOf(c3, id), "resolved").toEqual(nothing);
+      await hiddenIn(id, { seenBy: c1Pm, hiddenFrom: c3, reads, label: "resolved" });
       expect(await take(k1, id, "return_to_open", { reason: "Not yet" })).toBe("applied");
       expect(await openSteps()).toEqual([{ participant_id: tower.c1.participantId }]);
       expect((await stepAsSeen(c1Pm, id))!.stage_key).toBe("open");
-      expect(await readsOf(c3, id), "returned").toEqual(nothing);
-      expect(await listed(c3)).not.toContain(id);
+      await hiddenIn(id, { seenBy: c1Pm, hiddenFrom: c3, reads, label: "returned" });
+      const listedRows = async (as: string) => (await listed(as)).map((row) => ({ id: row }));
+      await expectHiddenFrom({ read: listedRows, target: id, seenBy: c1Pm, hiddenFrom: c3, name: (as) => (as === c3 ? "C3 engineer" : whoIs(as)), label: "listed" });
       // Positive control: C3 reads a Snag raised on it (Building C, which C1 does not cover).
       const onC = await raised("C3's own", { location: buildingC });
       expect(await seen(c3, onC)).toEqual([onC]);
@@ -290,7 +316,7 @@ describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)"
     comments = (await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from' order by from_id", [source])).rows.map(
       (r: { from_id: string }) => r.from_id,
     );
-    expect(comments).toHaveLength(2);
+    expect(comments).toHaveLength(2); // not hidden-from: the review's two rows made two Comments
     photographed = await draft("Cable tray not bonded");
     photoId = await photo(photographed);
     expect(await take(k1, photographed, "raise")).toBe("applied");
@@ -313,28 +339,46 @@ describe("C2's Snag List names and counts none of C1's items (scenario RP-94-1)"
   });
 
   it("RP-94-1: no read names C1's items, their source's number or Review Code, or C1's Participant; Company and Raised from offer C1 nothing", async () => {
-    for (const id of [source, ...comments, photographed]) expect(await readsOf(c2, id), id).toEqual(nothing);
-    expect(await call(c2, sql<{ outcome: string }>`select outcome from work_item where id = ${source}::uuid`)).toEqual([]);
-    const companies = await call<{ participant_id: string }>(
-      c2,
-      sql`select distinct hc.participant_id from work_item w cross join lateral app.work_item_holder(w.id) h
-          join lateral app.work_item_companies(w.id) hc on hc.participant_id = h.participant_id
-          where w.project_id = ${tower.projectId}::uuid`,
-    );
-    expect(companies).toEqual([{ participant_id: tower.c2.participantId }]);
-    const sources = await call<{ document_number: string }>(
-      c2,
-      sql`select l.document_number from work_item w cross join lateral app.work_item_links(w.id) l
-          where w.project_id = ${tower.projectId}::uuid and l.kind = 'raised_from'`,
-    );
-    expect(sources).toEqual([]);
+    // C1's PM and K1 read each through every read it has rows in (the source's Review Code with its row); C2 none.
+    const both = [c1Pm, k1];
+    await hiddenIn(source, { seenBy: both, hiddenFrom: c2, reads: ["row", "events", "steps", "companies", "stage", "counts"], label: "source" });
+    for (const comment of comments) {
+      await hiddenIn(comment, { seenBy: both, hiddenFrom: c2, reads: [...openSnag.filter((read) => read !== "steps"), "links"], label: "Comment" });
+      // A Comment's Steps are C1's: K1, who never raised it by hand, reads none either.
+      await hiddenIn(comment, { seenBy: c1Pm, hiddenFrom: c2, reads: ["steps"], label: "Comment" });
+    }
+    await hiddenIn(photographed, { seenBy: both, hiddenFrom: c2, reads: [...openSnag, "documents", "photos"], label: "photographed" });
+    const companies = async (as: string) =>
+      (
+        await call<{ participant_id: string }>(
+          as,
+          sql`select distinct hc.participant_id from work_item w cross join lateral app.work_item_holder(w.id) h
+              join lateral app.work_item_companies(w.id) hc on hc.participant_id = h.participant_id
+              where w.project_id = ${tower.projectId}::uuid`,
+        )
+      ).map((r) => ({ id: r.participant_id }));
+    expect(await companies(c2)).toEqual([{ id: tower.c2.participantId }]);
+    await expectHiddenFrom({ read: companies, target: tower.c1.participantId, seenBy: both, hiddenFrom: c2, name: whoIs, label: "Company choices" });
+    const sources = async (as: string) =>
+      (
+        await call<{ document_number: string }>(
+          as,
+          sql`select l.document_number from work_item w cross join lateral app.work_item_links(w.id) l
+              where w.project_id = ${tower.projectId}::uuid and l.kind = 'raised_from'`,
+        )
+      ).map((r) => ({ id: r.document_number }));
+    await expectHiddenFrom({ read: sources, target: sourceNumber, seenBy: both, hiddenFrom: c2, name: whoIs, label: "Raised from choices" });
   });
 
   it("RP-94-1: filtering by C1's source, by C1 or by the Comment Type finds nothing for C2, and each finds C1's items for C1", async () => {
-    expect(await raisedFrom(c2, sourceNumber)).toEqual([]);
-    expect(await heldBy(c2, tower.c1.participantId)).toEqual([]);
-    expect(await ofCommentType(c2)).toEqual([]);
-    expect(await call(c2, sql<{ id: string }>`select id from document where id = ${photoId}::uuid`)).toEqual([]);
+    const rows = (find: (as: string) => Promise<string[]>) => async (as: string) => (await find(as)).map((id) => ({ id }));
+    const hidden = (label: string, find: (as: string) => Promise<string[]>, target: string) =>
+      expectHiddenFrom({ read: rows(find), target, seenBy: [c1Pm, k1], hiddenFrom: c2, name: whoIs, label });
+    await hidden("Raised from", (as) => raisedFrom(as, sourceNumber), comments[0]!);
+    await hidden("Company", (as) => heldBy(as, tower.c1.participantId), photographed);
+    await hidden("Comment Type", ofCommentType, comments[0]!);
+    const document = async (as: string) => (await call<{ id: string }>(as, sql`select id from document where id = ${photoId}::uuid`)).map((r) => r.id);
+    await hidden("photo", document, photoId);
     // Positive controls: C2's own filter finds its Snag; C1's filters find its items.
     expect(await heldBy(c2, tower.c2.participantId)).toEqual([c2Snag]);
     expect(await raisedFrom(c1Pm, sourceNumber)).toEqual([...comments].sort());
@@ -374,11 +418,12 @@ describe("the raised-from counts follow what the viewer sees (scenarios RP-624-1
     await raiseFrom(forC1, source);
     await raiseFrom(forC2, source);
     expect(await counts(c2, source)).toEqual([{ type_code: "SNG", open_count: 1, closed_count: 0 }]);
-    expect(await readsOf(c2, forC1)).toEqual(nothing);
+    await hiddenIn(forC1, { seenBy: [c1Pm, k1], hiddenFrom: c2, reads: [...openSnag, "links"], label: "C1's side" });
     // K1 raised and sees all three.
     expect(await counts(k1, source)).toEqual([{ type_code: "SNG", open_count: 2, closed_count: 0 }]);
-    // C1 does not see the source itself: it counts nothing of it.
-    expect(await counts(c1Pm, source)).toEqual([]);
+    // C1 does not see the source itself: it counts nothing of it, where K1 and C2 count.
+    const countsOfSource = async (as: string) => (await counts(as, source)).map(() => ({ id: source }));
+    await expectHiddenFrom({ read: countsOfSource, target: source, seenBy: [k1, c2], hiddenFrom: c1Pm, name: whoIs, label: "counts" });
   });
 
   it("RP-624-2: C1's PM counts both Snags raised from a source; an Electrical-only engineer counts the one it sees; a discarded Draft is never counted", async () => {
@@ -393,7 +438,7 @@ describe("the raised-from counts follow what the viewer sees (scenarios RP-624-1
     await raiseFrom(ducts, source);
     expect(await counts(c1Pm, source)).toEqual([{ type_code: "SNG", open_count: 2, closed_count: 0 }]);
     expect(await counts(electricalOnly, source)).toEqual([{ type_code: "SNG", open_count: 1, closed_count: 0 }]);
-    expect(await readsOf(electricalOnly, ducts)).toEqual(nothing);
+    await hiddenIn(ducts, { seenBy: [c1Pm, k1], hiddenFrom: electricalOnly, reads: [...openSnag, "links"], label: "Mechanical" });
 
     const discarded = await draft("Level 2: paint");
     await raiseFrom(discarded, source);
@@ -435,11 +480,14 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
   });
 
   it("RP-629-1: Reassign offers the holder's own Participant's Members only, and nobody to K1, C2 or an outsider", async () => {
+    // Every Member offered to C1's PM is C1's: so never C2's or K1's.
     const offered = await candidates(c1Pm, first);
+    const c1Members = (await migrator.query("select id from member where company_id = $1", [tower.c1.id])).rows.map((r: { id: string }) => r.id);
     expect(offered).toContain(c1Engineer);
-    expect(offered).not.toContain(c2);
-    expect(offered).not.toContain(k1);
-    for (const other of [k1, c2, outsider]) expect(await candidates(other, first), other).toEqual([]);
+    for (const m of offered) expect(c1Members, m).toContain(m);
+    // C1's engineer is offered to C1's PM, holding it, and to none of K1, C2 or the outsider.
+    const offeredTo = async (as: string) => (await candidates(as, first)).map((m) => ({ id: m }));
+    await expectHiddenFrom({ read: offeredTo, target: c1Engineer, seenBy: c1Pm, hiddenFrom: [k1, c2, outsider], name: whoIs });
     // Positive controls: K1 and C2 read the item list they are offered nothing on; the outsider its own Project.
     expect(await seen(k1, first)).toEqual([first]);
     expect(await seen(c2, c2Snag)).toEqual([c2Snag]);
@@ -463,14 +511,17 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
     expect((await events(c1Pm, second)).filter((e) => e.type === "assigned")).toEqual([
       { type: "assigned", audience: "internal", actor_participant_id: tower.c1.participantId },
     ]);
-    expect((await events(k1, second)).map((e) => e.type)).not.toContain("assigned");
+    const assigned = async (as: string) => (await events(as, second)).filter((e) => e.type === "assigned").map(() => ({ id: "assigned" }));
+    await expectHiddenFrom({ read: assigned, target: "assigned", seenBy: c1Pm, hiddenFrom: k1, name: whoIs, label: "the reassign event" });
     expect((await events(k1, second)).every((e) => e.audience === "shared")).toBe(true);
   });
 
   it("RP-629-1: Move Stage is offered only the holder's own Transitions, per Stage; K1, C2 and an outsider are offered none", async () => {
     expect((await moves(c1Pm, first)).map((m) => m.stage_key).sort()).toEqual(["in_progress", "on_hold", "resolved"]);
-    for (const other of [k1, c1Engineer, c2, outsider]) expect(await moves(other, first), other).toEqual([]);
-    expect(await call(c2, sql<{ action: string }>`select action from app.work_item_actions(${first}::uuid)`)).toEqual([]);
+    const moveKeys = async (as: string) => (await moves(as, first)).map((m) => ({ id: m.transition_key }));
+    await expectHiddenFrom({ read: moveKeys, target: "start_work", seenBy: c1Pm, hiddenFrom: [k1, c1Engineer, c2, outsider], name: whoIs, label: "moves" });
+    const actions = async (as: string) => (await call<{ action: string }>(as, sql`select action from app.work_item_actions(${first}::uuid)`)).map(() => ({ id: first }));
+    await expectHiddenFrom({ read: actions, target: first, seenBy: c1Pm, hiddenFrom: c2, name: whoIs, label: "actions" });
     // Positive controls: C2 is offered a pick-up of its own Snag; the outsider reads its own Project.
     expect((await call<{ action: string }>(c2, sql`select action from app.work_item_actions(${c2Snag}::uuid)`)).length).toBeGreaterThan(0);
     expect(await outsiderReadsOwnProject()).toBe(true);
@@ -494,8 +545,9 @@ describe("the Snag List's bulk actions and export (scenario RP-629-1)", () => {
         .filter((id) => ours.includes(id));
     expect(await atStage(c2, "open")).toEqual([c2Snag]);
     expect((await atStage(c1Pm, "open")).sort()).toEqual([first, second].sort());
-    expect(await atStage(c2, "in_progress")).toEqual([]);
-    expect(await listed(outsider)).toEqual([]);
+    // (No item of these is In Progress, so a read at that Stage would be empty for everyone and prove nothing: RP-1095.)
+    const listedRows = async (as: string) => (await listed(as)).map((id) => ({ id }));
+    await expectHiddenFrom({ read: listedRows, target: first, seenBy: [c1Pm, k1], hiddenFrom: outsider, name: whoIs, label: "listed" });
     expect(await outsiderReadsOwnProject()).toBe(true);
   });
 });
@@ -523,8 +575,8 @@ describe("the cards' swipe actions are the item's own Transitions (scenario RP-6
 
   it("RP-630-1: C1's engineer (not holding it) and K1 (while C1 holds it) are offered none, and a Transition they try is refused", async () => {
     const id = await heldByPm("Ceiling tile cracked");
-    expect(await offered(c1Engineer, id)).toEqual([]);
-    expect(await offered(k1, id)).toEqual([]);
+    const keys = async (as: string) => (await offered(as, id)).map((key) => ({ id: key }));
+    await expectHiddenFrom({ read: keys, target: "start_work", seenBy: c1Pm, hiddenFrom: [c1Engineer, k1], name: whoIs });
     expect(await take(c1Engineer, id, "start_work")).toBe("not_holder");
     expect(await take(k1, id, "start_work")).toBe("not_holder");
     expect((await stepAsSeen(c1Pm, id))!.stage_key).toBe("open");

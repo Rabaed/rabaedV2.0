@@ -14,12 +14,12 @@
 // Rabaed Defaults.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, StartedDocumentUpload, WorkItemDetail, WorkItemHistory, WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
-import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, memberOnProject, ok, take, tryTake, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -170,7 +170,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     await sendToManager(wir, "C");
     await take(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: "Seal the formwork" } });
     const raised = await raisedFrom(hafiz.caller, wir, "SNG");
-    expect(raised).toHaveLength(1);
+    expect(raised).toHaveLength(1); // not hidden-from: how many Snags the code raised, read by C1, who sees them
     snag = await detail(hafiz.caller, raised[0]!.id);
   });
 
@@ -196,7 +196,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
       ["photos", null, "formwork.jpg"],
     ]);
     const named = (fileName: string) => copied.find((d) => d.fileName === fileName)!;
-    expect(copied.map((d) => d.id)).not.toContain(photos[0]);
+    expect(copied.map((d) => d.id)).not.toContain(photos[0]); // not hidden-from: the Snag's photos are new Documents, not the WIR's
     expect(named("formwork-annotated.png").annotatedFromId).toBe(named("formwork.jpg").id);
     expect(named("formwork.jpg").annotatedFromId).toBeNull();
     expect(await bytesOf(hafiz.caller, snag.id, named("formwork.jpg").id)).toEqual(await bytesOf(hafiz.caller, wir, photos[0]!));
@@ -206,7 +206,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
 
   it("its Raised from read carries the check item's key, text and photos: the WIR's own, in upload order, the annotated copy too (RP-1081)", async () => {
     const wirPhotos = (await documentsOf(hafiz.caller, wir)).documents.filter((d) => d.itemKey === "formwork");
-    expect(wirPhotos).toHaveLength(3);
+    expect(wirPhotos).toHaveLength(3); // not hidden-from: the check item's three photos, read by C1, who sees them
     const ofWir = (fileName: string) => wirPhotos.find((d) => d.fileName === fileName)!;
     expect(snag.raisedFrom?.checkItem).toEqual({
       key: "formwork",
@@ -260,7 +260,7 @@ describe("every code raises them (seam 1)", () => {
     await ok(mohammed.caller.post(`/v1/work-items/${wir}/transitions`, code), 204);
     await ok(mohammed.caller.post(`/v1/work-items/${wir}/transitions`, code), 204);
     const raised = await raisedFrom(hafiz.caller, wir, "SNG");
-    expect(raised).toHaveLength(1);
+    expect(raised).toHaveLength(1); // not hidden-from: the replayed code raised no second Snag
     const [copied] = (await documentsOf(hafiz.caller, raised[0]!.id)).documents;
     expect(await bytesOf(hafiz.caller, raised[0]!.id, copied!.id)).toEqual(jpegWithExif());
   });
@@ -269,7 +269,7 @@ describe("every code raises them (seam 1)", () => {
     const wir = await atManager("No snag", { formwork: { answer: "fail", comment: "Gap", snag: false }, cover: { answer: "na" }, clean: { answer: "yes" } });
     await sendToManager(wir, "C");
     await take(mohammed.caller, wir, "reject_d", { answers: { ...VERIFIED, remarks: "Rejected" } });
-    expect(await raisedFrom(hafiz.caller, wir, "SNG")).toEqual([]);
+    expect(await raisedFrom(hafiz.caller, wir, "SNG")).toEqual([]); // not hidden-from: the code raised none
     expect(await snagCount(hafiz.caller, wir)).toBeNull();
   });
 });
@@ -289,10 +289,16 @@ describe("RP-577-1: who sees the Snags raised at the code", () => {
   });
 
   it("C2 sees neither the Snag, its photos, nor its count; the WIR is hidden from it too", async () => {
-    expect((await snagList(yousef.caller)).map((i) => i.id)).not.toContain(snag);
-    await expectHidden(yousef.caller.get(`/v1/work-items/${snag}`));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${snag}/documents`));
-    await expectHidden(yousef.caller.get(`/v1/work-items/${wir}`));
+    type Member = { id: string; caller: Caller };
+    const seenBy = [hafiz, mohammed, faisal];
+    const known = new Map<Member, string>([[hafiz, "Hafiz (C1)"], [mohammed, "Mohammed (K1)"], [faisal, "Faisal (O1)"], [yousef, "Yousef (C2)"]]);
+    const hidden = (read: (m: Member) => Promise<readonly { id: string }[]>, target: string, label: string) =>
+      expectHiddenFrom({ read, target, seenBy, hiddenFrom: yousef, name: (m) => known.get(m) ?? m.id, label });
+    await hidden((m) => snagList(m.caller), snag, "the Snag List");
+    await hidden((m) => readById(`/v1/work-items/${snag}`)(m.caller), snag, "the Snag");
+    const photo = (await documentsOf(hafiz.caller, snag)).documents[0]!.id;
+    await hidden(async (m) => (await readById<DocumentList>(`/v1/work-items/${snag}/documents`)(m.caller)).flatMap((l) => l.documents), photo, "the Snag's photo");
+    await hidden((m) => readById(`/v1/work-items/${wir}`)(m.caller), wir, "the WIR");
   });
 
   it("C1, K1 and the Owner Representative see it, its photo and its source, and count it", async () => {
@@ -329,7 +335,7 @@ describe("a Snag Type that can't take them refuses the code (seam 1)", () => {
     const after = await detail(mohammed.caller, wir);
     expect(after.outcome).toBeNull();
     expect(after.step.key).toBe("consultant_manager");
-    expect((await history(mohammed.caller, wir)).map((e) => e.type)).not.toContain("issue_code");
-    expect(await raisedFrom(mohammed.caller, wir, "SNG")).toEqual([]);
+    expect((await history(mohammed.caller, wir)).map((e) => e.type)).not.toContain("issue_code"); // not hidden-from: the refused code wrote no event, for its Manager either
+    expect(await raisedFrom(mohammed.caller, wir, "SNG")).toEqual([]); // not hidden-from: and raised no Snag
   });
 });

@@ -1,0 +1,6 @@
+empty a Member who may not act on a card > has no moves for it: not the pool's other Members, not another Company, not the raiser :: expect((await board(k1ManagerB)).moves[marAtK1]).toBeUndefined();
+empty a Member who may not act on a card > has no moves for it: not the pool's other Members, not another Company, not the raiser :: expect((await board(k1ManagerB)).moves[pooled]).toBeUndefined();
+empty a Member who may not act on a card > has no moves for it: not the pool's other Members, not another Company, not the raiser :: expect((await board(c1Engineer)).moves[marAtK1]).toBeUndefined();
+empty a Member who may not act on a card > has no moves for it: not the pool's other Members, not another Company, not the raiser :: expect((await board(c1Pm)).moves[marAtK1]).toBeUndefined();
+empty a Member who may not act on a card > does not leak another Company's Transitions or Steps into C1's board :: for (const secret of ["approve_a", "revise_c", "consultant_review"]) expect(json).not.toContain(secret);
+empty dropping > takes the Transition, and the card is in its new Stage on the next read :: expect(after.moves[marAtK1]).toBeUndefined();

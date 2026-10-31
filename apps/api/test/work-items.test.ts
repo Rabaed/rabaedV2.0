@@ -2,9 +2,11 @@
 // (RP-192; visibility.md V1, V3, V4 and scenarios 1, 5, 8, 9 of the spec).
 // Lists, Stage counts and direct links all answer from the same visible items.
 import { randomUUID } from "node:crypto";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { expectNoDeadlineWords } from "./support/deadline-words.ts";
+import { createTestApi, expectHidden, readById, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -85,6 +87,20 @@ const list = async (by: Caller): Promise<WorkItemList> => {
 
 const counts = (l: WorkItemList) => Object.fromEntries(l.stages.map((s) => [s.key, s.count]));
 
+/** Who each caller is, in a failure. */
+const names = new Map<Caller, string>();
+const nameOf = (by: Caller) => names.get(by) ?? "a caller";
+
+/** Work Item `target` is read by `seenBy` and by none of `hiddenFrom`: in the Project's list, and by id. */
+async function itemHidden(target: string, seenBy: Caller | Caller[], hiddenFrom: Caller | Caller[]) {
+  const listed = async (by: Caller) => (await list(by)).items;
+  await expectHiddenFrom({ read: listed, target, seenBy, hiddenFrom, name: nameOf, label: "the Project's list" });
+  await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy, hiddenFrom, name: nameOf, label: "the item by id" });
+}
+
+/** The Project's Work Item list as a read of the Project: `[{ id: projectId }]` when `by` gets it, `[]` on the plain 404. */
+const projectList = async (by: Caller) => (await readById<WorkItemList>(`/v1/projects/${projectId}/work-items`)(by)).map(() => ({ id: projectId }));
+
 beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
@@ -114,6 +130,16 @@ beforeAll(async () => {
   c2Engineer = (await participantWithEngineer(await api.authorizedPerson(), "contractor")).caller;
   k1Engineer = (await participantWithEngineer(await api.authorizedPerson(), "consultant")).caller;
   orEngineer = (await participantWithEngineer(await api.authorizedPerson(), "owner_representative")).caller;
+  for (const [by, name] of [
+    [c1.caller, "C1's Project Admin"],
+    [c1Engineer, "the C1 engineer"],
+    [c1Narrow, "the C1 engineer on Building B"],
+    [c1Outsider, "the C1 Member not on the Project"],
+    [c2Engineer, "the C2 engineer"],
+    [k1Engineer, "the K1 engineer"],
+    [orEngineer, "the OR engineer"],
+  ] as const)
+    names.set(by, name);
 });
 
 describe("a Contractor engineer's Draft MAR", () => {
@@ -165,36 +191,27 @@ describe("a Contractor engineer's Draft MAR", () => {
 
   it("is not seen by their Company's Project Admin until their own Visibility covers it", async () => {
     // c1's Authorized Person has no Member Visibility of their own yet: nothing is covered until granted.
-    expect((await list(c1.caller)).items).toEqual([]);
+    await itemHidden(draftId, c1Engineer, c1.caller);
   });
 
   it("is not seen by the second Contractor on the same Trade: not listed, not counted, 404 (V3)", async () => {
-    const l = await list(c2Engineer);
-    expect(l.items).toEqual([]);
-    expect(Object.values(counts(l)).every((n) => n === 0)).toBe(true);
-    const res = await c2Engineer.get(`/v1/work-items/${draftId}`);
-    await expectHidden(res);
+    await itemHidden(draftId, c1Engineer, c2Engineer);
+    expect(Object.values(counts(await list(c2Engineer))).every((n) => n === 0)).toBe(true);
   });
 
   it("is not seen by the Consultant or the Owner Representative (V1)", async () => {
-    for (const caller of [k1Engineer, orEngineer]) {
-      const l = await list(caller);
-      expect(l.items).toEqual([]);
-      expect(Object.values(counts(l)).every((n) => n === 0)).toBe(true);
-      await expectHidden(caller.get(`/v1/work-items/${draftId}`));
-    }
+    await itemHidden(draftId, c1Engineer, [k1Engineer, orEngineer]);
+    for (const caller of [k1Engineer, orEngineer]) expect(Object.values(counts(await list(caller))).every((n) => n === 0)).toBe(true);
   });
 
   it("is not seen by a Member of their own Company whose Visibility excludes its Location (V4)", async () => {
-    const l = await list(c1Narrow);
-    expect(l.items).toEqual([]);
-    expect(counts(l).draft).toBe(0);
-    await expectHidden(c1Narrow.get(`/v1/work-items/${draftId}`));
+    await itemHidden(draftId, c1Engineer, c1Narrow);
+    expect(counts(await list(c1Narrow)).draft).toBe(0);
   });
 
   it("is not found by a Member who is not on the Project, nor is the Project's list", async () => {
-    await expectHidden(c1Outsider.get(`/v1/work-items/${draftId}`));
-    await expectHidden(c1Outsider.get(`/v1/projects/${projectId}/work-items`));
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${draftId}`), target: draftId, seenBy: c1Engineer, hiddenFrom: c1Outsider, name: nameOf, label: "the item by id" });
+    await expectHiddenFrom({ read: projectList, target: projectId, seenBy: c1Engineer, hiddenFrom: c1Outsider, name: nameOf, label: "the Project's list" });
   });
 });
 
@@ -226,15 +243,16 @@ describe("creating a Draft", () => {
   });
 
   it("is not found on a Project the Member is not on, or of an unknown Type", async () => {
-    await expectHidden(createDraft(c1Outsider));
+    await expectHiddenFrom({ read: projectList, target: projectId, seenBy: c1Engineer, hiddenFrom: c1Outsider, name: nameOf, label: "the Project's list" });
+    await expectHidden(createDraft(c1Outsider)); // not hidden-from: a refused write; the read above proves the Project with expectHiddenFrom
     expect((await createDraft(c1Engineer, { type: "XYZ" })).json()).toEqual({ error: "type_not_found" });
   });
 });
 
 describe("a Work Item link", () => {
   it("that isn't a UUID, or doesn't exist, is 404", async () => {
-    await expectHidden(c1Engineer.get("/v1/work-items/not-an-id"));
-    await expectHidden(c1Engineer.get(`/v1/work-items/${randomUUID()}`));
+    await expectHidden(c1Engineer.get("/v1/work-items/not-an-id")); // not hidden-from: no such row; a link that isn't an id is the plain 404
+    await expectHidden(c1Engineer.get(`/v1/work-items/${randomUUID()}`)); // not hidden-from: no such row; an unknown id is the plain 404
   });
 
   it("needs a session", async () => {
@@ -251,7 +269,7 @@ describe("Step Age", () => {
     const detail = (await again.get(`/v1/work-items/${id}`)).json();
     expect(detail.stepAgeWeeks).toBeNull();
     expect((await list(again)).items.find((i) => i.id === id)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
-    expect(JSON.stringify(detail)).not.toMatch(/due|overdue|deadline/i);
+    expectNoDeadlineWords(JSON.stringify(detail), "the Work Item detail");
   });
 });
 

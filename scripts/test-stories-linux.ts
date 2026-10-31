@@ -21,9 +21,11 @@ import { parseDocument } from "yaml";
 // packages/ui/test/__screenshots__ on the host. Linux's node_modules live in
 // Docker volumes laid over the host's node_modules folders (one per workspace
 // package), so the Windows binaries are never touched. Volumes are per worktree
-// and stay between runs, so only the first run downloads the packages (every run
-// still needs the network for the DejaVu font CI's runner has);
-// `docker volume rm $(docker volume ls -q -f name=rabaed-stories-)` clears them.
+// (rabaed-stories-<worktreeHash>-<folder>) and stay between runs, so only the first
+// run downloads the packages (every run still needs the network for the DejaVu font
+// CI's runner has). `pnpm worktrees:prune` and `pnpm worktrees:clean` remove the
+// volumes of each worktree they remove, and `pnpm worktrees:prune` also those of
+// worktrees git no longer lists (stories-volumes.ts, RP-1120; `--dry-run` lists them).
 //
 // Usage: pnpm test:stories:linux [vitest arguments]
 //   pnpm test:stories:linux                       compare, as CI does
@@ -63,10 +65,15 @@ export function runnerCodename(workflow: string): string {
 
 export const playwrightImage = (version: string, codename: string) => `mcr.microsoft.com/playwright:v${version}-${codename}`;
 
+/** What every stories volume's name starts with. */
+export const STORIES_VOLUME_PREFIX = "rabaed-stories-";
+
+/** The 8 hex digits naming one worktree's stories volumes: the sha1 of its root, spelled as Node resolved it. */
+export const worktreeHash = (root: string): string => createHash("sha1").update(root).digest("hex").slice(0, 8);
+
 /** The Docker volume holding one workspace folder's Linux node_modules, per worktree. */
 export function volumeName(root: string, folder: string): string {
-  const worktree = createHash("sha1").update(root).digest("hex").slice(0, 8);
-  return `rabaed-stories-${worktree}-${folder === rootFolder ? "root" : folder.replaceAll("/", "-")}`;
+  return `${STORIES_VOLUME_PREFIX}${worktreeHash(root)}-${folder === rootFolder ? "root" : folder.replaceAll("/", "-")}`;
 }
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;

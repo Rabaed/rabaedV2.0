@@ -1,0 +1,3 @@
+empty Company defaults through the app role > are read by the Company's Members and nobody else (V18) :: expect(await seen(rival.ap)).toEqual([]);
+empty Company defaults through the app role > are read by the Company's Members and nobody else (V18) :: expect(await seen(rival.member)).toEqual([]);
+text Company defaults through the app role > are cleared by the Authorized Person only, and Projects already created keep their copies :: expect(names.map((n) => n.name.en)).toEqual(["Rival route"]);

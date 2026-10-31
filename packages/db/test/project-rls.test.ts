@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -225,6 +225,12 @@ async function projectsSeen(trx: Db, { table, column }: { table: string; column:
   return rows.map((r) => r.project).filter((p): p is string => p !== null);
 }
 
+/** The Projects `who` sees rows of in table `t`, as `{ id }` for expectHiddenFrom (RP-1095); `null` is no Member set. */
+const seenAs = async (who: string | null, t: { table: string; column: string }) =>
+  (who === null ? await app.transaction().execute((trx) => projectsSeen(trx, t)) : await withMember(app, who, (trx) => projectsSeen(trx, t))).map((id) => ({ id }));
+const whoIs = (who: string | null) =>
+  who === null ? "no Member set" : who === ids.creatorA ? "A's creator" : who === ids.creatorB ? "B's creator" : who === ids.colleagueA ? "A's colleague" : who;
+
 // Written and read only through SECURITY DEFINER functions: with no read policy,
 // no Member sees any of their rows. Kept by hand on purpose: a new Project table
 // is expected readable by its own Project until it is added here.
@@ -263,14 +269,28 @@ describe("every Project table", () => {
 
   it("shows a Member of the same Company who is not on the Project nothing of it", async () => {
     for (const t of await projectTables()) {
-      expect(await withMember(app, ids.colleagueA, (trx) => projectsSeen(trx, t)), t.table).toEqual([]);
+      // Where Members read the table, Project A's creator reads its row first.
+      if (!unreadable.includes(t.table)) {
+        await expectHiddenFrom({ read: (who: string) => seenAs(who, t), target: ids.projectA, seenBy: ids.creatorA, hiddenFrom: ids.colleagueA, name: whoIs, label: t.table });
+      }
+      expect(await withMember(app, ids.colleagueA, (trx) => projectsSeen(trx, t)), t.table).toEqual([]); // not hidden-from: nothing of any Project; Project A proven hidden just above (an unreadable table: none read it, shown above)
     }
   });
 
   it("returns no rows at all with no Member set", async () => {
-    for (const { table } of await projectTables()) {
+    for (const t of await projectTables()) {
+      const { table } = t;
+      // Where Members read the table, each Project's creator reads its row, and no Member set reads neither.
+      if (!unreadable.includes(table)) {
+        for (const [creator, project] of [
+          [ids.creatorA, ids.projectA],
+          [ids.creatorB, ids.projectB],
+        ] as const) {
+          await expectHiddenFrom({ read: (who: string | null) => seenAs(who, t), target: project, seenBy: creator, hiddenFrom: null, name: whoIs, label: table });
+        }
+      }
       const { rows } = await app.transaction().execute((trx) => sql`select 1 from ${sql.table(table)}`.execute(trx));
-      expect(rows, table).toEqual([]);
+      expect(rows, table).toEqual([]); // not hidden-from: no row at all, Rabaed's own included; both Projects proven hidden just above
     }
   });
 

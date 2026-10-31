@@ -1,0 +1,1 @@
+empty a section the raiser fills at its Draft only > is read-only at the raiser's internal Step, with every other section :: expect(form.editableSections).toEqual([]);

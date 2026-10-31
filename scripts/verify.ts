@@ -2,13 +2,16 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
+import { composeProjectOfEnv, envValue } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
-import { acquireLock, lockFile, releaseLock } from "./verify-lock.ts";
+import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
+import { processAncestors, processStart } from "./process-start.ts";
+import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
 import { isRunning } from "./worktrees-stale.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
@@ -21,8 +24,11 @@ import { isRunning } from "./worktrees-stale.ts";
 // shared files with code gets a warning first and again above the last line (RP-993).
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
+// Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
+// waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
+// HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -46,9 +52,12 @@ function stopEarly(message: string, code = 1): never {
 
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
+// Both locks record this process's OS start time and check a holder's, so a pid Windows reused is not taken for a live run (RP-1136).
+const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [process.ppid, ...processAncestors(process.ppid)] };
+const pidStarted = processStart(process.pid);
 const lock = lockFile(root);
-const taken = acquireLock(lock, { pid: process.pid, started: new Date(), command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, isRunning);
-if (!taken.acquired) stopEarly(`${taken.message} Let it finish; if that pid is not a verify run, delete ${lock}.`);
+const taken = acquireLock(lock, { pid: process.pid, started: new Date(), pidStarted, command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, processes);
+if (!taken.acquired) stopEarly(`${taken.message} Let it finish.`);
 process.on("exit", () => releaseLock(lock, process.pid));
 // A last line for an interrupted run too, so a background run's notification still says how it ended.
 const interrupted = (signal: string, code: number) => () => {
@@ -99,13 +108,12 @@ try {
 }
 if (claimsWarning) out.error(`${claimsWarning}\n`);
 
-// The lane's Postgres first (RP-575): a stopped container otherwise showed only at
-// test:seam1, after every step before it had run.
-const envFile = join(root, ".env");
-const postgres = existsSync(envFile) ? postgresOfEnv(readFileSync(envFile, "utf8")) : undefined;
-if (!postgres) stopEarly("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
-const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
-if (!(await postgresAnswers())) stopEarly(postgresDown(postgres));
+// The commit this run verifies (RP-1103): HEAD is checked against it after every step, and the last line names it.
+const readHead = () => {
+  const done = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
+  return done.status === 0 ? done.stdout.trim() : "";
+};
+const startedOn = readHead();
 
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
@@ -120,6 +128,58 @@ if ("error" in resumed) stopEarly(resumed.error);
 const { steps } = resumed;
 const from = "from" in resumed ? resumed.from : undefined;
 for (const name of from?.notRun ?? []) out.info(`skip ${name}: before --from ${from?.step}`);
+
+// The lane's stack first (RP-575, RP-1096): Docker answers, the db and rustfs containers run
+// healthy, and both answer. A stopped or jammed one otherwise showed only at test:seam1, after
+// every step before it had run, or as seam suites timing out after hours.
+const envFile = join(root, ".env");
+const envText = existsSync(envFile) ? readFileSync(envFile, "utf8") : "";
+const postgres = postgresOfEnv(envText);
+if (!postgres) stopEarly("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
+const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
+const project = composeProjectOfEnv(envText) ?? "rabaed";
+const health: HealthDeps = {
+  project,
+  listServices: () => listServiceStates(project),
+  postgres,
+  dbAnswers: postgresAnswers,
+  filesEndpoint: envValue(envText, "FILE_STORE_ENDPOINT"),
+  filesProblem: (endpoint) => filesProblem(endpoint),
+};
+const checkHealth = async () => {
+  const problems = await stackHealthProblems(health);
+  if (problems.length > 0) stopEarly(healthStop(project, problems));
+};
+// Only the seam steps use the containers and the file store; without one, Postgres answering is enough (as before RP-1096).
+const needsStack = steps.some(({ name }) => isSeamStep(name));
+const checkStack = async () => {
+  if (needsStack) await checkHealth();
+  else if (!(await postgresAnswers())) stopEarly(postgresDown(postgres));
+};
+await checkStack();
+
+// One verify per Main at a time (RP-1096; the owner chose per Main): a run in another of the Main's
+// lanes waits for this one. The slot is a lock in the clone's common git folder; released on every exit.
+const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root, encoding: "utf8" });
+if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the Mains' verify slots.");
+const slot = mainSlot(common.stdout.trim(), postgres.lane);
+process.on("exit", () => releaseLock(slot.file, process.pid));
+// With --log the waiting lines go to the terminal too, so a run that waits is not silent there; the last line is still verify's.
+const reportWait = (line: string) => {
+  out.info(line);
+  if (options.log !== undefined) terminal.stderr(line);
+};
+const turn = await waitForLock(
+  slot.file,
+  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}` },
+  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
+);
+if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
+if (turn.waitedMs > 0) {
+  out.info(`Got ${slot.name} after ${Math.round(turn.waitedMs / 60_000)} min.`);
+  // The stack may have gone down while this run waited.
+  await checkStack();
+}
 
 const passed: string[] = [];
 for (const { name, script } of steps) {
@@ -141,20 +201,31 @@ for (const { name, script } of steps) {
     postgresAnswers,
   );
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
+  const moved = headMoved(startedOn, readHead());
   if (outcome.passed) {
     out.info(`ok   ${outcome.label} (${seconds}s)`);
     passed.push(outcome.label);
+    if (moved !== undefined) {
+      out.end([`${runCommand(from)} stopped after ${name}: ${moved}`], true);
+      process.exit(1);
+    }
     continue;
   }
   out.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). The last ${tailLines} lines it printed:`);
   out.error(tail(outcome.output, tailLines));
+  // The failure may come from the move rather than the diff: say so instead of the usual stop line.
+  if (moved !== undefined) {
+    out.end([`${runCommand(from)} stopped at ${name}: ${moved}`], true);
+    process.exit(outcome.status);
+  }
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).
   const answers = isSeamStep(name) ? await postgresAnswers() : true;
   out.end(failureEnd(name, outcome.output, answers, runCommand(from)), true);
   process.exit(outcome.status);
 }
-const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", startedOn], { cwd: root, encoding: "utf8" }).stdout.trim();
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);

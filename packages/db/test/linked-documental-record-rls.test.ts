@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
@@ -101,41 +101,65 @@ describe("scenario RP-1087-1: app.linked_documental_record_file", () => {
   });
 
   it("gives nothing more of Y: Y's own record read is still nothing to them, while C2, who sees Y, gets it", async () => {
-    expect(await ownRecord(viewer, y)).toEqual([]);
-    expect(await ownRecord(tower.c2.members.engineer, y)).toEqual([{ storage_key: yKey }]);
+    await expectHiddenFrom({
+      read: (member: string) => ownRecord(member, y),
+      target: yKey,
+      idOf: (row) => row.storage_key,
+      seenBy: tower.c2.members.engineer,
+      hiddenFrom: viewer,
+    });
   });
 });
 
+/** One call of app.linked_documental_record_file: by a Member (null: none set), on an item, through a Link. */
+type Call = { by: string | null; item: string; link: string; name: string };
+const call = (by: string | null, item: string, link: string, name: string): Call => ({ by, item, link, name });
+const through = (c: Call) =>
+  c.by === null
+    ? sql<{ storage_key: string }>`select * from app.linked_documental_record_file(${c.item}::uuid, ${c.link}::uuid)`.execute(app).then((r) => r.rows)
+    : viaLink(c.by, c.item, c.link);
+
+/** Y's record (by its storage key) comes through every call in `seenBy` and none in `hiddenFrom`. */
+const yThrough = (seenBy: Call | Call[], hiddenFrom: Call | Call[]) =>
+  expectHiddenFrom({ read: through, target: yKey, idOf: (row) => row.storage_key, name: (c) => c.name, seenBy, hiddenFrom });
+
 describe("scenario RP-1087-2: app.linked_documental_record_file", () => {
   it("gives nothing through a Link to an item that isn't closed, even with a record row standing for it", async () => {
-    expect(await viaLink(viewer, x, xToZ)).toEqual([]);
+    // No record at all, Z's or another: the same viewer gets Y's through X's Link to Y.
+    await expectHiddenFrom({
+      read: through,
+      target: "a record",
+      idOf: () => "a record",
+      name: (c) => c.name,
+      seenBy: call(viewer, x, xToY, "K1 through X's Link to Y"),
+      hiddenFrom: call(viewer, x, xToZ, "K1 through X's Link to Z"),
+    });
   });
 
   it("gives nothing through a Link of an item the Member doesn't see, nor for a Link id paired with another item", async () => {
-    expect(await viaLink(viewer, w, wToY)).toEqual([]);
-    expect(await viaLink(viewer, x, wToY)).toEqual([]);
-    expect(await viaLink(viewer, x, randomUUID())).toEqual([]);
-    // Positive control: C2, who sees W, gets Y's record through W's Link.
-    expect(await viaLink(tower.c2.members.engineer, w, wToY)).toEqual([{ storage_key: yKey, file_name: "RLR-WIR-01-0042.pdf" }]);
+    // C2, who sees W, gets Y's record through W's Link; K1 gets it only through X's own Link.
+    await yThrough(
+      [call(tower.c2.members.engineer, w, wToY, "C2 through W's Link"), call(viewer, x, xToY, "K1 through X's Link")],
+      [call(viewer, w, wToY, "K1 through W's Link"), call(viewer, x, wToY, "K1 through W's Link on X"), call(viewer, x, randomUUID(), "K1 through a made-up Link")],
+    );
   });
 
   it("gives nothing to a Member who doesn't see X: C2 on the same Project, and another Company's on another Project", async () => {
-    expect(await viaLink(tower.c2.members.engineer, x, xToY)).toEqual([]);
-    expect(await viaLink(tower.other.ap, x, xToY)).toEqual([]);
+    await yThrough(call(viewer, x, xToY, "K1"), [call(tower.c2.members.engineer, x, xToY, "C2"), call(tower.other.ap, x, xToY, "another Company's AP")]);
   });
 
   it("gives nothing once the Link is removed", async () => {
+    await yThrough(call(viewer, x, xToY, "K1 before the removal"), call(viewer, w, wToY, "K1 through W's Link"));
     // Put back afterwards, so no other test depends on running before this one.
     await migrator.query("update work_item_link set removed_at = now() where id = $1", [xToY]);
     try {
-      expect(await viaLink(viewer, x, xToY)).toEqual([]);
+      await yThrough(call(tower.c2.members.engineer, w, wToY, "C2 through W's Link"), call(viewer, x, xToY, "K1 through the removed Link"));
     } finally {
       await migrator.query("update work_item_link set removed_at = null where id = $1", [xToY]);
     }
   });
 
   it("gives nothing with no Member set", async () => {
-    const { rows } = await sql`select * from app.linked_documental_record_file(${w}::uuid, ${wToY}::uuid)`.execute(app);
-    expect(rows).toEqual([]);
+    await yThrough(call(tower.c2.members.engineer, w, wToY, "C2"), call(null, w, wToY, "no Member"));
   });
 });

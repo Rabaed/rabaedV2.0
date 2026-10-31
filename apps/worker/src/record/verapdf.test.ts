@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPinnedImage, parseVeraPdfReport, PINNED_VERAPDF_IMAGE, veraPdfFromEnv } from "./verapdf.ts";
+import { isPinnedImage, parseVeraPdfReport, PINNED_VERAPDF_IMAGE, veraPdfFromEnv, veraPdfSessionArgs } from "./verapdf.ts";
 
 // veraPDF's XML report as the checks read it (the real validation runs at seam 1).
 
@@ -40,6 +40,28 @@ describe("parseVeraPdfReport", () => {
 
   it("never passes a report it does not understand", () => {
     expect(parseVeraPdfReport("nothing").compliant).toBe(false);
+  });
+});
+
+describe("veraPdfSessionArgs (RP-1122)", () => {
+  const args = veraPdfSessionArgs({ image: "verapdf/cli:1.28.2", dir: "/tmp/rabaed-verapdf-x", hash: "0a1b2c3d", pid: 4312, n: 2 });
+  const after = (flag: string) => args[args.indexOf(flag) + 1];
+
+  it("names and labels the container so lanes:prune finds it after a killed test", () => {
+    expect(after("--name")).toBe("rabaed-verapdf-0a1b2c3d-4312-2");
+    expect(after("--label")).toBe("rabaed.verapdf=0a1b2c3d");
+  });
+
+  it("sleeps an hour, not forever, and is removed when the sleep ends", () => {
+    expect(args).toContain("--rm");
+    expect(after("--entrypoint")).toBe("sleep");
+    expect(args.slice(-2)).toEqual(["verapdf/cli:1.28.2", "3600"]);
+    expect(args).not.toContain("infinity");
+  });
+
+  it("mounts the PDF folder read-only and runs detached", () => {
+    expect(args.slice(0, 2)).toEqual(["run", "-d"]);
+    expect(after("-v")).toBe("/tmp/rabaed-verapdf-x:/data:ro");
   });
 });
 

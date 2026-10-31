@@ -12,14 +12,17 @@ import {
   type OptionList,
   type SupplierChoice,
   type ChecklistTemplateChoice,
+  type BilingualText,
 } from "@rabaed/domain";
-import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
+import { Button, cn, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useCreateRefusal } from "@/lib/create-refusal";
 import { useFormRendererLabels } from "@/lib/form-labels";
+import { pickedTemplate } from "@/lib/inspection";
 import { linkSearch } from "@/lib/link-search";
+import { WirNextSteps, WirRequestBar, WirRequestColumns, WirTemplatePreview } from "./wir-request";
 
 /**
  * Creates a Submittal of `typeCode` in Draft, then opens it: its Subject, then its Form (the latest
@@ -38,6 +41,7 @@ export function CreateWorkItemForm({
   checklistTemplates,
   startTradeId,
   locale,
+  request,
 }: {
   projectId: string;
   /** The Type being raised: the Form is its own. */
@@ -55,6 +59,11 @@ export function CreateWorkItemForm({
   /** The Trade the Form starts on (RP-627: the Site Observation's General), when its Form names one. */
   startTradeId?: string;
   locale: Locale;
+  /**
+   * The WIR request's layout (RP-655): the Form in cards with the template preview and what happens
+   * next beside it on a wide screen, and Save draft in a sticky bar naming `company`. Left out, as any Form.
+   */
+  request?: { company: BilingualText };
 }) {
   const t = useTranslations("workItems");
   const formLabels = useFormRendererLabels();
@@ -114,9 +123,9 @@ export function CreateWorkItemForm({
     }
   }
 
-  return (
-    <form onSubmit={onSubmit} className="space-y-6" noValidate>
-      <Field label={t("fields.subject")} id="title" required>
+  const fields = (
+    <>
+      <Field label={t("fields.subject")} id="title" required className={cn(request && "rounded-lg border border-border bg-surface p-4 md:p-5")}>
         <Input name="title" maxLength={200} dir="auto" />
       </Field>
       <FormRenderer
@@ -135,15 +144,45 @@ export function CreateWorkItemForm({
         onChange={change}
         idPrefix="answer"
         links={{ targets: {}, search: linkSearch(projectId), hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : null), linkAs: Link }}
+        {...(request ? { look: { sections: "cards", checklistTemplate: "cards" } as const } : {})}
       />
       {error && (
         <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
-        {t("saveDraft")}
-      </Button>
+    </>
+  );
+  const save = (
+    <Button type="submit" disabled={pending}>
+      {t("saveDraft")}
+    </Button>
+  );
+  if (!request) {
+    return (
+      <form onSubmit={onSubmit} className="space-y-6" noValidate>
+        {fields}
+        {save}
+      </form>
+    );
+  }
+  // The WIR request: the Draft starts with Save draft; once it exists its page offers sending it on.
+  return (
+    <form onSubmit={onSubmit} noValidate>
+      <WirRequestColumns
+        side={
+          <>
+            <WirTemplatePreview picked={pickedTemplate(form.schema, answers, checklistTemplates)} locale={locale} />
+            <WirNextSteps reviewer={null} locale={locale} />
+          </>
+        }
+      >
+        {fields}
+        <WirRequestBar company={request.company} goesTo={null} locale={locale}>
+          {save}
+        </WirRequestBar>
+        <WirNextSteps reviewer={null} locale={locale} className="lg:hidden" />
+      </WirRequestColumns>
     </form>
   );
 }

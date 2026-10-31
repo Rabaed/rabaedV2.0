@@ -2,9 +2,10 @@
 // RP-185 scenario 10: a removed Project Member loses access immediately).
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import type { BaseRole } from "@rabaed/domain";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import type { BaseRole, ParticipantMembers, ProjectParticipants } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
-import { createTestApi, expectHidden, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -12,7 +13,32 @@ afterAll(() => api.close());
 type Company = { company: OnboardedCompany; caller: Caller };
 
 /** The Host Company as every Participant sees it: its name only (V15). */
-const HOST_COMPANY = { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } };
+const HOST_COMPANY = { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } }; // not hidden-from: the name V15 shows every Participant
+
+/** Who a Caller is, in a failure. */
+const names = new Map<Caller, string>();
+const who = (by: Caller) => names.get(by) ?? "a Member";
+
+/** Project `id` as `by` reads it, for expectHiddenFrom: `[{ id }]`, or `[]` for the plain 404. */
+const projectRead = (id: string) => readById<{ id: string }>(`/v1/projects/${id}`);
+/** The Participants of Project `id` that `by` lists, or none for the plain 404. */
+const participantsRead = (id: string) => async (by: Caller) =>
+  (await readById<ProjectParticipants>(`/v1/projects/${id}/participants`)(by)).flatMap((list) => list.participants);
+/** Participant `id`'s Project Members list as `by` reads it: `[{ id }]`, naming the Participant, or `[]` for the plain 404. */
+const membersRead = (id: string) => async (by: Caller) =>
+  (await readById<ParticipantMembers>(`/v1/participants/${id}/members`)(by)).map((list) => ({ id: list.participant.id }));
+/** The Projects on `by`'s own list. */
+const myProjects = async (by: Caller) => {
+  const res = await by.get("/v1/projects");
+  expect(res.statusCode).toBe(200);
+  return res.json().projects as { id: string }[];
+};
+/** Each id of `candidates` found anywhere in what `by` gets from `path`: a row named in any field counts. */
+const mentioned = (path: string, candidates: readonly string[]) => async (by: Caller) => {
+  const res = await by.get(path);
+  expect(res.statusCode, path).toBe(200);
+  return candidates.filter((id) => res.body.includes(id)).map((id) => ({ id }));
+};
 
 let host: Company; // The Host Company: its Authorized Person is a Project Creator and the Project Admin.
 let consultant: Company; // Another Company, added as a Participant.
@@ -22,6 +48,7 @@ let consultantParticipantId: string;
 beforeAll(async () => {
   host = await api.projectCreator();
   consultant = await api.authorizedPerson();
+  names.set(host.caller, "the host's Project Admin").set(consultant.caller, "the consultant's Authorized Person");
   projectId = (await api.createProject(host.caller)).id;
   consultantParticipantId = await api.addParticipant(host.caller, projectId, consultant.company, "consultant");
 });
@@ -40,7 +67,7 @@ describe("adding a Participant", () => {
     expect(res.json().participants).toEqual([
       {
         id: expect.any(String),
-        company: { id: host.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+        company: { id: host.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } }, // not hidden-from: the Project Admin's own full list, matched by id
         projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
         code: null,
         ordinal: 1,
@@ -49,7 +76,7 @@ describe("adding a Participant", () => {
       },
       {
         id: consultantParticipantId,
-        company: { id: consultant.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+        company: { id: consultant.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } }, // not hidden-from: the Project Admin's own full list, matched by id
         projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
         code: null,
         ordinal: 2,
@@ -144,11 +171,22 @@ describe("adding a Participant", () => {
   it("does not exist for a Member who is not on the Project", async () => {
     const outsider = await api.projectCreator();
     const other = await api.authorizedPerson();
-    for (const id of [projectId, randomUUID()]) {
+    const madeUp = randomUUID();
+    for (const id of [projectId, madeUp]) {
       const res = await outsider.caller.post(`/v1/projects/${id}/participants`, { crNumber: other.company.crNumber, role: "owner" });
-      await expectHidden(res);
-      await expectHidden(outsider.caller.get(`/v1/projects/${id}/participants`));
+      await expectHidden(res); // not hidden-from: a refused write, the plain 404 for a real and a made-up Project alike
     }
+    // The list: the Project Admin reads it; the outsider gets the plain 404 (readById fails on anything else) for it and a made-up id alike.
+    await expectHiddenFrom({
+      read: ([by, id]: readonly [Caller, string]) => participantsRead(id)(by),
+      target: consultantParticipantId,
+      seenBy: [[host.caller, projectId]],
+      hiddenFrom: [
+        [outsider.caller, projectId],
+        [outsider.caller, madeUp],
+      ],
+      name: ([by, id]) => `${by === outsider.caller ? "the outsider" : who(by)} on ${id === madeUp ? "a made-up id" : "the Project"}`,
+    });
   });
 });
 
@@ -163,13 +201,14 @@ describe("the Authorized Person of a Participant", () => {
       projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
     });
     // Not on the Project yet, so it is not among their own Projects.
-    await expectHidden(consultant.caller.get(`/v1/projects/${projectId}`));
+    await expectHiddenFrom({ read: projectRead(projectId), target: projectId, seenBy: host.caller, hiddenFrom: consultant.caller, name: who });
   });
 
   it("adds their own Members, who then see the Project in their Company's role", async () => {
     const { participantId, projectId: id } = await projectWithConsultant();
     const { member, caller } = await api.member(consultant.caller);
-    await expectHidden(caller.get(`/v1/projects/${id}`));
+    names.set(caller, "the consultant's Member");
+    await expectHiddenFrom({ read: projectRead(id), target: id, seenBy: host.caller, hiddenFrom: caller, name: who });
 
     expect((await consultant.caller.post(`/v1/participants/${participantId}/members`, { memberId: member.id })).statusCode).toBe(204);
     const project = await caller.get(`/v1/projects/${id}`);
@@ -200,10 +239,10 @@ describe("the Authorized Person of a Participant", () => {
     for (const res of [
       await consultant.caller.post(`/v1/participants/${hostParticipantId}/members`, { memberId: consultantMember.id }),
       await consultant.caller.delete(`/v1/participants/${hostParticipantId}/members/${host.company.authorizedPerson.id}`),
-      await consultant.caller.get(`/v1/participants/${hostParticipantId}/members`),
     ]) {
-      await expectHidden(res);
+      await expectHidden(res); // not hidden-from: refused writes, the plain 404; the read is checked below
     }
+    await expectHiddenFrom({ read: membersRead(hostParticipantId), target: hostParticipantId, seenBy: host.caller, hiddenFrom: consultant.caller, name: who });
   });
 
   it("is the only one: a Project Admin or a plain Member cannot add or remove", async () => {
@@ -212,7 +251,7 @@ describe("the Authorized Person of a Participant", () => {
     await api.addProjectMember(consultant.caller, participantId, member.id);
 
     // The host's Project Admin: the Participant is another Company's, so it's not theirs to see.
-    await expectHidden(host.caller.post(`/v1/participants/${participantId}/members`, { memberId: member.id }));
+    await expectHidden(host.caller.post(`/v1/participants/${participantId}/members`, { memberId: member.id })); // not hidden-from: a refused write, the plain 404
     // A Member of the Participant who is not the Authorized Person.
     const add = await plain.post(`/v1/participants/${participantId}/members`, { memberId: consultant.company.authorizedPerson.id });
     expect(add.statusCode).toBe(403);
@@ -229,12 +268,12 @@ describe("removing a Project Member", () => {
 
     expect((await consultant.caller.delete(`/v1/participants/${participantId}/members/${member.id}`)).statusCode).toBe(204);
 
-    for (const url of [`/v1/projects/${id}`, `/v1/projects/${id}/participants`, `/v1/participants/${participantId}/members`]) {
-      const res = await caller.get(url);
-      await expectHidden(res, url);
-    }
-    expect((await caller.get("/v1/projects")).json().projects.map((p: { id: string }) => p.id)).not.toContain(id);
-    expect((await consultant.caller.get(`/v1/participants/${participantId}/members`)).json().members).toEqual([]);
+    names.set(caller, "the removed Member");
+    await expectHiddenFrom({ read: projectRead(id), target: id, seenBy: host.caller, hiddenFrom: caller, name: who, label: "the Project" });
+    await expectHiddenFrom({ read: participantsRead(id), target: participantId, seenBy: host.caller, hiddenFrom: caller, name: who, label: "its Participants" });
+    await expectHiddenFrom({ read: membersRead(participantId), target: participantId, seenBy: consultant.caller, hiddenFrom: caller, name: who, label: "its Project Members" });
+    await expectHiddenFrom({ read: myProjects, target: id, seenBy: host.caller, hiddenFrom: caller, name: who, label: "their Projects" });
+    expect((await consultant.caller.get(`/v1/participants/${participantId}/members`)).json().members).toEqual([]); // not hidden-from: the Authorized Person's own list, the removed Member gone (state)
   });
 
   it("can be undone by adding them again", async () => {
@@ -266,10 +305,18 @@ describe("a Participant's Project Members list", () => {
     expect(own.json().members.map((m: { id: string }) => m.id)).toEqual([member.id]);
 
     // The host sees the Participant on the Project, but not who its Members are.
-    const hostView = (await host.caller.get(`/v1/projects/${id}/participants`)).json();
-    expect(JSON.stringify(hostView)).not.toContain(member.id);
-    const res = await host.caller.get(`/v1/participants/${participantId}/members`);
-    await expectHidden(res);
+    // The scan finds the Member's id where it is, in the Participant's own list, and not in the host's.
+    const hostView = await host.caller.get(`/v1/projects/${id}/participants`);
+    expect(hostView.statusCode).toBe(200);
+    await expectHiddenFrom({
+      read: async (body: string) => (body.includes(member.id) ? [{ id: member.id }] : []),
+      target: member.id,
+      seenBy: own.body,
+      hiddenFrom: hostView.body,
+      name: (body) => (body === own.body ? "the Participant's own Project Members list" : "the host's list of Participants"),
+    });
+    names.set(consultantMember, "the consultant's Member");
+    await expectHiddenFrom({ read: membersRead(participantId), target: participantId, seenBy: consultantMember, hiddenFrom: host.caller, name: who });
   });
 });
 
@@ -279,6 +326,8 @@ describe("the Participants of a Project", () => {
   type Guest = "c1" | "c2" | "k1" | "or";
   let tower: string;
   const ids: Record<"host" | Guest, string> = { host: "", c1: "", c2: "", k1: "", or: "" };
+  /** A Member of each Participant on the Tower, who reads its own Participant: the host's is its Project Admin. */
+  const readers = {} as Record<"host" | Guest, Caller>;
   let c1: Company;
   let c1Member: Caller;
   let c1MemberId: string;
@@ -292,8 +341,11 @@ describe("the Participants of a Project", () => {
       ids[key] = await api.addParticipant(host.caller, tower, company.company, role);
       const { member, caller } = await api.member(company.caller);
       await api.addProjectMember(company.caller, ids[key], member.id);
+      readers[key] = caller;
+      names.set(caller, `${key.toUpperCase()}'s Member`).set(company.caller, `${key.toUpperCase()}'s Authorized Person`);
       return { company, member, caller };
     };
+    readers.host = host.caller;
     const first = await join("c1", "contractor");
     [c1, c1Member, c1MemberId] = [first.company, first.caller, first.member.id];
     await join("c2", "contractor");
@@ -309,7 +361,7 @@ describe("the Participants of a Project", () => {
       participants: [
         {
           id: ids.c1,
-          company: { id: c1.company.companyId, legalName: expect.any(Object) },
+          company: { id: c1.company.companyId, legalName: expect.any(Object) }, // not hidden-from: C1's own row, matched by id
           projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
           code: null,
           // Not even its own order on the Project, which would count the others (RP-381-1).
@@ -319,7 +371,11 @@ describe("the Participants of a Project", () => {
         },
       ],
     });
-    for (const other of [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId]) expect(res.body).not.toContain(other);
+    // Nowhere in the answer: the Project Admin's names each of these.
+    const others = [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId];
+    for (const other of others) {
+      await expectHiddenFrom({ read: mentioned(`/v1/projects/${tower}/participants`, others), target: other, seenBy: host.caller, hiddenFrom: c1Member, name: who });
+    }
   });
 
   it("shows C1 its own Project Members with their Positions", async () => {
@@ -327,8 +383,8 @@ describe("the Participants of a Project", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().participant.hostCompany).toEqual(HOST_COMPANY);
     expect(res.json().members).toEqual([expect.objectContaining({ id: c1MemberId, positions: [] })]);
-    for (const other of [ids.host, ids.c2, ids.k1, ids.or]) {
-      await expectHidden(c1Member.get(`/v1/participants/${other}/members`));
+    for (const other of ["host", "c2", "k1", "or"] as const) {
+      await expectHiddenFrom({ read: membersRead(ids[other]), target: ids[other], seenBy: readers[other], hiddenFrom: c1Member, name: who });
     }
   });
 
@@ -374,7 +430,19 @@ describe("the Participants of a Project", () => {
       ],
     });
     // No other Participant, and another Company only as the Host Company's name.
-    for (const other of [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId, annex, annexC1]) expect(res.body).not.toContain(other);
+    // Each named nowhere in the answer, though its own reader's Company Projects names it.
+    const others = [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId, annex, annexC1];
+    for (const [other, seenBy] of [
+      [ids.host, readers.host],
+      [ids.c2, readers.c2],
+      [ids.k1, readers.k1],
+      [ids.or, readers.or],
+      [annex, c1.caller],
+      [annexC1, c1.caller],
+    ] as const) {
+      await expectHiddenFrom({ read: mentioned("/v1/participants", others), target: other, seenBy, hiddenFrom: c1Member, name: who });
+    }
+    expect(res.body).not.toContain(host.company.companyId); // not hidden-from: no Company Projects answer, anyone's, has a Company id: the Host Company only by name (V15)
     // The Authorized Person reads both; their Company's pending invitations stay theirs (ADR 0009).
     expect((await c1.caller.get("/v1/participants")).json().participants.map((p: { id: string }) => p.id)).toEqual([annexC1, ids.c1]);
     expect((await c1Member.get("/v1/participant-invitations")).statusCode).toBe(403);

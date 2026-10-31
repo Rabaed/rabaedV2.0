@@ -1,0 +1,14 @@
+empty a Draft's Documents, for the raiser > are not listed until confirmed, and not confirmed until the file is stored :: await expectHidden(engineer.get(`${documentUrl(itemId, started.id)}/download`));
+empty a Draft's Documents, for the raiser > can be removed and replaced :: await expectHidden(engineer.get(`${documentUrl(itemId, documentId)}/download`));
+empty a Draft's Documents, for the raiser > can be removed and replaced :: await expectHidden(engineer.delete(documentUrl(itemId, documentId)));
+empty a hidden item's Documents > answer 404 to every other Company and to a Member off the Project, naming nothing :: await expectHidden(who.get(documentsUrl(itemId)));
+empty a hidden item's Documents > answer 404 to every other Company and to a Member off the Project, naming nothing :: await expectHidden(who.get(`${documentUrl(itemId, documentId)}/download`));
+empty a hidden item's Documents > answer 404 to every other Company and to a Member off the Project, naming nothing :: await expectHidden(start(who, itemId, { sizeBytes: 10 }));
+empty a hidden item's Documents > answer 404 to every other Company and to a Member off the Project, naming nothing :: await expectHidden(who.post(`${documentUrl(itemId, pendingId)}/confirm`));
+empty a hidden item's Documents > answer 404 to every other Company and to a Member off the Project, naming nothing :: await expectHidden(who.delete(documentUrl(itemId, documentId)));
+empty a hidden item's Documents > answer 404 to another Member of the raiser's Company for an upload that isn't theirs to confirm :: await expectHidden(pm.post(`${documentUrl(itemId, pendingId)}/confirm`));
+empty a hidden item's Documents > answer 404 under another item, or for ids that aren't Documents :: await expectHidden(engineer.get(`${documentUrl(otherItem, documentId)}/download`));
+empty a hidden item's Documents > answer 404 under another item, or for ids that aren't Documents :: await expectHidden(engineer.delete(documentUrl(otherItem, documentId)));
+empty a hidden item's Documents > answer 404 under another item, or for ids that aren't Documents :: await expectHidden(engineer.get(`${documentUrl(itemId, randomUUID())}/download`));
+empty a hidden item's Documents > answer 404 under another item, or for ids that aren't Documents :: await expectHidden(engineer.get(`${documentUrl(itemId, "not-a-uuid")}/download`));
+empty a hidden item's Documents > answer 404 under another item, or for ids that aren't Documents :: await expectHidden(engineer.get(documentsUrl(randomUUID())));

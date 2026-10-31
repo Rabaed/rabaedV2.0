@@ -6,11 +6,11 @@
 // the exceptions that are not their own Participant's. Each published Workflow Version is
 // read whole, and which Screen Version it pins.
 import { createDb, readLatestPublishedDefinition, writeRabaedDefaultWorkflow } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ScreenPins, WorkflowDefinition, WorkflowRead, WorkflowSettings, WorkflowVersionRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, buildTower, detail, draft, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -24,6 +24,12 @@ const label = (en: string) => ({ en, ar: en });
 const settings = async (by: Caller, projectId: string): Promise<WorkflowSettings> =>
   (await ok(by.get(`/v1/projects/${projectId}/workflow-settings`), 200)).json();
 const marOf = (s: WorkflowSettings) => s.types.find((t) => t.code === "MAR")!;
+
+// Reads for expectHiddenFrom (RP-1126): a read by id of something that has no id of its own
+// (a Project's settings, its Stages, a Workflow Version) answers [{ id }] of what it belongs to.
+const readOf = (path: string, id: string) => async (by: Caller) => (await readById<unknown>(path)(by)).map(() => ({ id }));
+const callers = new Map<Caller, string>();
+const who = (by: Caller) => callers.get(by) ?? "a caller";
 
 let c1: Company;
 let k1: Company;
@@ -49,6 +55,7 @@ beforeAll(async () => {
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marWorkflowId = mar.rows[0]!.workflow_definition_id;
+  callers.set(c1.caller, "C1's Project Admin").set(at.c1Engineer, "C1's engineer").set(at.c1Pm, "C1's PM").set(at.k1Manager, "K1's manager").set(c2Engineer, "C2's engineer").set(other.c1Engineer, "another Project's engineer");
 });
 
 describe("which Workflow each Type runs", () => {
@@ -68,8 +75,9 @@ describe("which Workflow each Type runs", () => {
   });
 
   it("is the same 404 to anyone outside the Project and for a made-up id", async () => {
-    await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/workflow-settings`));
-    await expectHidden(c1.caller.get("/v1/projects/00000000-0000-4000-8000-000000000000/workflow-settings"));
+    const read = readOf(`/v1/projects/${at.projectId}/workflow-settings`, at.projectId);
+    await expectHiddenFrom({ read, target: at.projectId, seenBy: [c1.caller, at.c1Engineer, at.k1Manager], hiddenFrom: other.c1Engineer, name: who, label: "Tower's Workflow settings" });
+    await expectHidden(c1.caller.get("/v1/projects/00000000-0000-4000-8000-000000000000/workflow-settings")); // not hidden-from: a made-up id, the answer the hidden read above must match
   });
 
   it("is the Project's copy once duplicated, published and bound; its draft is the Project Admins' alone", async () => {
@@ -78,7 +86,9 @@ describe("which Workflow each Type runs", () => {
     expect(marOf(await settings(c1.caller, at.projectId)).copies).toEqual([
       { id: copy, name: label("Tower MARs"), versionNo: null, bound: false, hasDraft: true },
     ]);
-    expect(marOf(await settings(at.k1Manager, at.projectId)).copies).toEqual([]);
+    const copies = async (by: Caller) => marOf(await settings(by, at.projectId)).copies;
+    await expectHiddenFrom({ read: copies, target: copy, seenBy: c1.caller, hiddenFrom: [at.k1Manager, at.c1Engineer], name: who, label: "the unpublished copy in Settings" });
+    await expectHiddenFrom({ read: readById(`/v1/workflows/${copy}`), target: copy, seenBy: c1.caller, hiddenFrom: [at.k1Manager, at.c1Engineer], name: who, label: "the unpublished copy" });
     await ok(c1.caller.post(`/v1/workflows/${copy}/publish`), 200);
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: copy }));
     for (const reader of [c1.caller, at.k1Manager, at.c1Engineer]) {
@@ -93,28 +103,37 @@ describe("which Workflow each Type runs", () => {
     const route = (await ok(c1.caller.post(`/v1/workflows/${marWorkflowId}/duplicate`, { projectId: at.projectId, name: label("MARs, short route") }), 201)).json().id;
     await ok(c1.caller.post(`/v1/workflows/${route}/publish`), 200);
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: c2ParticipantId, workflowId: route }));
-    const c2Name = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants.find((p: { id: string }) => p.id === c2ParticipantId).company.legalName;
+    const c2Name = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants.find((p: { id: string }) => p.id === c2ParticipantId).company.legalName; // not hidden-from: the name the exception shows, which the Project Admin and C2 may read
     const expected = { participantId: c2ParticipantId, companyName: c2Name, workflow: { id: route, name: label("MARs, short route"), versionNo: 1 } };
     expect(marOf(await settings(c1.caller, at.projectId)).exceptions).toEqual([expected]);
     expect(marOf(await settings(c2Engineer, at.projectId)).exceptions).toEqual([expected]);
     // K1 and C1's engineer learn of no exception (and so of no Participant).
-    for (const reader of [at.k1Manager, at.c1Engineer]) {
-      const read = await settings(reader, at.projectId);
-      expect(marOf(read).exceptions).toEqual([]);
-      expect(JSON.stringify(read)).not.toContain(c2ParticipantId);
-    }
+    const exceptions = async (by: Caller) => marOf(await settings(by, at.projectId)).exceptions;
+    const named = async (by: Caller) => (JSON.stringify(await settings(by, at.projectId)).includes(c2ParticipantId) ? [{ id: c2ParticipantId }] : []);
+    const hidden = { target: c2ParticipantId, seenBy: [c1.caller, c2Engineer], hiddenFrom: [at.k1Manager, at.c1Engineer], name: who };
+    await expectHiddenFrom({ ...hidden, read: exceptions, idOf: (e) => e.participantId, label: "the exception" });
+    await expectHiddenFrom({ ...hidden, read: named, label: "the Participant, anywhere in the read" });
     // Taking it away: back to the binding.
     await ok(c1.caller.request("DELETE", `/v1/projects/${at.projectId}/workflow-bindings?workItemTypeId=${marTypeId}&raisingParticipantId=${c2ParticipantId}`));
-    expect(marOf(await settings(c1.caller, at.projectId)).exceptions).toEqual([]);
+    expect(marOf(await settings(c1.caller, at.projectId)).exceptions).toEqual([]); // not hidden-from: the exception is gone, for the Project Admin, who reads every exception
   });
 
   it("offers a Project Admin their own Company's Library Workflows, never another Company's (V18)", async () => {
     const lib = (await ok(c1.caller.post(`/v1/workflows/${marWorkflowId}/duplicate`, { projectId: null, name: label("C1 library MAR") }), 201)).json().id;
-    expect((await settings(c1.caller, at.projectId)).library).toEqual([]); // not published yet
+    expect((await settings(c1.caller, at.projectId)).library).toEqual([]); // not hidden-from: not published yet, so Settings offers it to nobody, its own Project Admin included
     await ok(c1.caller.post(`/v1/workflows/${lib}/publish`), 200);
     expect((await settings(c1.caller, at.projectId)).library).toEqual([{ id: lib, name: label("C1 library MAR"), versionNo: 1, workItemTypeId: marTypeId }]);
-    expect((await settings(at.k1Manager, at.projectId)).library).toEqual([]);
-    expect((await settings(other.c1Engineer, other.projectId)).library).toEqual([]);
+    // Each reader reads their own Project's settings: K1 on Tower, another Company on its own Project.
+    type Reader = { by: Caller; projectId: string };
+    const offered = async ({ by, projectId }: Reader) => (await settings(by, projectId)).library;
+    await expectHiddenFrom<Reader, { id: string }>({
+      read: offered,
+      target: lib,
+      seenBy: { by: c1.caller, projectId: at.projectId },
+      hiddenFrom: [{ by: at.k1Manager, projectId: at.projectId }, { by: other.c1Engineer, projectId: other.projectId }],
+      name: (r) => who(r.by),
+      label: "C1's Library Workflow in Settings",
+    });
   });
 });
 
@@ -135,10 +154,11 @@ describe("View versions", () => {
 
   it("is the plain 404 for a Version that isn't published, another Project's Workflow, and a made-up one", async () => {
     const draftCopy = (await ok(c1.caller.post(`/v1/workflows/${marWorkflowId}/duplicate`, { projectId: at.projectId, name: label("Only a draft") }), 201)).json().id;
-    await expectHidden(c1.caller.get(`/v1/workflows/${draftCopy}/versions/1`));
-    await expectHidden(c1.caller.get(`/v1/workflows/${route}/versions/9`));
-    await expectHidden(other.c1Engineer.get(`/v1/workflows/${route}/versions/1`));
-    await expectHidden(c1.caller.get("/v1/workflows/00000000-0000-4000-8000-000000000000/versions/1"));
+    await expectHidden(c1.caller.get(`/v1/workflows/${draftCopy}/versions/1`)); // not hidden-from: no Version 1 is published, so nobody reads it, its author included
+    await expectHidden(c1.caller.get(`/v1/workflows/${route}/versions/9`)); // not hidden-from: a Version that doesn't exist
+    const v1 = readOf(`/v1/workflows/${route}/versions/1`, route);
+    await expectHiddenFrom({ read: v1, target: route, seenBy: [c1.caller, at.k1Manager, c2Engineer], hiddenFrom: other.c1Engineer, name: who, label: "Tower's Workflow Version 1" });
+    await expectHidden(c1.caller.get("/v1/workflows/00000000-0000-4000-8000-000000000000/versions/1")); // not hidden-from: a made-up id, the answer the hidden read above must match
   });
 });
 
@@ -174,7 +194,8 @@ describe("which Screen Versions the Workflow Versions pin", () => {
         { screenId: screen, screenKey: "pin_reply", screenVersionNo: 1, workflowId: route, workflowName: label("Tower MARs"), workflowVersionNo: 2 },
       ]);
     }
-    await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/screen-pins`));
+    const pins = async (by: Caller) => (await readById<ScreenPins>(`/v1/projects/${at.projectId}/screen-pins`)(by)).flatMap((p) => p.pins);
+    await expectHiddenFrom({ read: pins, target: screen, seenBy: [c1.caller, at.k1Manager], hiddenFrom: other.c1Engineer, idOf: (p) => p.screenId, name: who, label: "Tower's Screen pins" });
   });
 });
 
@@ -183,10 +204,13 @@ describe("a Stage the Project Admin renames (scenario RP-441-1)", () => {
     const stagesOf = async (by: Caller, projectId: string) =>
       (await ok(by.get(`/v1/projects/${projectId}/modules/submittals/stages`), 200)).json().stages as { key: string; name: { en: string; ar: string } }[];
     const before = (await stagesOf(other.c1Engineer, other.projectId)).find((s) => s.key === "approved")!.name;
+    // Tower's Stages are its Members' to read, and hidden from another Project's.
+    const towerStages = readOf(`/v1/projects/${at.projectId}/modules/submittals/stages`, at.projectId);
+    await expectHiddenFrom({ read: towerStages, target: at.projectId, seenBy: [c1.caller, at.c1Engineer, at.k1Manager, c2Engineer], hiddenFrom: other.c1Engineer, name: who, label: "Tower's Stages" });
 
     // Only a Project Admin renames it; anyone else, on the Project or not, gets the plain 404.
     for (const by of [at.c1Engineer, at.k1Manager, other.c1Engineer]) {
-      await expectHidden(by.request("PATCH", `/v1/projects/${at.projectId}/modules/submittals/stages/approved`, { name: label("Signed off") }));
+      await expectHidden(by.request("PATCH", `/v1/projects/${at.projectId}/modules/submittals/stages/approved`, { name: label("Signed off") })); // not hidden-from: a refused write; the read above proves the Stages with expectHiddenFrom
     }
     await ok(c1.caller.request("PATCH", `/v1/projects/${at.projectId}/modules/submittals/stages/approved`, { name: label("Signed off") }));
 
@@ -198,7 +222,7 @@ describe("a Stage the Project Admin renames (scenario RP-441-1)", () => {
     }
     // Another Project's set is its own: unchanged, and this one is hidden from its Members.
     expect((await stagesOf(other.c1Engineer, other.projectId)).find((s) => s.key === "approved")!.name).toEqual(before);
-    await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/modules/submittals/stages`));
+    await expectHiddenFrom({ read: towerStages, target: at.projectId, seenBy: c1.caller, hiddenFrom: other.c1Engineer, name: who, label: "Tower's renamed Stages" });
   });
 });
 
@@ -347,7 +371,7 @@ describe("a Rabaed Default a Project lacks an outcome of (RP-566)", () => {
     }
     expect((await settings(c1.caller, t.projectId)).types.find((x) => x.code === TYPE)!.workflow).toMatchObject({ id: copyId, source: "project_copy" });
     // Anyone else learns nothing of it: the plain 404.
-    await expectHidden(t.c1Engineer.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`));
+    await expectHidden(t.c1Engineer.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`)); // not hidden-from: a refused write (not a Project Admin); the binding is still there for the Admin's unbind below
 
     await ok(c1.caller.post(`/v1/projects/${t.projectId}/work-item-types/${TYPE}/outcomes`, { code, name: label("On site"), closing: true, polarity: "positive", actions: [] }), 201);
     await ok(c1.caller.request("DELETE", `${bindings(t)}?workItemTypeId=${typeId}`));

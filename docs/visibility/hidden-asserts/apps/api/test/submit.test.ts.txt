@@ -1,0 +1,29 @@
+text (top level) :: legalName = "Test Constructions",
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty Submit > moves the item to Pending Approval, with the Consultant's pool :: expect(buttons(d)).toEqual([]);
+empty Submit > moves the item to Pending Approval, with the Consultant's pool :: expect(participants.body).not.toContain(CONSULTANT);
+empty Submit > shows the item to the Consultant's Members whose Visibility covers it: list, counts and detail (V2, scenario 3) :: expect(buttons(await detail(k1Engineer, id))).toEqual([]);
+empty Submit > hides it from a Consultant Member whose Visibility doesn't cover its Trade (scenario 4) :: await expectHidden(mechanicalManager.get(`/v1/work-items/${id}`));
+empty Submit > hides it from a Consultant Member whose Visibility doesn't cover its Trade (scenario 4) :: await expectHidden(mechanicalManager.post(`/v1/work-items/${id}/pick-up`));
+empty Submit > shows it as oversight to the Owner and the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6) :: expect(buttons(d)).toEqual([]);
+empty Submit > hides it from an Owner Representative whose Visibility doesn't cover its Location, or its Trade: 404 :: await expectHidden(caller.get(`/v1/work-items/${id}`));
+empty Submit > hides it from an Owner Representative whose Visibility doesn't cover its Location, or its Trade: 404 :: await expectHidden(caller.get(`/v1/work-items/${id}/history`));
+empty Submit > still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5) :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
+empty Submit > still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5) :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
+empty Submit > still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5) :: await expectHidden(tryTake(c2Engineer, id, "approve_a"));
+empty Submit > shows the Consultant the Submit, never the Contractor's Return or internal moves (V5) :: expect(await everything(signer, id)).not.toContain("Wrong tray size");
+empty Approve · A > goes to the Consultant manager who picks it up; the Contractor still sees only the Company :: expect(buttons(await detail(otherManager, id))).toEqual([]);
+empty Approve · A > goes to the Consultant manager who picks it up; the Contractor still sees only the Company :: expect(await everything(pm, id)).not.toContain(SIGNER);
+empty Approve · A > closes the item Approved with Code A :: expect(buttons(d)).toEqual([]);
+text Approve · A > shows the Contractor the Code and its signer, never another Consultant person (V5, V14) :: expect(events.filter((e) => e.by.companyName?.en === CONSULTANT)).toHaveLength(1);
+empty Approve · A > shows the Contractor the Code and its signer, never another Consultant person (V5, V14) :: expect(await everything(pm, id)).not.toContain(OTHER_MANAGER);
+empty Revise & Resubmit · C > closes the item Revise & Resubmit with Code C :: expect(await everything(engineer, id)).not.toContain(SIGNER);
+text Remarks with the Code (MAR Workflow Version 2) > shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant :: expect(events.filter((e) => e.remarks !== null)).toHaveLength(1);
+empty Remarks with the Code (MAR Workflow Version 2) > shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant :: expect(await everything(caller, id)).not.toContain(NOTE);
+empty Remarks with the Code (MAR Workflow Version 2) > shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
+empty Submit with no single Consultant to take it (scenario 37) :: for (const name of NEVER_IN_REFUSAL) expect(res.body).not.toContain(name);
+text Submit with no single Consultant to take it (scenario 37) > is offered with the Participant field when two Consultants cover the item (a Visibility Overlap), and goes to the one picked only :: expect(submit.participants!.map((p) => [p.participantId, p.companyName.en]).sort()).toEqual(
+empty Submit with no single Consultant to take it (scenario 37) > is offered with the Participant field when two Consultants cover the item (a Visibility Overlap), and goes to the one picked only :: await expectHidden(k2Manager.get(`/v1/work-items/${id}`));
+empty Internal Note (V5, scenarios 7 and 34) > is never seen by the Consultant or the Owner Representative, who see the Submit (scenario 34) :: for (const note of [SENT, RETURNED, SUBMITTED]) expect(all).not.toContain(note);
+empty Internal Note (V5, scenarios 7 and 34) > written with the Code, stays inside the Consultant (scenario 8) :: expect(await everything(caller, id)).not.toContain(CODED);

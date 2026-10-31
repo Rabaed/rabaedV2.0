@@ -1,0 +1,8 @@
+empty a Project's outcome sets > are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is :: await expectHidden(c1.caller.get(outcomesPath(t, "NOPE")));
+empty a Project's outcome sets > are hidden from anyone not on the Project, and for a Type the Project doesn't use, as a made-up Project is :: await expectHidden(c1.caller.get(`/v1/projects/00000000-0000-4000-8000-000000000000/work-item-types/MAR/outcomes`));
+empty a Project's outcome sets > refuse an outcome the set has, a code it can't hold, and anyone but the Project Admin :: await expectHidden(add(t.k1Manager, t, e));
+empty a Project's outcome sets > refuse an outcome the set has, a code it can't hold, and anyone but the Project Admin :: await expectHidden(add(outsider.caller, t, e));
+empty a Project's outcome sets > refuse an outcome the set has, a code it can't hold, and anyone but the Project Admin :: await expectHidden(add(c1.caller, t, e, "NOPE"));
+empty a Project's outcome sets > change an outcome's names and follow-up actions, and their order :: await expectHidden(change(t.k1Manager, t, "B", { name, actions: [] }));
+empty a Project's outcome sets > change an outcome's names and follow-up actions, and their order :: await expectHidden(change(c1.caller, t, "Z", { name, actions: [] }));
+empty an outcome the Project Admin added :: expect(await publishProblems(t, version, code, (await outcomesOf(c1.caller, t, code)).outcomes)).toEqual([]);

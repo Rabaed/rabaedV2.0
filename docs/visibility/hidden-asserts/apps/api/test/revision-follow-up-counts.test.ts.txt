@@ -1,0 +1,2 @@
+empty a Revision shows the follow-ups its previous item left (seam 1) > C2, who sees neither the WIR nor its Revision, reads nothing :: await expectHidden(yousef.caller.get(`/v1/work-items/${chain.revision}`));
+text a Revision lists each follow-up its previous item left (seam 1) > lists only Rev 0's, never the Revision's own: the same Snags as the Snag List filtered to Rev 0's number :: expect(own).toHaveLength(2);

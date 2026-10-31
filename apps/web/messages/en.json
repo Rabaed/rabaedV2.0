@@ -85,6 +85,7 @@
     "newOfType": "New {type}",
     "types": "Types",
     "allTypes": "All",
+    "questions": "Questions",
     "company": "Company",
     "raisedFrom": "Raised from",
     "raisedManually": "By hand",
@@ -1011,6 +1012,7 @@
         "notYet": "Photos can be added once the Draft is saved.",
         "uploading": "Uploading…",
         "takePhoto": "Take a photo",
+        "upload": "Upload",
         "open": "Open {name} full size",
         "remove": "Remove {name}",
         "frozen": "Submitted: can't be changed",
@@ -1073,7 +1075,11 @@
         "itemNumber": "{n} of {of}",
         "raiseSnag": "Raise a Snag",
         "snagRaised": "A Snag is raised with the code",
-        "noSnagRaised": "No Snag is raised"
+        "noSnagRaised": "No Snag is raised",
+        "raiseSnagTicked": "Becomes a Snag for the Contractor when the code is issued.",
+        "raiseSnagUnticked": "Unticked: for example a minor failure fixed on the spot.",
+        "addComment": "Add comment",
+        "addPhoto": "Add photo"
       },
       "tableField": {
         "addRow": "Add row",
@@ -1107,7 +1113,14 @@
         "photoRequired": "Photo required on {answer}",
         "commentOptional": "Comment optional",
         "photoOptional": "Photos optional",
-        "raisesSnag": "{answer} raises a Snag"
+        "raisesSnag": "{answer} raises a Snag",
+        "forTrade": "Templates for \u2068{trade}\u2069",
+        "otherTradesHidden": "{count, plural, one {1 for other Trades hidden} other {{n} for other Trades hidden}}",
+        "version": "v{n}",
+        "locked": "You can change the Checklist Template until the WIR is submitted; then it is locked.",
+        "hideItems": "Hide items",
+        "showItems": "Show items",
+        "negativeAsks": "{every, select, yes {{what, select, both {On {answer}, the Consultant must add a comment and a photo} comment {On {answer}, the Consultant must add a comment} other {On {answer}, the Consultant must add a photo}}} other {{what, select, both {On {answer}, some items need a comment or a photo from the Consultant} comment {On {answer}, some items need a comment from the Consultant} other {On {answer}, some items need a photo from the Consultant}}}}"
       },
       "linkQuestion": {
         "remove": "Remove {number}"
@@ -1163,6 +1176,109 @@
       "saving": "Saving…",
       "saved": "Saved.",
       "notSaved": "The checklist wasn't saved. Try again."
+    },
+    "inspection": {
+      "breadcrumb": "Breadcrumb",
+      "request": {
+        "newWir": "New WIR",
+        "raisedBy": "Raised by \u2068{company}\u2069",
+        "goesTo": "Goes to \u2068{name}\u2069",
+        "numberOnSubmit": "Number given on submit",
+        "actions": "Save or send this WIR",
+        "previewTitle": "Checklist Template preview",
+        "previewEmpty": "Pick a Checklist Template to see its items here.",
+        "nextTitle": "What happens next",
+        "nextReview": "Your Company reviews it, then Returns it or Submits it to the Consultant with a Cover Note.",
+        "nextReviewBy": "\u2068{name}\u2069 reviews it, then Returns it or Submits it to the Consultant with a Cover Note.",
+        "nextInspect": "The Consultant inspects on site.",
+        "nextCode": "The Consultant Manager issues the Review Code."
+      },
+      "requestedFor": "Requested for",
+      "issuedBy": "Issued by {by} · {when}",
+      "privacy": "Only {company} sees your answers until you send them.",
+      "internal": "Internal",
+      "coverNote": "Cover Note",
+      "remarks": "Remarks",
+      "revisionBanner": "This WIR is to be revised: create a Revision for re-inspection.",
+      "waiting": "With {company}. You read the checklist's answers once the code is issued.",
+      "save": {
+        "saved": "Saved",
+        "savedAt": "Saved {time}",
+        "notSaved": "Not saved",
+        "offline": "Not saved: the signal dropped. Your answer is still on this screen.",
+        "retry": "Retry"
+      },
+      "tiles": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "na": "N/A",
+        "answered": "answered",
+        "items": "items"
+      },
+      "filters": {
+        "label": "Show items",
+        "all": "All",
+        "unanswered": "Unanswered",
+        "failed": "Failed"
+      },
+      "summary": {
+        "label": "Checklist summary",
+        "pass": "Pass",
+        "fail": "Fail",
+        "na": "N/A",
+        "answered": "<strong>{answered}</strong> of <strong>{total}</strong> answered",
+        "progress": "Items answered",
+        "left": "{count, plural, one {1 item is left to answer.} other {{n} items are left to answer.}}",
+        "notSaved": "{count, plural, one {1 change not saved: Retry it before you send.} other {{n} changes not saved: Retry them before you send.}}"
+      },
+      "send": {
+        "recommendedCode": "Recommended Code",
+        "internal": "Your Recommended Code and Internal Note stay inside {company}. {raiser} never sees them: only the code and what it shares.",
+        "snags": "{tickedCount, plural, one {1 failed item ticked “Raise a Snag”} other {{ticked} failed items ticked “Raise a Snag”}} · {untickedCount, plural, one {1 unticked} other {{unticked} unticked}}"
+      },
+      "recommendedCode": {
+        "title": "Engineer's Recommended Code",
+        "sent": "Sent {when}",
+        "internalOnly": "Inside {company} only: {raiser} never sees this."
+      },
+      "decision": {
+        "label": "Your decision",
+        "title": "Your decision",
+        "proposed": "Proposed: {code}",
+        "issue": "Issue code"
+      },
+      "issueCodeAs": "Issue code: {code}",
+      "code": {
+        "label": "Review Code",
+        "failedProposal": "{count, plural, one {1 item failed} other {{n} items failed}}: the proposal was {proposed}. You can still choose {picked}.",
+        "passedProposal": "No item failed: the proposal was {proposed}. You can still choose {picked}.",
+        "commentRows": "Each row becomes a Comment in the Snag List, assigned to {company}.",
+        "snagsTitle": "Snags that will be raised",
+        "noSnags": "No failed item is ticked “Raise a Snag”.",
+        "snagTo": "Item {n} · to {company}",
+        "unticked": "{count, plural, one {1 failed item raises no Snag: its tick was taken off.} other {{n} failed items raise no Snag: their ticks were taken off.}}",
+        "raisedBy": "Raised by {company}, assigned to {raiser}, whatever the code."
+      },
+      "return": {
+        "kept": "The Engineer's answers, comments and photos stay on the WIR, to change and send to you again.",
+        "internal": "Internal to {company}: {raiser} isn't told."
+      },
+      "counts": {
+        "label": "Raised from this WIR",
+        "hint": "Opens the Snag List filtered to this WIR. Counts include only items you can see."
+      },
+      "shared": {
+        "title": "Checklist",
+        "readable": "You can read the checklist now that the code is issued."
+      },
+      "revision": {
+        "of": "Revision of",
+        "number": "Rev {revision}",
+        "neverBlocks": "Open Snags never block this code: the Consultant Manager can issue it either way.",
+        "openSnagList": "Open in Snag List",
+        "rowOpen": "Open",
+        "rowClosed": "Closed"
+      }
     },
     "attachments": {
       "title": "Attachments",
@@ -2261,6 +2377,7 @@
         "invalid_schema": "is not valid",
         "unknown_internal_field": "is marked internal but is not a field of the Screen",
         "internal_file_field": "holds photos or Documents, which are always shared",
+        "reply_checklist_not_on_close": "is a checklist, but a Workflow shows this Screen on a Transition that doesn't close the item: only a close takes a checklist",
         "duplicate_key": "uses a key another field has",
         "unknown_reference": "reads a field that holds no answer",
         "condition_cycle": "has conditions that depend on each other in a circle",
@@ -3059,6 +3176,38 @@
     "noLinks": "No Links",
     "none": "—"
   },
+  "submittalPanelAttachments": {
+    "title": "Attachments",
+    "fileCount": "{count, plural, =0 {No Documents} one {1 Document} other {{n} Documents}}",
+    "none": "No Documents attached.",
+    "reading": "Reading the Documents…",
+    "unavailableList": "The Documents couldn't be read. Try again later.",
+    "pdf": "PDF",
+    "image": "Image",
+    "other": "Document",
+    "pageCount": "{count, plural, one {1 page} other {{n} pages}}",
+    "pageOf": "{page} / {pages}",
+    "ofAttachments": "{count, plural, one {Document} other {Documents}}",
+    "page": "Page {n}",
+    "pages": "Pages",
+    "files": "Attachments",
+    "preview": "Preview",
+    "closePreview": "Close preview",
+    "openLarge": "Open large",
+    "download": "Download",
+    "print": "Print",
+    "back": "Back",
+    "close": "Close",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "loading": "Opening the Document…",
+    "unavailable": "This Document couldn't be opened.",
+    "tryAgain": "Try again",
+    "noPreview": "This type of Document can't be previewed. Download it to open it.",
+    "documentOf": "{n} / {total}"
+  },
   "submittalPanel": {
     "position": "{n} / {total}",
     "previous": "Previous submittal",
@@ -3080,6 +3229,31 @@
     "noNumber": "No number yet",
     "loading": "Opening the submittal…",
     "unavailable": "This submittal couldn't be opened.",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "numberCard": {
+      "title": "How this number is built",
+      "footnote": "Set by the Project's Numbering Pattern. The number never changes; Revisions add Rev 1, Rev 2…",
+      "kinds": {
+        "project": "Project",
+        "type": "Work Item Type",
+        "trade": "Trade",
+        "participant": "Participant Code",
+        "location": "Location",
+        "text": "Fixed text",
+        "sequence": "Sequence"
+      },
+      "levels": {
+        "zone": "Zone",
+        "building": "Building",
+        "floor": "Floor"
+      },
+      "lines": {
+        "project": "the Project's code",
+        "participant": "{company}'s Participant Code",
+        "location": "its {level}",
+        "text": "the same on every number",
+        "sequence": "the running number, given when it first left Draft"
+      }
+    }
   }
 }

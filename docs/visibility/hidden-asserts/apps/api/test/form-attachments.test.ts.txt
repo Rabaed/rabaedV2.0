@@ -1,0 +1,4 @@
+empty a field's files > refuse a content type the field doesn't take, even one the Project takes :: expect((await list(engineer, id)).documents).toEqual([]);
+empty once Submitted > anyone who can't see the item gets a 404 for the field's Documents and their download URLs :: await expectHidden(c2Engineer.get(documentsUrl(id)));
+empty once Submitted > anyone who can't see the item gets a 404 for the field's Documents and their download URLs :: await expectHidden(c2Engineer.get(`${documentUrl(id, datasheet)}/download`));
+empty once Submitted > anyone who can't see the item gets a 404 for the field's Documents and their download URLs :: await expectHidden(start(c2Engineer, id, { fieldKey: "datasheet" }));

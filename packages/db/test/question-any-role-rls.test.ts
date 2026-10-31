@@ -4,12 +4,12 @@
 // (Consultant), O1 (Owner) and R1 (Owner Representative, Building A only). A QSO is held by R1
 // where it covers the item, else by O1; the covering Consultant is informed of a Contractor's QSO
 // and of the Owner side's QSC; C2 reads none of it.
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -26,6 +26,7 @@ let projectId = "";
 let electrical = "";
 let buildingA = "";
 let buildingB = "";
+let anchors: Partial<Record<Who, string>> = {}; // Each asker's own Draft, the item its furnished Questions link to.
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -71,16 +72,69 @@ const events = (as: string, id: string) =>
         left join workflow_transition t on t.id = e.transition_id
         where e.work_item_id = ${id}::uuid order by e.seq`,
   );
-/** Everything `who` reads of item `id`: its row, events, Links, Steps, Stage and Documents. */
-const reads = async (who: string, id: string) => [
-  await seen(who, id),
-  await events(who, id),
-  await call(who, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`),
-  await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
-  (await call(who, sql<{ stage_key: string }>`select stage_key from app.step_as_seen(${id}::uuid)`))[0],
-  await call(who, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
-];
-const nothing = [[], [], [], [], undefined, []];
+type Rows = Promise<readonly unknown[]>;
+/** Each read `who` makes of item `id`: its row, events, Links, Steps, Stage and Documents. */
+const itemReads = {
+  row: (who: string, id: string): Rows => seen(who, id),
+  events: (who: string, id: string): Rows => events(who, id),
+  links: (who: string, id: string): Rows => call(who, sql<{ id: string }>`select id from app.work_item_links(${id}::uuid)`),
+  steps: (who: string, id: string): Rows => call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
+  stage: (who: string, id: string): Rows => call(who, sql<{ stage_key: string }>`select stage_key from app.step_as_seen(${id}::uuid)`),
+  documents: (who: string, id: string): Rows => call(who, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
+};
+type ItemRead = keyof typeof itemReads;
+const everyRead = Object.keys(itemReads) as ItemRead[];
+/** A Draft's reads: it has no event even its asker reads until the Ask, so that read would prove nothing there. */
+const draftReads = everyRead.filter((read) => read !== "events");
+/** How a Member is named in a failure. */
+const whoIs = (member: string) => (Object.keys(co) as Who[]).find((who) => co[who].member === member) ?? member;
+
+/**
+ * Item `id` through each read in `reads` (all of them by default): read first by every one of `seenBy`, then
+ * by none of `hiddenFrom` (RP-1095). An item has rows in its Documents and Links only once `furnished`.
+ */
+async function hiddenIn(id: string, seenBy: Who[], hiddenFrom: Who[], label: string, reads: ItemRead[] = everyRead) {
+  for (const read of reads) {
+    await expectHiddenFrom({
+      read: async (member: string) => (await itemReads[read](member, id)).map(() => ({ id })),
+      target: id,
+      seenBy: seenBy.map((who) => co[who].member),
+      hiddenFrom: hiddenFrom.map((who) => co[who].member),
+      name: whoIs,
+      label: `${label}, ${read}`,
+    });
+  }
+}
+
+/** The asker's own anchor Draft: a Link only ever names an item its maker sees. */
+const anchorOf = (asker: string) => anchors[whoIs(asker) as Who]!;
+
+/** The asker's Draft `id` gets an Attachment and a Link to `to`, as made in the Draft: its Documents and Links have rows. */
+async function furnished(asker: string, id: string, to: string): Promise<void> {
+  const [started] = await call<{ outcome: string; document_id: string }>(
+    asker,
+    sql`select outcome, document_id from app.start_document_upload(${id}::uuid, 'sketch.pdf', 10, 'application/pdf', now())`,
+  );
+  expect(started!.outcome).toBe("started");
+  const fingerprint = createHash("sha256").update(`sketch-${id}`, "utf8").digest();
+  expect(
+    await outcome(asker, sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'application/pdf', ${fingerprint}, now()) as outcome`),
+  ).toBe("confirmed");
+  const { rows } = await migrator.query(
+    `insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id, created_at)
+     select f.project_id, f.id, t.id, 'related', f.created_by_member_id, f.created_at from work_item f, work_item t where f.id = $1 and t.id = $2 returning id`,
+    [id, to],
+  );
+  await migrator.query("update work_item_link set arrival = 0 where id = $1", [rows[0].id]);
+}
+
+/** `asker`'s Draft of `type`, furnished with an Attachment and a Link, then asked. */
+async function askedFurnished(asker: string, type: string, title: string, location = buildingA): Promise<string> {
+  const id = await drafted(asker, type, title, location);
+  await furnished(asker, id, anchorOf(asker));
+  expect(await take(asker, id, "ask")).toBe("applied");
+  return id;
+}
 
 /** `asker`'s Draft Question of `type` on Electrical, at `location` (Building A unless named). */
 async function drafted(asker: string, type: string, title: string, location = buildingA): Promise<string> {
@@ -157,6 +211,13 @@ beforeAll(async () => {
     }
     expect(await outcome(ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${positions[who]}::text[]) as outcome`)).toBe("set");
   }
+  // Each asker's own Draft, of a Type it may start, for its furnished Questions' Links.
+  anchors = {
+    c1: await drafted(co.c1.member, "QSN", "C1's anchor"),
+    k1: await drafted(co.k1.member, "QSC", "K1's anchor"),
+    o1: await drafted(co.o1.member, "QSN", "O1's anchor"),
+    r1: await drafted(co.r1.member, "QSN", "R1's anchor"),
+  };
 });
 
 afterAll(async () => {
@@ -195,18 +256,19 @@ describe("who may start which Question (seam 2)", () => {
 describe("a Contractor's Question to Owner (scenario RP-1108-1)", () => {
   it("RP-1108-1: lands with R1, read by O1 and by K1 (informed, shared Transitions only); C2 reads nothing at any Step", async () => {
     const id = await drafted(co.c1.member, "QSO", "Which façade colour");
-    for (const who of ["c2", "k1", "o1", "r1"] as const) expect(await reads(co[who].member, id), `draft, ${who}`).toEqual(nothing);
+    await furnished(co.c1.member, id, anchorOf(co.c1.member));
+    await hiddenIn(id, ["c1"], ["c2", "k1", "o1", "r1"], "draft", draftReads);
     expect(await take(co.c1.member, id, "ask")).toBe("applied");
     expect(await holder(id)).toEqual([participant.r1]);
     for (const who of ["k1", "o1", "r1"] as const) expect(await seen(co[who].member, id), who).toEqual([id]);
-    expect(await reads(co.c2.member, id), "open, C2").toEqual(nothing);
+    await hiddenIn(id, ["c1", "r1"], ["c2"], "open");
     // K1 holds nothing: its try is refused as any non-holder's.
     expect(await take(co.k1.member, id, "answer", { answer: "Grey" })).toBe("not_holder");
 
     expect(await take(co.r1.member, id, "answer", { answer: "RAL 7016" })).toBe("applied");
     expect(await pickUp(co.c1.member, id)).toBe("picked_up");
     expect(await take(co.c1.member, id, "close")).toBe("applied");
-    expect(await reads(co.c2.member, id), "closed, C2").toEqual(nothing);
+    await hiddenIn(id, ["c1", "r1"], ["c2"], "closed");
     const access = await migrator.query("select participant_id, reason from work_item_access where work_item_id = $1 order by reason", [id]);
     expect(access.rows.find((r) => r.participant_id === participant.k1)?.reason).toBe("informed");
     expect((await events(co.k1.member, id)).map((e) => [e.type, e.audience, e.transition_key])).toEqual([
@@ -217,31 +279,34 @@ describe("a Contractor's Question to Owner (scenario RP-1108-1)", () => {
   });
 
   it("with no Owner Representative covering it (Building B), lands with the Owner", async () => {
-    const id = await asked(co.c1.member, "QSO", "Which paving", buildingB);
+    const id = await askedFurnished(co.c1.member, "QSO", "Which paving", buildingB);
     expect(await holder(id)).toEqual([participant.o1]);
-    expect(await seen(co.r1.member, id)).toEqual([]);
+    // R1 covers Building A only: it reads none of it; C1 and O1, holding it, do.
+    await hiddenIn(id, ["c1", "o1"], ["r1"], "Building B");
     expect(await take(co.o1.member, id, "answer", { answer: "Interlock" })).toBe("applied");
   });
 });
 
 describe("the Owner side asks (scenarios RP-1108-2 to RP-1108-4)", () => {
   it("RP-1108-2: O1's QSC to C1 is read by C1, R1 and K1 (informed); C2 reads nothing", async () => {
-    const id = await asked(co.o1.member, "QSC", "When is the slab poured");
+    const id = await askedFurnished(co.o1.member, "QSC", "When is the slab poured");
     expect(await holder(id)).toEqual([participant.c1]);
     for (const who of ["c1", "k1", "r1"] as const) expect(await seen(co[who].member, id), who).toEqual([id]);
-    expect(await reads(co.c2.member, id)).toEqual(nothing);
+    await hiddenIn(id, ["o1", "c1"], ["c2"], "open");
     expect(await pickUp(co.c1.member, id)).toBe("picked_up");
     expect(await take(co.c1.member, id, "answer", { answer: "Sunday" })).toBe("applied");
     expect(await take(co.o1.member, id, "close")).toBe("applied");
-    expect(await reads(co.c2.member, id)).toEqual(nothing);
+    await hiddenIn(id, ["o1", "c1"], ["c2"], "closed");
   });
 
   it("RP-1108-3: K1's QSO and O1's QSN are read by no Contractor, and inform nobody", async () => {
-    const toOwner = await asked(co.k1.member, "QSO", "Is the alternate tile accepted");
-    const toConsultant = await asked(co.o1.member, "QSN", "Has the mock-up been approved");
-    for (const id of [toOwner, toConsultant]) {
-      expect(await reads(co.c1.member, id)).toEqual(nothing);
-      expect(await reads(co.c2.member, id)).toEqual(nothing);
+    const toOwner = await askedFurnished(co.k1.member, "QSO", "Is the alternate tile accepted");
+    const toConsultant = await askedFurnished(co.o1.member, "QSN", "Has the mock-up been approved");
+    for (const [id, asker, asked] of [
+      [toOwner, "k1", "r1"],
+      [toConsultant, "o1", "k1"],
+    ] as const) {
+      await hiddenIn(id, [asker, asked], ["c1", "c2"], `${asker}'s`);
       const informed = await migrator.query("select 1 from work_item_access where work_item_id = $1 and reason = 'informed'", [id]);
       expect(informed.rowCount).toBe(0);
     }
@@ -251,11 +316,48 @@ describe("the Owner side asks (scenarios RP-1108-2 to RP-1108-4)", () => {
 
   it("RP-1108-4: R1's Draft is R1's alone until the Ask", async () => {
     const id = await drafted(co.r1.member, "QSN", "Which sample is the reference");
-    for (const who of ["c1", "c2", "k1", "o1"] as const) expect(await reads(co[who].member, id), who).toEqual(nothing);
-    expect(await seen(co.r1.member, id)).toEqual([id]);
+    await furnished(co.r1.member, id, anchorOf(co.r1.member));
+    await hiddenIn(id, ["r1"], ["c1", "c2", "k1", "o1"], "draft", draftReads);
     expect(await take(co.r1.member, id, "ask")).toBe("applied");
     expect(await seen(co.k1.member, id)).toEqual([id]);
-    expect(await reads(co.c1.member, id)).toEqual(nothing);
-    expect(await reads(co.c2.member, id)).toEqual(nothing);
+    await hiddenIn(id, ["r1", "k1"], ["c1", "c2"], "open");
+  });
+});
+
+describe("the Snag List's one Questions chip (RP-1109, scenario RP-1109-1)", () => {
+  /** The Questions `as` reads on the Project, by id: the rows the chip's filter lists. */
+  const questionIds = async (as: string) =>
+    (
+      await call<{ id: string }>(
+        as,
+        sql`select w.id from work_item w join work_item_type t on t.id = w.work_item_type_id
+            where w.project_id = ${projectId}::uuid and t.code in ('QSN', 'QSC', 'QSO') order by w.id`,
+      )
+    ).map((r) => r.id);
+  /** The chip's number: the Question Types' counts `as` reads, added up as the chip does. */
+  const chip = async (as: string) =>
+    (
+      await call<{ code: string; n: number }>(
+        as,
+        sql`select t.code, count(*)::int as n from work_item w join work_item_type t on t.id = w.work_item_type_id
+            where w.project_id = ${projectId}::uuid and t.code in ('QSN', 'QSC', 'QSO') group by t.code`,
+      )
+    ).reduce((sum, c) => sum + c.n, 0);
+
+  it("RP-1109-1: C2's chip counts its own Question only; C1's and K1's count what they read, never C2's", async () => {
+    const c1Qso = await asked(co.c1.member, "QSO", "Which façade lighting colour");
+    const k1Qsc = await asked(co.k1.member, "QSC", "Confirm cable tray route");
+    const c2Qsn = await asked(co.c2.member, "QSN", "Clarify socket height", buildingB);
+    // C2 reads its own Question and none of the Project's others (V3): an exact set, by id.
+    expect(await questionIds(co.c2.member)).toEqual([c2Qsn]);
+    expect(await chip(co.c2.member)).toBe(1);
+    const c1 = await questionIds(co.c1.member);
+    expect(c1).toEqual(expect.arrayContaining([c1Qso, k1Qsc]));
+    const questions = async (member: string) => (await questionIds(member)).map((id) => ({ id }));
+    await expectHiddenFrom({ read: questions, target: c2Qsn, seenBy: [co.c2.member, co.k1.member], hiddenFrom: co.c1.member, name: whoIs });
+    expect(await chip(co.c1.member)).toBe(c1.length);
+    const k1 = await questionIds(co.k1.member);
+    expect(k1).toEqual(expect.arrayContaining([c1Qso, k1Qsc, c2Qsn]));
+    expect(await chip(co.k1.member)).toBe(k1.length);
   });
 });

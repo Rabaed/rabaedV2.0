@@ -1,0 +1,6 @@
+empty scenario 67: a K1 engineer and the C1 PM both watch the MAR > returns no list or count of watchers in any read :: expect((await ok(who.get(`/v1/work-items/${mar}${path}`), 200)).body.toLowerCase(), path).not.toContain("watch");
+empty scenario 67: a K1 engineer and the C1 PM both watch the MAR > returns no list or count of watchers in any read :: expect((await ok(who.get(`/v1/projects/${at.projectId}/work-items`), 200)).body.toLowerCase()).not.toContain("watch");
+empty a Revision chain > keeps a Draft Revision hidden from another Company's watcher (V1), until it is Submitted :: await expectHidden(watchRead(k1Engineer, rev1));
+empty a hidden item > is the plain 404 to read, watch or unwatch, exactly like a made-up id :: await expectHidden(watchRead(who, item));
+empty a hidden item > is the plain 404 to read, watch or unwatch, exactly like a made-up id :: await expectHidden(who.request("PUT", `/v1/work-items/${item}/watch`));
+empty a hidden item > is the plain 404 to read, watch or unwatch, exactly like a made-up id :: await expectHidden(who.delete(`/v1/work-items/${item}/watch`));

@@ -85,6 +85,7 @@
     "newOfType": "إضافة {type}",
     "types": "الأنواع",
     "allTypes": "الكل",
+    "questions": "الأسئلة",
     "company": "الشركة",
     "raisedFrom": "المصدر",
     "raisedManually": "يدويًا",
@@ -1011,6 +1012,7 @@
         "notYet": "يمكن إضافة الصور بعد حفظ المسودة.",
         "uploading": "جارٍ الرفع…",
         "takePhoto": "التقط صورة",
+        "upload": "رفع",
         "open": "فتح \u2068{name}\u2069 بالحجم الكامل",
         "remove": "إزالة \u2068{name}\u2069",
         "frozen": "مُقدَّم: لا يمكن تغييره",
@@ -1073,7 +1075,11 @@
         "itemNumber": "{n} من {of}",
         "raiseSnag": "إنشاء عيب",
         "snagRaised": "يُنشأ عيب مع الرمز",
-        "noSnagRaised": "لا يُنشأ عيب"
+        "noSnagRaised": "لا يُنشأ عيب",
+        "raiseSnagTicked": "يصبح عيبًا على المقاول عند إصدار الرمز.",
+        "raiseSnagUnticked": "غير محدد: مثلًا خلل بسيط أُصلح في الموقع.",
+        "addComment": "إضافة تعليق",
+        "addPhoto": "إضافة صورة"
       },
       "tableField": {
         "addRow": "إضافة صف",
@@ -1107,7 +1113,14 @@
         "photoRequired": "صورة مطلوبة عند {answer}",
         "commentOptional": "التعليق اختياري",
         "photoOptional": "الصور اختيارية",
-        "raisesSnag": "عند {answer} يُنشأ عيب"
+        "raisesSnag": "عند {answer} يُنشأ عيب",
+        "forTrade": "قوالب \u2068{trade}\u2069",
+        "otherTradesHidden": "{count, plural, one {قالب واحد لتخصصات أخرى مخفي} two {قالبان لتخصصات أخرى مخفيان} few {{n} قوالب لتخصصات أخرى مخفية} many {{n} قالبًا لتخصصات أخرى مخفيًا} other {{n} قالب لتخصصات أخرى مخفي}}",
+        "version": "الإصدار {n}",
+        "locked": "يمكنك تغيير قالب قائمة التحقق حتى يُقدَّم طلب المعاينة، ثم يُقفل.",
+        "hideItems": "إخفاء البنود",
+        "showItems": "عرض البنود",
+        "negativeAsks": "{every, select, yes {{what, select, both {عند {answer}، يجب أن يضيف الاستشاري تعليقًا وصورة} comment {عند {answer}، يجب أن يضيف الاستشاري تعليقًا} other {عند {answer}، يجب أن يضيف الاستشاري صورة}}} other {{what, select, both {عند {answer}، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري} comment {عند {answer}، تحتاج بعض البنود إلى تعليق من الاستشاري} other {عند {answer}، تحتاج بعض البنود إلى صورة من الاستشاري}}}}"
       },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
@@ -1163,6 +1176,109 @@
       "saving": "جارٍ الحفظ…",
       "saved": "حُفظت.",
       "notSaved": "لم تُحفظ قائمة التحقق. حاول مرة أخرى."
+    },
+    "inspection": {
+      "breadcrumb": "مسار التنقل",
+      "request": {
+        "newWir": "طلب معاينة جديد",
+        "raisedBy": "رفعته \u2068{company}\u2069",
+        "goesTo": "يذهب إلى \u2068{name}\u2069",
+        "numberOnSubmit": "يُعطى الرقم عند التقديم",
+        "actions": "حفظ طلب المعاينة أو إرساله",
+        "previewTitle": "معاينة قالب قائمة التحقق",
+        "previewEmpty": "اختر قالب قائمة تحقق لترى بنوده هنا.",
+        "nextTitle": "ما الذي يحدث بعد ذلك",
+        "nextReview": "تراجعه شركتك، ثم تعيده أو تقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextReviewBy": "يراجعه \u2068{name}\u2069، ثم يعيده أو يقدّمه إلى الاستشاري مع خطاب تغطية.",
+        "nextInspect": "يعاين الاستشاري الأعمال في الموقع.",
+        "nextCode": "يصدر مدير الاستشاري رمز المراجعة."
+      },
+      "requestedFor": "مطلوب في",
+      "issuedBy": "أصدره {by} · {when}",
+      "privacy": "لا يرى إجاباتك إلا {company} حتى ترسلها.",
+      "internal": "داخلي",
+      "coverNote": "خطاب التغطية",
+      "remarks": "الملاحظات",
+      "revisionBanner": "يجب مراجعة طلب الفحص هذا: أنشئ مراجعة لإعادة الفحص.",
+      "waiting": "لدى {company}. تقرأ إجابات قائمة التحقق بعد إصدار الرمز.",
+      "save": {
+        "saved": "حُفظ",
+        "savedAt": "حُفظ {time}",
+        "notSaved": "لم يُحفظ",
+        "offline": "لم يُحفظ: انقطعت الإشارة. إجابتك ما زالت على هذه الشاشة.",
+        "retry": "إعادة المحاولة"
+      },
+      "tiles": {
+        "pass": "مطابق",
+        "fail": "غير مطابق",
+        "na": "لا ينطبق",
+        "answered": "تمت الإجابة",
+        "items": "بنود"
+      },
+      "filters": {
+        "label": "عرض البنود",
+        "all": "الكل",
+        "unanswered": "دون إجابة",
+        "failed": "غير مطابق"
+      },
+      "summary": {
+        "label": "ملخص قائمة التحقق",
+        "pass": "مطابق",
+        "fail": "غير مطابق",
+        "na": "لا ينطبق",
+        "answered": "<strong>{answered}</strong> من <strong>{total}</strong> تمت الإجابة",
+        "progress": "البنود المُجاب عنها",
+        "left": "{count, plural, one {بقي بند واحد دون إجابة.} other {بقي {n} بنود دون إجابة.}}",
+        "notSaved": "{count, plural, one {تغيير واحد لم يُحفظ: أعد المحاولة قبل الإرسال.} other {{n} تغييرات لم تُحفظ: أعد المحاولة قبل الإرسال.}}"
+      },
+      "send": {
+        "recommendedCode": "الرمز الموصى به",
+        "internal": "يبقى رمزك الموصى به وملاحظتك الداخلية داخل {company}. لا تراهما {raiser} أبدًا: فقط الرمز وما يشاركه.",
+        "snags": "{tickedCount, plural, one {بند واحد غير مطابق محدد عليه «إنشاء عيب»} other {{ticked} بنود غير مطابقة محدد عليها «إنشاء عيب»}} · {untickedCount, plural, one {بند واحد غير محدد} other {{unticked} غير محددة}}"
+      },
+      "recommendedCode": {
+        "title": "الرمز الموصى به من المهندس",
+        "sent": "أُرسلت {when}",
+        "internalOnly": "داخل {company} فقط: لا ترى {raiser} هذا أبدًا."
+      },
+      "decision": {
+        "label": "قرارك",
+        "title": "قرارك",
+        "proposed": "المقترح: {code}",
+        "issue": "إصدار الرمز"
+      },
+      "issueCodeAs": "إصدار الرمز: {code}",
+      "code": {
+        "label": "رمز المراجعة",
+        "failedProposal": "{count, plural, one {بند واحد غير مطابق} other {{n} بنود غير مطابقة}}: المقترح كان {proposed}. ما زال بإمكانك اختيار {picked}.",
+        "passedProposal": "لا يوجد بند غير مطابق: المقترح كان {proposed}. ما زال بإمكانك اختيار {picked}.",
+        "commentRows": "يصبح كل صف ملاحظة في قائمة العيوب، مسندة إلى {company}.",
+        "snagsTitle": "العيوب التي ستُنشأ",
+        "noSnags": "لا يوجد بند غير مطابق محدد عليه «إنشاء عيب».",
+        "snagTo": "البند {n} · إلى {company}",
+        "unticked": "{count, plural, one {بند واحد غير مطابق لا يُنشئ عيبًا: أُزيل تحديده.} other {{n} بنود غير مطابقة لا تُنشئ عيوبًا: أُزيل تحديدها.}}",
+        "raisedBy": "تُنشئها {company} وتُسند إلى {raiser}، أيًّا كان الرمز."
+      },
+      "return": {
+        "kept": "تبقى إجابات المهندس وتعليقاته وصوره على طلب الفحص، ليعدّلها ويرسلها إليك مرة أخرى.",
+        "internal": "داخلي لدى {company}: لا تُبلَّغ {raiser}."
+      },
+      "counts": {
+        "label": "ما أُنشئ من طلب الفحص هذا",
+        "hint": "يفتح قائمة العيوب مصفّاة على طلب الفحص هذا. الأعداد تشمل فقط البنود التي تراها."
+      },
+      "shared": {
+        "title": "قائمة التحقق",
+        "readable": "يمكنك قراءة قائمة التحقق الآن بعد إصدار الرمز."
+      },
+      "revision": {
+        "of": "مراجعة لـ",
+        "number": "المراجعة {revision}",
+        "neverBlocks": "العيوب المفتوحة لا تمنع إصدار هذا الرمز أبدًا: يمكن لمدير الاستشاري إصداره في كل الأحوال.",
+        "openSnagList": "فتح في قائمة العيوب",
+        "rowOpen": "مفتوح",
+        "rowClosed": "مغلق"
+      }
     },
     "attachments": {
       "title": "المرفقات",
@@ -2261,6 +2377,7 @@
         "invalid_schema": "غير صالح",
         "unknown_internal_field": "مُعلَّم داخليًا وليس حقلًا في الشاشة",
         "internal_file_field": "يحمل صورًا أو مستندات، وهي مشتركة دائمًا",
+        "reply_checklist_not_on_close": "قائمة تحقق، لكن سير عمل يعرض هذه الشاشة في انتقال لا يُغلق العنصر: لا يأخذ قائمة التحقق إلا انتقال إغلاق",
         "duplicate_key": "يستخدم مفتاحًا لحقل آخر",
         "unknown_reference": "يقرأ حقلًا لا يحمل إجابة",
         "condition_cycle": "له شروط يعتمد بعضها على بعض في حلقة",
@@ -3059,6 +3176,38 @@
     "noLinks": "لا روابط",
     "none": "—"
   },
+  "submittalPanelAttachments": {
+    "title": "المرفقات",
+    "fileCount": "{count, plural, =0 {لا مستندات} one {مستند واحد} two {مستندان} few {{n} مستندات} many {{n} مستندًا} other {{n} مستند}}",
+    "none": "لا توجد مستندات مرفقة.",
+    "reading": "جارٍ قراءة المستندات…",
+    "unavailableList": "تعذرت قراءة المستندات. حاول مرة أخرى لاحقًا.",
+    "pdf": "PDF",
+    "image": "صورة",
+    "other": "مستند",
+    "pageCount": "{count, plural, one {صفحة واحدة} two {صفحتان} few {{n} صفحات} many {{n} صفحة} other {{n} صفحة}}",
+    "pageOf": "{page} / {pages}",
+    "ofAttachments": "{count, plural, one {مستند} two {مستندين} few {مستندات} many {مستندًا} other {مستند}}",
+    "page": "صفحة {n}",
+    "pages": "الصفحات",
+    "files": "المرفقات",
+    "preview": "معاينة",
+    "closePreview": "إغلاق المعاينة",
+    "openLarge": "فتح بحجم كبير",
+    "download": "تنزيل",
+    "print": "طباعة",
+    "back": "رجوع",
+    "close": "إغلاق",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "loading": "جارٍ فتح المستند…",
+    "unavailable": "تعذر فتح هذا المستند.",
+    "tryAgain": "حاول مرة أخرى",
+    "noPreview": "لا يمكن معاينة هذا النوع من المستندات. نزّله لفتحه.",
+    "documentOf": "{n} / {total}"
+  },
   "submittalPanel": {
     "position": "{n} / {total}",
     "previous": "التقديم السابق",
@@ -3080,6 +3229,31 @@
     "noNumber": "بلا رقم بعد",
     "loading": "جارٍ فتح التقديم…",
     "unavailable": "تعذّر فتح هذا التقديم.",
-    "tryAgain": "حاول مرة أخرى"
+    "tryAgain": "حاول مرة أخرى",
+    "numberCard": {
+      "title": "كيف يُبنى هذا الرقم",
+      "footnote": "يحدّده نمط الترقيم في المشروع. الرقم لا يتغيّر؛ وتضيف المراجعات «مراجعة 1» و«مراجعة 2»…",
+      "kinds": {
+        "project": "المشروع",
+        "type": "نوع البند",
+        "trade": "التخصص",
+        "participant": "رمز المشارك",
+        "location": "الموقع",
+        "text": "نص ثابت",
+        "sequence": "التسلسل"
+      },
+      "levels": {
+        "zone": "المنطقة",
+        "building": "المبنى",
+        "floor": "الطابق"
+      },
+      "lines": {
+        "project": "رمز المشروع",
+        "participant": "رمز المشارك لـ {company}",
+        "location": "{level} الخاص به",
+        "text": "ثابت في كل رقم",
+        "sequence": "الرقم التسلسلي، يُعطى عند خروجه من المسودة أول مرة"
+      }
+    }
   }
 }

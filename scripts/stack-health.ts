@@ -105,6 +105,34 @@ export function stoppedMessage(problems: string[], at?: string): string {
   ].join("\n");
 }
 
+export type WhileUpSteps<T, R> = {
+  /** Why the stack is down before or after `item` ran, or undefined when it is up. */
+  down: (item: T, when: "before" | "after") => Promise<string | undefined>;
+  run: (item: T) => Promise<R>;
+  save: (item: T, result: R) => void;
+};
+
+/**
+ * The UAT harness's case and fixture loop (here so the unit suite reaches it): checks the stack before and after each item and saves its result only when
+ * both pass. Stops at the first down check; what was saved before it is kept. An outage that starts
+ * and ends inside one item is not seen.
+ */
+export type WhileUpOutcome = { saved: number; stopped: string | undefined };
+
+export async function runWhileUp<T, R>(items: T[], { down, run, save }: WhileUpSteps<T, R>): Promise<WhileUpOutcome> {
+  let saved = 0;
+  for (const item of items) {
+    const before = await down(item, "before");
+    if (before) return { saved, stopped: before };
+    const result = await run(item);
+    const after = await down(item, "after");
+    if (after) return { saved, stopped: after };
+    save(item, result);
+    saved++;
+  }
+  return { saved, stopped: undefined };
+}
+
 /**
  * The PowerShell call that shows a Windows message box, on top of every window, until it is clicked.
  * Not a toast: toasts are off on the owner's machine. The call waits for the click, so a scheduled

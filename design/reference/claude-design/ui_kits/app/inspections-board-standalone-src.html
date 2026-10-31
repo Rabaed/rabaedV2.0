@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Inspections (WIR) · Screen board</title>
+<meta name="ext-resource-dependency" content="Inspections (WIR).html" data-resource-id="insp">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0;background:#e9eaee;font-family:var(--font-ui);color:#1f2430}
+a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+.bd-top{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #dcdee3;padding:14px 24px 12px;display:flex;flex-direction:column;gap:10px}
+.bd-h{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}.bd-h h1{margin:0;font:800 20px 'Montserrat',var(--font-ui)}.bd-h p{margin:0;font-size:13px;color:#6a6e7a}.bd-h a{margin-inline-start:auto;font-size:13px;font-weight:600}
+.bd-g{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.bd-grp{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.bd-grp>b{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9aa0ad;margin-inline-end:4px}
+.bd-grp button{height:32px;padding:0 12px;border:0;border-radius:9px;background:#f1f2f5;font:600 12.5px var(--font-ui);color:#3a3f4b;cursor:pointer}.bd-grp button:hover{background:#e6e8ec}.bd-grp button.on{background:#1f2430;color:#fff}
+.bd-row{display:flex;gap:28px;padding:24px;align-items:flex-start;overflow-x:auto}
+.bd-f{display:flex;flex-direction:column;gap:8px;flex:none}.bd-f>b{font-size:12.5px;color:#3a3f4b;display:flex;align-items:center;gap:8px}.bd-f>b span{font-weight:500;color:#8a8f9c}
+.bd-ph{width:390px;height:844px;border-radius:44px;background:#111;padding:12px;box-sizing:content-box;box-shadow:0 20px 50px rgba(0,0,0,.18)}
+.bd-ph iframe{width:390px;height:844px;border:0;border-radius:34px;background:#fff;display:block}
+.bd-dk{width:720px;height:450px;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px #d5d8de,0 14px 40px rgba(0,0,0,.12)}
+.bd-dk iframe{width:1440px;height:900px;border:0;transform:scale(.5);transform-origin:0 0;display:block}
+.bd-desk{display:flex;flex-direction:column;gap:24px}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#e9eaee"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect x="430" y="220" width="340" height="400" rx="36" fill="#fff"/><rect x="520" y="190" width="160" height="70" rx="20" fill="#1f2430"/><path d="M510 420l60 60 120-130" stroke="#f95738" stroke-width="40" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></template>
+<div class="bd-top"><div class="bd-h"><h1>Inspections (WIR)</h1><p>Responsive web — the same pages at phone width (Chrome / Safari on site) and desktop. Each frame is live: tap through it.</p><a id="full" href="#" target="_blank">Open the full page ↗</a></div><div class="bd-g" id="nav"></div></div>
+<div class="bd-row" id="row"></div>
+<script>
+const G=[['Start here',[['list','Inspections list'],['start','Start inspection']]],['Photo tool',[['photo','Take photo / Upload'],['annotate','Annotate'],['viewer','Annotated / Original']]],['Request',[['request','WIR request']]],['Engineer on site',[['site','Pass item'],['site-fail','Fail + Snag tick'],['retry','Save failed · Retry'],['send','Send to Manager']]],['Manager',[['mgr','Checklist + recommendation'],['r-pass','Passed'],['r-pwc','Passed with Comments'],['r-fail','Failed'],['return','Return to Engineer']]],['After the Result',[['after','WIR page'],['rev','Revision'],['snag','Snag from WIR']]]];
+const PHONE_FIRST=['photo','annotate','viewer','site','site-fail','retry','send'];
+let cur=(location.hash.slice(1))||'list';
+function nav(){document.getElementById('nav').innerHTML=G.map(g=>`<div class="bd-grp"><b>${g[0]}</b>${g[1].map(s=>`<button class="${s[0]===cur?'on':''}" data-s="${s[0]}">${s[1]}</button>`).join('')}</div>`).join('')}
+function show(){nav();const u=l=>`${window.__resources.insp}#frame=1&lang=${l}&scr=${cur}`;const lab=G.flatMap(g=>g[1]).find(s=>s[0]===cur)[1];
+ const ph=l=>`<div class="bd-f"><b>${l==='en'?'English':'العربية'} <span>· phone 390 px</span></b><div class="bd-ph"><iframe src="${u(l)}" title="${lab} ${l} phone"></iframe></div></div>`;
+ const dk=l=>`<div class="bd-f"><b>${l==='en'?'English':'العربية'} <span>· desktop 1440 px (50%)</span></b><div class="bd-dk"><iframe src="${u(l)}" title="${lab} ${l} desktop"></iframe></div></div>`;
+ document.getElementById('row').innerHTML=ph('en')+ph('ar')+`<div class="bd-desk">${dk('en')}${dk('ar')}</div>`;
+ history.replaceState(null,'','#'+cur)}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(b){cur=b.dataset.s;show()}});
+document.getElementById('full').href=window.__resources.insp;
+show();
+</script>
+</body>
+</html>

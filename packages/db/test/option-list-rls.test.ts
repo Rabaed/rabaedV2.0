@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -68,8 +68,16 @@ describe("the app role", () => {
   });
 
   it("reads nothing with no Member set", async () => {
-    expect((await sql`select id from option_list`.execute(app)).rows).toEqual([]);
-    expect((await sql`select id from option`.execute(app)).rows).toEqual([]);
+    // The active Member reads the list and its option by id first; with no Member set, neither.
+    const readAs = (table: "option_list" | "option") => async (member: string | null) => {
+      const query = sql<{ id: string }>`select id from ${sql.table(table)}`;
+      return member === null ? (await query.execute(app)).rows : await asMember(query);
+    };
+    const who = (member: string | null) => (member === null ? "no Member set" : "an active Member");
+    await expectHiddenFrom({ read: readAs("option_list"), target: listId, seenBy: memberId, hiddenFrom: null, name: who, label: "option_list" });
+    await expectHiddenFrom({ read: readAs("option"), target: optionId, seenBy: memberId, hiddenFrom: null, name: who, label: "option" });
+    expect((await sql`select id from option_list`.execute(app)).rows).toEqual([]); // not hidden-from: no list at all, whoever's; the read is proven by id just above
+    expect((await sql`select id from option`.execute(app)).rows).toEqual([]); // not hidden-from: no option at all, whoever's; the read is proven by id just above
   });
 
   it("can't insert, update or delete a list or an option", async () => {

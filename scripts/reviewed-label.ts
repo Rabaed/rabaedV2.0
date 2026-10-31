@@ -8,19 +8,23 @@ import { resolve } from "node:path";
 // A label already there when a PR opens or reopens is dropped: no review is tied to that head.
 //
 // The label means "/code-review finished and its fixes are pushed, at this head":
-// `pnpm queue` refuses a PR without it. So a new push drops it, with one exception
-// (decided in RP-584): a push that only merges main in, by a clean automatic merge,
-// keeps it. "Clean automatic merge" is checked, not guessed:
+// `pnpm queue` refuses a PR without it. So a new push drops it, with two exceptions.
+// A push that only merges main in, by a clean automatic merge, keeps it (RP-584).
+// "Clean automatic merge" is checked, not guessed:
 //   1. the new head is a merge commit with two parents,
 //   2. the first parent is the head the push replaced (`before`),
 //   3. the second parent is already on origin/main (not another feature branch),
 //   4. the tree of the new head equals the tree `git merge-tree` makes by merging
 //      that second parent into `before`, so nobody edited anything while merging
 //      (a conflict resolution, an "evil merge", or extra changes fail this).
+// A bot's push of one screenshot baseline-only commit on `before` keeps it too
+// (`baselineBotPush`, RP-1121): it changes no code, and CI's story run checks the images.
+// The sender must be a bot account (the screenshot workflow's App): anyone can write the
+// bot's email into a commit, but lanes push as people.
 // Anything else, including any error while checking, removes the label: a missing
 // label costs one `gh pr edit`, a stale one lets unreviewed code into main.
-// `pnpm queue` follows the same rule back from the head to the commit `pnpm verify`
-// passed on (`onlyMainMergedSince`, RP-1017), so there is one definition of it.
+// `pnpm queue` and the verify gate follow both back from the head to the commit `pnpm verify`
+// passed on (`onlyCleanCommitsSince`, RP-1017, RP-1103), so there is one definition of each.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH. Runs the default
 // branch's copy of this file in a checkout that has main's history and the PR head;
@@ -37,6 +41,35 @@ export interface ReviewedGit {
   tree(commit: string): string;
   /** The tree id of the clean merge of `other` into `base` (`git merge-tree --write-tree`); undefined when it conflicts or errors. */
   mergedTree(base: string, other: string): string | undefined;
+  /** The author's and the committer's email of `commit`. */
+  identity(commit: string): { author: string; committer: string };
+  /** The paths `commit` changes against its parent, both sides of a rename (`git diff-tree --no-renames`). */
+  changedPaths(commit: string): string[];
+}
+
+/** Where CI's update-screenshots workflow keeps the story screenshot baselines (its `SCREENSHOTS`). */
+export const BASELINE_FOLDER = "packages/ui/test/__screenshots__";
+/** The email that workflow commits as, author and committer alike (its `git config` email). */
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's own noreply address for its Actions bot.
+export const BASELINE_BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
+
+/**
+ * True for CI's "Update story screenshot baselines" commit (RP-1103): one parent, authored and committed by the
+ * workflow's bot, changing only PNGs under the baseline folder, at least one. It changes no code, so it does not
+ * void a verify line: `pnpm verify` compares no screenshots off Linux, and CI checks them. Anyone can set a commit's
+ * author, but such a commit still changes only baseline images, which CI's story run then checks; a mixed commit,
+ * or one a person made or re-committed (a cherry-pick, a rebase), never counts.
+ */
+export function isBaselineBotCommit(commit: string, git: ReviewedGit): boolean {
+  try {
+    if (git.parents(commit).length !== 1) return false;
+    const { author, committer } = git.identity(commit);
+    if (author !== BASELINE_BOT_EMAIL || committer !== BASELINE_BOT_EMAIL) return false;
+    const paths = git.changedPaths(commit);
+    return paths.length > 0 && paths.every((path) => path.startsWith(`${BASELINE_FOLDER}/`) && path.endsWith(".png"));
+  } catch {
+    return false;
+  }
 }
 
 /** True when the push `before` -> `after` only merged main in, with no change of its own. */
@@ -52,16 +85,18 @@ export function keepsLabel(before: string, after: string, git: ReviewedGit): boo
   }
 }
 
-/** How many clean merges of main the walk follows before it gives up; a branch merges main about once a day. */
-const MAX_MAIN_MERGES = 50;
+/** How many clean commits the walk follows before it gives up; a branch merges main about once a day. */
+const MAX_CLEAN_COMMITS = 50;
 
 /**
- * True when `head` is `base`, or follows it by clean merges of main only, each one a push `keepsLabel` would keep
- * the label on (RP-1017: `pnpm queue` takes a `pnpm verify` run on such an older head). `base` may be abbreviated.
+ * True when `head` is `base`, or follows it by clean commits only: merges of main, each one a push `keepsLabel` would
+ * keep the label on (RP-1017: `pnpm queue` and the verify gate take a `pnpm verify` run on such an older head), and
+ * the screenshot bot's baseline-only commits (`isBaselineBotCommit`, RP-1103). `base` may be abbreviated. The
+ * `reviewed` label takes one step per push (`dropLabelOnPush`), and a bot commit only when a bot pushed it (RP-1121).
  */
-export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit): boolean {
+export function onlyCleanCommitsSince(base: string, head: string, git: ReviewedGit): boolean {
   let current = head;
-  for (let merges = 0; merges <= MAX_MAIN_MERGES; merges++) {
+  for (let steps = 0; steps <= MAX_CLEAN_COMMITS; steps++) {
     if (current.startsWith(base)) return true;
     let first: string | undefined;
     try {
@@ -69,26 +104,41 @@ export function onlyMainMergedSince(base: string, head: string, git: ReviewedGit
     } catch {
       return false;
     }
-    if (first === undefined || !keepsLabel(first, current, git)) return false;
+    if (first === undefined || !(keepsLabel(first, current, git) || isBaselineBotCommit(current, git))) return false;
     current = first;
   }
   return false;
+}
+
+/** True when `after` is one baseline-only bot commit (`isBaselineBotCommit`) straight on top of `before` (RP-1121). */
+export function baselineBotPush(before: string, after: string, git: ReviewedGit): boolean {
+  try {
+    return git.parents(after)[0] === before && isBaselineBotCommit(after, git);
+  } catch {
+    return false;
+  }
 }
 
 export interface ReviewedGitHub {
   removeLabel(pr: number): Promise<void>;
 }
 
-/** Returns what was done, for the log. */
+/**
+ * Returns what was done, for the log. `pushedByBot`: the push's sender is a bot account (`sender.type` "Bot"), as the
+ * screenshot workflow's App is. Lanes push as people, so a commit that only claims the bot's email drops the label.
+ */
 export async function dropLabelOnPush(
-  event: { pr: number; action: string; labels: string[]; before?: string | undefined; after?: string | undefined },
+  event: { pr: number; action: string; labels: string[]; before?: string | undefined; after?: string | undefined; pushedByBot?: boolean },
   git: ReviewedGit,
   github: ReviewedGitHub,
 ): Promise<string> {
   if (!event.labels.includes(REVIEWED_LABEL)) return `PR #${event.pr} has no \`${REVIEWED_LABEL}\` label: nothing to remove.`;
   // Only a push (synchronize) has a reviewed head before it; opened and reopened never keep the label.
-  if (event.action === "synchronize" && event.before && event.after && keepsLabel(event.before, event.after, git)) {
-    return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
+  if (event.action === "synchronize" && event.before && event.after) {
+    if (keepsLabel(event.before, event.after, git)) return `PR #${event.pr}: the push only merged main in by a clean merge; \`${REVIEWED_LABEL}\` stays.`;
+    if (event.pushedByBot && baselineBotPush(event.before, event.after, git)) {
+      return `PR #${event.pr}: the push only added the screenshot bot's baseline commit; \`${REVIEWED_LABEL}\` stays.`;
+    }
   }
   await github.removeLabel(event.pr);
   const why = event.action === "synchronize" ? "the new push" : `the ${event.action} PR's head`;
@@ -110,6 +160,15 @@ export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = s
       const done = run(["merge-tree", "--write-tree", base, other]);
       return done.status === 0 ? (done.stdout ?? "").split("\n")[0]?.trim() : undefined;
     },
+    identity(commit) {
+      const [author = "", committer = ""] = must(["log", "-1", "--format=%ae%n%ce", commit]).split("\n");
+      return { author: author.trim(), committer: committer.trim() };
+    },
+    changedPaths: (commit) =>
+      must(["diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", commit])
+        .split("\n")
+        .map((path) => path.trim())
+        .filter(Boolean),
   };
 }
 
@@ -135,9 +194,17 @@ async function main() {
     pull_request: { number: number; labels: { name: string }[] };
     before?: string;
     after?: string;
+    sender?: { type?: string };
   };
   const summary = await dropLabelOnPush(
-    { pr: event.pull_request.number, action: event.action, labels: event.pull_request.labels.map((label) => label.name), before: event.before, after: event.after },
+    {
+      pr: event.pull_request.number,
+      action: event.action,
+      labels: event.pull_request.labels.map((label) => label.name),
+      before: event.before,
+      after: event.after,
+      pushedByBot: event.sender?.type === "Bot",
+    },
     realGit(),
     overHttp(repository, token),
   );

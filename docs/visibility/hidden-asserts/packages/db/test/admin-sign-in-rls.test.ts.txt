@@ -1,0 +1,2 @@
+empty the app role > finds no Engineer to sign in :: expect(rows).toEqual([]);
+empty the app role > resolves no Engineer session, even one made before Rabaed Admin moved out :: expect(rows).toEqual([]);

@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, expectedContentSha256, joinProject, sha256Bytea, sha256Hex, testDatabaseUrls, type HashedDocument } from "../test-support/index.ts";
+import { addTestWorkflow, expectedContentSha256, expectHiddenFrom, joinProject, sha256Bytea, sha256Hex, testDatabaseUrls, type HashedDocument } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -259,7 +259,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   });
 
   it("had, at the Send Back, its two Documents and two Links to X", () => {
-    expect(atSendBack.documents).toHaveLength(2);
+    expect(atSendBack.documents).toEqual([...first].sort());
     expect(atSendBack.linkRows).toHaveLength(2);
     expect(atSendBack.links).toEqual([`related:${x}`, `relies_on:${x}`]);
   });
@@ -274,17 +274,21 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   it("shows K1 and the Owner its Documents and Links as they were at the Send Back, from the tables and the functions", async () => {
     for (const other of [k1.member, ow.member]) {
       expect(await reads(other, id)).toEqual(atSendBack);
-      for (const document of added) {
-        expect(await call(other, sql<{ id: string }>`select id from document where id = ${document}`)).toEqual([]);
-      }
+    }
+    // C1, holding it, reads each added Document by id; K1 and the Owner don't (RP-1095).
+    const byId = (document: string) => (as: string) => call<{ id: string }>(as, sql`select id from document where id = ${document}`);
+    for (const document of added) {
+      await expectHiddenFrom({ read: byId(document), target: document, seenBy: c1.member, hiddenFrom: [k1.member, ow.member], label: "an added Document" });
     }
   });
 
   it("keeps it in X's Linked from and out of Y's for them", async () => {
     for (const other of [k1.member, ow.member]) {
       expect(await linkedFrom(other, x)).toEqual([id]);
-      expect(await linkedFrom(other, y)).toEqual([]);
     }
+    // C1 reads it in Y's Linked from already; K1 and the Owner don't (RP-1095).
+    const yLinkers = async (as: string) => (await linkedFrom(as, y)).map((linker) => ({ id: linker }));
+    await expectHiddenFrom({ read: yLinkers, target: id, seenBy: c1.member, hiddenFrom: [k1.member, ow.member], label: "Y's Linked from" });
   });
 
   it("shows C1, holding it, what it has now", async () => {
@@ -394,22 +398,53 @@ describe("a Link C1 adds and removes again while it holds the Sent Back item", (
 });
 
 describe("an item the caller can't see, through app.item_row_seen (RP-309 review)", () => {
-  it("answers false whatever is asked, so it tells neither that the item exists nor how often it arrived, nor that it is closed", async () => {
-    const hidden = await draft("H"); // C1's own: K1 can't see it (V1).
-    const shared = await draft("S");
-    await submit(shared); // The stranger is not on the Project.
-    for (const [as, id] of [
-      [k1.member, hidden],
-      [stranger.member, shared],
-      [stranger.ap, shared],
-    ] as const) {
-      for (const arrival of [-1, 0, 1, 2]) {
-        for (const removed of [false, true]) {
-          expect(
-            await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`),
-            `${arrival} ${removed}`,
-          ).toEqual([{ seen: false }]);
-        }
+  let hidden = ""; // C1's own Draft, held by C1: K1 can't see it (V1). It has never arrived anywhere (arrivals 0).
+  let shared = ""; // Submitted once, so held by K1 (arrivals 1). The stranger is not on the Project.
+  const seen = async (as: string, id: string, arrival: number, removed: boolean) =>
+    (await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`))[0]!.seen;
+  /** The item `id` when `as` gets true for this exact (arrival, removed), as a row by id; none when false. */
+  const rowSeen = (id: string, arrival: number, removed: boolean) => async (as: string) => ((await seen(as, id, arrival, removed)) ? [{ id }] : []);
+
+  beforeAll(async () => {
+    hidden = await draft("H");
+    shared = await draft("S");
+    await submit(shared);
+  });
+
+  // Each input the callers who can't see the item are asked is one a Member who sees it gets true for, so
+  // their false is the caller's (RP-1095): the holder reads a row not removed, whatever its arrival;
+  // another viewer reads a row of an earlier arrival, removed since or not.
+  type Asked = { what: string; item: () => string; seer: () => string; outsiders: () => string[]; arrival: number; removed: boolean };
+  const onHidden = (arrival: number): Asked => ({ what: "C1's Draft, to its holder C1", item: () => hidden, seer: () => c1.member, outsiders: () => [k1.member], arrival, removed: false });
+  const onShared = (arrival: number, removed: boolean, holder: boolean): Asked => ({
+    what: holder ? "the shared item, to its holder K1" : "the shared item, to C1, of an earlier arrival",
+    item: () => shared,
+    seer: () => (holder ? k1.member : c1.member),
+    outsiders: () => [stranger.member, stranger.ap],
+    arrival,
+    removed,
+  });
+  const asked: Asked[] = [
+    ...[-1, 0, 1, 2].map((arrival) => onHidden(arrival)),
+    ...[-1, 0, 1, 2].map((arrival) => onShared(arrival, false, true)),
+    ...[-1, 0].map((arrival) => onShared(arrival, true, false)),
+  ];
+  for (const { what, item, seer, outsiders, arrival, removed } of asked) {
+    it(`answers false to a caller who can't see the item, where a viewer gets true: ${what}, arrival ${arrival}, removed ${removed}`, async () => {
+      await expectHiddenFrom({ read: rowSeen(item(), arrival, removed), target: item(), seenBy: seer(), hiddenFrom: outsiders(), label: `${what} (${arrival}, ${removed})` });
+    });
+  }
+
+  // Not a visibility proof: for these inputs nobody gets true, the Members who see the item included, so the
+  // caller's false tells them nothing either: not a row the holder took away, nor one of the current arrival.
+  it("answers false to everyone, viewers included, for a removed row of its holder's, or one of the current arrival or later", async () => {
+    const none: [string, number, boolean][] = [
+      ...[-1, 0, 1, 2].map((arrival) => [hidden, arrival, true] as [string, number, boolean]),
+      ...[1, 2].map((arrival) => [shared, arrival, true] as [string, number, boolean]),
+    ];
+    for (const [id, arrival, removed] of none) {
+      for (const as of [c1.member, c1Pm, k1.member, ow.member, stranger.member, stranger.ap]) {
+        expect(await seen(as, id, arrival, removed), `${as} ${arrival} ${removed}`).toBe(false);
       }
     }
   });
@@ -458,9 +493,15 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
     }
     expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "picked_up"]);
     expect(await pickUp(k1Manager, id)).toBe("picked_up");
-    for (const as of [c1.member, ow.member]) {
-      for (const row of await assignments(as, id)) expect(row.assignee_member_id, as).not.toBe(k1Manager);
-    }
+    // K1 reads its Manager holding it; C1 and the Owner never read who (RP-1095).
+    await expectHiddenFrom({
+      read: (as: string) => assignments(as, id),
+      target: k1Manager,
+      idOf: (row) => row.assignee_member_id ?? "",
+      seenBy: k1.member,
+      hiddenFrom: [c1.member, ow.member],
+      label: "K1's holder",
+    });
   });
 });
 
@@ -540,6 +581,13 @@ describe("Documents and Links added during the Draft, through the app role (scen
   });
 
   it("give no times of an item the caller can't see", async () => {
+    // C1 reads each time first, so the stranger's empty read is the caller's (RP-1095).
+    const times = (read: (as: string) => Promise<Date[]>) => async (as: string) => (await read(as)).map((at) => ({ id: at.toISOString() }));
+    for (const read of [uploadedAt, linkedAt]) {
+      const [at] = await read(c1.member);
+      expect(at).toBeInstanceOf(Date);
+      await expectHiddenFrom({ read: times(read), target: at!.toISOString(), seenBy: c1.member, hiddenFrom: stranger.member, label: "times" });
+    }
     expect(await uploadedAt(stranger.member)).toEqual([]);
     expect(await linkedAt(stranger.member)).toEqual([]);
   });

@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -75,8 +75,49 @@ const events = (as: string, id: string) =>
 const stepAsSeen = async (as: string, id: string) =>
   (await call<{ stage_key: string; entered_at: Date }>(as, sql`select stage_key, entered_at from app.step_as_seen(${id}::uuid)`))[0];
 
-/** K1's engineer's Snag, raised on C1: Open, in C1's Step Pool. */
-async function raised(title: string): Promise<string> {
+/** `as`, holding Draft `id`, uploads a photo to it; so a read of its Documents can fail (RP-1095). Returns its id. */
+async function addPhoto(as: string, id: string): Promise<string> {
+  const [started] = await call<{ outcome: string; document_id: string }>(
+    as,
+    sql`select outcome, document_id from app.start_document_upload(${id}::uuid, 'site.jpg', 10, 'image/jpeg', now(), 'photos')`,
+  );
+  expect(started!.outcome).toBe("started");
+  const fingerprint = createHash("sha256").update("site.jpg", "utf8").digest();
+  expect(
+    await outcome(as, sql`select app.confirm_document_upload(${id}::uuid, ${started!.document_id}::uuid, 10, 'image/jpeg', ${fingerprint}, now()) as outcome`),
+  ).toBe("confirmed");
+  return started!.document_id;
+}
+/** `as`, holding `from`, Links it to `to`; read by `as`'s Participant now, by others from its next shared move. */
+async function addLink(from: string, to: string, as: string) {
+  const [added] = await call<{ outcome: string }>(as, sql`select outcome from app.add_work_item_link(${from}::uuid, ${to}::uuid, now())`);
+  expect(added!.outcome).toBe("added");
+}
+
+/** Every kind of row of item `id`, each by its id, as a read for expectHiddenFrom. */
+const rowsOf = (id: string): Record<string, (as: string) => Promise<{ id: string }[]>> => ({
+  item: (as) => call(as, sql<{ id: string }>`select id from work_item where id = ${id}::uuid`),
+  events: (as) => call(as, sql<{ id: string }>`select id from work_item_event where work_item_id = ${id}::uuid`),
+  steps: (as) => call(as, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`),
+  documents: (as) => call(as, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`),
+  links: (as) => call(as, sql<{ id: string }>`select id from app.work_item_links(${id}::uuid)`),
+  stage: async (as) => ((await stepAsSeen(as, id)) ? [{ id }] : []),
+});
+/**
+ * Each kind of row of item `id` (`kinds`, all when left out) that `seenBy` reads, it must read at least one of, and none
+ * of them does any of `hiddenFrom` read (RP-1095): an empty read can't pass for a row that was never there.
+ */
+async function hiddenWhole(id: string, seenBy: string, hiddenFrom: string[], label: string, kinds?: string[]) {
+  for (const [kind, read] of Object.entries(rowsOf(id))) {
+    if (kinds && !kinds.includes(kind)) continue;
+    const targets = (await read(seenBy)).map((r) => r.id);
+    expect(targets.length, `${label}: ${kind} has a row ${seenBy} reads`).toBeGreaterThan(0);
+    for (const target of targets) await expectHiddenFrom({ read, target, seenBy, hiddenFrom, label: `${label}, ${kind}` });
+  }
+}
+
+/** K1's engineer's Snag, raised on C1: Open, in C1's Step Pool; with `photo` and `linkTo`, a photo and a Link K1 gave the Draft. */
+async function raised(title: string, { photo = false, linkTo }: { photo?: boolean; linkTo?: string } = {}): Promise<string> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     k1.member,
     sql`select outcome, work_item_id from app.create_work_item(
@@ -85,6 +126,8 @@ async function raised(title: string): Promise<string> {
   );
   expect(created!.outcome).toBe("created");
   const id = created!.work_item_id;
+  if (photo) await addPhoto(k1.member, id);
+  if (linkTo) await addLink(id, linkTo, k1.member);
   expect(await take(k1.member, id, "raise")).toBe("applied");
   return id;
 }
@@ -154,18 +197,14 @@ afterAll(async () => {
 
 describe("a Consultant's Snag reaches exactly K1 and C1", () => {
   it("RP-90-1: C2, another Contractor of the same Trade, reads no item, Link, event, Document, Step or count of it", async () => {
-    const id = await raised("Cable tray not bonded");
+    // With K1's photo, and below a Link to another of K1's Snags, so every kind of row exists.
+    const id = await raised("Cable tray not bonded", { photo: true, linkTo: await raised("Cable tray not bonded, bay 2") });
     expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await take(c1Pm, id, "start_work")).toBe("applied");
 
     expect(await seen(c1.member, id)).toEqual([id]);
-    expect(await seen(k1.member, id)).toEqual([id]);
-    expect(await seen(c2.member, id)).toEqual([]);
-    expect(await events(c2.member, id)).toEqual([]);
-    expect(await call(c2.member, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`)).toEqual([]);
-    expect(await stepAsSeen(c2.member, id)).toBeUndefined();
+    await hiddenWhole(id, k1.member, [c2.member], "RP-90-1 as K1");
+    await hiddenWhole(id, c1.member, [c2.member], "RP-90-1 as C1");
   });
 
   it("RP-90-2: C1 never reads K1's internal events, nor K1 C1's: each reads the other's shared Transitions only", async () => {
@@ -243,19 +282,27 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
 
   it("RP-622-1: its Draft, Open, moves, Verify and Close are C1's alone: C2 reads none of it at any Step, K1 none of its Draft", async () => {
     const id = await drafted("Missing fire stopping");
+    // A photo and a Link on the Draft, so a read of them can fail (RP-1095); a Draft has no events yet.
+    await addPhoto(c1Pm, id);
+    await addLink(id, await raised("Missing fire stopping, linked"), c1Pm);
     expect(await readByOthers(id)).toEqual([...nothing, ...nothing]);
+    await hiddenWhole(id, c1Pm, [k1.member, c2.member], "RP-622-1 Draft", ["item", "steps", "documents", "links", "stage"]);
     // From the Raise the Consultant is informed (RP-625, below); C2 never reads it.
     await move(id, "raise");
     expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("open");
     expect(await readByOthers(id, [c2.member])).toEqual(nothing);
+    await hiddenWhole(id, c1Pm, [c2.member], "RP-622-1 Open");
     await move(id, "start_work");
     await move(id, "put_on_hold_in_progress");
     expect(await readByOthers(id, [c2.member])).toEqual(nothing);
+    await hiddenWhole(id, c1Pm, [c2.member], "RP-622-1 On Hold");
     await move(id, "resolve_on_hold", { resolution_note: "Sealed" });
     expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("resolved");
     expect(await readByOthers(id, [c2.member])).toEqual(nothing);
+    await hiddenWhole(id, c1Pm, [c2.member], "RP-622-1 Verify");
     expect(await take(c1Pm, id, "close")).toBe("applied");
     expect(await readByOthers(id, [c2.member])).toEqual(nothing);
+    await hiddenWhole(id, c1Pm, [c2.member], "RP-622-1 Closed");
     // C1 reads it whole, every event its own.
     expect(await seen(c1.member, id)).toEqual([id]);
     expect((await events(c1.member, id)).every((e) => e.actor_participant_id === participant.c1)).toBe(true);
@@ -310,6 +357,7 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     const id = await drafted("Exposed rebar");
     expect(await seen(k1.member, id)).toEqual([]);
     expect(await stepAsSeen(k1.member, id)).toBeUndefined();
+    await hiddenWhole(id, c1Pm, [k1.member], "RP-625-1 Draft", ["item", "stage"]);
 
     await move(id, "raise");
     const atRaise = (await stepAsSeen(c1.member, id))!;
@@ -451,20 +499,19 @@ describe("a Snag two Contractors cover: the raiser picks one (RP-658)", () => {
     const id = await drafted("No pick on B");
     expect(await raise(id, null)).toBe("participant_not_picked");
     for (const pick of [participant.k2, participant.k1, randomUUID()]) expect(await raise(id, pick), pick).toBe("participant_not_offered");
-    expect(await seen(c1.member, id)).toEqual([]);
-    expect(await seen(c2.member, id)).toEqual([]);
+    // Still K1's Draft: K1 reads it, neither Contractor does.
+    await expectHiddenFrom({ read: rowsOf(id).item!, target: id, seenBy: k1.member, hiddenFrom: [c1.member, c2.member], label: "unraised" });
   });
 
   it("RP-658-1: raised with a pick of C1, C2, covering it too, reads no item, event, Document, Step or Link of it", async () => {
+    const other = await drafted("C1 picked on B, bay 2");
+    expect(await raise(other, participant.c1)).toBe("applied");
     const id = await drafted("C1 picked on B");
+    // A photo and a Link to another of the same Snags on the Draft, so every kind of row exists.
+    await addPhoto(k1.member, id);
+    await addLink(id, other, k1.member);
     expect(await raise(id, participant.c1)).toBe("applied");
-    expect(await seen(c1.member, id)).toEqual([id]);
-    expect(await seen(c2.member, id)).toEqual([]);
-    expect(await events(c2.member, id)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from document where work_item_id = ${id}::uuid`)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`)).toEqual([]);
-    expect(await call(c2.member, sql<{ to_id: string }>`select * from app.work_item_links(${id}::uuid)`)).toEqual([]);
-    expect(await stepAsSeen(c2.member, id)).toBeUndefined();
+    await hiddenWhole(id, c1.member, [c2.member], "RP-658-1");
     expect(await offered(c2.member, id)).toEqual([]);
   });
 });

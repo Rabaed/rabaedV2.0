@@ -17,9 +17,15 @@
 // was kept is printed last, with why, so a `| tail` keeps the reasons.
 //
 //   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
+//   pnpm lanes:prune --stale     a report for session start (RP-1096): running stacks against the cap, stopped
+//                                stacks, dead containers, volume-only projects and stray containers; removes nothing
 //
 // --lane N limits the candidates (stale, plus merged with --merged) to rabaed-laneN, with the
 // same confirmation and the same keep rules, so one lane is freed without touching the others (RP-505).
+//
+// RP-1122: without --lane N it also removes the veraPDF containers of test runs that were killed or
+// timed out (verapdf-containers.ts): those whose test process no longer runs, read again just before
+// each removal. One whose process runs, or of a worktree holding lane 7, stays and is named.
 import { existsSync } from "node:fs";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
@@ -42,13 +48,47 @@ import {
   staleProjects,
   type KeptProject,
   type StaleProject,
+  type Volume,
 } from "./lanes.ts";
+import { maxStacks, staleReport } from "./machine-load.ts";
+import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
 import { gitChanges, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
+import { pidAlive } from "./lanes-lock.ts";
+import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
-const options = parsePruneArgs(process.argv.slice(2));
+const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
+const argv = process.argv.slice(2);
+
+// RP-1096: --stale only reports, and removes nothing (lane 7 included, marked as Main 7's).
+if (argv.includes("--stale")) {
+  if (argv.length > 1) {
+    console.error(`--stale is a report on its own.\n${usage}`);
+    process.exit(1);
+  }
+  const listed = listContainers(DOCKER_TIMEOUT_MS);
+  let volumes: Volume[] | undefined;
+  try {
+    volumes = listed && listVolumes(DOCKER_TIMEOUT_MS);
+  } catch {
+    volumes = undefined;
+  }
+  if (!listed || !volumes) {
+    console.error(`Docker is not answering (no answer in ${DOCKER_TIMEOUT_MS / 1000} s): it is stopped or jammed. Tell your Main; do not restart it yourself.`);
+    process.exit(1);
+  }
+  try {
+    for (const line of staleReport({ containers: listed, volumes, exists: existsSync, max: maxStacks(process.env) })) console.log(line);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+const options = parsePruneArgs(argv);
 if (!options) {
-  console.error(`Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`);
+  console.error(usage);
   process.exit(1);
 }
 const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal(options);
@@ -123,15 +163,19 @@ const laneRefused = laneKeptByClaim(lane, claimed, fresh);
 const guarded = guardCandidates(onlyLane(stale, lane), containers, holders, existsSync);
 guarded.kept.forEach(keep);
 const candidates = guarded.prune;
-if (candidates.length === 0) {
+// RP-1122: they belong to no lane, so --lane N leaves them.
+const veraPdf = lane === undefined ? veraPdfCandidates() : [];
+if (candidates.length === 0 && veraPdf.length === 0) {
   console.log(lane === undefined ? "Nothing to prune." : `Nothing to prune for lane ${lane}.`);
   printKept();
   process.exit(laneRefused ? 1 : 0);
 }
-console.log("Compose projects to prune:");
+if (candidates.length > 0) console.log("Compose projects to prune:");
 for (const s of candidates) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
+if (veraPdf.length > 0) console.log("veraPDF containers of killed or timed-out test runs to remove:");
+for (const c of veraPdf) console.log(`  ${c.name}: its test process (pid ${c.pid}) is gone; ${c.state}, started ${c.age}`);
 // The reasons before the prompt, so the choice is made seeing them; again last (RP-1101).
 printKept();
 
@@ -140,7 +184,9 @@ if (options.dryRun) {
   process.exit(0);
 }
 
-await confirmOrExit("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.", {
+const question =
+  candidates.length > 0 ? "Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist." : "Remove them? They only sleep; nothing in them is kept.";
+await confirmOrExit(question, {
   yes: options.yes,
   verb: "remove",
   done: "removed",
@@ -168,8 +214,37 @@ for (const s of candidates) {
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
   }
 }
+for (const c of veraPdf) {
+  // Read again just before: a new test process may have been given its pid since the listing.
+  if (pidAlive(c.pid)) {
+    kept.push({ what: c.name, reason: `its test process (pid ${c.pid}) runs again` });
+    continue;
+  }
+  try {
+    removeVeraPdfContainer(c.name);
+    console.log(`Removed ${c.name}.`);
+  } catch (error) {
+    failed++;
+    console.error(`Could not remove ${c.name}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
+  }
+}
 printKept();
 if (failed > 0) process.exit(1);
+
+/** RP-1122: the veraPDF containers to remove; those kept go to `kept`, with why. */
+function veraPdfCandidates(): GoneContainer[] {
+  const listed = listVeraPdfContainers(DOCKER_TIMEOUT_MS);
+  if (!listed) {
+    kept.push({ what: "veraPDF containers", reason: "Docker did not list them; none removed" });
+    return [];
+  }
+  const worktrees = listWorktrees()
+    .filter((w) => existsSync(w.path))
+    .map((w) => ({ path: w.path, project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") }));
+  const { remove, kept: stays } = chooseVeraPdfContainers({ containers: listed, alive: pidAlive, protectedHashes: protectedHashes(worktrees) });
+  kept.push(...stays);
+  return remove;
+}
 
 /** A worktree's uncommitted changes; one that git cannot read counts as changed, so its project stays. */
 function changesOf(path: string): string[] {

@@ -7,11 +7,11 @@
 // RP-442), so the migrator writes those; the Workflow is copied through the api.
 import { submittalWorkflows } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { CompanyDefaults, ScreenList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { buildTower, detail, draft, ok, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -42,6 +42,11 @@ let tmcForm = "";
 
 const defaults = async (by: Company): Promise<CompanyDefaults> => (await ok(by.caller.get("/v1/company-defaults"), 200)).json();
 const run = (text: string) => sql.raw(text).execute(migrator);
+/** The items a Caller's Company has marked as defaults, by item id, for expectHiddenFrom (RP-1095). */
+const defaultItems = async (by: Caller) =>
+  (await ok(by.get("/v1/company-defaults"), 200)).json().defaults.map((d: { itemId: string }) => ({ id: d.itemId })) as { id: string }[];
+/** Who a Caller is, in a failure. */
+const who = (by: Caller) => (by === tmc.caller ? "TMC" : by === k1.caller ? "Beta Build" : by === nobody.caller ? "the Company with no defaults" : "someone");
 
 /** A Workflow in `by`'s Library: a published copy of the MAR's Rabaed Default. */
 async function libraryRoute(by: Company, name: { en: string; ar: string }): Promise<string> {
@@ -108,14 +113,16 @@ describe("marking a default", () => {
   it("is for the Company's Authorized Person, of an item in its own Library", async () => {
     const plain = await api.member(tmc.caller);
     // Anyone else, another Company's item or a made-up one is the same 404 (V18).
-    await expectHidden(setDefault({ ...tmc, caller: plain.caller }, "workflow", tmcRoute));
-    await expectHidden(setDefault(k1, "workflow", tmcRoute));
-    await expectHidden(setDefault(nobody, "workflow", tmcRoute));
-    await expectHidden(setDefault(tmc, "workflow", "00000000-0000-4000-8000-000000000000"));
-    await expectHidden(setDefault(tmc, "workflow", marWorkflowId));
-    await expectHidden(setDefault(tmc, "workflow", tmcRoute, "00000000-0000-4000-8000-000000000000"));
-    await expectHidden(plain.caller.request("DELETE", `/v1/company-defaults?kind=workflow&workItemTypeId=${marTypeId}`));
-    expect((await defaults(tmc)).defaults).toEqual([]);
+    await expectHidden(setDefault({ ...tmc, caller: plain.caller }, "workflow", tmcRoute)); // not hidden-from: TMC's own Member who isn't the Authorized Person, refused as the same 404
+    // TMC's Library Workflow is there for TMC, and not for the other Companies that try to mark it.
+    await expectHiddenFrom({ read: readById(`/v1/workflows/${tmcRoute}`), target: tmcRoute, seenBy: tmc.caller, hiddenFrom: [k1.caller, nobody.caller], name: who });
+    await expectHidden(setDefault(k1, "workflow", tmcRoute)); // not hidden-from: the write's plain 404; the Workflow is proven TMC's just above
+    await expectHidden(setDefault(nobody, "workflow", tmcRoute)); // not hidden-from: the write's plain 404; the Workflow is proven TMC's just above
+    await expectHidden(setDefault(tmc, "workflow", "00000000-0000-4000-8000-000000000000")); // not hidden-from: a made-up id, no row to prove
+    await expectHidden(setDefault(tmc, "workflow", marWorkflowId)); // not hidden-from: a Rabaed Default, not in TMC's Library, refused as the same 404
+    await expectHidden(setDefault(tmc, "workflow", tmcRoute, "00000000-0000-4000-8000-000000000000")); // not hidden-from: a made-up Work Item Type, no row to prove
+    await expectHidden(plain.caller.request("DELETE", `/v1/company-defaults?kind=workflow&workItemTypeId=${marTypeId}`)); // not hidden-from: TMC's own Member who isn't the Authorized Person, refused as the same 404
+    expect((await defaults(tmc)).defaults).toEqual([]); // not hidden-from: TMC's own list; none of the refused writes marked a default
   });
 
   it("is refused for a Workflow with nothing published, or made for another Type", async () => {
@@ -125,7 +132,7 @@ describe("marking a default", () => {
     const other = await sql<{ id: string }>`select id from work_item_type where owner_kind = 'rabaed' and code <> 'MAR' limit 1`.execute(migrator);
     const wrong = await setDefault(tmc, "workflow", tmcRoute, other.rows[0]!.id);
     expect({ status: wrong.statusCode, error: wrong.json().error }).toEqual({ status: 422, error: "not_for_type" });
-    expect((await defaults(tmc)).defaults).toEqual([]);
+    expect((await defaults(tmc)).defaults).toEqual([]); // not hidden-from: TMC's own list; the refused writes marked no default
   });
 
   it("holds one default per Type and kind, which the Company's Members read", async () => {
@@ -138,7 +145,7 @@ describe("marking a default", () => {
     await ok(setDefault(tmc, "form", tmcForm));
     const member = await api.member(tmc.caller);
     const read: CompanyDefaults = (await ok(member.caller.get("/v1/company-defaults"), 200)).json();
-    expect(read.defaults.map((d) => ({ kind: d.kind, code: d.workItemTypeCode, itemId: d.itemId, name: d.name.en }))).toEqual([
+    expect(read.defaults.map((d) => ({ kind: d.kind, code: d.workItemTypeCode, itemId: d.itemId, name: d.name.en }))).toEqual([ // not hidden-from: the Company's own defaults, compared by item id with their names
       { kind: "form", code: "MAR", itemId: tmcForm, name: "TMC MAR form" },
       { kind: "screen", code: "MAR", itemId: tmcScreen, name: "TMC reply" },
       { kind: "workflow", code: "MAR", itemId: tmcRoute, name: "TMC MAR route" },
@@ -184,7 +191,7 @@ describe("a Project starts from its creator's Company defaults", () => {
     // A Project created now has no Workflow default for the Type: the Rabaed Default again.
     const later = await buildTower(api, { c1: tmc, k1 }, "CD2");
     expect((await detail(later.c1Engineer, await draft(later, later.c1Engineer, "Pipes", { type: "MAR" }))).workflow).toEqual(MAR);
-    expect((await projectWorkflows(later.projectId)).bindings).toEqual([]);
+    expect((await projectWorkflows(later.projectId)).bindings).toEqual([]); // not hidden-from: read as the migrator; the new Project has no Workflow of its own to bind
     await ok(setDefault(tmc, "workflow", tmcRoute));
   });
 
@@ -194,7 +201,7 @@ describe("a Project starts from its creator's Company defaults", () => {
     const { definitions, bindings } = await projectWorkflows(plain.projectId);
     expect({ definitions, bindings }).toEqual({ definitions: [], bindings: [] });
     const screens: ScreenList = (await ok(plain.c1Engineer.get(`/v1/projects/${plain.projectId}/screens`), 200)).json();
-    expect(screens.screens.filter((s) => s.owner === "project")).toEqual([]);
+    expect(screens.screens.filter((s) => s.owner === "project")).toEqual([]); // not hidden-from: the Project's own Screens, none copied with no defaults
   });
 
   it("copies a Library Screen a default Workflow names, so the Project's copy pins what the Library's did (scenario RP-517-1 setup)", async () => {
@@ -235,13 +242,14 @@ describe("a Project starts from its creator's Company defaults", () => {
 describe("another Company never reads TMC's defaults or Library items (scenario RP-517-1, V18)", () => {
   it("sees none of them, by the list or the Library items; the seeded Project is the Project's, not the Library's", async () => {
     expect((await defaults(k1)).defaults.map((d) => d.itemId)).toEqual([k1Route]);
-    expect((await defaults(nobody)).defaults).toEqual([]);
-    for (const outsider of [k1, nobody]) {
-      await expectHidden(outsider.caller.get(`/v1/workflows/${tmcRoute}`));
-      await expectHidden(outsider.caller.get(`/v1/screens/${tmcScreen}`));
-    }
+    expect((await defaults(nobody)).defaults).toEqual([]); // not hidden-from: a Company that marked none has none; TMC's are proven hidden from it below
+    const outsiders = [k1.caller, nobody.caller];
+    // TMC's defaults are on TMC's list, and never on another Company's.
+    for (const target of [tmcRoute, tmcScreen, tmcForm]) await expectHiddenFrom({ read: defaultItems, target, seenBy: tmc.caller, hiddenFrom: outsiders, name: who });
+    await expectHiddenFrom({ read: readById(`/v1/workflows/${tmcRoute}`), target: tmcRoute, seenBy: tmc.caller, hiddenFrom: outsiders, name: who });
+    await expectHiddenFrom({ read: readById(`/v1/screens/${tmcScreen}`), target: tmcScreen, seenBy: tmc.caller, hiddenFrom: outsiders, name: who });
     // Marking another Company's Library item, or reading its Project copy as a default, names nothing.
-    await expectHidden(setDefault(k1, "screen", tmcScreen));
-    await expectHidden(setDefault(k1, "form", tmcForm));
+    await expectHidden(setDefault(k1, "screen", tmcScreen)); // not hidden-from: the write's plain 404; the Screen is proven TMC's just above
+    await expectHidden(setDefault(k1, "form", tmcForm)); // not hidden-from: the write's plain 404; the Form is proven TMC's default just above
   });
 });

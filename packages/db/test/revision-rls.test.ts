@@ -11,7 +11,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -241,12 +241,57 @@ describe("a Draft Revision (scenario 51)", () => {
   });
 
   it("returns nothing to K1 or the Owner, who see the closed item", async () => {
+    // C1 reads the Revision, so "nothing" below is K1's and the Owner's view, not an empty item (RP-1095).
+    const read = (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${revision}`);
+    await expectHiddenFrom({ read, target: revision, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "the Draft Revision" });
     for (const other of [k1.member, ow.member]) {
       expect(await call(other, sql`select id from work_item where id = ${closed}`)).toEqual([{ id: closed }]);
       expect(await everythingOf(other, revision)).toEqual(nothing);
-      expect(await call(other, sql`select id from work_item_link where from_id = ${closed}`)).toEqual([]);
-      expect(await call(other, sql`select id from app.work_item_links(${closed}::uuid)`)).toEqual([]);
-      expect(await call(other, sql`select * from app.work_item_linked_from(${closed}::uuid)`)).toEqual([]);
+    }
+  });
+
+  // A Link C1's author adds from the Draft Revision (V1: a Draft is its Participant's only; the Links
+  // channel). A Link to a Draft can't be made at all: only a Submitted item is a Link's target.
+  it("keeps a Link from the Draft Revision C1's: K1 and the Owner read it neither in the table nor through the Links", async () => {
+    const [made] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Door hinges', app.latest_form_version(${TYPE}), '{"model": "DH-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const hinges = made!.work_item_id;
+    expect(await take(c1.member, hinges, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, hinges)).toBe("picked_up");
+    expect(await take(c1Pm, hinges, "submit")).toBe("applied");
+    const add = (as: string, from: string, to: string) =>
+      call<{ outcome: string; link_id: string | null }>(as, sql`select outcome, link_id from app.add_work_item_link(${from}::uuid, ${to}::uuid, now())`).then(
+        (rows) => rows[0]!,
+      );
+    // K1 and the Owner, who see the target, can't add one from the Revision; nor can anyone add one to it.
+    for (const other of [k1.member, ow.member]) expect(await add(other, revision, hinges)).toEqual({ outcome: "not_found", link_id: null });
+    const anotherDraft = (await call<{ work_item_id: string }>(
+      c1.member,
+      sql`select work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Door stops', app.latest_form_version(${TYPE}), '{"model": "DS-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    ))[0]!.work_item_id;
+    expect(await add(c1.member, anotherDraft, revision)).toEqual({ outcome: "target_not_found", link_id: null });
+    expect((await add(c1.member, anotherDraft, hinges)).outcome).toBe("added");
+    const added = await add(c1.member, revision, hinges);
+    expect(added.outcome).toBe("added");
+    const link = added.link_id!;
+
+    const viewers = { seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member] };
+    const row = (as: string) => call<{ id: string }>(as, sql`select id from work_item_link where id = ${link}`);
+    await expectHiddenFrom({ read: row, target: link, ...viewers, label: "the Draft Revision's Link row" });
+    const fromRevision = (as: string) => call<{ id: string }>(as, sql`select id from app.work_item_links(${revision}::uuid)`);
+    await expectHiddenFrom({ read: fromRevision, target: link, ...viewers, label: "the Draft Revision's Links" });
+    // The Links name the target to C1 by id, as it sees it.
+    expect((await call<{ work_item_id: string }>(c1.member, sql`select work_item_id from app.work_item_links(${revision}::uuid)`)).map((r) => r.work_item_id)).toEqual([hinges]);
+    // Linked from lists Submitted items only, so the Draft is in nobody's, C1's included (E3).
+    for (const who of [c1.member, c1Pm, k1.member, ow.member]) {
+      const linkers = await call<{ work_item_id: string | null; document_number: string | null }>(who, sql`select work_item_id, document_number from app.work_item_linked_from(${hinges}::uuid)`);
+      expect(linkers, who).toEqual([]); // not hidden-from: a Draft is in nobody's Linked from, its own Participant's included
     }
   });
 
@@ -291,8 +336,12 @@ describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
   it("lists only the original to K1 and the Owner, and nothing from the Draft Revision's id", async () => {
     for (const other of [k1.member, ow.member]) {
       expect((await chain(other, closed)).map((r) => r.work_item_id)).toEqual([closed]);
-      expect(await chain(other, revision)).toEqual([]);
-      expect(await chain(other, randomUUID())).toEqual([]);
+      expect(await chain(other, randomUUID())).toEqual([]); // not hidden-from: a random id is no item, so its chain is nobody's
+    }
+    // From the Draft Revision's id, C1 reads the chain, the Revision and the original; K1 and the Owner neither (RP-1095).
+    const fromRevision = (as: string) => chain(as, revision).then((rows) => rows.map((r) => ({ id: r.work_item_id })));
+    for (const target of [revision, closed]) {
+      await expectHiddenFrom({ read: fromRevision, target, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "the chain from the Draft Revision's id" });
     }
   });
 });
@@ -304,10 +353,13 @@ describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
 describe("the Links between the items of a chain, for a reader who sees only some of them (scenario 62)", () => {
   let original = "";
   let moved = ""; // Rev 1, moved to Building B.
+  let originalNumber = "";
+  let toRevision = ""; // The engine's Link from the original to Rev 1.
   const links = (as: string, id: string) =>
-    call<{ kind: string; document_number: string | null }>(as, sql`select kind, document_number from app.work_item_links(${id}::uuid)`);
+    call<{ id: string; kind: string; document_number: string | null }>(as, sql`select id, kind, document_number from app.work_item_links(${id}::uuid)`);
   const linkedFrom = (as: string, id: string) =>
-    call<{ document_number: string }>(as, sql`select document_number from app.work_item_linked_from(${id}::uuid)`);
+    call<{ document_number: string; work_item_id: string | null }>(as, sql`select document_number, work_item_id from app.work_item_linked_from(${id}::uuid)`);
+  const byId = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${id}`);
 
   beforeAll(async () => {
     const [draft] = await call<{ outcome: string; work_item_id: string }>(
@@ -332,26 +384,40 @@ describe("the Links between the items of a chain, for a reader who sees only som
     expect(await take(c1.member, moved, "send_for_review")).toBe("applied");
     expect(await pickUp(c1Pm, moved)).toBe("picked_up");
     expect(await take(c1Pm, moved, "submit")).toBe("applied");
+    originalNumber = (await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${original}`))[0]!.document_number;
+    const [link] = await links(c1.member, original);
+    toRevision = link!.id;
   });
 
   it("gives a reader of both the Link to the Revision, and its Linked from", async () => {
     for (const who of [c1.member, k1.member, ow.member]) {
-      expect((await links(who, original)).map((l) => l.kind)).toEqual(["related"]);
-      expect(await linkedFrom(who, moved)).toHaveLength(1);
+      expect((await links(who, original)).map((l) => [l.id, l.kind])).toEqual([[toRevision, "related"]]);
+      expect((await linkedFrom(who, moved)).map((l) => l.work_item_id)).toEqual([original]);
     }
   });
 
   it("leaves the Revision out of the original's Links for a reader who sees only the original", async () => {
     expect(await call(orA.member, sql`select id from work_item where id = ${original}`)).toEqual([{ id: original }]);
-    expect(await call(orA.member, sql`select id from work_item where id = ${moved}`)).toEqual([]);
-    expect(await links(orA.member, original)).toEqual([]);
+    await expectHiddenFrom({ read: byId(moved), target: moved, seenBy: [c1.member, k1.member, ow.member, orB.member], hiddenFrom: orA.member, label: "Rev 1, in Building B" });
+    const originalLinks = (as: string) => links(as, original);
+    await expectHiddenFrom({ read: originalLinks, target: toRevision, seenBy: [c1.member, k1.member, ow.member], hiddenFrom: orA.member, label: "the original's Link to Rev 1" });
     expect((await chain(orA.member, original)).map((r) => r.work_item_id)).toEqual([original]);
   });
 
   it("leaves the original out of the Revision's Linked from for a reader who sees only the Revision", async () => {
     expect(await call(orB.member, sql`select id from work_item where id = ${moved}`)).toEqual([{ id: moved }]);
-    expect(await call(orB.member, sql`select id from work_item where id = ${original}`)).toEqual([]);
-    expect(await linkedFrom(orB.member, moved)).toEqual([]);
+    await expectHiddenFrom({ read: byId(original), target: original, seenBy: [c1.member, k1.member, ow.member, orA.member], hiddenFrom: orB.member, label: "the original, in Building A" });
+    // By Document Number, unique in the Project: Linked from names a linking item the reader can't see by
+    // its number with no id (E3), so a compare by id would miss exactly that leak.
+    const revisionLinkers = (as: string) => linkedFrom(as, moved);
+    await expectHiddenFrom({
+      read: revisionLinkers,
+      target: originalNumber,
+      idOf: (row) => row.document_number,
+      seenBy: [c1.member, k1.member, ow.member],
+      hiddenFrom: orB.member,
+      label: "Rev 1's Linked from",
+    });
     expect((await chain(orB.member, moved)).map((r) => r.work_item_id)).toEqual([moved]);
   });
 });
@@ -387,10 +453,13 @@ describe("an item closed otherwise than with Code C", () => {
 
 describe("a discarded Revision (scenario 56)", () => {
   it("is gone for C1 too, and the next one is Rev 1 again", async () => {
+    // C1 reads it, by id, until the discard, so the nothing below is the discard's (RP-1095).
+    expect((await chain(c1.member, revision)).map((r) => r.work_item_id)).toContain(revision);
+    expect(await call(c1.member, sql`select id from work_item where id = ${revision}`)).toEqual([{ id: revision }]);
     expect(await outcome(c1.member, sql`select app.discard_revision(${revision}::uuid, now()) as outcome`)).toBe("discarded");
     for (const who of [c1.member, c1Pm, k1.member, ow.member]) expect(await everythingOf(who, revision)).toEqual(nothing);
     expect((await chain(c1.member, closed)).map((r) => r.work_item_id)).toEqual([closed]);
-    expect(await chain(c1.member, revision)).toEqual([]);
+    expect(await chain(c1.member, revision)).toEqual([]); // not hidden-from: a discarded Revision is gone for everyone, C1 too; C1 read it above
     // Kept, with when its Draft was started, for audit: a Work Item is never deleted (RP-334).
     const kept = await migrator.query("select created_at, discarded_at from work_item where id = $1", [revision]);
     expect(kept.rows).toEqual([{ created_at: expect.any(Date), discarded_at: expect.any(Date) }]);
@@ -412,8 +481,9 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
       as,
       sql`select outcome, work_item_id from app.create_replacement(${id}::uuid, ${randomUUID()}::uuid, now())`,
     ).then((rows) => rows[0]!);
+  let replaces = ""; // The replacement's Link to the rejected item.
   const links = (as: string, id: string) =>
-    call<{ kind: string; document_number: string | null }>(as, sql`select kind, document_number from app.work_item_links(${id}::uuid)`);
+    call<{ id: string; kind: string; document_number: string | null }>(as, sql`select id, kind, document_number from app.work_item_links(${id}::uuid)`);
   const linkedFrom = (as: string, id: string) =>
     call<{ document_number: string }>(as, sql`select document_number from app.work_item_linked_from(${id}::uuid)`);
 
@@ -436,12 +506,13 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     const created = await createReplacement(c1.member, rejected);
     expect(created.outcome).toBe("created");
     replacement = created.work_item_id!;
+    replaces = (await links(c1.member, replacement))[0]!.id;
   });
 
   it("is a new Draft of C1's, not a Revision, with the answers copied and a Link to the rejected item", async () => {
     expect(await call(c1.member, sql`select revision_no from work_item where id = ${replacement}`)).toEqual([{ revision_no: 0 }]);
     expect((await everythingOf(c1Pm, replacement)).answers).toMatchObject({ model: "DC-1" });
-    expect(await links(c1.member, replacement)).toEqual([{ kind: "replaces", document_number: expect.any(String) }]);
+    expect(await links(c1.member, replacement)).toEqual([{ id: replaces, kind: "replaces", document_number: expect.any(String) }]);
     expect(await chain(c1.member, replacement)).toEqual([{ work_item_id: replacement, document_number: null, revision_no: 0 }]);
     expect(await call(c1.member, sql`select app.can_create_revision(${rejected}::uuid) as can`)).toEqual([{ can: false }]);
   });
@@ -450,13 +521,17 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     for (const other of [k1.member, ow.member]) {
       expect(await call(other, sql`select id from work_item where id = ${rejected}`)).toEqual([{ id: rejected }]);
       expect(await everythingOf(other, replacement)).toEqual(nothing);
-      expect(await call(other, sql`select id from work_item_link where from_id = ${replacement}`)).toEqual([]);
-      expect(await links(other, replacement)).toEqual([]);
-      expect(await linkedFrom(other, rejected)).toEqual([]);
     }
-    // The rejected item's own Links name nothing of it either, for C1 too.
-    expect(await links(c1.member, rejected)).toEqual([]);
-    expect(await linkedFrom(c1.member, rejected)).toEqual([]);
+    // C1 reads its Link, from the table and through the Links; K1 and the Owner neither (RP-1095).
+    const viewers = { target: replaces, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member] };
+    const row = (as: string) => call<{ id: string }>(as, sql`select id from work_item_link where from_id = ${replacement}`);
+    await expectHiddenFrom({ read: row, ...viewers, label: "the replacement's Link row" });
+    await expectHiddenFrom({ read: (as: string) => links(as, replacement), ...viewers, label: "the replacement's Links" });
+    // A Draft is in nobody's Linked from until it is Submitted (E3), C1's too; the rejected item has no Link of its own.
+    for (const who of [c1.member, k1.member, ow.member]) {
+      expect(await linkedFrom(who, rejected), who).toEqual([]); // not hidden-from: a Draft is in nobody's Linked from; all three read it after the Submit below
+    }
+    expect(await links(c1.member, rejected)).toEqual([]); // not hidden-from: the Link is the replacement's; the rejected item links nothing
   });
 
   it("can't be created by K1 or the Owner, nor again by C1, and the refusal names nothing", async () => {
@@ -472,8 +547,8 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     expect(await take(c1.member, replacement, "send_for_review")).toBe("applied");
     const rows = await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${replacement}`);
     const number = rows[0]!.document_number;
-    expect(number).not.toContain("Rev");
-    expect(await linkedFrom(k1.member, rejected)).toEqual([]);
+    expect(number).not.toContain("Rev"); // not hidden-from: the number's text: a number of its own, not a Rev of the rejected item's
+    expect(await linkedFrom(k1.member, rejected)).toEqual([]); // not hidden-from: Sent for review, not yet Submitted, so in nobody's Linked from; K1 reads it after the Submit below
     expect(await pickUp(c1Pm, replacement)).toBe("picked_up");
     expect(await take(c1Pm, replacement, "submit")).toBe("applied");
     for (const who of [c1.member, k1.member, ow.member]) {
@@ -523,7 +598,10 @@ describe("the List's row commands (RP-409)", () => {
     );
     expect(await call(c1Pm, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([{ key: "model" }]);
     expect(await call(k1.member, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([{ key: "verdict" }]);
-    expect(await call(ow.member, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([]);
+    // Each field is named to its writer's Participant only: the Owner, who wrote neither, reads neither (RP-1095).
+    const owned = (as: string) => call<{ key: string }>(as, sql`select app.own_written_fields(${closed}::uuid) as key`).then((rows) => rows.map((r) => ({ id: r.key })));
+    await expectHiddenFrom({ read: owned, target: "model", seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "C1's field" });
+    await expectHiddenFrom({ read: owned, target: "verdict", seenBy: k1.member, hiddenFrom: [c1.member, c1Pm, ow.member], label: "K1's field" });
   });
 
   it("keeps a Duplicate's source on the new Draft, named to C1 only, with no time, and finds it again by its key", async () => {
@@ -541,7 +619,8 @@ describe("the List's row commands (RP-409)", () => {
     await expect(call(c1.member, sql`select app.record_duplicate(${other}::uuid, ${closed}::uuid, ${key}::uuid)`)).rejects.toThrow(/duplicate key/);
     const source = sql`select work_item_id, document_number, subject from app.work_item_duplicated_from(${copy}::uuid)`;
     for (const who of [c1.member, c1Pm]) expect(await call(who, source)).toEqual([expect.objectContaining({ work_item_id: closed })]);
-    expect(await call(k1.member, source)).toEqual([]);
+    const sourceOf = (as: string) => call<{ work_item_id: string }>(as, source);
+    await expectHiddenFrom({ read: sourceOf, target: closed, idOf: (row) => row.work_item_id, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "the Duplicate's source" });
     // Nothing of it is an event, so nothing has a time.
     const events = await migrator.query("select type from work_item_event where work_item_id = $1", [copy]);
     expect(events.rows).toEqual([{ type: "created" }]);

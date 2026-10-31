@@ -1,5 +1,6 @@
 // Seam 1: the Authorized Person manages Members (RP-188; RP-185 stories 5–8, 13).
 import { randomUUID } from "node:crypto";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, uniqueEmail, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
@@ -14,6 +15,14 @@ beforeAll(async () => {
 });
 
 const ids = (res: { json(): { members: { id: string }[] } }) => res.json().members.map((m) => m.id);
+/** The Members `by` reads on the Members list, for expectHiddenFrom (RP-1095). */
+const listed = async (by: Caller) => {
+  const res = await by.get("/v1/members");
+  expect(res.statusCode).toBe(200);
+  return res.json().members as { id: string }[];
+};
+/** Who a Caller is, in a failure. */
+const who = (by: Caller) => (by === a.caller ? "A's Authorized Person" : by === b.caller ? "B's Authorized Person" : "another Member");
 
 describe("inviting a Member", () => {
   it("lets the invited Member accept, set a password and sign in", async () => {
@@ -33,7 +42,7 @@ describe("inviting a Member", () => {
         isAuthorizedPerson: false,
         canCreateProjects: false,
       },
-      company: { id: a.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      company: { id: a.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } }, // not hidden-from: the Member's own Company in /v1/me, compared whole with its id
       // A new Member's Theme and Mode: Warm, following the device.
       appearance: { theme: "warm", mode: "system" },
     });
@@ -48,7 +57,7 @@ describe("inviting a Member", () => {
     expect(res.json()).toEqual({ memberId: expect.any(String), invitationSentTo: email });
 
     const [invitation, ...more] = api.mailbox.to(email);
-    expect(more).toEqual([]);
+    expect(more).toEqual([]); // not hidden-from: one invitation email to the invitee, not two
     expect(invitation).toMatchObject({
       template: "invitation",
       locale: "ar",
@@ -56,7 +65,7 @@ describe("inviting a Member", () => {
     });
     // The token is in the email only: nowhere in what the inviter got back.
     const token = api.mailbox.invitationToken(email);
-    expect(res.body).not.toContain(token);
+    expect(res.body).not.toContain(token); // not hidden-from: a secret kept out of the inviter's own answer; the token is read from the email just above
     const caller = await api.acceptInvitation(token);
     expect((await caller.get("/v1/me")).json().member.id).toBe(res.json().memberId);
   });
@@ -77,7 +86,7 @@ describe("inviting a Member", () => {
       const email = uniqueEmail("member");
       const body = { email, fullName: { en: "Sara Ali", ar: "سارة علي" }, locale: "en" };
       expect((await caller.post("/v1/members", body)).statusCode).toBe(500);
-      expect(ids(await caller.get("/v1/members"))).toHaveLength(1);
+      expect(ids(await caller.get("/v1/members"))).toHaveLength(1); // not hidden-from: the failed invite added no Member, so the Company's own list holds its Authorized Person alone
       fail = false;
       expect((await caller.post("/v1/members", body)).statusCode).toBe(201);
       expect(sent).toEqual([email]);
@@ -138,7 +147,7 @@ describe("inviting an email that is already taken", () => {
     await b.caller.post(`/v1/members/${bMember.id}/deactivate`);
     expect((await invite(a.caller, bMember.email)).body).toBe(JSON.stringify({ error: "registered_with_another_company" }));
     // B's Member is untouched and still B's.
-    expect(ids(await a.caller.get("/v1/members"))).not.toContain(bMember.id);
+    await expectHiddenFrom({ read: listed, target: bMember.id, seenBy: b.caller, hiddenFrom: a.caller, name: who });
     const row = (await b.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === pending.id);
     expect(row).toMatchObject({ status: "invited", fullName: { en: "Test Member" } });
   });
@@ -194,10 +203,10 @@ describe("reactivating a deactivated Member", () => {
     expect(body.member).toMatchObject({ id: invited.id, status: "invited" });
     // Emailed to them, as the first one was; the token is not in the answer (RP-1052).
     expect(body.invitationSentTo).toBe(invited.email);
-    expect(api.mailbox.to(invited.email)).toHaveLength(2);
+    expect(api.mailbox.to(invited.email)).toHaveLength(2); // not hidden-from: the invitee's two invitation emails, the first and the fresh one
     const token = api.mailbox.invitationToken(invited.email);
     expect(token).not.toBe(invited.invitationToken);
-    expect(res.body).not.toContain(token);
+    expect(res.body).not.toContain(token); // not hidden-from: a secret kept out of the Authorized Person's own answer; the token is read from the email just above
     // The old invitation stays void; the new one works.
     const old = await api.anonymous().post("/v1/invitations/accept", { token: invited.invitationToken, password: DEFAULT_PASSWORD });
     expect(old.statusCode).toBe(400);
@@ -224,8 +233,10 @@ describe("reactivating a deactivated Member", () => {
   it("treats another Company's Member exactly like one that doesn't exist", async () => {
     const { member: bMember } = await api.member(b.caller);
     await b.caller.post(`/v1/members/${bMember.id}/deactivate`);
-    await expectHidden(a.caller.post(`/v1/members/${bMember.id}/reactivate`));
-    await expectHidden(a.caller.post(`/v1/members/${randomUUID()}/reactivate`));
+    // B's deactivated Member is there, on B's list, and never on A's.
+    await expectHiddenFrom({ read: listed, target: bMember.id, seenBy: b.caller, hiddenFrom: a.caller, name: who });
+    await expectHidden(a.caller.post(`/v1/members/${bMember.id}/reactivate`)); // not hidden-from: the write's plain 404; the Member is proven B's just above
+    await expectHidden(a.caller.post(`/v1/members/${randomUUID()}/reactivate`)); // not hidden-from: a made-up id, no row to prove
     const row = (await b.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === bMember.id);
     expect(row.status).toBe("deactivated");
   });
@@ -250,11 +261,10 @@ describe("the Members list", () => {
 
   it("never shows another Company's Members", async () => {
     const { member: bMember } = await api.member(b.caller);
-    const seenByA = ids(await a.caller.get("/v1/members"));
-    expect(seenByA).not.toContain(b.company.authorizedPerson.id);
-    expect(seenByA).not.toContain(bMember.id);
-    const seenByB = ids(await b.caller.get("/v1/members"));
-    expect(seenByB).not.toContain(a.company.authorizedPerson.id);
+    for (const target of [b.company.authorizedPerson.id, bMember.id]) {
+      await expectHiddenFrom({ read: listed, target, seenBy: b.caller, hiddenFrom: a.caller, name: who });
+    }
+    await expectHiddenFrom({ read: listed, target: a.company.authorizedPerson.id, seenBy: a.caller, hiddenFrom: b.caller, name: who });
   });
 
   it("needs a signed-in Member", async () => {
@@ -307,11 +317,12 @@ describe("the Projects count", () => {
     const otherMember = await api.member(other.caller);
     await api.addProjectMember(other.caller, theirs, otherMember.member.id);
     const own = await rows(other.caller);
-    expect(own.map((m) => m.id)).not.toContain(busy.member.id);
+    const name = (by: Caller) => (by === host.caller ? "the host" : by === other.caller ? "the other Company" : "someone");
+    await expectHiddenFrom({ read: rows, target: busy.member.id, seenBy: host.caller, hiddenFrom: other.caller, name });
     expect(countOf(own, otherMember.member.id)).toBe(1);
     // The host's count is untouched by the other Company's Member on the same Project.
     expect(countOf(await rows(host.caller), busy.member.id)).toBe(2);
-    expect((await rows(host.caller)).map((m) => m.id)).not.toContain(otherMember.member.id);
+    await expectHiddenFrom({ read: rows, target: otherMember.member.id, seenBy: other.caller, hiddenFrom: host.caller, name });
   });
 });
 
@@ -361,8 +372,10 @@ describe("the Project Creator flag", () => {
     const other = await a.caller.patch(`/v1/members/${bMember.id}`, { canCreateProjects: true });
     const missing = await a.caller.patch(`/v1/members/${randomUUID()}`, { canCreateProjects: true });
     const malformed = await a.caller.patch("/v1/members/not-an-id", { canCreateProjects: true });
+    // B's Member is there, on B's list, and never on A's.
+    await expectHiddenFrom({ read: listed, target: bMember.id, seenBy: b.caller, hiddenFrom: a.caller, name: who });
     for (const res of [other, missing, malformed]) {
-      await expectHidden(res);
+      await expectHidden(res); // not hidden-from: each write's plain 404; B's Member is proven B's just above
     }
     expect((await bCaller.get("/v1/me")).json().member.canCreateProjects).toBe(false);
   });
@@ -429,8 +442,10 @@ describe("deactivating a Member", () => {
     const { member: bMember, caller: bCaller } = await api.member(b.caller);
     const other = await a.caller.post(`/v1/members/${bMember.id}/deactivate`);
     const missing = await a.caller.post(`/v1/members/${randomUUID()}/deactivate`);
+    // B's Member is there, on B's list, and never on A's.
+    await expectHiddenFrom({ read: listed, target: bMember.id, seenBy: b.caller, hiddenFrom: a.caller, name: who });
     for (const res of [other, missing]) {
-      await expectHidden(res);
+      await expectHidden(res); // not hidden-from: each write's plain 404; B's Member is proven B's just above
     }
     expect((await bCaller.get("/v1/me")).statusCode).toBe(200);
   });

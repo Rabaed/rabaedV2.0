@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -133,6 +133,8 @@ async function side(engineer: string, name: string, code: string): Promise<Side>
   for (const from of [hiddenLinker, visibleLinker, draftLinker, internalLinker]) await link(from, target);
   await link(visibleLinker, target, "relies_on");
   await link(target, visibleLinker);
+  // So the item the narrow Member can't see has a linker to hide (RP-1095).
+  await link(target, hiddenLinker);
   return { ap, narrow, target, hiddenLinker, visibleLinker, draftLinker, internalLinker, code };
 }
 
@@ -176,6 +178,12 @@ describe("Linked from", () => {
   });
 
   it("is empty for an item the caller can't see, and for another Project's item", async () => {
+    // Each read is proved first by a caller who sees the item and its linker (RP-1095).
+    const linkers = (item: string) => async (as: string) => (await linkedFrom(as, item)) as { work_item_id: string | null }[];
+    const idOf = (row: { work_item_id: string | null }) => row.work_item_id ?? "";
+    await expectHiddenFrom({ read: linkers(a.hiddenLinker), target: a.target, seenBy: a.ap, hiddenFrom: a.narrow, idOf, label: "hidden item" });
+    await expectHiddenFrom({ read: linkers(b.target), target: b.visibleLinker, seenBy: b.ap, hiddenFrom: a.ap, idOf, label: "B's item" });
+    await expectHiddenFrom({ read: linkers(a.target), target: a.visibleLinker, seenBy: a.ap, hiddenFrom: b.ap, idOf, label: "A's item" });
     expect(await linkedFrom(a.narrow, a.hiddenLinker)).toEqual([]);
     expect(await linkedFrom(a.ap, b.target)).toEqual([]);
     expect(await linkedFrom(b.ap, a.target)).toEqual([]);

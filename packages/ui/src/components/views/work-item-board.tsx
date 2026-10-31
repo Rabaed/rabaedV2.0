@@ -126,8 +126,10 @@ export function boardStages(board: Pick<WorkItemBoardData, "stages">): WorkItemB
  * other Company by its name only (V5, V14), and the closed items. A closed
  * column shows the items closed in the last 30 days, with its total and "Show
  * all", which opens the List with the same filters. Under a search the total is
- * left out: a search counts only what it shows. The board scrolls sideways in
- * its own region; columns keep their width.
+ * left out: a search counts only what it shows. On its page the board fills
+ * the window under its toolbar (RP-1092) and scrolls in its own region, down
+ * and sideways, its scrollbar on the window's bottom edge; columns keep their
+ * width and grow with their cards.
  *
  * A card the viewer may act on can be dragged (RP-350): only the Stages that
  * one of its Transitions alone leads to are outlined and take a drop, which
@@ -173,7 +175,10 @@ export function WorkItemBoard({
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
       data-board=""
-      className={cn("relative overflow-x-auto bg-canvas pt-[18px] pb-[40px]", focusRing, className)}
+      // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
+      data-fills-window=""
+      className={cn("relative min-h-64 flex-1 overflow-auto bg-canvas pt-[18px] pb-[40px]", focusRing, "focus-visible:-outline-offset-2", className)}
     >
       {dragging && (
         <p role="status" className="sr-only">
@@ -201,7 +206,7 @@ export function WorkItemBoard({
               data-drop-target={dropMove ? "" : undefined}
               data-drop-over={dropMove && over === stage.key ? "" : undefined}
               className={cn(
-                // A column grows with its cards (the anatomy): the page scrolls down, the board sideways in its own region.
+                // A column grows with its cards (the anatomy): the board scrolls down and sideways in its own region.
                 "flex w-[318px] shrink-0 flex-col rounded-lg border border-border bg-surface transition-shadow",
                 dropMove && "outline-2 outline-offset-2 outline-brand outline-dashed",
                 dropMove && over === stage.key && "outline-solid",

@@ -46,6 +46,10 @@ const copy = {
   raiseSnag: { en: "Raise a Snag", ar: "إنشاء عيب" },
   snagRaised: { en: "A Snag is raised with the code", ar: "يُنشأ عيب مع الرمز" },
   noSnagRaised: { en: "No Snag is raised", ar: "لا يُنشأ عيب" },
+  ticked: { en: "Becomes a Snag for the Contractor when the code is issued.", ar: "يصبح عيبًا على المقاول عند إصدار الرمز." },
+  unticked: { en: "Unticked: for example a minor failure fixed on the spot.", ar: "غير محدد: مثلًا خلل بسيط أُصلح في الموقع." },
+  addComment: { en: "Add comment", ar: "إضافة تعليق" },
+  saved: { en: "Saved", ar: "حُفظ" },
 };
 
 const meta = {
@@ -87,9 +91,12 @@ export const Answering: Story = {
     await expect(tick()).toBeNull();
     await userEvent.click(formwork.getByRole("radio", { name: storyText(context, copy.fail) }));
     await expect(tick()).toBeChecked();
+    // Its help says what the tick does, and why one may untick it (RP-655).
+    await expect(tick()).toHaveAccessibleDescription(storyText(context, copy.ticked));
     await expect(context.args.onChange).toHaveBeenLastCalledWith({ formwork: { answer: "fail" } });
     await userEvent.click(tick()!);
     await expect(tick()).not.toBeChecked();
+    await expect(tick()).toHaveAccessibleDescription(storyText(context, copy.unticked));
     await expect(context.args.onChange).toHaveBeenLastCalledWith({ formwork: { answer: "fail", snag: false } });
     await userEvent.click(tick()!);
     await expect(context.args.onChange).toHaveBeenLastCalledWith({ formwork: { answer: "fail" } });
@@ -108,6 +115,8 @@ export const Unticked: Story = {
   play: async (context) => {
     const formwork = itemOf(context, copy.formwork);
     await expect(formwork.getByRole("checkbox", { name: storyText(context, copy.raiseSnag) })).not.toBeChecked();
+    // An optional comment opens from its link (RP-655).
+    await userEvent.click(formwork.getByRole("button", { name: storyText(context, copy.addComment) }));
     await userEvent.type(formwork.getByRole("textbox"), "Gap");
     await expect(context.args.onChange).toHaveBeenLastCalledWith({ formwork: { answer: "fail", snag: false, comment: "Gap" } });
   },
@@ -121,6 +130,28 @@ export const Read: Story = {
     await expect(canvas.queryByRole("checkbox")).toBeNull();
     await expect(canvas.getByText(storyText(context, copy.snagRaised))).toBeVisible();
     await expect(canvas.queryByText(storyText(context, copy.noSnagRaised))).toBeNull();
+  },
+};
+
+/**
+ * On a WIR's page (RP-655): only the items a filter chip shows, numbered as in the whole checklist,
+ * each card ending with the page's own line (whether its answer is saved), and no summary line,
+ * which the page's bar shows.
+ */
+export const OnTheWirPage: Story = {
+  args: {
+    value: { formwork: { answer: "pass" } },
+    shown: new Set(["permit_on_site"]),
+    summary: false,
+    itemFooter: (key: string) => <p>{`${key}: ${copy.saved.en}`}</p>,
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    await expect(canvas.queryByRole("radiogroup", { name: storyText(context, copy.formwork) })).toBeNull();
+    const permit = itemOf(context, copy.permit);
+    await expect(permit.getByText(`permit_on_site: ${copy.saved.en}`)).toBeVisible();
+    await expect(permit.getByText("2", { exact: true })).toBeVisible();
+    await expect(canvas.queryByRole("status")).toBeNull();
   },
 };
 

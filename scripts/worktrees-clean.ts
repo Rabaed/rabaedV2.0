@@ -15,7 +15,9 @@
 // and a worktree a session opened after the prompt is kept and named. The dev servers each
 // removed worktree still runs (servers.ts, as `pnpm servers:stop` finds them) are listed
 // with it and stopped just before it is removed; one that cannot be stopped keeps its
-// worktree (RP-568).
+// worktree (RP-568). Each removed worktree's rabaed-stories-* volumes (test:stories:linux's
+// node_modules, stories-volumes.ts) go after it, never while a worktree with that path exists or a
+// container uses one; those are named (RP-1120). `pnpm worktrees:prune` removes the orphaned sets.
 //
 // It fetches origin first and checks against `origin/<branch>` when that exists, so a
 // stale local `main` no longer hides merged worktrees (RP-564); the local branch is
@@ -31,10 +33,12 @@
 // out of the run. Uncommitted changes or unmerged commits still skip a named one.
 //
 // The default branch is main; --yes skips the confirmation.
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { holdReason, systemHolders, type Holders } from "./claude-sessions.ts";
 import { describeServer, findServersOf, firstLine, stopServers, type Server } from "./servers.ts";
+import { DOCKER_SILENT, describeCount, listStoriesVolumes, removeStoriesVolumesNow, storiesVolumesOf } from "./stories-volumes.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, systemLiveness } from "./worktrees.ts";
 
@@ -160,15 +164,20 @@ async function main(): Promise<void> {
   } catch (error) {
     console.warn(`Could not read the running processes (${firstLine(error)}), so dev servers are not stopped first.`);
   }
+  const storiesVolumes = listStoriesVolumes();
+  if (storiesVolumes === undefined) console.log(DOCKER_SILENT);
   console.log(`Agent worktrees merged into ${target}:`);
   for (const w of remove) {
     console.log(`  ${name(w)}`);
     for (const s of servers.get(w.path) ?? []) console.log(`    dev server to stop: ${describeServer(s)}`);
+    const stories = storiesVolumesOf(w.path, storiesVolumes ?? []);
+    if (stories.length > 0) console.log(`    stories volumes to remove: ${describeCount(stories)}`);
   }
 
-  await confirmOrExit("Stop their dev servers and remove them with their folders and branches?", { yes, verb: "remove", done: "removed" });
+  await confirmOrExit("Stop their dev servers and remove them with their folders, branches and stories volumes?", { yes, verb: "remove", done: "removed" });
 
   let failed = 0;
+  const removedPaths: string[] = [];
   for (const w of remove) {
     // Read again just before each removal: a session may have opened it, or moved into it, since the prompt (RP-608, RP-956).
     const opened = openedSinceListed(w.path, systemHolders());
@@ -184,10 +193,22 @@ async function main(): Promise<void> {
     }
     try {
       if (reportRemoval(w.path, removeWorktree(w, mainRoot, target))) failed++;
+      removedPaths.push(w.path);
     } catch (error) {
       failed++;
       console.error(`Could not remove ${w.path}: ${gitError(error)}`);
     }
+  }
+  // RP-1120: the removed worktrees' stories volumes, judged on the worktrees git lists now.
+  if (removedPaths.length > 0 && storiesVolumes !== undefined) {
+    const existingNow = listWorktrees(mainRoot)
+      .map((w) => w.path)
+      .filter((p) => existsSync(p));
+    const result = removeStoriesVolumesNow({ gone: removedPaths }, existingNow);
+    if (result.removed.length > 0) console.log(`Removed stories volumes: ${describeCount(result.removed)}.`);
+    for (const line of result.kept) console.log(line);
+    for (const e of result.errors) console.error(e);
+    failed += result.errors.length;
   }
   try {
     pruneWorktrees(mainRoot);

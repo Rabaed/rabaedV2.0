@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
@@ -27,6 +28,8 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     onMain: () => false,
     tree: () => "tree1",
     mergedTree: () => "tree1",
+    identity: () => ({ author: "dev@example.com", committer: "dev@example.com" }),
+    changedPaths: () => ["apps/api/src/a.ts"],
     labelWorkflowOnMain: () => true,
     labelRuns: () => [{ status: "completed", conclusion: "success" }],
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
@@ -225,6 +228,19 @@ describe("queuePr", () => {
       // abc1234 merges main's m2 into n1, which merged main's m1 into the verified beef999.
       const graph: Record<string, string[]> = { abc1234: ["n1", "m2"], n1: ["beef999", "m1"] };
       const { seam, enqueued } = fakeSeam({ body: verifiedOn("beef999"), parents: (commit) => graph[commit] ?? [], onMain: (commit) => commit.startsWith("m") });
+      expect(queuePr(149, seam).ok).toBe(true);
+      expect(enqueued).toEqual([["PR_node", "abc1234"]]);
+    });
+
+    it("queues when the screenshot bot's baseline-only commit follows the verified one (RP-1103)", () => {
+      const graph: Record<string, string[]> = { abc1234: ["beef999"] };
+      const bot = { author: BASELINE_BOT_EMAIL, committer: BASELINE_BOT_EMAIL };
+      const { seam, enqueued } = fakeSeam({
+        body: verifiedOn("beef999"),
+        parents: (commit) => graph[commit] ?? [],
+        identity: () => bot,
+        changedPaths: () => ["packages/ui/test/__screenshots__/stories.test.tsx/button-en-chromium-linux.png"],
+      });
       expect(queuePr(149, seam).ok).toBe(true);
       expect(enqueued).toEqual([["PR_node", "abc1234"]]);
     });

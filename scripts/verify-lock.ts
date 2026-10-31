@@ -4,9 +4,26 @@ import { join } from "node:path";
 // One `pnpm verify` per worktree (RP-996): two runs in one worktree share the lane's
 // databases and fail each other. The lock is a file in the worktree, so verify in two
 // worktrees still runs side by side. The pid check is passed in, so it is unit-tested.
+// RP-1096 adds each Main's one verify slot (mainSlot): a second verify among a Main's lanes waits for it.
+// RP-1136: Windows reuses pids quickly, so a lock also records when its process started (pidStarted, as
+// the OS reports it). A lock is held only while its pid runs, is not the caller's own or an ancestor's,
+// and started at that time (a lock without the time: started before the lock was taken); a pid whose
+// start can't be read falls back to the pid alone, and only then does the message say how to free it by hand.
 
-/** Who holds the lock: the verify process, when it started and how it was started. */
-export type LockHolder = { pid: number; started: Date; command: string };
+/**
+ * Who holds the lock: the verify process, when it took the lock, how it was started, and when the OS
+ * says that process started (absent in locks written before RP-1136, or when it couldn't be read).
+ */
+export type LockHolder = { pid: number; started: Date; command: string; pidStarted?: Date | undefined };
+
+/**
+ * The process checks the lock uses, injected so they are unit-tested: whether a pid runs, when it
+ * started (undefined when that can't be read), and the caller's ancestors (a lock naming one is stale).
+ */
+export type Processes = { isAlive: (pid: number) => boolean; startOf: (pid: number) => Date | undefined; ancestors?: number[] };
+
+/** How far apart two readings of one process's start time may be (ps gives whole seconds). */
+const START_TOLERANCE_MS = 2_000;
 
 /** Taken (`tookOver` says whose stale lock it replaced), or refused with a message naming the holder. */
 export type LockResult = { acquired: true; tookOver?: string } | { acquired: false; message: string };
@@ -37,7 +54,7 @@ function link(from: string, file: string): boolean {
  */
 function create(file: string, self: LockHolder): boolean {
   const temp = `${file}.${self.pid}`;
-  writeFileSync(temp, JSON.stringify({ ...self, started: self.started.toISOString() }));
+  writeFileSync(temp, JSON.stringify({ ...self, started: self.started.toISOString(), pidStarted: self.pidStarted?.toISOString() }));
   try {
     return link(temp, file);
   } finally {
@@ -56,8 +73,10 @@ const readText = (file: string): string | undefined => {
 /** The run named in a lock's text; undefined when it is gone or unreadable. */
 function parseHolder(text: string | undefined): LockHolder | undefined {
   try {
-    const stored = JSON.parse(text ?? "") as { pid: number; started: string; command: string };
-    return Number.isInteger(stored.pid) ? { ...stored, started: new Date(stored.started) } : undefined;
+    const stored = JSON.parse(text ?? "") as { pid: number; started: string; command: string; pidStarted?: string };
+    if (!Number.isInteger(stored.pid)) return undefined;
+    const pidStarted = stored.pidStarted === undefined ? undefined : new Date(stored.pidStarted);
+    return { ...stored, started: new Date(stored.started), pidStarted: pidStarted && !Number.isNaN(pidStarted.getTime()) ? pidStarted : undefined };
   } catch {
     return undefined;
   }
@@ -90,18 +109,90 @@ const refuseCurrent = (file: string): LockResult => {
   return { acquired: false, message: holder ? refusal(holder) : `verify could not take ${file}; run it again.` };
 };
 
+/** Whether `holder` still holds its lock: live (and why it can't be sure), or stale and why. */
+type HolderStatus = { live: true; unsure?: string } | { live: false; why: string };
+
+function holderStatus(holder: LockHolder, self: LockHolder, file: string, { isAlive, startOf, ancestors = [] }: Processes): HolderStatus {
+  if (holder.pid === self.pid) return { live: false, why: "its pid is this run's own." };
+  if (ancestors.includes(holder.pid)) return { live: false, why: "its pid is a process this run was started from." };
+  if (!isAlive(holder.pid)) return { live: false, why: "that process is gone." };
+  const now = startOf(holder.pid);
+  const reused = { live: false, why: `pid ${holder.pid} is now another process, started ${hhmm(now ?? holder.started)}.` } as const;
+  const freeByHand = `so a reused pid can't be told apart: if pid ${holder.pid} is not a verify run, delete ${file}.`;
+  if (now === undefined) return { live: true, unsure: `This run could not read pid ${holder.pid}'s start time, ${freeByHand}` };
+  if (holder.pidStarted !== undefined) return Math.abs(now.getTime() - holder.pidStarted.getTime()) <= START_TOLERANCE_MS ? { live: true } : reused;
+  // A lock from before RP-1136 has no start time, but no process takes a lock before it starts.
+  if (now.getTime() > holder.started.getTime() + START_TOLERANCE_MS) return reused;
+  return { live: true, unsure: `Its lock records no process start time, ${freeByHand}` };
+}
+
 /**
- * Takes the lock for `self`, or refuses with a message naming the live run that holds it. A lock
- * whose pid `isAlive` denies (or that cannot be read) is stale and taken over once; if another run
- * took it over first, even between the read and the takeover, that run is the holder.
+ * Takes the lock for `self`, or refuses with a message naming the live run that holds it. A lock is
+ * stale, and taken over once, when it can't be read or `holderStatus` finds its process gone, reused by
+ * another process (its start time differs) or the caller itself (RP-1136); if another run took it
+ * over first, even between the read and the takeover, that run is the holder.
  */
-export function acquireLock(file: string, self: LockHolder, isAlive: (pid: number) => boolean): LockResult {
+export function acquireLock(file: string, self: LockHolder, processes: Processes): LockResult {
   if (create(file, self)) return { acquired: true };
   const staleText = readText(file);
   const stale = parseHolder(staleText);
-  if (stale && isAlive(stale.pid)) return { acquired: false, message: refusal(stale) };
+  const verdict = stale && holderStatus(stale, self, file, processes);
+  if (verdict && verdict.live) return { acquired: false, message: verdict.unsure ? `${refusal(stale)} ${verdict.unsure}` : refusal(stale) };
   if (!removeStale(file, staleText, self.pid) || !create(file, self)) return refuseCurrent(file);
-  return { acquired: true, tookOver: stale ? `took over a stale lock (${describeHolder(stale)}): that process is gone.` : "took over an unreadable lock." };
+  return { acquired: true, tookOver: stale && verdict ? `took over a stale lock (${describeHolder(stale)}): ${verdict.why}` : "took over an unreadable lock." };
+}
+
+/**
+ * A Main's one verify slot (RP-1096; the owner chose one per Main, as planning/parallel-sessions.md's
+ * staged restart says): a lock file in the clone's common git folder, shared by the Main's lanes mL
+ * (and m0, and the legacy lane m). On 2026-10-29 many verify runs at once pushed the machine to 98% CPU
+ * and seam suites ran past 3 hours. `lane` is the .env's lane ("31"); lane 0 or none is the main folder's.
+ */
+export function mainSlot(commonGitDir: string, lane: string): { file: string; name: string } {
+  const n = Number(lane);
+  if (lane === "" || !Number.isInteger(n) || n === 0) return { file: join(commonGitDir, "rabaed-verify-main-folder.lock"), name: "the main folder's verify slot" };
+  const main = n >= 10 ? Math.floor(n / 10) : n;
+  return { file: join(commonGitDir, `rabaed-verify-main${main}.lock`), name: `Main ${main}'s verify slot` };
+}
+
+export type WaitDeps = {
+  processes: Processes;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  /** A line for the run's output: when it starts waiting, when the holder changes, and every reportEveryMs. */
+  report: (line: string) => void;
+  /** The slot's name in those lines ("Main 3's verify slot"). */
+  slot: string;
+  pollMs?: number;
+  reportEveryMs?: number;
+};
+
+/**
+ * Takes the lock for `self`, waiting while another live run holds it (a stale one is taken over at
+ * once, as acquireLock does). Never gives up: the run holding it ends some time, and Ctrl-C stops the wait.
+ */
+export async function waitForLock(
+  file: string,
+  self: LockHolder,
+  { processes, now, sleep, report, slot, pollMs = 30_000, reportEveryMs = 600_000 }: WaitDeps,
+): Promise<{ waitedMs: number; tookOver?: string }> {
+  const start = now();
+  let said: string | undefined;
+  let nextReport = start + reportEveryMs;
+  for (;;) {
+    const result = acquireLock(file, self, processes);
+    if (result.acquired) return { waitedMs: now() - start, ...(result.tookOver === undefined ? {} : { tookOver: result.tookOver }) };
+    if (result.message !== said) {
+      // A lock left by a gone or reused pid is taken over by itself; the message says how to free one by hand only when the pid alone decided.
+      report(`Waiting for ${slot}: ${result.message} One verify per Main runs at a time (RP-1096).`);
+      said = result.message;
+      nextReport = now() + reportEveryMs;
+    } else if (now() >= nextReport) {
+      report(`Still waiting for ${slot} (${Math.floor((now() - start) / 60_000)} min).`);
+      nextReport = now() + reportEveryMs;
+    }
+    await sleep(pollMs);
+  }
 }
 
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */

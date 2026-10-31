@@ -12,7 +12,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, approveBActionForm, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, approveBActionForm, expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -127,6 +127,14 @@ async function atApproval(type: string, model: string): Promise<string> {
 /** The Screens of `ids` `as` reads through the table. */
 const screensSeen = async (as: string, ids: string[]) =>
   (await call<{ id: string }>(as, sql`select id from screen where id = any(${ids}::uuid[]) order by id`)).map((r) => r.id);
+const names = new Map<string, string>();
+const named = (as: string) => names.get(as) ?? as;
+/** The Screen `target` read through the table: by every one of `seenBy` first, by none of `hiddenFrom`. */
+const expectScreenHidden = (target: string, seenBy: string[], hiddenFrom: string[], label: string) =>
+  expectHiddenFrom({ read: async (as: string) => (await screensSeen(as, [target])).map((id) => ({ id })), target, seenBy, hiddenFrom, name: named, label });
+/** [`text`] when `as`'s history of item `id` holds it (a history row carries no event id, so the text, unique to one answer, is the key). */
+const textInHistory = (id: string, text: string) => async (as: string) =>
+  (await call<object>(as, sql`select * from app.work_item_history(${id}::uuid)`)).filter((r) => JSON.stringify(r).includes(text)).map(() => ({ id: text }));
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -159,6 +167,16 @@ beforeAll(async () => {
   k1 = await company(engineer, "K1");
   outsider = await company(engineer, "Outsider");
   c1Pm = await member(c1.id, "pm");
+  const known: [string, string][] = [
+    [c1.ap, "C1 Project Admin"],
+    [c1.member, "C1 engineer"],
+    [c1Pm, "C1 PM"],
+    [k1.ap, "K1 manager"],
+    [k1.member, "K1 engineer"],
+    [outsider.ap, "the other Project's Project Admin"],
+    [outsider.member, "an outsider on no Project"],
+  ];
+  for (const [as, name] of known) names.set(as, name);
 
   const [created] = await call<{ project_id: string }>(c1.ap, sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, 'SCT', 'contractor')`);
   projectId = created!.project_id;
@@ -229,11 +247,9 @@ describe("Screens through the app role", () => {
 
   it("are read by the Project's Members once published, never another Project's; a draft by nobody (V20)", async () => {
     // Never published, it is its authors' only (as a Workflow, RP-427-5).
-    expect(await screensSeen(c1.ap, [screenId])).toEqual([screenId]);
-    for (const reader of [c1.member, k1.member, outsider.member]) expect(await screensSeen(reader, [screenId])).toEqual([]);
+    await expectScreenHidden(screenId, [c1.ap], [c1.member, c1Pm, k1.member, k1.ap, outsider.ap, outsider.member], "the draft Screen");
     expect(await outcome(c1.ap, sql`select outcome from app.publish_screen(${screenId}::uuid, now())`)).toBe("published");
-    for (const reader of [c1.ap, c1.member, k1.member]) expect(await screensSeen(reader, [screenId])).toEqual([screenId]);
-    expect(await screensSeen(outsider.ap, [screenId])).toEqual([]);
+    await expectScreenHidden(screenId, [c1.ap, c1.member, k1.member], [outsider.ap, outsider.member], "the published Screen");
     expect(otherProjectId).not.toBe(projectId);
 
     expect(await outcome(c1.ap, sql`select outcome from app.save_screen_draft(${screenId}::uuid, ${JSON.stringify(codeReply)}::jsonb, '{}'::text[], now())`)).toBe(
@@ -245,7 +261,13 @@ describe("Screens through the app role", () => {
     }
     // Its author reads the draft through app.screen_draft; nobody else does.
     expect(await call<{ version_no: number }>(c1.ap, sql`select version_no from app.screen_draft(${screenId}::uuid)`)).toEqual([{ version_no: 2 }]);
-    expect(await call<{ version_no: number }>(k1.member, sql`select version_no from app.screen_draft(${screenId}::uuid)`)).toEqual([]);
+    const draft = await one("select id from screen_version where screen_id = $1 and status = 'draft'", [screenId]);
+    const others = [c1.member, c1Pm, k1.member, k1.ap, outsider.ap, outsider.member];
+    for (const fn of ["screen_draft", "screen_draft_read"]) {
+      const read = async (as: string) =>
+        (await call<{ screen_version_id: string }>(as, sql`select screen_version_id from ${sql.raw(`app.${fn}`)}(${screenId}::uuid)`)).map((r) => ({ id: r.screen_version_id }));
+      await expectHiddenFrom({ read, target: draft, seenBy: c1.ap, hiddenFrom: others, name: named, label: `app.${fn}` });
+    }
   });
 
   it("write exactly one setup_event row per command, none for a refused one, to the Project only (RP-450)", async () => {
@@ -259,8 +281,7 @@ describe("Screens through the app role", () => {
   });
 
   it("give its draft to a read without the lock a publish takes (RP-525 review)", async () => {
-    expect(await call<{ version_no: number }>(k1.member, sql`select version_no from app.screen_draft_read(${screenId}::uuid)`)).toEqual([]);
-    // A publish holds the Screen locked (app.screen_draft); its page still reads the draft at once.
+    // Only its authors read it (by id, in the test above). A publish holds the Screen locked (app.screen_draft); its page still reads the draft at once.
     const read = await withMember(app, c1.ap, async (publishing) => {
       await sql`select * from app.screen_draft(${screenId}::uuid)`.execute(publishing);
       return withMember(app, c1.ap, async (reading) => {
@@ -306,15 +327,23 @@ describe("a reply's internal answers stay with the acting Participant (scenario 
     call<{ type: string; answers: Record<string, unknown> | null }>(as, sql`select type, answers from app.work_item_history(${id}::uuid)`);
 
   it("the Contractor reads the Code's shared answers only, in the events table and the history", async () => {
-    for (const contractor of [c1.member, c1Pm]) {
+    const contractors = [c1.member, c1Pm];
+    const consultants = [k1.ap, k1.member];
+    for (const contractor of contractors) {
       const rows = await events(contractor);
-      expect(rows.map((r) => r.type)).not.toContain("internal_answers");
       expect(rows.find((r) => r.type === "issue_code")?.payload).toEqual({ remarks: "Matches the sample.", outcome: "A" });
-      expect(JSON.stringify(rows)).not.toContain("Batch 7");
       const read = await history(contractor);
       expect(read.find((r) => r.type === "issue_code")?.answers).toEqual({ remarks: "Matches the sample." });
-      expect(JSON.stringify(read)).not.toContain("Batch 7");
     }
+    // The internal answers' event, and every event row that holds them, by the row's id.
+    const eventIds = async (as: string) => (await call<{ id: string }>(as, sql`select id from work_item_event where work_item_id = ${id}::uuid`)).map((r) => ({ id: r.id }));
+    const { rows: holding } = await migrator.query<{ id: string; type: string }>(
+      "select id, type from work_item_event where work_item_id = $1 and (type = 'internal_answers' or position('Batch 7' in payload::text) > 0) order by seq",
+      [id],
+    );
+    expect(holding.map((r) => r.type)).toEqual(["internal_answers"]);
+    for (const row of holding) await expectHiddenFrom({ read: eventIds, target: row.id, seenBy: consultants, hiddenFrom: contractors, name: named, label: `the ${row.type} event` });
+    await expectHiddenFrom({ read: textInHistory(id, "Batch 7"), target: "Batch 7", seenBy: consultants, hiddenFrom: contractors, name: named, label: "the history" });
   });
 
   it("the Consultant reads its internal answers too, in their own event", async () => {
@@ -332,12 +361,13 @@ describe("scenario RP-525-1: a Screen's internal answers never reach the Contrac
     const rows = [{ comment: "Torque log missing" }];
     expect(await take(k1.ap, id, "approve_b", { remarks: "See K1's notes.", items_to_create: rows, verification_note: "Plant batch 9." })).toBe("applied");
     const { rows: links } = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
-    expect(links).toEqual([]);
+    expect(links).toEqual([]); // not hidden-from: the internal table raised no item at all, read as the tables' owner
     for (const contractor of [c1.member, c1Pm]) {
       const read = await call<{ type: string; answers: Record<string, unknown> | null }>(contractor, sql`select type, answers from app.work_item_history(${id}::uuid)`);
       expect(read.find((r) => r.type === "issue_code")?.answers).toEqual({ remarks: "See K1's notes." });
-      expect(JSON.stringify(read)).not.toContain("Torque log");
-      expect(JSON.stringify(read)).not.toContain("Plant batch 9");
+    }
+    for (const text of ["Torque log", "Plant batch 9"]) {
+      await expectHiddenFrom({ read: textInHistory(id, text), target: text, seenBy: [k1.ap, k1.member], hiddenFrom: [c1.member, c1Pm], name: named, label: "the history" });
     }
     const own = await call<{ type: string; answers: Record<string, unknown> | null }>(k1.ap, sql`select type, answers from app.work_item_history(${id}::uuid)`);
     expect(own.find((r) => r.type === "internal_answers")?.answers).toEqual({ items_to_create: rows, verification_note: "Plant batch 9." });
@@ -347,8 +377,8 @@ describe("scenario RP-525-1: a Screen's internal answers never reach the Contrac
     const id = await atApproval(LEAKY, "Internal copy");
     expect(await take(k1.ap, id, "approve_a", { remarks: "Fine.", verification_note: "Plant batch 10." })).toBe("action_not_allowed");
     const events = await call<{ type: string }>(k1.ap, sql`select type from work_item_event where work_item_id = ${id}::uuid order by seq`);
-    expect(events.map((e) => e.type)).not.toContain("issue_code");
-    expect(events.map((e) => e.type)).not.toContain("internal_answers");
+    expect(events.map((e) => e.type)).not.toContain("issue_code"); // not hidden-from: the refused code wrote no event, read by its own Manager
+    expect(events.map((e) => e.type)).not.toContain("internal_answers"); // not hidden-from: nor its internal answers' event
   });
 });
 

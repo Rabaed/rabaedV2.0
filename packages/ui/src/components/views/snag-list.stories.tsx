@@ -2,7 +2,10 @@ import { workItemQuery, workItemSearchParams, type Locale, type WorkItemBoard as
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { overlay } from "../../storybook/overlay.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import type { SnagBulkLabels } from "./snag-bulk.tsx";
 import type { SnagExportLabels } from "./snag-export.ts";
 import { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
@@ -34,6 +37,7 @@ const labels: Record<Locale, SnagListLabels> = {
     newOfType: (type) => `New ${type}`,
     types: "Types",
     allTypes: "All",
+    questions: "Questions",
     stage: "Stage",
     trade: "Trade",
     company: "Company",
@@ -102,6 +106,7 @@ const labels: Record<Locale, SnagListLabels> = {
     newOfType: (type) => `إضافة ${type}`,
     types: "الأنواع",
     allTypes: "الكل",
+    questions: "الأسئلة",
     stage: "المرحلة",
     trade: "التخصص",
     company: "الشركة",
@@ -253,17 +258,19 @@ const list: WorkItemListData = {
   ],
   filters,
 };
-const board: WorkItemBoardData = {
-  stages: list.stages,
+/** A Kanban of these items: a column per Stage, TMC's cards in one lane. */
+const boardOf = (of: WorkItemRow[]): WorkItemBoardData => ({
+  stages: counts(of),
   filters,
   typeCounts: list.typeCounts,
-  columns: list.stages.map((s) => {
-    const cards = items.filter((i) => i.stage.key === s.key);
+  columns: counts(of).map((s) => {
+    const cards = of.filter((i) => i.stage.key === s.key);
     return { stageKey: s.key, shown: cards.length, steps: [], lanes: cards.length ? [{ kind: "company" as const, participantId: tmcId, companyName: tmc, count: cards.length, cards }] : [] };
   }),
   moves: {},
   layout: { contractorName: false, location: true, creationDate: true },
-};
+});
+const board = boardOf(items);
 
 const defaults: WorkItemQuery = { ...workItemQuery.parse({}), module: "snag_list", sort: "stage", page: 1, pageSize: 25 };
 
@@ -337,6 +344,47 @@ export const TypeChips: Story = {
   },
 };
 
+// The Question Types (RP-1004): one "Questions" chip filters to all three, counting only what the viewer sees.
+const questionTypes = [
+  { code: "QSN", name: b("Question to Consultant", "سؤال إلى الاستشاري") },
+  { code: "QSC", name: b("Question to Contractor", "سؤال إلى المقاول") },
+  { code: "QSO", name: b("Question to Owner", "سؤال إلى المالك") },
+];
+const withQuestions = {
+  filters: { ...filters, types: [comment, ...questionTypes, snag, walkdown] },
+  // TMC sees two Questions to Consultant and one to Owner; none to Contractor.
+  typeCounts: [...list.typeCounts!, { code: "QSN", count: 2 }, { code: "QSO", count: 1 }],
+};
+const questionsQuery = { ...defaults, type: ["QSN", "QSC", "QSO"] };
+
+/** One "Questions" chip, not one per Question Type: its count adds up the three, and it filters to all three. */
+export const QuestionsChip: Story = {
+  args: { data: { view: "list", list: { ...list, ...withQuestions } } },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const chips = context.canvas.getByRole("navigation", { name: labels[locale].types });
+    const links = within(chips).getAllByRole("link");
+    // All, Comment, Questions, Snag, Walkdown item: the Question Types have no chips of their own.
+    await expect(links).toHaveLength(5);
+    for (const t of questionTypes) await expect(within(chips).queryByRole("link", { name: new RegExp(t.name[locale]) })).toBeNull();
+    const questions = within(chips).getByRole("link", { name: new RegExp(labels[locale].questions) });
+    await expect(questions).toHaveTextContent("3");
+    await expect(links[0]).toHaveTextContent("9");
+    const href = new URLSearchParams(questions.getAttribute("href")!.slice(1));
+    await expect(href.getAll("type").flatMap((v) => v.split(",")).sort()).toEqual(["QSC", "QSN", "QSO"]);
+  },
+};
+
+/** Chosen, on the Kanban too: the Questions chip is the current one. */
+export const QuestionsChipChosen: Story = {
+  args: { query: questionsQuery, data: { view: "kanban", board: { ...board, ...withQuestions } } },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const chips = context.canvas.getByRole("navigation", { name: labels[locale].types });
+    await expect(within(chips).getByRole("link", { current: true })).toHaveTextContent(labels[locale].questions);
+  },
+};
+
 /** "+ New" with several Types to raise is a menu of them; with none it is left out. */
 export const NewMenu: Story = {
   args: { newTypes: [comment, snag] },
@@ -361,6 +409,35 @@ export const Kanban: Story = {
     await expect(within(kanban).queryByRole("region", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
     const open = within(kanban).getByRole("region", { name: stages.open.name[storyLocale(context)] });
     await expect(within(open).getAllByRole("listitem")).toHaveLength(2);
+  },
+};
+
+// Twelve open snags: a column taller than the window.
+const manyOpen = Array.from({ length: 12 }, (_, i) => row(7 + i, { id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, title: `Cable tray not bonded, bay ${i + 1}`, documentNumber: `TWR-DCL-EL-SNG-1${String(i).padStart(2, "0")}` }));
+const crowded = boardOf([...items, ...manyOpen]);
+
+/**
+ * On its page (RP-1092), the Kanban fills the window from under its type chips to the bottom
+ * edge, as the Submittals' does: its sideways scrollbar sits on that edge, it scrolls down
+ * inside itself, and the page doesn't scroll.
+ */
+export const KanbanFillsTheWindow: Story = {
+  parameters: { ...overlay, layout: "fullscreen" },
+  args: { data: { view: "kanban", board: crowded } },
+  render: (args, context) => (
+    <StoryProjectPage context={context} current="snag_list">
+      <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} />
+    </StoryProjectPage>
+  ),
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const region = context.canvas.getByRole("region", { name: labels[locale].board });
+    await expectFillsTheWindow(region, context.canvas.getByRole("navigation", { name: labels[locale].types }));
+    // A short column still reaches the board's foot; a tall one grows past it.
+    const open = within(region).getByRole("region", { name: stages.open.name[locale] });
+    const closed = within(region).getByRole("region", { name: stages.closed.name[locale] });
+    await expect(open.scrollHeight).toBe(open.clientHeight);
+    await expect(closed.getBoundingClientRect().height).toBeGreaterThanOrEqual(region.clientHeight - 8);
   },
 };
 
