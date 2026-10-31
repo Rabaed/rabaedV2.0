@@ -187,3 +187,15 @@ export function guardedOrExit(command: string, env: NodeJS.ProcessEnv, target: T
   console.error(`${command}: nothing was changed`);
   process.exit(1);
 }
+
+/** Runs a tool's `main` and exits with its code; a failure prints a database error by its code only (its text can quote row values). */
+export function runCli(command: string, main: (argv: string[]) => Promise<number>): void {
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error: unknown) => {
+      const code = typeof error === "object" && error !== null && "code" in error ? ` (database error ${String(error.code)})` : "";
+      console.error(`${command}: ${code ? "the database refused" : (error as Error).message}${code}; nothing was changed`);
+      process.exit(1);
+    },
+  );
+}

@@ -37,7 +37,7 @@ export async function giveAssign(migrator: pg.Client, t: SeamTwoTower): Promise<
 
 /** A Rabaed Submittals Type on the test Workflow (Contractor to Consultant), with a one-field Form; returns its code. */
 export async function addSubmittalType(migrator: pg.Client): Promise<string> {
-  const code = `UA${digits(4)}`;
+  const code = `UA${Array.from({ length: 4 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("")}`; // letters only (work_item_type_code_check)
   const workflowId = await addTestWorkflow((text) => migrator.query(text), { name: bilingual(`RP-922 UAT tool ${digits(6)}`) });
   const formId = (await migrator.query("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [JSON.stringify(bilingual("UAT tool (RP-922)"))]))
     .rows[0].id as string;
@@ -72,4 +72,14 @@ export async function submittalAtK1(t: SeamTwoTower, type: string, title: string
     if (outcome !== "applied" && outcome !== "picked_up") throw new Error(`submittalAtK1 ${what}: ${outcome}`);
   }
   return id;
+}
+
+/** The emails of `projectId`'s active Members holding Assign. */
+export async function assignHolders(migrator: pg.Client, projectId: string): Promise<string[]> {
+  const { rows } = await migrator.query<{ email: string }>(
+    `select m.email from project_member pm join member m on m.id = pm.member_id
+     where pm.project_id = $1 and pm.status = 'active' and app.project_member_holds_assign(pm.id) order by m.email`,
+    [projectId],
+  );
+  return rows.map((r) => r.email);
 }

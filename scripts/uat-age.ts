@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { ageItems, findAgeCandidates, type AgedItem, type AgedRows } from "../packages/db/dev-tools/index.ts";
 import { ageChanges } from "../packages/db/dev-tools/changes.ts";
 import { createDb } from "../packages/db/src/client.ts";
-import { guardedOrExit, laneOfEnv, loadToolEnv, type Target } from "./uat-guard.ts";
+import { guardedOrExit, laneOfEnv, loadToolEnv, runCli, type Target } from "./uat-guard.ts";
 export { ageChanges, type AgeChanges, type AgedItem } from "../packages/db/dev-tools/changes.ts";
 
 // `uat:age` (RP-922): moves chosen items back in time, so UAT can see Step Age it would otherwise wait
@@ -109,14 +109,4 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
-    (error: unknown) => {
-      // A database error by its code only: its text can quote row values.
-      const code = typeof error === "object" && error !== null && "code" in error ? ` (database error ${String(error.code)})` : "";
-      console.error(`uat:age: ${code ? "the database refused" : (error as Error).message}${code}; nothing was changed`);
-      process.exit(1);
-    },
-  );
-}
+if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) runCli("uat:age", main);

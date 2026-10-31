@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ageChanges, ageItems, AgeRefused, findAgeCandidates, ITEM_TIMES, runJob } from "../dev-tools/index.ts";
 import { createDb, stepAgeReportHandler, type Db } from "../src/index.ts";
 import { buildSeamTwoTower, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
-import { addSubmittalType, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
+import { addSubmittalType, assignHolders, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
 import { hiddenColumns } from "../../../scripts/hidden-columns.ts";
 
 const urls = testDatabaseUrls();
@@ -156,16 +156,12 @@ describe("the weekly report after uat:age", () => {
     const id = await submittalAtK1(tower, submittalType, `Report trays ${++serial} ${Date.now()}`);
     const number = (await migrator.query<{ document_number: string }>("select document_number from work_item where id = $1", [id])).rows[0]!.document_number;
     await age([number], 4);
-    const { rows } = await migrator.query<{ email: string }>(
-      `select m.email from project_member pm join member m on m.id = pm.member_id
-       where pm.project_id = $1 and pm.status = 'active' and app.project_member_holds_assign(pm.id) order by m.email`,
-      [tower.projectId],
-    );
+    const holders = await assignHolders(migrator, tower.projectId);
     const seen: number[] = [];
     const handler = stepAgeReportHandler(async (report) => {
       for (const i of report.items) if (i.workItemId === id) seen.push(i.stepAgeWeeks);
     });
-    for (const { email } of rows) await runJob({ migrator: tool, worker: app }, "weekly-report", { handlers: { step_age_report: handler }, memberEmail: email, dryRun: false });
+    for (const email of holders) await runJob({ migrator: tool, worker: app }, "weekly-report", { handlers: { step_age_report: handler }, memberEmail: email, dryRun: false });
     expect(seen.length).toBeGreaterThan(0);
     expect(new Set(seen)).toEqual(new Set([4]));
   });

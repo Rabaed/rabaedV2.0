@@ -13,6 +13,8 @@ export interface AgedItem {
   subject: string;
   /** How far back each of its times moves. */
   shiftMs: number;
+  /** When it reached its Step, as read: ageItems refuses it if a Transition moved it since. */
+  stepEnteredAt: Date;
   stepAge: { own: { from: number; to: number }; others: { from: number; to: number } };
 }
 
@@ -79,6 +81,7 @@ export function ageChanges({ items, weeks }: { items: string[]; weeks: number },
       documentNumber: c.documentNumber,
       subject: c.subject,
       shiftMs,
+      stepEnteredAt: c.stepEnteredAt,
       stepAge: {
         own: { from: own, to: stepAgeWeeks(moved(c.stepEnteredAt), now) },
         others: { from: stepAgeWeeks(c.participantEnteredAt, now), to: stepAgeWeeks(moved(c.participantEnteredAt), now) },

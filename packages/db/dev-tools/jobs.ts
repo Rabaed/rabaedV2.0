@@ -1,6 +1,6 @@
 import { sql, type Transaction } from "kysely";
 import type { Db } from "../src/client.ts";
-import type { OutboxHandler } from "../src/outbox.ts";
+import { failureOf, type OutboxHandler } from "../src/outbox.ts";
 import type { Database } from "../src/schema.ts";
 
 // `uat:run-job` (RP-922): the daily digest or the weekly Step Age report, now, whatever the day and hour.
@@ -64,16 +64,14 @@ type Queued = { row: JobRow; payload: Record<string, unknown> };
 
 /** Thrown to roll a dry run back. */
 class DryRun extends Error {
-  constructor(readonly queued: Queued[], readonly leftOut: number) {
+  // Plain fields, not parameter properties: Node's type stripping (node scripts/uat-run-job.ts) refuses those.
+  readonly queued: Queued[];
+  readonly leftOut: number;
+  constructor(queued: Queued[], leftOut: number) {
     super("dry run");
+    this.queued = queued;
+    this.leftOut = leftOut;
   }
-}
-
-/** What a failure says: a database error by its code only (its text can quote row values). */
-function failureOf(error: unknown): string {
-  const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
-  if (code && /^[0-9A-Z]{5}$/.test(code)) return `database error ${code}`;
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Step 1: queue as the scheduled job does, keep the chosen Member's rows only. */

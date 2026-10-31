@@ -84,6 +84,8 @@ export interface AgeItem {
   id: string;
   documentNumber: string;
   shiftMs: number;
+  /** When it reached its Step as the shift was worked out: a Transition since makes the shift wrong. */
+  stepEnteredAt: Date;
 }
 
 export interface AgedRows {
@@ -98,8 +100,11 @@ export class AgeRefused extends Error {}
 
 /** Thrown to roll a dry run back after it ran every check. */
 class DryRun extends Error {
-  constructor(readonly aged: AgedRows[]) {
+  // Plain fields, not parameter properties: Node's type stripping (node scripts/uat-age.ts) refuses those.
+  readonly aged: AgedRows[];
+  constructor(aged: AgedRows[]) {
     super("dry run");
+    this.aged = aged;
   }
 }
 
@@ -123,7 +128,9 @@ async function fingerprint(trx: Transaction<Database>, item: string): Promise<st
       return sql`(select coalesce(jsonb_agg(to_jsonb(x) - ${drop}::text[] order by (to_jsonb(x) - ${drop}::text[])::text), '[]'::jsonb) from ${sql.table(table)} x where ${all})`;
     });
   const { rows } = await sql<{ f: string }>`select md5(jsonb_build_array(${sql.join(parts)},
-      (select count(*) from work_item_event), (select count(*) from outbox), (select count(*) from notification),
+      -- The item's own events and notifications, and outbox rows this transaction wrote: never another session's.
+      (select count(*) from work_item_event where work_item_id = ${item}::uuid), (select count(*) from notification where work_item_id = ${item}::uuid),
+      (select count(*) from outbox where created_at = now()),
       (select to_jsonb(p) from package p join work_item w on w.package_id = p.id where w.id = ${item}::uuid))::text) as f`.execute(trx);
   return rows[0]!.f;
 }
@@ -148,12 +155,15 @@ async function blockers(trx: Transaction<Database>, item: string): Promise<strin
   ].filter((x): x is string => x !== undefined);
 }
 
-async function ageOne(trx: Transaction<Database>, { id, documentNumber, shiftMs }: AgeItem): Promise<AgedRows> {
-  const { rows: locked } = await sql<{ open: boolean; data_as_arrived: unknown; built_ins_as_arrived: unknown; arrivals: number }>`
-    select closed_at is null and discarded_at is null and document_number is not null as open, data_as_arrived, built_ins_as_arrived, arrivals
+async function ageOne(trx: Transaction<Database>, { id, documentNumber, shiftMs, stepEnteredAt }: AgeItem): Promise<AgedRows> {
+  // The shared answers as text: a trip through JavaScript's numbers could change them (1.50, large integers).
+  const { rows: locked } = await sql<{ open: boolean; step_entered_at: Date; data_as_arrived: string | null; built_ins_as_arrived: string | null; arrivals: number }>`
+    select closed_at is null and discarded_at is null and document_number is not null as open, step_entered_at,
+      data_as_arrived::text as data_as_arrived, built_ins_as_arrived::text as built_ins_as_arrived, arrivals
     from work_item where id = ${id}::uuid for update`.execute(trx);
   const item = locked[0];
   if (!item?.open) throw new AgeRefused(`${documentNumber} is no longer open and numbered: nothing was changed`);
+  if (item.step_entered_at.getTime() !== stepEnteredAt.getTime()) throw new AgeRefused(`${documentNumber} moved to another Step meanwhile: run it again; nothing was changed`);
   const blocking = await blockers(trx, id);
   if (blocking.length > 0) {
     throw new AgeRefused(`${documentNumber} has ${blocking.join(", ")} at its current Step: moving its times would act as if it left. Age it after its next Transition; nothing was changed`);
@@ -169,9 +179,8 @@ async function ageOne(trx: Transaction<Database>, { id, documentNumber, shiftMs 
     changed[table] = Number(result.numAffectedRows ?? 0);
   }
   // app.share_answers_on_leaving cleared these as the item "left"; it did not.
-  const json = (value: unknown) => (value === null ? null : JSON.stringify(value));
-  await sql`update work_item set data_as_arrived = ${json(item.data_as_arrived)}::jsonb,
-      built_ins_as_arrived = ${json(item.built_ins_as_arrived)}::jsonb, arrivals = ${item.arrivals}
+  await sql`update work_item set data_as_arrived = ${item.data_as_arrived}::jsonb,
+      built_ins_as_arrived = ${item.built_ins_as_arrived}::jsonb, arrivals = ${item.arrivals}
     where id = ${id}::uuid`.execute(trx);
   if ((await fingerprint(trx, id)) !== before) throw new Error(`${documentNumber}: a row besides its times changed; everything was rolled back`);
   const { rows: chain } = await sql<{ intact: boolean }>`select app.work_item_chain_intact(${id}::uuid) as intact`.execute(trx);

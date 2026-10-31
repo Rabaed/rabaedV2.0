@@ -4,7 +4,7 @@ import { JOBS, runJob, type JobName, type JobRow } from "../packages/db/dev-tool
 import { createDb } from "../packages/db/src/client.ts";
 import { mailerFromEnv, renderEmail, type Mailer } from "../packages/mailer/src/index.ts";
 import { targetOf } from "./uat-age.ts";
-import { guardedOrExit, loadToolEnv, type Target } from "./uat-guard.ts";
+import { guardedOrExit, loadToolEnv, runCli, type Target } from "./uat-guard.ts";
 
 // `uat:run-job` (RP-922): the daily digest or the weekly Step Age report now, so UAT need not wait for
 // 07:00 Riyadh (digest Sunday to Thursday, report Sunday). Dev and UAT only (scripts/uat-guard.ts):
@@ -102,14 +102,4 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
-    (error: unknown) => {
-      // A database error by its code only: its text can quote row values.
-      const code = typeof error === "object" && error !== null && "code" in error ? ` (database error ${String(error.code)})` : "";
-      console.error(`uat:run-job: ${code ? "the database refused" : (error as Error).message}${code}`);
-      process.exit(1);
-    },
-  );
-}
+if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) runCli("uat:run-job", main);

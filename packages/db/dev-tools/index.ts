@@ -31,7 +31,10 @@ export async function findAgeCandidates(db: Db, texts: string[]): Promise<AgeCan
     select id, document_number, title, closed_at is not null or discarded_at is not null as closed, step_entered_at, participant_entered_at
     from work_item w
     where exists (select 1 from unnest(${texts.map(containing)}::text[]) p where w.document_number ilike p or w.title ilike p)
-    order by w.document_number nulls last, w.title, w.id
+    -- Exact matches first, so the limit never hides the one asked for.
+    order by (upper(w.document_number) = any(${texts.map((t) => t.trim().toUpperCase())}::text[])
+      or lower(btrim(w.title)) = any(${texts.map((t) => t.trim().toLowerCase())}::text[])) desc,
+      w.document_number nulls last, w.title, w.id
     limit 500`.execute(db);
   return rows.map((r) => ({
     id: r.id,

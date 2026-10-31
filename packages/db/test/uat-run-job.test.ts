@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runJob, type JobConnections } from "../dev-tools/index.ts";
 import { createDb, notificationDigestHandler, runScheduledJobs, stepAgeReportHandler, weeklyStepAgeReportJob, type Db } from "../src/index.ts";
 import { buildSeamTwoTower, drainOutbox, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
-import { addSubmittalType, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
+import { addSubmittalType, assignHolders as holdersOfAssign, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
 import { statementRoles } from "../test-support/statement-roles.ts";
 
 const urls = testDatabaseUrls();
@@ -41,14 +41,7 @@ const queuedFor = async (kind: string, id: string) =>
     (await migrator.query<{ n: string }>("select count(*) as n from outbox where kind = $1 and processed_at is null and payload ->> 'member_id' = $2", [kind, id])).rows[0]!.n,
   );
 /** The tower's Members holding Assign on its Project, by email. */
-async function assignHolders(): Promise<string[]> {
-  const { rows } = await migrator.query<{ email: string }>(
-    `select m.email from project_member pm join member m on m.id = pm.member_id
-     where pm.project_id = $1 and pm.status = 'active' and app.project_member_holds_assign(pm.id) order by m.email`,
-    [tower.projectId],
-  );
-  return rows.map((r) => r.email);
-}
+const assignHolders = () => holdersOfAssign(migrator, tower.projectId);
 /** Every Member of the tower's Project, by email. */
 async function towerMembers(): Promise<string[]> {
   const { rows } = await migrator.query<{ email: string }>(
