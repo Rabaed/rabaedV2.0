@@ -10,9 +10,11 @@
 -- disagreed. Now they read one rule:
 --
 -- * After the close, the other Participants read the rows the item had at its last arrival with them:
---   added before the arrival the close follows, `arrival < arrivals - 1` (the close counts one arrival
---   itself, app.share_answers_on_leaving), as the Record. A Link removed during that arrival is gone for
---   everyone, as before (app.drop_removed_links_on_leaving; RP-1149 to decide otherwise).
+--   every row but those added during the arrival the close follows, `arrival <> arrivals - 1` (the close
+--   counts one arrival itself, app.share_answers_on_leaving), so those added before it, as the Record,
+--   and those Rabaed adds after the close (a Revision's chain Links to its closed original, stamped with
+--   the close's own arrival), as before. A Link removed during that arrival is gone for everyone, as
+--   before (app.drop_removed_links_on_leaving; RP-1149 to decide otherwise).
 -- * The Participant that held the item at the close keeps reading what it added, as while it held it:
 --   app.held_at_close, a Step of one of the acting Member's Participants done at the close. Every close
 --   writes it so: app.take_transition's effects mark the Step it closes from done, and the cancel of
@@ -76,8 +78,9 @@ create or replace function app.item_row_as_arrived(p_work_item_id uuid, p_arriva
       return exists (
         select 1 from work_item w
         where w.id = p_work_item_id
-          -- The close counts one arrival itself, so a closed item's last arrival is `arrivals - 1`.
-          and p_arrival < case when w.closed_at is null then w.arrivals else w.arrivals - 1 end
+          -- The close counts one arrival itself, so a closed item's last arrival is `arrivals - 1`; a row
+          -- of the close's own arrival was added after it, by Rabaed (a Revision's chain Link), for everyone.
+          and case when w.closed_at is null then p_arrival < w.arrivals else p_arrival <> w.arrivals - 1 end
       );
     end
   $$;
@@ -104,6 +107,7 @@ grant execute on function app.document_seen(uuid, integer, uuid) to rabaed_app;
 alter policy member_reads_documents on document
   using (confirmed_at is not null and removed_at is null
     and project_id in (select app.current_project_ids())
+    and app.sees_work_item(work_item_id)
     and app.document_seen(work_item_id, arrival, reply_event_id));
 
 -- As in 20271101000000_reply_files_event_audience.sql, through app.document_seen (as the policy).
@@ -153,7 +157,7 @@ create or replace function app.work_item_shared_documents(p_work_item_id uuid) r
         where d.work_item_id = p_work_item_id and app.sees_work_item(w.id) and w.submitted_at is not null
           and d.confirmed_at is not null and d.removed_at is null
           and (case when w.closed_at is null then d.arrival < w.arrivals
-            else d.arrival < w.arrivals - 1 or d.reply_event_id is not null end)
+            else d.arrival <> w.arrivals - 1 or d.reply_event_id is not null end)
           and app.reply_event_shared(d.work_item_id, d.reply_event_id);
     end
   $$;
@@ -172,7 +176,7 @@ create or replace function app.work_item_shared_links(p_work_item_id uuid)
         join work_item f on f.id = l.from_id
         join work_item t on t.id = l.to_id
         where l.from_id = p_work_item_id and app.sees_work_item(f.id) and f.submitted_at is not null
-          and l.arrival < case when f.closed_at is null then f.arrivals else f.arrivals - 1 end
+          and case when f.closed_at is null then l.arrival < f.arrivals else l.arrival <> f.arrivals - 1 end
           and t.document_number is not null and not app.chain_item_unshared(f.id, t.id)
         -- hidden-sort-key: main's order, unchanged; the order they were added, never a time, which app.work_item_links already gives every reader (floored at the Creation Date, RP-399)
         order by l.created_at, t.document_number collate "C", l.id;
