@@ -747,7 +747,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         w.paper_ref, coalesce(st.category = 'draft', false) as draft_step,
         wf.name as workflow_name, wf.version_no as workflow_version_no, ty.module_key,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
-        -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022).
+        -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022;
+        -- db-mask: app.work_item_holder_unchecked, so app.work_item_holder gives them no holder either).
         raiser.legal_name as raised_by, coalesce(app.with_owner_review(w.id), holder.legal_name) as held_by, m.full_name as holder_name,
         pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, app.sent_back_for_comment(w.id) as sent_back_for_comment, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,

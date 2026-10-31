@@ -46,6 +46,7 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       join app.work_item_workflow(w.id) wf on true
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
+      -- db-mask: app.work_item_holder_unchecked (app.work_item_holder gives no holder where this label is read).
       cross join lateral (select app.with_owner_review(w.id) as label) r
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
