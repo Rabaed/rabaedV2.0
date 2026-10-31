@@ -15,7 +15,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, joinProject, testDatabaseUrls, type TestWorkflowOptions } from "../test-support/index.ts";
+import { addTestWorkflow, expectHiddenFrom, joinProject, testDatabaseUrls, type TestWorkflowOptions } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -379,6 +379,20 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
       ).then((rows) => rows.map((r) => r.key));
     expect(await moves(k1.member)).toContain("send_to_manager");
     expect(await moves(c1Pm)).not.toContain("send_to_manager");
+    // The events policy itself keeps K1's internal move from C1: the event, by its id, whatever it says.
+    const internalMove = (
+      await migrator.query(
+        "select e.id from work_item_event e join workflow_transition tr on tr.id = e.transition_id where e.work_item_id = $1 and tr.key = 'send_to_manager'",
+        [item.id],
+      )
+    ).rows[0].id as string;
+    await expectHiddenFrom({
+      read: (as: string) => call<{ id: string }>(as, sql`select id from work_item_event where work_item_id = ${item.id}::uuid`),
+      target: internalMove,
+      seenBy: k1.member,
+      hiddenFrom: c1Pm,
+      label: "K1's internal move",
+    });
     const [seen] = await call<{ key: string }>(
       c1Pm,
       sql`select s.key from app.step_as_seen(${item.id}::uuid) seen join workflow_step s on s.id = seen.step_id`,

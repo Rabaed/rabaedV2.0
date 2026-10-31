@@ -33,8 +33,13 @@ create function app.event_transitions(p_event_ids uuid[])
     #variable_conflict use_column
     declare
       v_own uuid[];
+      v_seen uuid[];
     begin
       v_own := array(select app.current_participant_ids());
+      -- The items the reader sees, each asked once, however many of its events are asked about.
+      v_seen := array(
+        select i.work_item_id from (select distinct x.work_item_id from work_item_event x where x.id = any (p_event_ids)) i
+        where app.sees_work_item(i.work_item_id));
       return query
         select e.id,
           -- The Transition and the Step it left are the actor's own Participant's (V5, V14): a Transition
@@ -49,7 +54,7 @@ create function app.event_transitions(p_event_ids uuid[])
           -- As the events policy: never the `created` event (the Draft's start), only an item the reader
           -- sees, and a shared event or one internal to the reader's own Participant (V5).
           and e.type <> 'created'
-          and app.sees_work_item(e.work_item_id)
+          and e.work_item_id = any (v_seen)
           and (e.audience = 'shared' or e.audience_participant_id = any (v_own));
     end
   $$;
