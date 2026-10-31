@@ -65,7 +65,7 @@ export async function inlinePhotos(
  * The Form's and Documents' assets: the listed Documents' page counts and the Form's photos inlined. A
  * Working Copy prints these only (RP-621: no Signature, logo or Stamp); the record adds its marks below.
  */
-export async function formAssets(facts: Pick<RecordFacts, "form" | "documents">, files: RecordFiles): Promise<DocumentAssets> {
+export async function formAssets(facts: Pick<RecordFacts, "form" | "documents"> & Partial<Pick<RecordFacts, "transitions">>, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
   for (const d of facts.documents) {
