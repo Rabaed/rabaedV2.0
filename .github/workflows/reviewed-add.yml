@@ -1,7 +1,8 @@
 name: Reviewed add
 # Adds the `reviewed` label when the PR's head has both a /code-review summary comment
-# (`<!-- code-review: <sha> -->`, by a user with write access to the repo) and a stamped verify
-# line in the body (RP-1118, owner's option b on RP-1098: no session labels its own PR).
+# (`<!-- code-review: <sha> -->`, by a user with write access to the repo) and a passing verify:
+# a stamped verify line in the body, or CI green on that exact head for a PR that changes none of
+# CI's own files (RP-1118, RP-1190; owner's option b on RP-1098: no session labels its own PR).
 # The rule is scripts/reviewed-add.ts; it waits for the head's reviewed-label run first,
 # and re-runs the head's reviewed-required run, since a label added with GITHUB_TOKEN
 # starts no `labeled` run.
@@ -19,6 +20,12 @@ on:
   issue_comment:
     # The /code-review summary comment, posted by scripts/review-post.ts.
     types: [created, edited]
+  # CI finished on a PR's head (RP-1190): CI green counts as the verify, so the script adds the
+  # label then, and re-runs the head's verify-gate run, which ran before CI had finished.
+  # workflow_run runs this file and the script from the default branch.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 permissions: {}
 jobs:
   reviewed-add:
@@ -32,19 +39,25 @@ jobs:
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
       contains(github.event.comment.body, '<!-- code-review: ') &&
-      github.event.comment.user.type == 'User')
+      github.event.comment.user.type == 'User') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
     # On the job, not the workflow: a skipped job (any other comment) never joins the group, so
     # it cannot replace a pending run that matters. One run per PR at a time; never cancelled,
     # since a run may be mid-way through adding the label, and two re-runs of one
-    # reviewed-required run at once would fail.
+    # reviewed-required run at once would fail. A CI run names its PR in pull_requests: empty for
+    # a fork's (which the if: above skips), and now and then otherwise (a closed PR, a moved head),
+    # when the script does nothing. Its head sha keys the group then.
     concurrency:
-      group: reviewed-add-${{ github.event.pull_request.number || github.event.issue.number }}
+      group: reviewed-add-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     # Two waits of up to 1500 s each (the reviewed-label run, then the reviewed-required run).
     timeout-minutes: 60
     # The script's read of a comment author's permission (collaborators/{login}/permission)
-    # needs only metadata: read, which every GITHUB_TOKEN has.
+    # needs only metadata: read, which every GITHUB_TOKEN has. actions: write is for the re-runs of
+    # reviewed-required and verify-gate; it also covers reading the head's CI run and its jobs.
     permissions:
       contents: read
       pull-requests: write
@@ -64,7 +77,7 @@ jobs:
         run: |
           echo "::error::scripts/reviewed-add.ts is missing on the default branch; reviewed-add cannot label this PR"
           exit 1
-      - name: Add the reviewed label when the review and the verify line name the head
+      - name: Add the reviewed label when the review and the verify (stamped line or CI green) name the head
         run: node scripts/reviewed-add.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
