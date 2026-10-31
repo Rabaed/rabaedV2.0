@@ -143,7 +143,12 @@ describe("argumentValue", () => {
     expect(value("p_lock", "boolean")).toBe(false);
     expect(value("p_limit", "integer")).toBe(50);
     expect(value("p_keys", "text[]")).toEqual([]);
-    expect(value("p_token_hash", "bytea")).toEqual(Buffer.from([0]));
+    expect(value("p_token_hash", "bytea")).toEqual(Buffer.alloc(32)); // a SHA-256's length, which the hash arguments check
+    expect(value("p_because", "text")).toBe("removed");
+    expect(value("p_mime", "text")).toBe("image/png");
+    expect(value("p_base_role", "text")).toBe("contractor");
+    expect(value("p_name", "jsonb")).toBe('{"en":"x","ar":"x"}');
+    expect(value("p_engineer_id", "uuid")).toBeNull();
     expect(value("p_window", "interval")).toBe("1 day");
     expect(typeof value("p_idempotency_key", "uuid")).toBe("string");
   });

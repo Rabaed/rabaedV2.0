@@ -48,6 +48,38 @@ export const skippedNames = (allow: readonly AllowEntry[]) => new Set(allow.filt
  * (the ratchet), and an entry that excuses nothing, or names a function that is gone, fails the sweep too.
  */
 export const SWEEP_ALLOW: readonly AllowEntry[] = [
+  // The outbox worker's functions refuse any session with a Member set (`if app.current_member_id() is not null then
+  // raise 'only the worker processes the outbox'`), so no Member reaches what they read; their errors are still searched.
+  ...[
+    "claim_scheduled_run",
+    "clean_previewed_register_imports",
+    "deliver_notification",
+    "deliver_record_ready",
+    "documental_record_facts",
+    "documental_record_reproduction_source",
+    "enqueue_notification_digests",
+    "enqueue_step_age_reports",
+    "finish_documental_record",
+    "hold_outbox_row",
+    "outbox_failed",
+    "outbox_processed",
+    "outbox_stats",
+    "reproduce_documental_record",
+    "save_documental_record",
+    "save_documental_record_face",
+    "save_snag_report",
+    "save_working_copy",
+    "snag_report_job",
+    "take_notification_digest",
+    "take_notification_email",
+    "take_outbox_row",
+    "take_step_age_report",
+    "working_copy_job",
+  ].map((fn) => ({ name: `app.${fn}`, errors: "the outbox worker's: it refuses every session with a Member set, so no Member reaches it" })),
+  { name: "app.set_company_image", errors: "writes the caller's own Company's logo or Stamp (p_kind 'logo' or 'stamp'; the sweep gives p_kind 'trade', which the dimension functions need)" },
+  { name: "app.set_member_signature", errors: "writes the caller's own Signature, from a storage key under their own Signatures that no world has" },
+  { name: "app.set_list_columns", errors: "writes the caller's own List columns; a generic '{}' fails its check constraint, and it reads no one else's row" },
+  { name: "app.set_member_appearance", errors: "writes the caller's own theme and mode; a generic 'x' fails its check constraint, and it reads no one else's row" },
   {
     name: "app.form_participant_choices",
     kinds: ["participant"],
@@ -173,6 +205,8 @@ export function argumentValue(arg: CatalogArgument, world: SweepWorld, viewer: S
     if (/^p_participant(_id)?$/.test(name)) return viewer.participant;
     if (/^p_((from|to)_)?member_id$|^p_assign_to$/.test(name)) return viewer.member;
     if (name === "p_company_id") return viewer.company;
+    // A Member's session names no Rabaed Engineer.
+    if (name === "p_engineer_id") return null;
     return unrelatedId;
   }
   if (type === "uuid[]") {
@@ -184,14 +218,18 @@ export function argumentValue(arg: CatalogArgument, world: SweepWorld, viewer: S
     if (name === "p_type_code") return world.typeCode;
     if (name === "p_q" || name === "p_title") return world.title;
     if (name === "p_email") return viewer.email;
+    if (name === "p_because") return "removed"; // a Handover reason
+    if (name === "p_mime") return "image/png";
+    if (name === "p_base_role" || name === "p_raiser_role") return "contractor";
     return "x";
   }
   if (type.endsWith("[]")) return [];
   if (/^timestamp/.test(type) || type === "date") return new Date();
+  if ((type === "jsonb" || type === "json") && /^p_(full_)?name$/.test(name)) return JSON.stringify({ en: "x", ar: "x" });
   if (type === "jsonb" || type === "json") return "{}";
   if (type === "boolean") return false;
   if (/^(integer|smallint|bigint|numeric|double precision|real)$/.test(type)) return name === "p_limit" ? 50 : name === "p_arrival" ? 0 : 1;
-  if (type === "bytea") return Buffer.from([0]);
+  if (type === "bytea") return Buffer.alloc(32); // a SHA-256's length: the token and visitor hashes check it
   if (type === "interval") return "1 day";
   return null;
 }
