@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CiRun } from "./ci-green.ts";
 import { BASELINE_BOT_EMAIL, type ReviewedGit } from "./reviewed-label.ts";
 import { needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
@@ -136,11 +137,86 @@ describe("requireVerified", () => {
         fetched.push(pr);
       },
       changedFiles: () => ["scripts/x.ts"],
+      packageJsonVersions: () => ({ before: undefined, after: undefined }),
+      requiredChecks: async () => ["lint", "unit", "verify-gate"],
+      ciRuns: async () => [],
       ...overrides,
     };
     return { seam, fetched };
   }
   const prEvent = { kind: "pull_request" as const, pr: 7, headSha: "abc1234", sameRepo: true, draft: false };
+
+  describe("CI green on the head (RP-1190)", () => {
+    const HEAD = "d".repeat(40);
+    const event = { ...prEvent, headSha: HEAD };
+    const ciRun = (status: string, conclusion: string | null): CiRun => ({
+      id: 77,
+      headSha: HEAD,
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      status,
+      conclusion,
+      repo: "Rabaed/rabaedV2.0",
+      headRepo: "Rabaed/rabaedV2.0",
+      jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
+    });
+    const noLine = { pull: async () => ({ body: "", headSha: HEAD, labels: ["reviewed"] }) };
+
+    it("passes with no verify line when CI passed on the head", async () => {
+      const { seam } = fakeGate({ ...noLine, ciRuns: async () => [ciRun("completed", "success")] });
+      const result = await requireVerified(event, seam);
+      expect(result).toEqual({ ok: true, summary: `PR #7: CI passed on its head ${HEAD} (run 77), and it changes none of CI's own files: passes.` });
+    });
+
+    it("needs the stamped line when the PR edits ci.yml, however green CI is", async () => {
+      const { seam } = fakeGate({ ...noLine, changedFiles: () => [".github/workflows/ci.yml", "scripts/x.ts"], ciRuns: async () => [ciRun("completed", "success")] });
+      const result = await requireVerified(event, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("CI's own files (.github/workflows/ci.yml)");
+      expect(result.summary).toContain("pnpm verify --pr 7");
+    });
+
+    it("fails while CI runs, saying how many jobs are left", async () => {
+      const { seam } = fakeGate({ ...noLine, ciRuns: async () => [ciRun("in_progress", null)] });
+      const result = await requireVerified(event, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain(`CI still running on ${HEAD}: 2 jobs left (lint, unit)`);
+    });
+
+    it("fails on an API error, naming it", async () => {
+      const { seam } = fakeGate({
+        ...noLine,
+        requiredChecks: async () => {
+          throw new Error("GitHub GET rules/branches/main answered 403");
+        },
+      });
+      const result = await requireVerified(event, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("403");
+    });
+
+    it("reads a package.json's scripts at the merge base and the head", async () => {
+      const asked: string[] = [];
+      const { seam } = fakeGate({
+        ...noLine,
+        changedFiles: () => ["package.json"],
+        packageJsonVersions: (head, file) => (asked.push(`${head} ${file}`), { before: '{"scripts":{"test:unit":"vitest"}}', after: '{"scripts":{"test:unit":"true"}}' }),
+        ciRuns: async () => [ciRun("completed", "success")],
+      });
+      const result = await requireVerified(event, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("package.json (scripts)");
+      expect(asked).toEqual([`${HEAD} package.json`]);
+    });
+
+    it("in the merge queue, reads CI on the PR's pinned head", async () => {
+      const heads: string[] = [];
+      const { seam } = fakeGate({ ...noLine, ciRuns: async (head) => (heads.push(head), [ciRun("completed", "success")]) });
+      const result = await requireVerified({ kind: "merge_group", headRef: "refs/heads/gh-readonly-queue/main/pr-7-0123abc" }, seam);
+      expect(result.ok).toBe(true);
+      expect(heads).toEqual([HEAD]);
+    });
+  });
 
   it("passes a PR whose body has a stamped line for the event's head", async () => {
     const { seam, fetched } = fakeGate();

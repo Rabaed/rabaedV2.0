@@ -1,0 +1,255 @@
+/* eslint-disable rabaed/no-avoid-terms -- GitHub's required checks, workflow runs and jobs, by their own names, as in reviewed-required.ts */
+
+// CI green counts as the verify (RP-1190, owner's decision of 2026-10-31: "I agree if CI of GitHub do it the
+// test"). A PR's head passes the verify gate when the stamped `pnpm verify` line names it (RP-1094, still
+// accepted) or when GitHub CI's `ci.yml` run on `pull_request` for that exact head finished green: every check
+// the main ruleset requires that ci.yml reports passed, none skipped. One rule for the verify-gate check,
+// reviewed-add and `pnpm queue`; each reads the evidence its own way and asks `verifiedOrGreen` (verify-gate.ts).
+//
+// A PR must not weaken its own gate: `pull_request` runs the PR's own copy of ci.yml, its configs and the
+// scripts it calls, so a PR could rename or empty a job. A CI run does not count for a PR that changes any of
+// CI's own files (`CI_OWN_FILES`, and a package.json's `scripts`); it needs the stamped line. Any API error,
+// missing data or doubt refuses. A fork's run never counts.
+
+/** The workflow whose runs count, by its path (as a run reports it) and its file name (as the API names it). */
+export const CI_WORKFLOW = ".github/workflows/ci.yml";
+const CI_WORKFLOW_FILE = "ci.yml";
+
+/**
+ * Required checks of the main ruleset that another workflow reports, with that workflow: not ci.yml jobs, so a
+ * CI run is not held to them. Every other required check must be a job of the run. A check added to the ruleset
+ * from a new workflow makes every CI run refuse until it is named here (fail closed).
+ */
+export const OTHER_REQUIRED_CHECKS: Readonly<Record<string, string>> = {
+  "verify-gate": ".github/workflows/verify-gate.yml",
+  "reviewed-required": ".github/workflows/reviewed-required.yml",
+  gitleaks: ".github/workflows/secret-scan.yml",
+};
+
+/**
+ * CI's own files: what decides what CI runs and how it judges it. A change to one voids the PR's CI run as a
+ * verify. A leading `**` and slash is any folder, `*` anything but a slash. ci-green.test.ts checks that every script and local
+ * action ci.yml runs, every vitest global setup, and every scripts/ file those scripts import is here. App code
+ * and tests are not: CI tests them, and review reads them. A package.json counts when its `scripts` change
+ * (`ciOwnChanges`): CI calls `pnpm test:unit` and the like, and `pnpm install` runs lifecycle scripts.
+ */
+export const CI_OWN_FILES: readonly string[] = [
+  CI_WORKFLOW,
+  ".github/actions/**",
+  "**/vitest.config.*",
+  "**/vitest.workspace.*",
+  "**/vite.config.*",
+  "**/playwright.config.*",
+  "eslint.config.*",
+  "pnpm-workspace.yaml",
+  ".npmrc",
+  // The vitest configs' global setups.
+  "scripts/test-services.ts",
+  "packages/db/test-support/global-setup.ts",
+  "apps/api/test/support/seed-demo.ts",
+  // The scripts ci.yml and the root scripts run, and the scripts/ files they import.
+  "scripts/check-migration-drift.ts",
+  "scripts/check-migrations-hidden-sort.ts",
+  "scripts/check-migrations-immutable.ts",
+  "scripts/check-workflows.ts",
+  "scripts/claude-sessions.ts",
+  "scripts/desktop-sessions.ts",
+  "scripts/docs-only.ts",
+  "scripts/hidden-columns.ts",
+  "scripts/lanes.ts",
+  "scripts/migrations.ts",
+  "scripts/new-screenshots-reporter.ts",
+  "scripts/paths.ts",
+  "scripts/pnpm.ts",
+  "scripts/reviewed-label.ts",
+  "scripts/reviewed-required.ts",
+  "scripts/session-lock.ts",
+  "scripts/story-run.ts",
+  "scripts/test-timing.ts",
+  "scripts/typecheck.ts",
+  "scripts/worktrees-stale.ts",
+  "scripts/worktrees.ts",
+];
+
+const globPattern = (glob: string) =>
+  new RegExp(
+    `^${glob
+      .split(/(\*\*\/|\*\*|\*)/)
+      .map((part) => (part === "**/" ? "(?:.*/)?" : part === "**" ? ".*" : part === "*" ? "[^/]*" : part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")))
+      .join("")}$`,
+  );
+const OWN = CI_OWN_FILES.map(globPattern);
+
+/** True for a path in `CI_OWN_FILES`. */
+export const isCiOwnFile = (path: string): boolean => OWN.some((pattern) => pattern.test(path));
+
+const scriptsOf = (text: string | undefined): string | undefined => {
+  if (text === undefined) return JSON.stringify({});
+  try {
+    return JSON.stringify((JSON.parse(text) as { scripts?: unknown }).scripts ?? {});
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The changed paths that are CI's own: `CI_OWN_FILES`, and each package.json whose `scripts` differ between the
+ * merge base and the head (`versions`, as `pnpm queue` reads them); one it cannot parse counts.
+ */
+export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
+  return changed.flatMap((path) => {
+    if (isCiOwnFile(path)) return [path];
+    if (path !== "package.json" && !path.endsWith("/package.json")) return [];
+    const { before, after } = versions(path);
+    const [was, now] = [scriptsOf(before), scriptsOf(after)];
+    return was === undefined || now === undefined || was !== now ? [`${path} (scripts)`] : [];
+  });
+}
+
+export interface CiJob {
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
+/** A workflow run, with its latest jobs. */
+export interface CiRun {
+  id: number;
+  headSha: string;
+  event: string;
+  /** The workflow file the run used: `.github/workflows/ci.yml`. */
+  path: string;
+  status: string;
+  conclusion: string | null;
+  /** The repository the run belongs to, and the one its head came from (undefined: a deleted fork). */
+  repo: string;
+  headRepo: string | undefined;
+  jobs: CiJob[];
+}
+
+/** What CI shows for a head: the ruleset's required checks and the head's runs, or the error that stopped the read. */
+export type CiEvidence = { required: string[]; runs: CiRun[] } | { error: string };
+
+export type CiVerdict = { state: "green"; runId: number } | { state: "running"; left: string[] } | { state: "refused"; reason: string };
+
+/** The line `pnpm queue` and the checks print while CI runs. */
+export const ciRunningLine = (head: string, left: string[]) => `CI still running on ${head}: ${left.length} ${left.length === 1 ? "job" : "jobs"} left (${left.join(", ")})`;
+
+const passed = (job: CiJob | undefined) => job?.status === "completed" && job.conclusion === "success";
+
+/** Whether CI green on `head` counts as its verify; `ownChanges` is `ciOwnChanges` of the PR. */
+export function ciVerdict(head: string, ownChanges: string[], evidence: CiEvidence): CiVerdict {
+  const refused = (reason: string): CiVerdict => ({ state: "refused", reason });
+  if (ownChanges.length > 0) return refused(`it changes CI's own files (${ownChanges.join(", ")}), so its CI run, which used the PR's own copy of them, does not count: it needs a stamped verify line`);
+  if ("error" in evidence) return refused(`could not read CI on ${head}: ${evidence.error.trim()}`);
+  const required = evidence.required.filter((name) => !(name in OTHER_REQUIRED_CHECKS));
+  if (required.length === 0) return refused("the main ruleset names no required check that ci.yml reports, so there is nothing to hold its CI run to");
+  const onHead = evidence.runs.filter((run) => run.headSha === head && run.event === "pull_request" && run.path === CI_WORKFLOW);
+  const ours = onHead.filter((run) => run.headRepo !== undefined && run.headRepo === run.repo);
+  if (ours.length === 0) {
+    return refused(onHead.length > 0 ? `its only CI runs on ${head} are from a fork, which never count` : `no CI (${CI_WORKFLOW}) pull_request run on its head ${head} yet`);
+  }
+  const jobOf = (run: CiRun, name: string) => run.jobs.find((job) => job.name === name);
+  const green = ours.find((run) => run.status === "completed" && run.conclusion === "success" && required.every((name) => passed(jobOf(run, name))));
+  if (green) return { state: "green", runId: green.id };
+  const running = ours.find((run) => run.status !== "completed");
+  if (running) return { state: "running", left: required.filter((name) => !passed(jobOf(running, name))) };
+  const [latest] = ours;
+  if (latest === undefined) return refused(`no CI run on ${head}`);
+  const bad = required.flatMap((name) => {
+    const job = jobOf(latest, name);
+    return job === undefined ? [`${name} (not in the run)`] : passed(job) ? [] : [`${name} (${job.conclusion ?? job.status})`];
+  });
+  return refused(`its CI run ${latest.id} on ${head} ended ${latest.conclusion ?? latest.status}${bad.length > 0 ? `: ${bad.join(", ")}` : ""}`);
+}
+
+/** How the checks read CI: the main ruleset's required checks, and the head's ci.yml pull_request runs with their jobs. */
+export interface CiReads {
+  requiredChecks(): Promise<string[]>;
+  ciRuns(head: string): Promise<CiRun[]>;
+}
+
+const errorOf = (error: unknown): CiEvidence => ({ error: error instanceof Error ? error.message : String(error) });
+
+/** `read`'s evidence; any error becomes `{ error }`, which `ciVerdict` refuses (for `pnpm queue`'s gh calls, which are synchronous). */
+export function ciEvidenceOf(read: () => { required: string[]; runs: CiRun[] }): CiEvidence {
+  try {
+    return read();
+  } catch (error) {
+    return errorOf(error);
+  }
+}
+
+/** The evidence for `head`; any error becomes `{ error }`, which `ciVerdict` refuses. */
+export async function readCiEvidence(head: string, reads: CiReads): Promise<CiEvidence> {
+  try {
+    const required = await reads.requiredChecks();
+    return { required, runs: await reads.ciRuns(head) };
+  } catch (error) {
+    return errorOf(error);
+  }
+}
+
+const PER_PAGE = 100;
+
+/** The API paths (under `repos/{owner}/{repo}/`) CI is read from, for the HTTP reads here and `pnpm queue`'s gh. */
+export const RULES_PATH = "rules/branches/main";
+export const ciRunsPath = (head: string) => `actions/workflows/${CI_WORKFLOW_FILE}/runs?head_sha=${head}&event=pull_request&per_page=${PER_PAGE}`;
+export const ciJobsPath = (runId: number) => `actions/runs/${runId}/jobs?filter=latest&per_page=${PER_PAGE}`;
+
+/** The required checks in the answer of `RULES_PATH`. */
+export const requiredFromRules = (answer: unknown): string[] =>
+  (answer as { type: string; parameters?: { required_status_checks?: { context: string }[] } }[])
+    .filter((rule) => rule.type === "required_status_checks")
+    .flatMap((rule) => (rule.parameters?.required_status_checks ?? []).map((check) => check.context));
+
+interface RawRun {
+  id: number;
+  head_sha: string;
+  event: string;
+  path: string;
+  status: string;
+  conclusion: string | null;
+  repository: { full_name: string };
+  head_repository: { full_name: string } | null;
+}
+
+/** The runs in the answer of `ciRunsPath`. */
+export const runsFrom = (answer: unknown): RawRun[] => (answer as { workflow_runs: RawRun[] }).workflow_runs;
+
+/** A run from `runsFrom` with the answer of its `ciJobsPath`; throws when the jobs did not fit on one page. */
+export function ciRunFrom(run: RawRun, jobsAnswer: unknown): CiRun {
+  const { total_count: total, jobs } = jobsAnswer as { total_count: number; jobs: CiJob[] };
+  // One page holds every job ci.yml has; more would mean jobs this read never saw.
+  if (total > jobs.length) throw new Error(`run ${run.id} has ${total} jobs, more than one page of ${PER_PAGE}`);
+  return {
+    id: run.id,
+    headSha: run.head_sha,
+    event: run.event,
+    path: run.path,
+    status: run.status,
+    conclusion: run.conclusion,
+    repo: run.repository.full_name,
+    headRepo: run.head_repository?.full_name,
+    jobs: jobs.map(({ name, status, conclusion }) => ({ name, status, conclusion })),
+  };
+}
+
+/** `CiReads` over GitHub's REST API with the workflow's token (needs `actions: read`). */
+export function ciOverHttp(repository: string, token: string, fetcher: typeof fetch = fetch): CiReads {
+  const get = async (path: string): Promise<unknown> => {
+    const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+    });
+    if (!response.ok) throw new Error(`GitHub GET ${path} answered ${response.status}`);
+    return response.json();
+  };
+  return {
+    requiredChecks: async () => requiredFromRules(await get(RULES_PATH)),
+    async ciRuns(head) {
+      const all: CiRun[] = [];
+      for (const run of runsFrom(await get(ciRunsPath(head)))) all.push(ciRunFrom(run, await get(ciJobsPath(run.id))));
+      return all;
+    },
+  };
+}

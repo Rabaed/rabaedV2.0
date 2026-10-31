@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { CiRun } from "./ci-green.ts";
 import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
@@ -35,6 +36,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
     requiredChecks: () => [],
+    ciRuns: () => [],
     checkRuns: () => [],
     commitStatuses: () => [],
     mergeChecks: () => ({ ok: true, skipped: [] }),
@@ -252,7 +254,7 @@ describe("queuePr", () => {
   // RP-1017: PR #288's old head was labelled and green, but `pnpm verify` had found a visibility leak on it.
   describe("verify line (RP-1017)", () => {
     const verifiedOn = (sha: string) => () => `Closes RP-1\n\n${stampLine(`pnpm verify passed on ${sha}: lint, typecheck, unit.`)}`;
-    const fix = "Fix: run `pnpm verify` on abc1234";
+    const fix = "or run `pnpm verify` on abc1234";
 
     it("refuses a PR whose body has no verify line, naming the head that needs a run", () => {
       const { seam, enqueued } = fakeSeam({ body: () => "## Summary\n\nNo verify run yet." });
@@ -352,6 +354,105 @@ describe("queuePr", () => {
       const result = await queuePrWhenChecksPass(149, seam, { sleep: async () => {} });
       expect(result.ok).toBe(false);
       expect(result.lines.join("\n")).toContain(fix);
+      expect(enqueued).toEqual([]);
+    });
+  });
+
+  // RP-1190: CI green on the exact head counts as the verify; the rule is scripts/ci-green.ts's, here only that the queue applies it.
+  describe("CI green instead of the verify line (RP-1190)", () => {
+    const ciRun = (status: string, conclusion: string | null, overrides: Partial<CiRun> = {}): CiRun => ({
+      id: 88,
+      headSha: "abc1234",
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      status,
+      conclusion,
+      repo: "Rabaed/rabaedV2.0",
+      headRepo: "Rabaed/rabaedV2.0",
+      jobs: ["lint", "unit"].map((name) => ({ name, status, conclusion })),
+      ...overrides,
+    });
+    const ci = (...runs: CiRun[]): Partial<QueueSeam> => ({ body: () => "## Summary\n\nNo verify line.", requiredChecks: () => ["lint", "unit", "verify-gate", "reviewed-required"], ciRuns: () => runs });
+
+    it("queues a PR with no verify line when CI passed on its head", () => {
+      const { seam, enqueued } = fakeSeam(ci(ciRun("completed", "success")));
+      expect(queuePr(149, seam).ok).toBe(true);
+      expect(enqueued).toEqual([["PR_node", "abc1234"]]);
+    });
+
+    it("refuses a PR that edits ci.yml without the stamped line, however green CI is", () => {
+      const { seam, enqueued } = fakeSeam({ ...ci(ciRun("completed", "success")), changedFiles: () => [".github/workflows/ci.yml", "scripts/x.ts"] });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("CI's own files (.github/workflows/ci.yml)");
+      expect(result.lines.join("\n")).toContain("pnpm verify --pr 149");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("says CI is still running and how many jobs are left", () => {
+      const { seam, enqueued } = fakeSeam(ci(ciRun("in_progress", null)));
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines[0]).toBe("PR #149: CI still running on abc1234: 2 jobs left (lint, unit).");
+      expect(result.lines.join("\n")).toContain("pnpm queue 149 --wait");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("refuses when CI failed, or the only run is a fork's, naming why", () => {
+      for (const [run, why] of [
+        [ciRun("completed", "failure"), "failure"],
+        [ciRun("completed", "success", { headRepo: "stranger/rabaedV2.0" }), "fork"],
+      ] as const) {
+        const { seam, enqueued } = fakeSeam(ci(run));
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).toContain(why);
+        expect(enqueued).toEqual([]);
+      }
+    });
+
+    it("refuses on a gh error reading CI, naming it, and still queues on a stamped line then", () => {
+      const broken = {
+        ciRuns: () => {
+          throw new Error("gh api actions/workflows/ci.yml/runs failed: HTTP 502");
+        },
+      };
+      const { seam } = fakeSeam({ ...ci(), ...broken });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("HTTP 502");
+      expect(queuePr(149, fakeSeam(broken).seam).ok).toBe(true);
+    });
+
+    it("--wait waits for CI, printing how many jobs are left, excuses verify-gate's early failure, then queues", async () => {
+      let poll = 0;
+      const logged: string[] = [];
+      const runs = [ciRun("in_progress", null), ciRun("in_progress", null, { jobs: [{ name: "lint", status: "completed", conclusion: "success" }] }), ciRun("completed", "success")];
+      const { seam, enqueued } = fakeSeam({
+        ...ci(),
+        requiredChecks: () => ["lint", "unit", "verify-gate"],
+        ciRuns: () => [runs[Math.min(poll, runs.length - 1)] as CiRun],
+        checkRuns: () => {
+          const now = runs[Math.min(poll++, runs.length - 1)] as CiRun;
+          // verify-gate ran at the push, before CI finished, and failed; once CI is green it is re-run and passes.
+          const gate = now.status === "completed" ? { name: "verify-gate", status: "completed", conclusion: "success" } : { name: "verify-gate", status: "completed", conclusion: "failure" };
+          return [...now.jobs.map((job) => ({ name: job.name, status: job.status, conclusion: job.conclusion ?? "" })), gate];
+        },
+      });
+      const result = await queuePrWhenChecksPass(149, seam, { sleep: async () => {}, log: (line) => logged.push(line) });
+      expect(result.ok).toBe(true);
+      expect(logged).toContain("CI still running on abc1234: 2 jobs left (lint, unit).");
+      expect(logged).toContain("CI still running on abc1234: 1 job left (unit).");
+      expect(enqueued).toEqual([["PR_node", "abc1234"]]);
+    });
+
+    it("--wait fails when CI fails while it waits", async () => {
+      let poll = 0;
+      const runs = [ciRun("in_progress", null), ciRun("completed", "failure")];
+      const { seam, enqueued } = fakeSeam({ ...ci(), ciRuns: () => [runs[Math.min(poll++, runs.length - 1)] as CiRun] });
+      const result = await queuePrWhenChecksPass(149, seam, { sleep: async () => {} });
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("failure");
       expect(enqueued).toEqual([]);
     });
   });
@@ -963,6 +1064,20 @@ describe("realSeam", () => {
     expect(rules?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/rules/branches/main"]);
     expect(rules?.join(" ")).toContain("required_status_checks");
     expect(runs?.slice(0, 4)).toEqual(["gh", "api", "--paginate", "repos/{owner}/{repo}/commits/abc1234/check-runs?per_page=100"]);
+  });
+
+  it("reads the head's ci.yml pull_request runs and each run's latest jobs through gh api (RP-1190)", () => {
+    const run = { id: 5, head_sha: "abc1234", event: "pull_request", path: ".github/workflows/ci.yml", status: "completed", conclusion: "success", repository: { full_name: "Rabaed/rabaedV2.0" }, head_repository: { full_name: "Rabaed/rabaedV2.0" } };
+    const { calls, seam } = recorded((_command, args) =>
+      args.some((arg) => arg.includes("/jobs")) ? { status: 0, stdout: JSON.stringify({ total_count: 1, jobs: [{ name: "lint", status: "completed", conclusion: "success", id: 1 }] }) } : { status: 0, stdout: JSON.stringify({ workflow_runs: [run] }) },
+    );
+    expect(seam.ciRuns("abc1234")).toEqual([
+      { id: 5, headSha: "abc1234", event: "pull_request", path: ".github/workflows/ci.yml", status: "completed", conclusion: "success", repo: "Rabaed/rabaedV2.0", headRepo: "Rabaed/rabaedV2.0", jobs: [{ name: "lint", status: "completed", conclusion: "success" }] },
+    ]);
+    expect(calls.map(({ args }) => args.join(" "))).toEqual([
+      "api repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=abc1234&event=pull_request&per_page=100",
+      "api repos/{owner}/{repo}/actions/runs/5/jobs?filter=latest&per_page=100",
+    ]);
   });
 
   it("reads the head's commit statuses through gh api, one JSON line per context", () => {
