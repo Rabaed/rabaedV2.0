@@ -81,9 +81,11 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               {item.move}
             </p>
             {item.who && (item.who.person || item.who.company) && (
-              <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[12.5px] [overflow-wrap:anywhere]">
+              <p className="mt-1 flex items-start gap-1.5 text-[12.5px] [overflow-wrap:anywhere]">
                 {/* The page's History draws the person's initials before the name (RP-1151 row 60); the name is beside it. */}
-                {item.who.avatar && item.who.person && <Avatar name={item.who.person} size="sm" decorative className="me-0.5" />}
+                {item.who.avatar && item.who.person && <Avatar name={item.who.person} size="sm" decorative />}
+                {/* One run of text, so it wraps as words, not part by part. */}
+                <span className="min-w-0 self-center">
                 {/* Name · Position · Company, each part only when given; a Position only with its person. */}
                 {item.who.person && <span className="font-semibold">{item.who.person}</span>}
                 {item.who.person && item.who.position && (
@@ -96,6 +98,7 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
                 )}
                 {item.who.person && item.who.company && <span className="text-muted"> · </span>}
                 {item.who.company && <span className="text-muted">{item.who.company}</span>}
+                </span>
               </p>
             )}
             {item.texts?.map((text) => (
