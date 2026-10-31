@@ -55,6 +55,11 @@ const state = (memberId: string, id: string, project = projectId) =>
     async (trx) =>
       (await sql<{ status: string; storage_key: string | null }>`select status, storage_key from app.snag_report_state(${project}::uuid, ${id}::uuid)`.execute(trx)).rows,
   );
+/** Report `id`'s state as a read by id for expectHiddenFrom: one row naming it when `as` reads its state, none otherwise. */
+const stateById =
+  (id: string, project = projectId) =>
+  (memberId: string) =>
+    state(memberId, id, project).then((rows) => rows.map(() => ({ id })));
 
 /** A report's content holding one item with the photo stored under `key`. */
 const withPhoto = (key: string, row: object = {}) => ({ ...content, items: [{ ...row, photo: { storageKey: key, contentType: "image/jpeg", size: 1 } }] });
@@ -122,14 +127,14 @@ afterAll(async () => {
   await app.destroy();
 });
 
-describe("the snag_report table", () => {
+describe("scenario RP-677-2: the snag_report table", () => {
   it("is not read by the app role at all: the snapshot goes to the worker through its function only", async () => {
     expect(await failure(asker, sql`select * from snag_report`)).toBe("42501");
     expect(await failure(null, sql`select id from snag_report`)).toBe("42501");
   });
 });
 
-describe("a report, from request to PDF", () => {
+describe("scenario RP-677-2: a report, from request to PDF", () => {
   let id = "";
   let outbox = "";
   /** Reports the colleague and the outsider ask for themselves: the positive controls beside each refusal to them. */
@@ -160,13 +165,13 @@ describe("a report, from request to PDF", () => {
 
   it("is preparing to its asker, and nothing to a colleague on the Project, a Member of no Project and a made-up id", async () => {
     expect(await state(asker, id)).toEqual([{ status: "preparing", storage_key: null }]);
-    expect(await state(colleague, id)).toEqual([]);
-    expect(await state(outsider, id)).toEqual([]);
+    await expectHiddenFrom({ read: stateById(id), target: id, seenBy: asker, hiddenFrom: [colleague, outsider], label: "the asker's report" });
     expect(await state(asker, randomUUID())).toEqual([]);
-    // Positive controls: the colleague and the outsider each read their own report, and the asker reads neither.
+    // The colleague and the outsider each read their own report, and the asker reads neither.
     expect(await state(colleague, colleaguesId)).toEqual([{ status: "preparing", storage_key: null }]);
     expect(await state(outsider, outsidersId, outsidersProjectId)).toEqual([{ status: "preparing", storage_key: null }]);
-    expect(await state(asker, colleaguesId)).toEqual([]);
+    await expectHiddenFrom({ read: stateById(colleaguesId), target: colleaguesId, seenBy: colleague, hiddenFrom: asker, label: "the colleague's report" });
+    await expectHiddenFrom({ read: stateById(outsidersId, outsidersProjectId), target: outsidersId, seenBy: outsider, hiddenFrom: asker, label: "the outsider's report" });
     expect(await state(asker, outsidersId)).toEqual([]);
   });
 
@@ -197,8 +202,7 @@ describe("a report, from request to PDF", () => {
     expect(await save()).toBe(true);
     expect(await save()).toBe(false);
     expect(await state(asker, id)).toEqual([{ status: "ready", storage_key: key }]);
-    expect(await state(colleague, id)).toEqual([]);
-    expect(await state(outsider, id)).toEqual([]);
+    await expectHiddenFrom({ read: stateById(id), target: id, seenBy: asker, hiddenFrom: [colleague, outsider], label: "the asker's ready report" });
     expect(await state(colleague, colleaguesId)).toEqual([{ status: "preparing", storage_key: null }]);
     expect(await state(outsider, outsidersId, outsidersProjectId)).toEqual([{ status: "preparing", storage_key: null }]);
     const job = await sql`select * from app.snag_report_job(${outbox}::uuid)`.execute(app);

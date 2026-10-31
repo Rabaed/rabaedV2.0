@@ -124,7 +124,7 @@ beforeAll(async () => {
 });
 
 describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
-  it("C1 adds two at In Progress, keeps them through On Hold and back, resolves; K1 sees them on Verify, and the Resolve's hash covers them", async () => {
+  it("RP-623-3: C1 adds two at In Progress, keeps them through On Hold and back, resolves; K1 sees them on Verify, and the Resolve's hash covers them", async () => {
     const id = await raised("Cable tray not bonded");
     const before = (await documentsOf(at.c1Pm, id)).documents.find((d) => d.fieldKey === "photos")!.id;
     await move(id, "start_work");
@@ -174,7 +174,7 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
     expect(removed.statusCode, removed.body).toBe(409);
   });
 
-  it("after a Return to Open the next Resolve starts empty; the first round's photos stay on the first Resolve", async () => {
+  it("RP-623-3: after a Return to Open the next Resolve starts empty; the first round's photos stay on the first Resolve", async () => {
     const id = await raised("Corner to clean");
     const firstRound = await addAfterPhoto(at.c1Pm, id, "round-1.jpg");
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Cleaned" } });
@@ -183,8 +183,9 @@ describe("a Snag's After photos, in the Resolve Screen (seam 1)", () => {
     // Back with C1: its field is empty, the first round's photo is still the Snag's.
     expect((await afterPhotos(at.c1Pm, id)).map((d) => [d.id, d.reply])).toEqual([[firstRound, { taken: true }]]);
     const secondRound = await addAfterPhoto(at.c1Pm, id, "round-2.jpg");
-    // K1 sees only the first round while C1 works the second.
+    // K1 sees only the first round while C1 works the second: the second is C1's alone until the next Resolve.
     expect((await afterPhotos(at.k1Manager, id)).map((d) => d.id)).toEqual([firstRound]);
+    await expectPhotosHidden(id, [secondRound], [at.c1Pm, at.c1Engineer], [at.k1Manager, owner], "the second round before its Resolve");
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Cleaned behind the door" } });
 
     const resolves = (await history(at.k1Manager, id)).filter((e) => e.transition?.en === "Resolve");
@@ -335,7 +336,7 @@ describe("files no Transition took are discarded when the item leaves the Partic
     await ok(c1.caller.request("DELETE", `/v1/projects/${at.projectId}/workflow-bindings?workItemTypeId=${typeId}`));
   });
 
-  it("C1 adds After photos at In Progress, then Sends it Back to K1: they are gone, for C1 too, and the Send Back's hash leaves them out", async () => {
+  it("RP-623-3: C1 adds After photos at In Progress, then Sends it Back to K1: they are gone, for C1 too, and the Send Back's hash leaves them out", async () => {
     const id = await raised("Which riser?");
     const before = (await documentsOf(at.c1Pm, id)).documents.find((d) => d.fieldKey === "photos")!.id;
     await move(id, "start_work");
