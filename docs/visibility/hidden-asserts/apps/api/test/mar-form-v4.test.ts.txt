@@ -1,0 +1,2 @@
+empty an item pinned to Version 4 (RP-437: Form Sections filled by another Participant retired) > leaves its Consultant verification read-only to the Consultant, who answers in its reply instead :: expect(form.editableSections).toEqual([]);
+empty an item pinned to Version 4 (RP-437: Form Sections filled by another Participant retired) > takes its Code without the section, and everyone reads it empty :: expect(JSON.stringify(seen)).not.toContain("Internal: checked");

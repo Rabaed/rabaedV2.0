@@ -1,0 +1,9 @@
+empty Restrict: who may take it, by Position > offers Send Back to a K1 manager, never to a K1 engineer :: expect(await offered(k1Engineer, id)).not.toContain("send_back");
+empty Restrict: not the same person > hides Approve from the manager who sent it to the Manager; another manager approves :: expect(await offered(k1Manager, id)).not.toContain("approve_a");
+empty Restrict: not the same person > hides the second-pair-of-eyes Submit from the PM who left the Draft :: expect(await offered(pm, id)).not.toContain("submit_separate");
+text Restrict: not the same person keeps that Member from holding the next Step > leaves the manager who sent it to the Manager out of the next Step's pool and of Assign to :: expect(fresh?.assignTo).toHaveLength(1);
+empty Restrict: not the same person keeps that Member from holding the next Step > refuses with the usual answer when nobody is left to hold the next Step :: expect(await offered(k1Engineer, id)).not.toContain("fresh_eyes");
+empty Restrict: has been through a Step, or a shared fact > offers Submit directly from the Draft only once it has been through Contractor review :: expect(await offered(pm, id)).not.toContain("submit_direct");
+empty Restrict: has been through a Step, or a shared fact > offers Resubmit only after a Send Back :: expect(await offered(pm, id)).not.toContain("resubmit");
+empty Restrict: has been through a Step, or a shared fact > offers Submit Revision only on a Revision :: expect(await offered(pm, (await inReview("Not a Revision")))).not.toContain("submit_revision");
+empty Restrict: all Comments closed > hides Reject while a Comment raised from the item is open :: expect(await offered(k1Manager, id)).not.toContain("reject_d");

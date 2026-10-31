@@ -1,0 +1,4 @@
+text accepting an invitation > sets the password and signs the Authorized Person in :: company: { id: company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+empty signing in > gives a wrong password, an unknown email and a not-yet-accepted invitation the same answer :: expect(res.cookies).toEqual([]);
+empty signing in > serves no Rabaed Admin route, to anyone :: await expectHidden(caller.request(method, url, method === "POST" ? {} : undefined), `${method} ${url}`);
+empty sessions > end on the server at sign-out :: expect(caller.sessionToken).toBeUndefined();

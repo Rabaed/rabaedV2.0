@@ -1,0 +1,5 @@
+text (top level) :: const owCompany = await api.onboardCompany({ legalName: { en: "Waha Owner Holding", ar: "الواحة القابضة المالكة" } });
+empty scenario RP-598-1: while the Owner reviews, C1 reads it "With Owner review" > everywhere C1 reads the item, never the Owner's name or a Code; OW and K1 read the Owner's name :: expect(named).not.toContain(owName.en);
+text scenario RP-598-1: while the Owner reviews, C1 reads it "With Owner review" > everywhere C1 reads the item, never the Owner's name or a Code; OW and K1 read the Owner's name :: expect(filters.with.companies.map((c) => c.name.en)).not.toContain(owName.en);
+empty scenario RP-598-1: while the Owner reviews, C1 reads it "With Owner review" > everywhere C1 reads the item, never the Owner's name or a Code; OW and K1 read the Owner's name :: expect(filters.with.companies.map((c) => c.name.en)).not.toContain(owName.en);
+empty scenario RP-598-1: while the Owner reviews, C1 reads it "With Owner review" > everywhere C1 reads the item, never the Owner's name or a Code; OW and K1 read the Owner's name :: expect(about(await get(by, `${list}/kanban?q=${encodeURIComponent(owName.en)}`), id)).toEqual([]);

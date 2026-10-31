@@ -1,0 +1,11 @@
+empty a Project mute > is refused for a Project the Member is not on, like a made-up one :: await expectHidden(mute(c2Engineer, projectId), projectId);
+empty a Project mute > is refused for a Project the Member is not on, like a made-up one :: await expectHidden(unmute(c2Engineer, projectId), projectId);
+empty watched items > tell the raiser and the Submitter of the Code, with K1 by name only; never K1, which issued it, nor C2 :: expect(more).toEqual([]);
+empty watched items > tell the raiser and the Submitter of the Code, with K1 by name only; never K1, which issued it, nor C2 :: for (const who of [k1Manager2, c2Engineer]) expect(await watched(who, id)).toEqual([]);
+empty watched items > never tell a watcher of their own move, nor tell them twice when it waits on them :: expect(await watched(at.c1Pm, id)).toEqual([]);
+empty watched items > scenario 68: a watching OR Member narrowed off the MAR's Trade gets nothing when K1 issues Code A :: expect((await routed(id)).filter((r) => r.member_id === narrowedId)).toEqual([]);
+empty watched items > notify a watcher who ticked only A and B of Code A, not of Code C :: expect(await about(watcher, c)).toEqual([]);
+empty watched items > tell the chain's watchers of a new Revision, never its raiser, nor another Company before it is Submitted (V1) :: expect(await routed(rev)).toEqual([]);
+empty watched items > tell the chain's watchers of a new Revision, never its raiser, nor another Company before it is Submitted (V1) :: expect((await about(at.c1Engineer, rev)).filter((n) => n.event?.type === "revision_created")).toEqual([]);
+empty mute and email off > a mute silences the bell, and the item still waits on them (Need My Action is unaffected); email off keeps the bell :: expect(await about(pmMuted, id)).toEqual([]);
+empty a Pick up (scenario 70) > withdraws the pool colleagues' unread Step reached, and keeps the holder's and a read one :: expect(await about(k1Manager2, id)).toEqual([]);

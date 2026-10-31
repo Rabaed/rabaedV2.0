@@ -1,0 +1,7 @@
+empty the phone's New Snag (seam 1) > keeps its photos and answers when it is read again mid-flow, after the Subject step and after the Location step :: expect(atLocation.answers.location).toBeUndefined();
+text the phone's New Snag (seam 1) > keeps its photos and answers when it is read again mid-flow, after the Subject step and after the Location step :: expect(await photos(at.k1Manager, id)).toHaveLength(2);
+text the phone's New Snag (seam 1) > keeps its photos and answers when it is read again mid-flow, after the Subject step and after the Location step :: expect(await photos(at.k1Manager, id)).toHaveLength(2);
+text the phone's New Snag (seam 1) > keeps its photos and answers when it is read again mid-flow, after the Subject step and after the Location step :: expect(await photos(at.c1Pm, id)).toHaveLength(2);
+text the phone's New Snag (seam 1) > offers the Raise with the Participant field where two Contractors cover the Snag (RP-658); without a pick the API refuses it :: expect(raise!.participants).toHaveLength(2);
+empty the cards' swipe actions (scenario RP-630-1, seam 1) > RP-630-1: are none for those who may take none: the Consultant while C1 holds it, and C1's colleague who did not pick it up :: expect((await detail(at.k1Manager, id)).actions.transitions).toEqual([]);
+empty the cards' swipe actions (scenario RP-630-1, seam 1) > RP-630-1: are none for those who may take none: the Consultant while C1 holds it, and C1's colleague who did not pick it up :: expect((await detail(at.c1Engineer, id)).actions.transitions).toEqual([]);

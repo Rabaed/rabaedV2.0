@@ -1,0 +1,5 @@
+empty the Snag item page's read (seam 1) > C1 reads the moves of its self-raised Snag, the informed Consultant none; at Verify C1 closes or returns it, and K1 still reads none :: expect(keys(await detail(at.k1Manager, id))).toEqual([]);
+empty the Snag item page's read (seam 1) > C1 reads the moves of its self-raised Snag, the informed Consultant none; at Verify C1 closes or returns it, and K1 still reads none :: expect(keys(informed)).toEqual([]);
+empty the Snag item page's read (seam 1) > C1 reads the moves of its self-raised Snag, the informed Consultant none; at Verify C1 closes or returns it, and K1 still reads none :: expect(keys(k1)).toEqual([]);
+empty the Snag item page's read (seam 1) > on the Consultant's Snag, C1 reads the moves at Open and none at Verify; K1 reads none at Open and verifies :: expect(keys(await detail(at.k1Manager, id))).toEqual([]);
+empty the Snag item page's read (seam 1) > on the Consultant's Snag, C1 reads the moves at Open and none at Verify; K1 reads none at Open and verifies :: expect(keys(await detail(at.c1Pm, id))).toEqual([]);

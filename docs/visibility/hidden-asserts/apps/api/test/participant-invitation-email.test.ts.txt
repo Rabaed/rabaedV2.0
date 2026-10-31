@@ -1,0 +1,4 @@
+empty inviting a Company by CR number (scenario RP-1072-1) > emails nobody for a Company whose Authorized Person has never signed in :: expect(to(k1.authorizedPerson.email)).toEqual([]);
+empty withdrawing an invitation (scenario 38) > sends nothing for an invitation withdrawn before the worker ran, and answers both kinds alike :: expect(to(k1.authorizedPerson.email)).toEqual([]);
+text withdrawing an invitation (scenario 38) > sends nothing more once withdrawn, and one email for each invitation sent again :: expect(to(k1.authorizedPerson.email)).toHaveLength(1);
+text withdrawing an invitation (scenario 38) > sends nothing more once withdrawn, and one email for each invitation sent again :: expect(to(k1.authorizedPerson.email)).toHaveLength(1);

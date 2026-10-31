@@ -1,0 +1,2 @@
+text (top level) :: expect(rows).toHaveLength(1);
+text scenario RP-1083-4: the app role reads nothing new > is the only role that may run the two functions: not Rabaed Admin's, not public :: expect(rows).toHaveLength(2);

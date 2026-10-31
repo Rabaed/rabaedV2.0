@@ -1,0 +1,2 @@
+text the Rabaed Default MAR Form > is readable by any active Member, with its definition :: expect(rows.map((r) => r.name.en)).toEqual(["Material Approval Request (MAR)"]);
+empty the Rabaed Default MAR Form > is not readable with no Member set :: expect(rows).toEqual([]);

@@ -1,0 +1,2 @@
+empty createDb pool errors > survives Postgres closing an idle connection, logs it by class and code only, and the next query works :: expect(unhandled).toEqual([]);
+empty createDb pool errors > survives Postgres closing an idle connection, logs it by class and code only, and the next query works :: expect(line).not.toContain("terminating");

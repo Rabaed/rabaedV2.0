@@ -1,0 +1,4 @@
+text every published Workflow Version > includes MAR Versions 1, 2 and 3 (RP-437), each used by a Work Item Type :: expect(versions.filter((v) => v.typeCode === "MAR" && v.name === submittalWorkflows[3].name.en).map((v) => [v.versionNo, v.outcomeKind])).toEqual([
+empty every published Workflow Version > includes MAR Versions 1, 2 and 3 (RP-437), each used by a Work Item Type :: expect(versions.filter((v) => v.typeId === null).map((v) => v.name)).toEqual([]);
+empty every published Workflow Version > reads as a definition and writes back as the same rows :: expect(changed.map((v) => `${v.name} v${v.versionNo}`)).toEqual([]);
+empty every published Workflow Version > passes every publish check :: expect(problems).toEqual([]);

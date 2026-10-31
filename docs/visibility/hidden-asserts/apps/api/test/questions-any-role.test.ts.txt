@@ -1,0 +1,11 @@
+empty (top level) :: expect((await snags(by)).items.map((i) => i.id), label).not.toContain(id);
+empty (top level) :: await expectHidden(by.get(`/v1/work-items/${id}`), label);
+empty (top level) :: await expectHidden(by.get(`/v1/work-items/${id}/history`), label);
+empty (top level) :: await expectHidden(by.get(`/v1/work-items/${id}/links`), label);
+empty a Contractor's Question to Owner (seam 1, scenario RP-1108-1) > lands with the covering Owner Representative, is answered, asked again and closed; the Consultant is informed and holds nothing :: expect(await offered(o1Pm, id)).toEqual([]);
+empty a Contractor's Question to Owner (seam 1, scenario RP-1108-1) > lands with the covering Owner Representative, is answered, asked again and closed; the Consultant is informed and holds nothing :: expect(await offered(at.k1Manager, id)).toEqual([]);
+empty a Contractor's Question to Owner (seam 1, scenario RP-1108-1) > lands with the covering Owner Representative, is answered, asked again and closed; the Consultant is informed and holds nothing :: expect(await offered(at.c1Engineer, id)).toEqual([]);
+empty a Contractor's Question to Owner (seam 1, scenario RP-1108-1) > RP-1108-1: C2, another Contractor, sees C1's QSO nowhere, Draft to Closed, not even by id; the Owner side and the Consultant see it once asked :: for (const other of [o1Pm, r1Engineer, at.k1Manager]) await expectHidden(other.get(`/v1/work-items/${id}`), "draft");
+empty a Contractor's Question to Owner (seam 1, scenario RP-1108-1) > with no Owner Representative covering it, lands with the Owner :: await expectHidden(r1Engineer.get(`/v1/work-items/${id}`), "R1 covers Building A only");
+empty the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4) > RP-1108-2: the Owner's QSC to C1 reaches C1, the Owner side and the Consultant (informed); C2 never :: expect(await offered(at.k1Manager, id)).toEqual([]);
+empty the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4) > the Owner Representative's QSC to C1 is asked, answered, asked again and closed; the Consultant is informed :: expect(await offered(at.k1Manager, id)).toEqual([]);

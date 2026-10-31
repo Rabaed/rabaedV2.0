@@ -1,0 +1,6 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty scenario RP-1091-1: C1 reads the history of its item K1 Coded > names C1's people with their Position; K1 by its name only, its Code's signer by name with no Position or Step :: expect(JSON.stringify(events)).not.toContain(`"${MANAGER.en}"`);
+empty scenario RP-1091-2: K1 reads the same history > names K1's people with their Position, and C1's Submit by C1's name only, with no Position or Step :: expect(JSON.stringify(events)).not.toContain(PROJECT_MANAGER.en);
+empty scenario RP-1091-3: a Member of a third Company on the Project > reads nothing of C1's item's history: the plain 404 :: await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));

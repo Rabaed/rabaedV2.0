@@ -1,0 +1,18 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: company: { legalName: { en: string } };
+text (top level) :: c1Name = participants.find((p) => p.isOwnCompany)!.company.legalName.en;
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > closes without waiting for the record: until the job has run there is none to download :: await expectHidden(shared.beforeWorker.link);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > prints the item, its outcome and everyone on its path, C1's and K1's alike, with each Transition's time and hash :: for (const t of [trail[0]!, trail[1]!]) expect(text, t.transition).not.toContain(t.hash);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > never prints the Internal Note, the Return or its reason :: for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(text).not.toContain(squeeze(hidden));
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > carries its Record Data inside, which holds nothing the pages don't print :: for (const hidden of [INTERNAL_NOTE, RETURN_REASON]) expect(xml).not.toContain(hidden);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > is sealed: the seal verifies, and one changed byte anywhere breaks it :: expect(stillValid).toEqual([]);
+text scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > dates Prepared at the second send out of the Draft when the first was Returned (sent, Returned, sent again, closed) :: expect(rows).toHaveLength(2);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > dates Prepared at the second send out of the Draft when the first was Returned (sent, Returned, sent again, closed) :: expect(xml).not.toContain(rows[0]!.at);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > scenario RP-1083-5: dates Prepared at the send again when the Return went to the engineer's Step, not the Draft (RP-1053) :: for (const off of [taken("send_for_review"), taken("return")]) expect(xml, off.key).not.toContain(off.at);
+text scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > scenario RP-1083-5: dates Prepared at the send again when the Return went to the engineer's Step, not the Draft (RP-1053) :: expect([...xml.matchAll(/<transition n="\d+"/g)]).toHaveLength(4);
+empty scenarios RP-23-1 and RP-1083-2: K1's PM issues Code A on C1's MAR, and the record is made > validates as PDF/A-3: our own rules, and veraPDF's (the checks before publishing ran it) :: expect(await pdfA3Problems(record)).toEqual([]);
+empty the record job > names each signer with the Position they held when they acted, not a later one :: expect(hers).not.toContain('<name lang="en">Engineer</name>');
+empty the record job > is never written for a discarded Draft, which nobody sees again :: expect(await recordJobs(id)).toEqual([]);
+empty the record job > retries a failure without touching the closure, then makes the record :: await expectHidden(downloadLink(c1Pm, id));

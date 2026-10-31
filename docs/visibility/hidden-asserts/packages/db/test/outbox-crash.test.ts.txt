@@ -1,0 +1,2 @@
+empty a worker that dies in the handler > costs the row an attempt each time, and after the last one the row is dead-lettered :: expect(ran).toEqual([]);
+empty a row being run > is not taken by another worker, even when its backoff has passed :: expect(others).not.toContain(id);

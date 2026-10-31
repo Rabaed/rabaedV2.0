@@ -1,0 +1,4 @@
+empty scenario RP-409-3: Delete discards C1's own original Draft > refuses a Member who may not edit the Draft, on the server :: await expectHidden(outsider.post(`/v1/work-items/${draft}/discard-draft`));
+empty scenario RP-409-3: Delete discards C1's own original Draft > is the plain 404 for anyone who can't see the Draft :: await expectHidden(at.k1Manager.post(`/v1/work-items/${draft}/discard-draft`));
+empty scenario RP-409-3: Delete discards C1's own original Draft > discards it: nobody sees it again, C1 included, and it leaves the List :: for (const who of [at.c1Engineer, at.c1Pm, at.k1Manager]) await expectHidden(who.get(`/v1/work-items/${draft}`));
+empty scenario RP-409-3: Delete discards C1's own original Draft > discards it: nobody sees it again, C1 included, and it leaves the List :: expect(list.items.map((i: { id: string }) => i.id)).not.toContain(draft);

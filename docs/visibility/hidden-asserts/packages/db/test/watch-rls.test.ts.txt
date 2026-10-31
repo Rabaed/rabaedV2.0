@@ -1,0 +1,2 @@
+empty work_item_watch, as the app role > shows a Member only their own rows, so a count is only ever their own :: expect(none.rows).toEqual([]);
+empty app.work_item_watchers, for delivery > names the watchers who still see the item, and leaves out one who lost sight of it :: expect(await watchers()).toEqual([]);

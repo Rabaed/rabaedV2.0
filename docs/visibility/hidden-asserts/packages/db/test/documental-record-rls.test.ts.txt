@@ -1,0 +1,3 @@
+empty scenario RP-1083-2: app.documental_record_file > gives nothing for an item the Member can't see, the same as for a made-up id :: expect(await recordFile(other, itemId)).toEqual([]);
+empty scenario RP-1083-2: app.documental_record_file > gives nothing for an item the Member can't see, the same as for a made-up id :: expect(await recordFile(seer, randomUUID())).toEqual([]);
+empty scenario RP-1083-2: app.documental_record_file > gives nothing for an item the Member can't see, the same as for a made-up id :: expect(await recordFile(seer, othersItemId)).toEqual([]);

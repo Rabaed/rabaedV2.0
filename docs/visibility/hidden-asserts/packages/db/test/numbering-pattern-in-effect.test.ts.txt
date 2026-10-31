@@ -1,0 +1,1 @@
+text the Rabaed Default > is the same in SQL and in the domain :: expect(rows).toHaveLength(1);

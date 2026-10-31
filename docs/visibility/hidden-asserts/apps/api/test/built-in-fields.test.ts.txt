@@ -1,0 +1,3 @@
+empty Save draft with the Built-in Fields > changes the item's Trade, and so who sees it :: await expectHidden(mechanicalOnly.get(`/v1/work-items/${id}`));
+empty Save draft with the Built-in Fields > changes the item's Trade, and so who sees it :: await expectHidden(electricalOnly.get(`/v1/work-items/${id}`));
+empty Save draft with the Built-in Fields > changes the item's Trade, and so who sees it :: await expectHidden(electricalOnly.get(`/v1/work-items/${id}/form`));

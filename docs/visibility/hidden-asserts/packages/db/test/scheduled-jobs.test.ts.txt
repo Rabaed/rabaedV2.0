@@ -1,0 +1,2 @@
+empty runScheduledJobs > runs nothing when no run is due (a Friday) :: expect(await runScheduledJobs(worker, [job], riyadh("2026-10-09T07:00"))).toEqual([]);
+empty runScheduledJobs > runs nothing when no run is due (a Friday) :: expect(job.runs).toEqual([]);
