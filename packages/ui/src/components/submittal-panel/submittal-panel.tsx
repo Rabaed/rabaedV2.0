@@ -221,6 +221,8 @@ export type SubmittalPanelIdentityProps = {
   subjectId?: string;
   /** Next to the number: the ⓘ "How this number is built" card (`SubmittalPanelNumberCard`, RP-1065). */
   numberInfo?: ReactNode;
+  /** The Subject's heading level: `h1` on the Work Item page, where it heads the page (RP-1151); `h2` in the panel. */
+  subjectAs?: "h1" | "h2";
 };
 
 /**
@@ -228,7 +230,7 @@ export type SubmittalPanelIdentityProps = {
  * in Arabic too, with a Revision's revision word inline after it in brand orange (`DocNo`'s
  * wording: "Rev 1", «مراجعة 1»; Rev 0 shows nothing), then the Subject and the chips.
  */
-export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo }: SubmittalPanelIdentityProps) {
+export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo, subjectAs: Subject = "h2" }: SubmittalPanelIdentityProps) {
   return (
     <div className="sdp-identity px-5 pt-[18px] pb-4">
       <div className="relative flex items-center gap-1">
@@ -251,9 +253,9 @@ export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chip
         </p>
         {numberInfo}
       </div>
-      <h2 id={subjectId} dir="auto" className="sdp-subject mt-2 mb-2.5 text-[20px] leading-tight font-bold text-pretty">
+      <Subject id={subjectId} dir="auto" className="sdp-subject mt-2 mb-2.5 text-[20px] leading-tight font-bold text-pretty">
         {subject}
-      </h2>
+      </Subject>
       {chips && <div className="sdp-chips flex flex-wrap items-center gap-1.5">{chips}</div>}
     </div>
   );

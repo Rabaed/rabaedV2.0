@@ -7,7 +7,7 @@ import type { SubmittalTimelineEvent } from "../submittal-panel/timeline-model.t
  * the viewer: nothing here puts back what those hide.
  */
 
-export type WorkItemCodeResult = {
+export type WorkItemIssuedCode = {
   code: string;
   /** When it was issued (ISO). */
   at: string;
@@ -19,11 +19,11 @@ export type WorkItemCodeResult = {
 };
 
 /**
- * The result card after a Code (gap table row 23): the Code the item closed with (`outcome`), from
+ * The Issued Code card (gap table row 23): the Code the item closed with (`outcome`), from
  * its latest shared `issue_code` event. Never a Recommended Code (V5), and none while the item is
  * open or for a Cancel, which issues no Code.
  */
-export function workItemCodeResult(events: readonly SubmittalTimelineEvent[], outcome: string | null): WorkItemCodeResult | null {
+export function workItemIssuedCode(events: readonly SubmittalTimelineEvent[], outcome: string | null): WorkItemIssuedCode | null {
   if (outcome === null) return null;
   const issued = events.findLast((e) => e.type === "issue_code" && e.audience === "shared" && e.outcome === outcome);
   if (!issued) return null;

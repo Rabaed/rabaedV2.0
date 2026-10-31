@@ -1,10 +1,10 @@
 "use client";
 
-import { formatNumber, type Locale } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
 import type { ReactNode } from "react";
 import type { IconName } from "../icon/icon.tsx";
 import { SubmittalPanelTimeline, type SubmittalTimelineItem } from "../submittal-panel/panel-timeline.tsx";
-import { submittalPositionsText, type SubmittalTimelineEvent, type SubmittalTimelineText, type SubmittalTimelineTone } from "../submittal-panel/timeline-model.ts";
+import { sameName, submittalPositionsText, type SubmittalTimelineEvent, type SubmittalTimelineText, type SubmittalTimelineTone } from "../submittal-panel/timeline-model.ts";
 import type { WorkItemHistoryEntry } from "./history-model.ts";
 
 export type WorkItemPageHistoryLabels = {
@@ -17,6 +17,8 @@ export type WorkItemPageHistoryLabels = {
   internal: string;
   /** "Details": the toggle over an entry's further details. */
   details: string;
+  /** "Hafiz Hamdan (you)": the viewer's own entries. */
+  you: (name: string) => string;
   empty: string;
 };
 
@@ -42,10 +44,13 @@ export function WorkItemPageHistory({
   labels,
   entries,
   details,
+  viewer,
 }: {
   locale: Locale;
   labels: WorkItemPageHistoryLabels;
   entries: readonly WorkItemHistoryEntry[];
+  /** The viewer's own name, as the reads give it: their entries say "(you)". */
+  viewer?: BilingualText;
   details?: (entry: WorkItemHistoryEntry) => ReactNode;
 }) {
   const items = entries.map((entry): SubmittalTimelineItem => {
@@ -57,7 +62,8 @@ export function WorkItemPageHistory({
       move: labels.move(entry.event),
       n: formatNumber(entry.n, locale),
       who: {
-        person: entry.person?.[locale] ?? null,
+        person: entry.person === null ? null : sameName(entry.person, viewer ?? null) ? labels.you(entry.person[locale]) : entry.person[locale],
+        avatar: true,
         position: submittalPositionsText(entry.positions, locale),
         company: entry.event.by.companyName?.[locale] ?? null,
       },

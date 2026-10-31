@@ -20,7 +20,7 @@ export type WorkItemPageFrameProps = {
   identity?: ReactNode;
   route?: ReactNode;
   facts?: ReactNode;
-  /** Under the facts: the result card after a Code, the in-flow Actions card below 880px, notices. */
+  /** Under the facts: The Issued Code card, the in-flow Actions card below 880px, notices. */
   lead?: ReactNode;
   /** The tabs and what they hold. */
   children?: ReactNode;

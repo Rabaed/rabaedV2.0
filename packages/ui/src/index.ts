@@ -351,6 +351,8 @@ export {
   type SubmittalPanelSupplier,
 } from "./components/submittal-panel/panel-sections-model.ts";
 export {
+  coverNoteKey,
+  sameName,
   submittalApprovalLog,
   submittalInternalLog,
   type SubmittalInternalEntry,
@@ -414,7 +416,7 @@ export {
 } from "./components/verification/record-verification.tsx";
 // The Work Item page (RP-1151): the Submittal Panel at page size, and its own parts.
 export { WorkItemPageFrame, WorkItemTopBarButton, type WorkItemPageFrameProps } from "./components/work-item-page/page-frame.tsx";
-export { CodeTile, StepAgePill, WorkItemActionsCard, WorkItemResultCard, type WorkItemActionsCardProps, type WorkItemResultCardProps } from "./components/work-item-page/page-parts.tsx";
+export { CodeTile, StepAgePill, WorkItemTransitionsCard, WorkItemIssuedCodeCard, type WorkItemTransitionsCardProps, type WorkItemIssuedCodeCardProps } from "./components/work-item-page/page-parts.tsx";
 export { WorkItemPageHistory, type WorkItemPageHistoryLabels } from "./components/work-item-page/work-item-history.tsx";
 export { workItemHistoryEntries, type WorkItemHistoryEntry } from "./components/work-item-page/history-model.ts";
-export { transitionCodes, workItemCodeResult, type WorkItemCodeResult } from "./components/work-item-page/page-model.ts";
+export { transitionCodes, workItemIssuedCode, type WorkItemIssuedCode } from "./components/work-item-page/page-model.ts";

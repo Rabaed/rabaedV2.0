@@ -1,15 +1,12 @@
 "use client";
 
 import {
-  answerFields,
   backwardKinds,
   formatDate,
   formatFormValue,
   formatNumber,
   isOpenStageCategory,
-  linksChangeField,
-  linksChangeValue,
-  sortedByName,
+  outcomeLook,
   watchOutcomeNames,
   type DocumentList,
   type FormSchema,
@@ -25,6 +22,7 @@ import {
   type WorkItemWorkflowMap,
 } from "@rabaed/domain";
 import {
+  Badge,
   Button,
   CodeTile,
   DocNo,
@@ -39,21 +37,21 @@ import {
   SubmittalPanelTabs,
   SubmittalPanelWorkflowAndLog,
   TradeChip,
-  WatchButton,
-  WorkItemActionsCard,
+  WorkItemTransitionsCard,
   WorkItemPageFrame,
   WorkItemPageHistory,
-  WorkItemResultCard,
+  WorkItemIssuedCodeCard,
   WorkItemTopBarButton,
+  coverNoteKey,
   outcomesOfType,
+  sameName,
   stageColour,
   submittalPanelNumber,
   submittalPanelWith,
   transitionCodes,
-  workItemCodeResult,
+  workItemIssuedCode,
   workItemHistoryEntries,
   type SubmittalPanelSectionItem,
-  type WatchCall,
   type WorkItemHistoryEntry,
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
@@ -67,16 +65,17 @@ import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { OpenerAlert, useTransitionOpener } from "@/components/work-item-actions";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
-import { WorkItemAnswers, useWorkItemForm } from "@/components/work-item-form";
+import { WorkItemAnswers, useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
+import { WorkItemWatch } from "@/components/work-item-watch";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { Link, useRouter } from "@/i18n/navigation";
 import type { AnsweredChecklists } from "@/lib/checklist-once";
+import { changeText, replyAnswers, replyFiles } from "@/lib/history-details";
 import { historyMoveLabel } from "@/lib/history-move-label";
-import { saveButton } from "@/lib/save-button";
+import { notPickedUpYetValues } from "@/lib/pool-line";
 
-type Event = WorkItemHistory["events"][number];
 
 export type WorkItemPageProps = {
   item: WorkItemDetail;
@@ -119,7 +118,6 @@ export function WorkItemPage(props: WorkItemPageProps) {
   const tFacts = useTranslations("submittalPanel");
   const tDetails = useTranslations("submittalPanelDetails");
   const tLog = useTranslations("submittalPanelLog");
-  const tWatch = useTranslations("watch");
   const tMap = useTranslations("workflowMap");
   const tViews = useTranslations("workItemViews");
   const tRevision = useTranslations("revision");
@@ -129,7 +127,15 @@ export function WorkItemPage(props: WorkItemPageProps) {
 
   const typeOutcomes = outcomesOfType(item.type.code, [...outcomes]);
   const codes = transitionCodes(item.actions.transitions, workflowMap?.definition ?? null);
-  const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => ({ code: codes[tr.key] ?? null, documentNumber: item.documentNumber }));
+  // A code's colour: its place in its Type's set, as the Kanban and the panel colour it.
+  const lookOf = (code: string) => {
+    const outcome = typeOutcomes.find((o) => o.code === code);
+    return outcome ? outcomeLook(outcome, typeOutcomes) : undefined;
+  };
+  const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => {
+    const code = codes[tr.key] ?? null;
+    return { code, look: code ? lookOf(code) : undefined, documentNumber: item.documentNumber };
+  });
   const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale);
   // Internal Communication, the panel's own (V5): its banner and entries, and no composer (gap table row 42).
   const log = useSubmittalPanelLog({ item, locale, outcomes: typeOutcomes.map((o) => ({ ...o, type: item.type.code })) });
@@ -137,7 +143,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
 
   const events = history?.events ?? [];
   const entries = workItemHistoryEntries({ events, viewerCompany: me.company.legalName, outcomes: typeOutcomes });
-  const result = workItemCodeResult(events, item.outcome);
+  const result = workItemIssuedCode(events, item.outcome);
   const number = submittalPanelNumber(item.documentNumber, item.revisionNo);
   const open = isOpenStageCategory(item.stage.category);
   const outcomeName = item.outcome ? (typeOutcomes.find((o) => o.code === item.outcome)?.name[locale] ?? item.outcome) : null;
@@ -153,29 +159,34 @@ export function WorkItemPage(props: WorkItemPageProps) {
         texts: { coverNote: tLog("coverNote"), remarks: tLog("remarks"), internalNote: tLog("internalNote"), reason: tLog("reason") },
         internal: tHistory("internal"),
         details: t("history.details"),
+        you: (name) => t("actions.you", { name }),
         empty: t("history.empty"),
       }}
       entries={entries}
       details={historyDetails}
+      viewer={me.member.fullName}
     />
   );
   const railLabels = { workflow: tLog("workflow"), map: tLog("map"), log: t("history.title") };
 
   // The Transitions the viewer may take, each with its Review Code's tile; Pick up beside them.
   const busy = opener.calls.pending || opener.waiting;
+  // The code a checklist proposes (RP-86, ADR 0025) is the one marked and filled; the other codes stay offered.
+  const proposing = item.actions.transitions.some((tr) => tr.proposed);
   const transitionButtons = (
     <>
       {item.actions.transitions.map((tr) => (
         <Button
           key={tr.key}
-          variant={codes[tr.key] || backwardKinds.includes(tr.kind) ? "secondary" : "primary"}
+          variant={backwardKinds.includes(tr.kind) || (proposing ? !tr.proposed : codes[tr.key] !== undefined) ? "secondary" : "primary"}
           disabled={busy}
           aria-busy={opener.waiting || undefined}
           onClick={() => opener.open(tr)}
           className="gap-2"
         >
-          {codes[tr.key] && <CodeTile code={codes[tr.key]!} />}
+          {codes[tr.key] && <CodeTile code={codes[tr.key]!} look={lookOf(codes[tr.key]!)} />}
           {tr.label[locale]}
+          {tr.proposed && <Badge tone="neutral">{tItems("actions.proposed")}</Badge>}
         </Button>
       ))}
       {item.actions.pickUp && (
@@ -198,26 +209,18 @@ export function WorkItemPage(props: WorkItemPageProps) {
         ? t("actions.you", { name: held.memberName[locale] })
         : held.memberName[locale]
       : pool
-        ? tItems("fields.notPickedUpYet", {
-            company: held.companyName[locale],
-            names: sortedByName(pool, (p) => p[locale], locale)
-              .slice(0, 3)
-              .map((p) => p[locale])
-              .join(locale === "ar" ? "، " : ", "),
-            more: Math.max(pool.length - 3, 0),
-            n: n(Math.max(pool.length - 3, 0)),
-          })
+        ? tItems("fields.notPickedUpYet", notPickedUpYetValues(held.companyName, pool, locale))
         : held.companyName[locale];
   const anotherCompany = held && !held.memberName && !pool;
   const attention = form?.editable ? form.errors.length : 0;
 
-  const actionsCard = (rail: boolean) => (
-    <WorkItemActionsCard
+  const transitionsCard = (rail: boolean) => (
+    <WorkItemTransitionsCard
       title={t("actions.title")}
       with={{
         step: item.outcome ? `${outcomeName} · ${item.outcome}` : item.step.name[locale],
         holder: item.outcome ? t("actions.ended") : holderText,
-        ...(item.outcome ? { code: item.outcome } : held?.memberName ? { avatar: held.memberName[locale] } : {}),
+        ...(item.outcome ? { code: item.outcome, look: lookOf(item.outcome) } : held?.memberName ? { avatar: held.memberName[locale] } : {}),
         ...(pool ? { unclaimed: true } : {}),
         ...(item.actions.returnToPool
           ? {
@@ -234,8 +237,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
       {...(attention > 0 ? { attention: t("actions.attention", { count: attention, n: n(attention) }) } : {})}
       {...(item.actions.pickUp
         ? { none: t("actions.pickUpHelp") }
-        : !hasTransitions && !item.outcome && anotherCompany
-          ? { none: t("actions.none", { company: held.companyName[locale] }) }
+        : !hasTransitions && !item.outcome && held && !mine
+          ? { none: t("actions.none", { company: anotherCompany ? held.companyName[locale] : (holderText ?? held.companyName[locale]) }) }
           : {})}
       {...(item.actions.createRevision && item.outcome
         ? {
@@ -249,14 +252,15 @@ export function WorkItemPage(props: WorkItemPageProps) {
       footer={
         <>
           {item.actions.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard />}
-          {rail && <OpenerAlert opener={opener} />}
+          <OpenerAlert opener={opener} />
         </>
       }
     />
   );
 
   // The Form tab: the Form's sections fold, between the page's own cards (gap table rows 22, 43–53).
-  const sectionLabels = { count: (value: string, count: number) => tDetails("sectionCount", { count, n: value }), collapseAll: tDetails("collapseAll"), expandAll: tDetails("expandAll") };
+  // "8 sections · Read-only", or "· Editing" while the viewer may change it (gap table row 43).
+  const sectionLabels = { count: (value: string, count: number) => `${tDetails("sectionCount", { count, n: value })} · ${form?.editable ? t("editing") : t("readOnly")}`, collapseAll: tDetails("collapseAll"), expandAll: tDetails("expandAll") };
   const lead: SubmittalPanelSectionItem[] = [
     {
       key: "workflow",
@@ -301,17 +305,12 @@ export function WorkItemPage(props: WorkItemPageProps) {
   const tabs = [
     { key: "form", label: t("form"), content: formTab },
     chat,
-    ...(log.internal ? [{ key: "internal", label: tDetails("internal"), icon: "lock" as const, count: log.internal.count, content: log.internal.content }] : []),
+    ...(log.internal ? [{ key: "internal", label: tDetails("internal"), shortLabel: t("internalShort"), icon: "lock" as const, count: log.internal.count, content: log.internal.content }] : []),
   ];
 
   // The bottom bar: Save Draft and the saved time while editing (every width), the Transitions under 880px.
-  const save = form && form.editable ? saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending }) : null;
-  const watchCall: WatchCall = async (on) => {
-    const res = await fetch(`/api/v1/work-items/${item.id}/watch`, { method: on ? "PUT" : "DELETE" });
-    if (res.ok) return { ok: true };
-    const { error } = (await res.json().catch(() => ({}))) as { error?: string };
-    return { ok: false, reason: error ?? "unavailable" };
-  };
+  const saveDraft = useSaveDraft(locale);
+  const save = form?.editable ? saveDraft : null;
 
   return (
     <>
@@ -332,12 +331,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
           <>
             {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
             {watch && (
-              <WatchButton
-                look="topBar"
-                labels={{ watch: tWatch("watch"), watching: tWatch("watching"), refusals: { not_found: tWatch("notFound"), unavailable: tWatch("unavailable") } }}
-                watching={watch.watching}
-                onChange={watchCall}
-              />
+              <WorkItemWatch workItemId={item.id} watching={watch.watching} look="topBar" />
+
             )}
             <WorkItemTopBarButton icon="route" label={tMap("view")} onClick={openMap} />
             {/* Its Documental Record once closed, its Working Copy while open (V7). */}
@@ -350,6 +345,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
             number={number}
             noNumber={item.revisionNo > 0 ? tViews("list.revisionNoNumber", { revision: n(item.revisionNo) }) : tFacts("noNumber")}
             subject={item.title}
+            subjectAs="h1"
             numberInfo={
               <span className="flex flex-wrap items-center gap-2.5">
                 {number && <SubmittalPanelNumber item={item} locale={locale} place={[]} />}
@@ -395,28 +391,28 @@ export function WorkItemPage(props: WorkItemPageProps) {
         lead={
           <>
             {result && (
-              <div className="mx-5 mt-[14px] @[880px]/sdp:mx-7">
-                <WorkItemResultCard
+              <div className="wip-lead mx-5 mt-[14px] @[880px]/sdp:mx-7">
+                <WorkItemIssuedCodeCard
                   code={result.code}
+                  look={lookOf(result.code)}
                   title={outcomeName ?? result.code}
-                  issued={t("result.issued", { date: formatDate(new Date(result.at), locale, { dateStyle: "medium", timeStyle: "short" }) })}
+                  issued={t("issuedCode.issued", { date: formatDate(new Date(result.at), locale, { dateStyle: "medium", timeStyle: "short" }) })}
                   remarks={result.remarks}
-                  signedBy={t("result.signedBy")}
+                  signedBy={t("issuedCode.signedBy")}
                   signer={result.signer?.[locale] ?? null}
                   company={result.company?.[locale] ?? null}
                 />
               </div>
             )}
             {/* Under 880px the Actions card sits in the flow; from 880px it is the rail's. */}
-            <div className="sdp-inflow px-5 pt-[14px]">{actionsCard(false)}</div>
-            {notices && <div className="flex flex-col gap-3 px-5 pt-[14px] empty:hidden @[880px]/sdp:px-7">{notices}</div>}
-            {!hasTransitions && <OpenerAlert opener={opener} className="px-5 pt-3" />}
+            <div className="sdp-inflow px-5 pt-[14px]">{transitionsCard(false)}</div>
+            {notices && <div className="wip-lead flex flex-col gap-3 px-5 pt-[14px] empty:hidden @[880px]/sdp:px-7">{notices}</div>}
           </>
         }
         railLabel={t("rail")}
         rail={
           <>
-            {actionsCard(true)}
+            {transitionsCard(true)}
             <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={historyList} />
           </>
         }
@@ -426,13 +422,9 @@ export function WorkItemPage(props: WorkItemPageProps) {
             ? {
                 start: (
                   <span className="flex flex-wrap items-center gap-3">
-                    <SaveStatus locale={locale} savedAt={form.savedAt} changedByOthers={[]} />
-                    <Button
-                      variant="secondary"
-                      disabled={save.disabled}
-                      onClick={() => void (save.closes ? form.save(true).then((ok) => ok && router.push(`/projects/${item.projectId}/work-items`)) : form.save(false))}
-                    >
-                      {tItems(`form.${save.label}`)}
+                    <SaveStatus locale={locale} savedAt={form.savedAt} changedByOthers={save.changedByOthers} />
+                    <Button variant="secondary" disabled={save.button.disabled} onClick={() => void save.run()}>
+                      {tItems(`form.${save.button.label}`)}
                     </Button>
                   </span>
                 ),
@@ -448,35 +440,23 @@ export function WorkItemPage(props: WorkItemPageProps) {
   );
 }
 
-const sameName = (a: { en: string; ar: string }, b: { en: string; ar: string }) => a.en === b.en && a.ar === b.ar;
 
-// Answers that hold ids (Built-in Fields, people and Companies) are named only on the Form itself.
-const idTypes = new Set(["trade", "location", "scopes", "member", "participant", "approved_supplier", "checklist_template"]);
-const ownLines: ReadonlySet<string> = new Set(["reason", "remarks"]);
+
+/** The Cover Note shows as the entry's own text, so its details don't repeat it. */
+const shownAsText: ReadonlySet<string> = new Set([coverNoteKey]);
 
 /**
  * An entry's further details, folded behind "Details" in the History (gap table row 64), as the old
- * page listed them: its Step move (the viewer's own Participant's only, as the read gives it), the
- * number it got, a reply's answers and files, a Recommended Code (inside its Participant, V5) and the
- * fields it changed. Nothing the read doesn't give.
+ * page lists them (`lib/history-details.ts`, shared with it): its Step move (the viewer's own
+ * Participant's only, as the read gives it), the number it got, a reply's answers and files, a
+ * Recommended Code (inside its Participant, V5) and the fields it changed. Nothing the read doesn't give.
  */
 function useHistoryDetails(schema: FormSchema, optionLists: readonly OptionList[], documents: DocumentList, locale: Locale) {
   const t = useTranslations("workItems.history");
-  const fields = new Map(answerFields(schema).map((f) => [f.key, f]));
+  const words = { emptyAnswer: t("emptyAnswer"), changedValue: t("changedValue"), linksField: t("linksField"), files: t("files") };
   const arrow = locale === "ar" ? "←" : "→";
-  const value = (key: string, v: unknown) => {
-    const field = fields.get(key);
-    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return t("emptyAnswer");
-    return field ? formatFormValue(field, v, locale, undefined, optionLists) : String(v);
-  };
-  const linksText = (v: unknown) => {
-    const parsed = linksChangeValue.safeParse(v);
-    if (!parsed.success || parsed.data.length === 0) return t("emptyAnswer");
-    return parsed.data.map((l) => `\u2066${l.documentNumber}\u2069 ${l.subject}`).join(", ");
-  };
-  const byId = new Map(documents.documents.map((d) => [d.id, d]));
   return (entry: WorkItemHistoryEntry): ReactNode => {
-    const e: Event = entry.event;
+    const e = entry.event;
     const lines: ReactNode[] = [];
     if (e.fromStep && e.toStep) lines.push(<p key="steps">{`${e.fromStep[locale]} ${arrow} ${e.toStep[locale]}`}</p>);
     if (e.documentNumber)
@@ -485,22 +465,16 @@ function useHistoryDetails(schema: FormSchema, optionLists: readonly OptionList[
           {t("numbered")} <DocNo value={e.documentNumber} />
         </p>,
       );
-    if (e.answers && e.answersForm) {
-      for (const f of answerFields(e.answersForm)) {
-        const v = e.answers[f.key];
-        if (ownLines.has(f.key) || f.key === "cover_note" || v === undefined || v === null || v === "") continue;
-        lines.push(
-          <p key={`answer-${f.key}`}>
-            <span className="font-semibold">{f.label[locale]}:</span> <bdi>{formatFormValue(f, v, locale, undefined, optionLists)}</bdi>
-          </p>,
-        );
-      }
-    }
-    const taken = (e.files ?? []).flatMap((id) => byId.get(id) ?? []);
-    if (taken.length > 0)
+    for (const [field, v] of replyAnswers(e, shownAsText))
       lines.push(
-        <p key="files">
-          <span className="font-semibold">{t("files")}:</span> <bdi>{taken.map((d) => d.fileName).join(", ")}</bdi>
+        <p key={`answer-${field.key}`}>
+          <span className="font-semibold">{field.label[locale]}:</span> <bdi>{formatFormValue(field, v, locale, undefined, optionLists)}</bdi>
+        </p>,
+      );
+    for (const [label, names] of replyFiles(e, documents.documents, locale, words))
+      lines.push(
+        <p key={`files-${label}`}>
+          <span className="font-semibold">{label}:</span> <bdi>{names.join(", ")}</bdi>
         </p>,
       );
     if (e.recommendedCode)
@@ -509,20 +483,12 @@ function useHistoryDetails(schema: FormSchema, optionLists: readonly OptionList[
           <span className="font-semibold">{t("recommendedCode")}:</span> {e.recommendedCode}
         </p>,
       );
-    for (const change of e.changes ?? []) {
-      const field = fields.get(change.field);
-      const text =
-        change.field === linksChangeField
-          ? `${t("linksField")}: ${linksText(change.old)} ${arrow} ${linksText(change.new)}`
-          : field && idTypes.has(field.type)
-            ? `${field.label[locale]}: ${t("changedValue")}`
-            : `${field?.label[locale] ?? change.field}: ${value(change.field, change.old)} ${arrow} ${value(change.field, change.new)}`;
+    for (const change of e.changes ?? [])
       lines.push(
         <p key={`change-${change.field}`}>
-          <bdi>{text}</bdi>
+          <bdi>{changeText(change, schema, optionLists, locale, words)}</bdi>
         </p>,
       );
-    }
     return lines.length > 0 ? <>{lines}</> : null;
   };
 }

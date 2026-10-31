@@ -4,7 +4,6 @@ import {
   isOpenStageCategory,
   moduleNames,
   moduleTabPaths,
-  sortedByName,
   stepAgeLabel,
   watchOutcomeNames,
   workItemListHref,
@@ -39,6 +38,7 @@ import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { WirDraftBar, WirDraftSide, WirNextSteps, WirRequestColumns } from "@/components/wir-request";
 import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, requestActions, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
+import { notPickedUpYetValues } from "@/lib/pool-line";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
   getLinkedFrom,
@@ -588,15 +588,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                   : item.heldBy.pool && item.heldBy.pool.names.length > 0
                     ? // Pooled at the viewer's own Participant: who it waits on (§3.4), three
                       // names in the viewer's language's order, then how many more.
-                      t("fields.notPickedUpYet", {
-                        company: item.heldBy.companyName[locale],
-                        names: sortedByName(item.heldBy.pool.names, (n) => n[locale], locale)
-                          .slice(0, 3)
-                          .map((n) => n[locale])
-                          .join(locale === "ar" ? "، " : ", "),
-                        more: Math.max(item.heldBy.pool.names.length - 3, 0),
-                        n: formatNumber(Math.max(item.heldBy.pool.names.length - 3, 0), locale),
-                      })
+                      t("fields.notPickedUpYet", notPickedUpYetValues(item.heldBy.companyName, item.heldBy.pool.names, locale))
                     : item.heldBy.companyName[locale]}
               </dd>
             </>

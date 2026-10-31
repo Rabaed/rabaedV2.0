@@ -107,6 +107,28 @@ export function useWorkItemForm(): WorkItemFormState | null {
   return useContext(WorkItemFormContext);
 }
 
+/**
+ * Save draft, as the Form's own row and the Work Item page's bar (RP-1151) offer it: the button's word
+ * and state (`saveButton`), what pressing it does, and the fields another Member changed that the last
+ * save kept as theirs, labelled from the Form. "Save and close" (a Draft with no number) saves quietly,
+ * then goes to the Project's Submittals list; a refused save stays. Null without a Form.
+ */
+export function useSaveDraft(locale: Locale) {
+  const form = useWorkItemForm();
+  const router = useRouter();
+  if (!form) return null;
+  const button = saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending });
+  const run = async () => {
+    if (!button.closes) return void (await form.save(false));
+    if (await form.save(true)) router.push(`/projects/${form.projectId}/work-items`);
+  };
+  const changedByOthers = Object.entries(form.changedByOthers).map(([key, memberName]) => {
+    const field = formFields(form.schema).find((f) => f.key === key);
+    return { fieldLabel: field && "label" in field ? field.label[locale] : key, memberName };
+  });
+  return { button, run, changedByOthers };
+}
+
 export function WorkItemFormProvider({
   workItemId,
   projectId,
@@ -346,16 +368,13 @@ export function WorkItemAnswers({
     workItemId,
     documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
   );
-  const router = useRouter();
+  const saveDraft = useSaveDraft(locale);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => Object.fromEntries((folding?.folded ?? []).map((key) => [key, true])));
   if (!form) return null;
-  const button = saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending });
-  /** Saves anything pending (quietly: the page is left), then goes to the Project's Submittals list. A refused save stays. */
-  async function saveAndClose() {
-    if (form && (await form.save(true))) router.push(`/projects/${form.projectId}/work-items`);
-  }
+  const button = saveDraft!.button;
   // The fields the last check marked, by their labels in the viewer's language, in Form order.
   const marked = new Set(form.errors.map((e) => e.key));
+  const withErrors = new Set(form.schema.sections.filter((section) => section.fields.some((f) => marked.has(f.key))).map((section) => section.key));
   const toFix = form.schema.sections.flatMap((section) =>
     section.fields.flatMap((field) => (marked.has(field.key) && "label" in field ? [field.label[locale]] : [])),
   );
@@ -411,7 +430,8 @@ export function WorkItemAnswers({
                     })),
                     ...folding.tail,
                   ]}
-                  collapsed={collapsed}
+                  // A section holding a field to fix stays open, so the banner's link reaches it (gap table row 30).
+                  collapsed={{ ...collapsed, ...Object.fromEntries(sections.filter((x) => withErrors.has(x.key)).map((x) => [`form-${x.key}`, false])) }}
                   onCollapsedChange={setCollapsed}
                 />
               ),
@@ -444,10 +464,7 @@ export function WorkItemAnswers({
       <SaveStatus
         locale={locale}
         savedAt={form.editable ? form.savedAt : null}
-        changedByOthers={Object.entries(form.changedByOthers).flatMap(([key, memberName]) => {
-          const field = formFields(form.schema).find((f) => f.key === key);
-          return [{ fieldLabel: field && "label" in field ? field.label[locale] : key, memberName }];
-        })}
+        changedByOthers={saveDraft!.changedByOthers}
       />
       )}
       {files.message && (
@@ -470,7 +487,7 @@ export function WorkItemAnswers({
           <Button
             variant={button.closes ? "primary" : "secondary"}
             disabled={button.disabled}
-            onClick={() => void (button.closes ? saveAndClose() : form.save(false))}
+            onClick={() => void saveDraft!.run()}
           >
             {t(button.label)}
           </Button>

@@ -3,6 +3,7 @@
 import { formatDate, formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { Avatar } from "../data/avatar.tsx";
 import { Badge } from "../data/badge.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
@@ -31,7 +32,7 @@ export type SubmittalTimelineItem = {
    * Who acted: a person (the viewer's own, or the Code's signer), their Position (the viewer's own
    * people only, as the read gives it, RP-1091) and their Company; or a Company alone.
    */
-  who?: { person: string | null; position?: string | null; company: string | null };
+  who?: { person: string | null; position?: string | null; company: string | null; avatar?: boolean };
   /** Each text written with it, labelled ("Cover Note", "Remarks"). */
   texts?: readonly { label: string; text: string }[];
   chip?: ReactNode;
@@ -80,7 +81,9 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               {item.move}
             </p>
             {item.who && (item.who.person || item.who.company) && (
-              <p className="mt-1 text-[12.5px] [overflow-wrap:anywhere]">
+              <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[12.5px] [overflow-wrap:anywhere]">
+                {/* The page's History draws the person's initials before the name (RP-1151 row 60); the name is beside it. */}
+                {item.who.avatar && item.who.person && <Avatar name={item.who.person} size="sm" decorative className="me-0.5" />}
                 {/* Name · Position · Company, each part only when given; a Position only with its person. */}
                 {item.who.person && <span className="font-semibold">{item.who.person}</span>}
                 {item.who.person && item.who.position && (

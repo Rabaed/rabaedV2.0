@@ -12,6 +12,7 @@ import {
   type FieldError,
   type FormSchema,
   type Locale,
+  type OutcomeLook,
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
@@ -249,7 +250,7 @@ export function TransitionDialog({
    * Transition issues, its label, the item's number under it and a close button; 560px wide, a sheet from
    * the bottom on a phone. Absent: the plain heading (the Kanban's move).
    */
-  heading?: { code: string | null; documentNumber: string | null };
+  heading?: { code: string | null; look?: OutcomeLook | undefined; documentNumber: string | null };
   idPrefix: string;
   onClose: () => void;
 }) {
@@ -331,15 +332,16 @@ export function TransitionDialog({
       className={cn(
         "m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text backdrop:bg-text/40",
         // On a phone a WIR's pop-up is a sheet from the bottom of the screen, as the design draws it.
-        (inspection || heading) && "max-h-[90dvh] overflow-y-auto max-md:mb-0 max-md:max-w-none max-md:rounded-b-none",
+        (inspection || heading) && "max-h-[90dvh] overflow-y-auto",
+        inspection && "max-md:mb-0 max-md:max-w-none max-md:rounded-b-none",
         inspection && "md:max-w-xl",
-        heading && !inspection && "rounded-[18px] p-0 md:max-w-[560px] max-md:rounded-b-none",
+        heading && !inspection && "rounded-[18px] p-0 sm:max-w-[560px] max-[559px]:mb-0 max-[559px]:max-w-none max-[559px]:rounded-b-none",
       )}
     >
       <form onSubmit={onSubmit} className={cn("space-y-4", heading && !inspection && "[&>*:not(:first-child)]:mx-5 [&>:last-child]:mb-5")} noValidate>
         {heading && !inspection ? (
           <div className="flex items-center gap-3 border-b border-border-subtle px-5 py-4">
-            {heading.code && <CodeTile code={heading.code} size="lg" />}
+            {heading.code && <CodeTile code={heading.code} look={heading.look} size="lg" />}
             <div className="min-w-0 flex-1">
               <h2 className="text-[16px] font-bold">{title}</h2>
               {heading.documentNumber && (

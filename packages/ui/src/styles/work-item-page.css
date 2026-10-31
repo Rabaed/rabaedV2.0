@@ -59,7 +59,17 @@
   .wip .sdp-route-slot {
     padding-inline: 40px;
   }
-  .wip .sdp-facts {
+  .wip .sdp-facts,
+  .wip .wip-lead {
     margin-inline: 40px;
+  }
+  .wip .wip-lead {
+    padding-inline: 0;
+  }
+  .wip .sdp-tablist,
+  .wip .sdp-section-controls,
+  .wip .sdp-sections > :last-child,
+  .wip .sdp-internal {
+    padding-inline: 40px;
   }
 }

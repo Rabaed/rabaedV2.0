@@ -1,5 +1,14 @@
-import { outcomeLook, type BilingualText, type OutcomeLook } from "@rabaed/domain";
-import { coverNoteKey, type SubmittalTimelineEvent, type SubmittalTimelineOutcomes, type SubmittalTimelineText, type SubmittalTimelineTone } from "../submittal-panel/timeline-model.ts";
+import type { BilingualText } from "@rabaed/domain";
+import {
+  sameName,
+  sharedTexts,
+  toneOfCode,
+  written,
+  type SubmittalTimelineEvent,
+  type SubmittalTimelineOutcomes,
+  type SubmittalTimelineText,
+  type SubmittalTimelineTone,
+} from "../submittal-panel/timeline-model.ts";
 
 /**
  * The Work Item page's History (RP-1151, gap table rows 60–63): every event the history read gives
@@ -23,16 +32,10 @@ export type WorkItemHistoryEntry = {
   tone: SubmittalTimelineTone;
 };
 
-const toneOfLook: Record<OutcomeLook, SubmittalTimelineTone> = { a: "ok", b: "warn", c: "bad", d: "bad" };
-
-const written = (text: unknown): text is string => typeof text === "string" && text.trim() !== "";
-const sameName = (a: BilingualText | null, b: BilingualText | null) => a !== null && b !== null && a.en === b.en && a.ar === b.ar;
-
+/** The approval log's shared texts (the Cover Note, the Remarks), then a reason and an Internal Note. */
 function textsOf(event: SubmittalTimelineEvent): SubmittalTimelineText[] {
-  const cover = event.answers?.[coverNoteKey];
   return [
-    ...(written(cover) ? [{ kind: "coverNote" as const, text: cover }] : []),
-    ...(written(event.remarks) ? [{ kind: "remarks" as const, text: event.remarks }] : []),
+    ...sharedTexts(event),
     // An `assigned` event's reason is why it was handed over, which its label already says.
     ...(written(event.reason) && event.type !== "assigned" ? [{ kind: "reason" as const, text: event.reason }] : []),
     ...(written(event.internalNote) ? [{ kind: "internalNote" as const, text: event.internalNote }] : []),
@@ -51,12 +54,8 @@ export function workItemHistoryEntries({
   /** The item's Type's outcomes on the Project, to tone a Code by its place in the set. */
   outcomes?: SubmittalTimelineOutcomes;
 }): WorkItemHistoryEntry[] {
-  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone => {
-    const code = event.outcome ?? event.recommendedCode;
-    const outcome = code === null ? undefined : outcomes.find((o) => o.code === code);
-    if (outcome) return toneOfLook[outcomeLook(outcome, outcomes)];
-    return event.reason !== null && event.type !== "assigned" ? "warn" : "neutral";
-  };
+  const tone = (event: SubmittalTimelineEvent): SubmittalTimelineTone =>
+    toneOfCode(event.outcome ?? event.recommendedCode, outcomes) ?? (event.reason !== null && event.type !== "assigned" ? "warn" : "neutral");
   return events
     .map((event, i): WorkItemHistoryEntry => {
       const own = sameName(event.by.companyName, viewerCompany);

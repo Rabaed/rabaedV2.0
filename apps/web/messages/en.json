@@ -1314,6 +1314,7 @@
       "none": "No Links yet.",
       "remove": "Remove the Link to {number}",
       "hidden": "You are not allowed to see the details of this item.",
+      "noAccess": "Not visible to you",
       "linkPage": {
         "title": "Linked item",
         "back": "Back to the item it is linked from"
@@ -3260,6 +3261,8 @@
     "rail": "Transitions, Workflow and History",
     "form": "Form",
     "internalShort": "Internal",
+    "editing": "Editing",
+    "readOnly": "Read-only",
     "nothingAnswered": "Nothing answered yet",
     "details": "Details",
     "attachmentsSummary": "{count, plural, one {1 Document} other {{n} Documents}}",
@@ -3275,14 +3278,13 @@
       "title": "Transitions",
       "bar": "Transitions",
       "you": "{name} (you)",
-      "with": "With {company}",
       "none": "Nothing for you to do while it is with {company}.",
       "pickUpHelp": "Pick it up to take its Transitions.",
       "ended": "Nothing pending",
       "attention": "{count, plural, one {1 field needs your attention before sending.} other {{n} fields need your attention before sending.}}",
       "revisionText": "Code {code} ended this item. Start Revision {n} from its Form; the number gets Rev {n} when you Submit."
     },
-    "result": {
+    "issuedCode": {
       "issued": "Review Code issued · {date}",
       "signedBy": "Signed by"
     },

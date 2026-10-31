@@ -1,6 +1,6 @@
 import type { WorkItemHistory } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { transitionCodes, workItemCodeResult } from "./page-model.ts";
+import { transitionCodes, workItemIssuedCode } from "./page-model.ts";
 
 type Event = WorkItemHistory["events"][number];
 const b = (en: string, ar: string = en) => Object.fromEntries([["en", en], ["ar", ar]]) as { en: string; ar: string };
@@ -31,33 +31,33 @@ function event(over: Partial<Event> & Pick<Event, "type" | "audience">): Event {
   };
 }
 
-describe("the result card after a Code (RP-1151, gap table row 23)", () => {
+describe("The Issued Code card (RP-1151, gap table row 23)", () => {
   it("is the Code the item closed with: its code, when, the Remarks and who signed it", () => {
     const submit = event({ type: "transition", audience: "shared", transition: b("Submit") });
     const code = event({ type: "issue_code", audience: "shared", outcome: "C", remarks: "Show the circuit separation.", by: { companyName: consultant, memberName: shamsi, positions: [b("Lead Reviewer")] } });
-    expect(workItemCodeResult([submit, code], "C")).toEqual({ code: "C", at: code.at, remarks: "Show the circuit separation.", signer: shamsi, company: consultant });
+    expect(workItemIssuedCode([submit, code], "C")).toEqual({ code: "C", at: code.at, remarks: "Show the circuit separation.", signer: shamsi, company: consultant });
   });
 
   it("has no Remarks when none were written", () => {
     const code = event({ type: "issue_code", audience: "shared", outcome: "A", by: { companyName: consultant, memberName: shamsi, positions: [] } });
-    expect(workItemCodeResult([code], "A")?.remarks).toBeNull();
+    expect(workItemIssuedCode([code], "A")?.remarks).toBeNull();
   });
 
   it("is never a Recommended Code, which stays inside its Participant (V5)", () => {
     const recommended = event({ type: "recommend_code", audience: "internal", recommendedCode: "B", by: { companyName: consultant, memberName: shamsi, positions: [] } });
-    expect(workItemCodeResult([recommended], null)).toBeNull();
+    expect(workItemIssuedCode([recommended], null)).toBeNull();
   });
 
   it("is none while the item is open, and none for a Cancel", () => {
     const code = event({ type: "issue_code", audience: "shared", outcome: "C" });
-    expect(workItemCodeResult([code], null)).toBeNull();
-    expect(workItemCodeResult([event({ type: "cancelled", audience: "shared" })], "cancelled")).toBeNull();
+    expect(workItemIssuedCode([code], null)).toBeNull();
+    expect(workItemIssuedCode([event({ type: "cancelled", audience: "shared" })], "cancelled")).toBeNull();
   });
 
   it("is the latest Code when the history holds more than one", () => {
     const first = event({ type: "issue_code", audience: "shared", outcome: "B" });
     const last = event({ type: "issue_code", audience: "shared", outcome: "C" });
-    expect(workItemCodeResult([first, last], "C")?.at).toBe(last.at);
+    expect(workItemIssuedCode([first, last], "C")?.at).toBe(last.at);
   });
 });
 

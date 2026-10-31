@@ -212,7 +212,7 @@ export function useLinksSectionLabels(): LinksSectionLabels {
     title: t("title"),
     none: t("none"),
     remove: (number) => t("remove", { number }),
-    item: { hidden: t("hidden") },
+    item: { hidden: t("hidden"), noAccess: t("noAccess") },
     search,
   };
 }
@@ -220,5 +220,5 @@ export function useLinksSectionLabels(): LinksSectionLabels {
 /** "Linked from"'s words. */
 export function useLinkedFromLabels(): LinkedFromLabels {
   const t = useTranslations("workItems.links");
-  return { title: t("linkedFrom.title"), none: t("linkedFrom.none"), item: { hidden: t("hidden") } };
+  return { title: t("linkedFrom.title"), none: t("linkedFrom.none"), item: { hidden: t("hidden"), noAccess: t("noAccess") } };
 }

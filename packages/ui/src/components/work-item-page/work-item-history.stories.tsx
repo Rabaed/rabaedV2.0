@@ -59,6 +59,7 @@ function labels(context: { globals: Record<string, unknown> }): WorkItemPageHist
     texts: { coverNote: "Cover Note", remarks: "Remarks", internalNote: "Internal Note", reason: "Reason" },
     internal: text(copy.internal),
     details: text(copy.details),
+    you: (name) => `${name} (you)`,
     empty: text(copy.empty),
   };
 }
