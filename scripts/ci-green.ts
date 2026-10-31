@@ -44,6 +44,14 @@ export const CI_OWN_FILES: readonly string[] = [
   "packages/eslint-plugin/**",
   "**/tsconfig*.json",
   "**/.storybook/**",
+  // The image CI's "web image starts" job builds.
+  "**/Dockerfile*",
+  "**/.dockerignore",
+  // The shared test helpers (`expectHiddenFrom`, the towers, the id sweeps): one that returns early turns every test
+  // using it green. Helper files straight in a test/ folder count too (`isTestHelper`).
+  "**/test-support/**",
+  "**/test/support/**",
+  "scripts/*.fixtures.ts",
   // Dependencies: a swapped vitest, an override or an install script decides what the tests do.
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
@@ -85,8 +93,11 @@ const globPattern = (glob: string) =>
   );
 const OWN = CI_OWN_FILES.map(globPattern);
 
-/** True for a path in `CI_OWN_FILES`. */
-export const isCiOwnFile = (path: string): boolean => OWN.some((pattern) => pattern.test(path));
+/** Code in a test/ folder that is not itself a test (`*.test.ts(x)`) nor test data under test/fixtures/: a helper. */
+const isTestHelper = (path: string) => /(^|\/)test\/(?!fixtures\/)(.+\/)?[^/]+\.[cm]?[jt]sx?$/.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path);
+
+/** True for a path in `CI_OWN_FILES`, or a test helper. ci-green.test.ts checks every helper a test imports is one. */
+export const isCiOwnFile = (path: string): boolean => isTestHelper(path) || OWN.some((pattern) => pattern.test(path));
 
 /** A package.json's fields that matter to CI (all but `version` and `description`), as comparable text; undefined when it cannot be read. */
 const ciFieldsOf = (text: string | undefined): string | undefined => {

@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
@@ -180,8 +182,85 @@ describe("isCiOwnFile", () => {
       expect(isCiOwnFile(path), path).toBe(true);
   });
 
-  it("leaves app code, tests and other workflows alone", () => {
-    for (const path of ["apps/api/src/app.ts", "scripts/queue-pr.ts", "apps/api/test/links.test.ts", ".github/workflows/deploy-uat.yml", "docs/visibility.md", "my-vitest.config.ts.md"]) expect(isCiOwnFile(path), path).toBe(false);
+  it("leaves app code, tests, test data and other workflows alone", () => {
+    for (const path of [
+      "apps/api/src/app.ts",
+      "apps/worker/src/record/golden-fixtures.ts",
+      "scripts/queue-pr.ts",
+      "apps/api/test/links.test.ts",
+      "packages/ui/test/stories.test.tsx",
+      "apps/api/test/fixtures/registers/formats.xlsx",
+      ".github/workflows/deploy-uat.yml",
+      "docs/visibility.md",
+      "my-vitest.config.ts.md",
+      "apps/api/src/latest/support.ts",
+    ])
+      expect(isCiOwnFile(path), path).toBe(false);
+  });
+
+  it("names the image CI's 'web image starts' job builds (Main 6 on #580)", () => {
+    for (const path of ["Dockerfile", ".dockerignore", "apps/web/Dockerfile"]) expect(isCiOwnFile(path), path).toBe(true);
+  });
+
+  it("names the shared test helpers: a helper that returns early turns every test using it green (Main 6 on #580)", () => {
+    for (const path of [
+      "packages/db/test-support/hidden-from.ts",
+      "packages/db/test-support/id-sweep.ts",
+      "apps/api/test/support/harness.ts",
+      "apps/api/test/support/tower.ts",
+      "apps/admin/test/support/harness.ts",
+      "packages/domain/test/support/mar-workflow.ts",
+      "packages/infra/test/support.ts",
+      "packages/db/test/uat-tool-support.ts",
+      "packages/db/test/outbox-crash-worker.ts",
+      "scripts/check-migration-drift.fixtures.ts",
+    ])
+      expect(isCiOwnFile(path), path).toBe(true);
+  });
+});
+
+describe("a PR that weakens expectHiddenFrom", () => {
+  it("gets no CI credit: every visibility scenario would pass with it returning early", () => {
+    const own = ciOwnChanges(["packages/db/test-support/hidden-from.ts", "apps/api/src/app.ts"], () => ({ before: undefined, after: undefined }));
+    expect(own).toEqual(["packages/db/test-support/hidden-from.ts"]);
+    const verdict = ciVerdict(HEAD, PR, own, evidence(run()));
+    expect(verdict.state).toBe("refused");
+    if (verdict.state === "refused") expect(verdict.reason).toContain("packages/db/test-support/hidden-from.ts");
+  });
+});
+
+/**
+ * Files outside src/ that tests import as the code they test, not as helpers: a change to one is what CI tests.
+ * A new import outside src/ fails the test below until it is named here or is CI's own.
+ */
+const CODE_UNDER_TEST = ["packages/db/dev-tools/", "apps/web/next.config.ts", "scripts/screens-examples/", "scripts/uat-sheet/"];
+
+describe("every helper a test imports", () => {
+  const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.test.ts", "*.test.tsx"], { encoding: "utf8" }).stdout.split("\0").filter(Boolean);
+  // `@rabaed/<package>/<path>`: the package's folder, as the workspace resolves it.
+  const resolve = (from: string, specifier: string): string | undefined => {
+    if (specifier.startsWith(".")) return posix.normalize(posix.join(posix.dirname(from), specifier));
+    const scoped = /^@rabaed\/([\w-]+)\/(.+)$/.exec(specifier);
+    if (!scoped) return undefined;
+    const base = `packages/${scoped[1]}/${scoped[2]}`;
+    return [`${base}.ts`, `${base}/index.ts`, base].find((path) => existsSync(path));
+  };
+
+  // A scripts/ file a test imports is the code under test, as src/ is; its fixtures are not.
+  it("is CI's own, unless it is code under test (under src/, or a scripts/ file) or another test", () => {
+    expect(tracked.length).toBeGreaterThan(100);
+    const missing = new Set<string>();
+    for (const file of tracked) {
+      for (const [, specifier = ""] of readFileSync(file, "utf8").matchAll(/(?:from|import\() ?"([^"]+)"/g)) {
+        const path = resolve(file, specifier);
+        if (path === undefined || /\.test\.tsx?$/.test(path) || /(^|\/)src\//.test(path) || !existsSync(path)) continue;
+        if (/^scripts\/[^/]+\.ts$/.test(path) && !path.endsWith(".fixtures.ts")) continue;
+        if (CODE_UNDER_TEST.some((prefix) => path.startsWith(prefix))) continue;
+        if (!/\.[cm]?[jt]sx?$/.test(path)) continue;
+        if (!isCiOwnFile(path)) missing.add(`${path} (imported by ${file})`);
+      }
+    }
+    expect([...missing]).toEqual([]);
   });
 });
 
