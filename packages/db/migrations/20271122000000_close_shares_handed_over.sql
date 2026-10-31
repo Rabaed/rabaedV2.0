@@ -174,6 +174,7 @@ create or replace function app.work_item_shared_links(p_work_item_id uuid)
         where l.from_id = p_work_item_id and app.sees_work_item(f.id) and f.submitted_at is not null
           and l.arrival < case when f.closed_at is null then f.arrivals else f.arrivals - 1 end
           and t.document_number is not null and not app.chain_item_unshared(f.id, t.id)
+        -- hidden-sort-key: main's order, unchanged; the order they were added, never a time, which app.work_item_links already gives every reader (floored at the Creation Date, RP-399)
         order by l.created_at, t.document_number collate "C", l.id;
     end
   $$;
