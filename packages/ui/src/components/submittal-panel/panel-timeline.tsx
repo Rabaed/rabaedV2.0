@@ -81,11 +81,11 @@ export function SubmittalPanelTimeline({ locale, items, empty, label }: { locale
               {item.move}
             </p>
             {item.who && (item.who.person || item.who.company) && (
-              <p className="mt-1 flex items-start gap-1.5 text-[12.5px] [overflow-wrap:anywhere]">
+              <p className={cn("mt-1 text-[12.5px] [overflow-wrap:anywhere]", item.who.avatar && "flex items-start gap-1.5")}>
                 {/* The page's History draws the person's initials before the name (RP-1151 row 60); the name is beside it. */}
                 {item.who.avatar && item.who.person && <Avatar name={item.who.person} size="sm" decorative />}
-                {/* One run of text, so it wraps as words, not part by part. */}
-                <span className="min-w-0 self-center">
+                {/* One run of text, so it wraps as words, not part by part; the panel's line stays as it was. */}
+                <span className={cn(item.who.avatar && "min-w-0 self-center")}>
                 {/* Name · Position · Company, each part only when given; a Position only with its person. */}
                 {item.who.person && <span className="font-semibold">{item.who.person}</span>}
                 {item.who.person && item.who.position && (
