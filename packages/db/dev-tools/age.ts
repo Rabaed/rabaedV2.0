@@ -119,7 +119,8 @@ async function fingerprint(trx: Transaction<Database>, item: string): Promise<st
       const drop = [...t.moved, ...(table === "work_item" ? ITEM_TIME_MAPS : [])];
       // Every row of the item, frozen Documents too: the `rows` filter is what moves, not what is compared.
       const all = table === "work_item" ? sql`id = ${item}::uuid` : table === "work_item_link" ? sql`from_id = ${item}::uuid` : sql`work_item_id = ${item}::uuid`;
-      return sql`(select coalesce(jsonb_agg(to_jsonb(x) - ${drop}::text[] order by x.id), '[]'::jsonb) from ${sql.table(table)} x where ${all})`;
+      // Ordered by the row itself: not every table has an id.
+      return sql`(select coalesce(jsonb_agg(to_jsonb(x) - ${drop}::text[] order by (to_jsonb(x) - ${drop}::text[])::text), '[]'::jsonb) from ${sql.table(table)} x where ${all})`;
     });
   const { rows } = await sql<{ f: string }>`select md5(jsonb_build_array(${sql.join(parts)},
       (select count(*) from work_item_event), (select count(*) from outbox), (select count(*) from notification),
