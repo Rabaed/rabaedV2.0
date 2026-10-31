@@ -312,6 +312,25 @@ describe("ciOwnChanges", () => {
     expect(ciOwnChanges(["packages/ui/package.json"], versions({ name: "@rabaed/ui", version: "1.0.0", description: "a" }, { name: "@rabaed/ui", version: "1.1.0", description: "b" }))).toEqual([]);
   });
 
+  it("counts a hidden-asserts or untested-seams list that gains an entry: it lets a weaker test through, and the check reads the PR's own list", () => {
+    const list = (...entries: string[]) => `# comment\n${entries.map((entry) => `${entry}\n`).join("")}`;
+    const hidden = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    const gaps = "docs/visibility/untested-seams/RP-412.txt";
+    const at = (before: string | undefined, after: string | undefined) => () => ({ before, after });
+    expect(ciOwnChanges([hidden], at(list("empty a :: x"), list("empty a :: x", "text b :: y")))).toEqual([`${hidden} (gains an entry)`]);
+    expect(ciOwnChanges([gaps], at(undefined, list("RP-412-1 api")))).toEqual([`${gaps} (gains an entry)`]);
+    // An entry changed in place is one gone and one gained.
+    expect(ciOwnChanges([gaps], at(list("RP-412-1 api"), list("RP-412-1 db")))).toEqual([`${gaps} (gains an entry)`]);
+    expect(ciOwnChanges([gaps], at(undefined, undefined))).toEqual([`${gaps} (gains an entry)`]);
+  });
+
+  it("leaves a list that only shrinks or is deleted alone, and its README", () => {
+    const hidden = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\ntext b :: y\n", after: "# fixed b\nempty a :: x\n" }))).toEqual([]);
+    expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\n", after: undefined }))).toEqual([]);
+    expect(ciOwnChanges(["docs/visibility/hidden-asserts/README.md"], () => ({ before: "a", after: "b" }))).toEqual([]);
+  });
+
   it("counts a new package.json, one it cannot parse, and one it could read on neither side", () => {
     expect(ciOwnChanges(["packages/new/package.json"], versions(undefined, { scripts: { postinstall: "node x.js" } }))).toEqual(["packages/new/package.json"]);
     expect(ciOwnChanges(["package.json"], () => ({ before: "{", after: "{}" }))).toEqual(["package.json"]);

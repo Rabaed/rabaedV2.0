@@ -120,13 +120,34 @@ const ciFieldsOf = (text: string | undefined): string | undefined => {
 };
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`, and each package.json that differs between the merge base and
- * the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot parse,
- * or read on either side, counts.
+ * The visibility ratchets: lists of known weak asserts (scripts/check-hidden-asserts.ts) and untested scenarios
+ * (scripts/check-scenario-seams.ts) that may only shrink. The checks read the PR's own list, in CI and in `pnpm
+ * queue`'s merge checks alike, so a list that gains an entry lets a weaker test through: its CI run does not count.
+ * One that only shrinks, or goes, is the fix they ask for.
+ */
+const RATCHETS = ["docs/visibility/hidden-asserts/", "docs/visibility/untested-seams/"];
+
+/** A ratchet list's entries: one a line, blank lines and `#` lines left out. */
+const ratchetEntries = (text: string) =>
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+
+/**
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`); and each
+ * package.json that differs between the merge base and the head (`versions`, as `pnpm queue` reads them) in more than
+ * its `version` or `description`. One it cannot parse, or read on either side, counts.
  */
 export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
+    if (RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt")) {
+      const { before, after } = versions(path);
+      if (after === undefined) return before === undefined ? [`${path} (gains an entry)`] : [];
+      const was = new Set(ratchetEntries(before ?? ""));
+      return ratchetEntries(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
+    }
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);
     const [was, now] = [ciFieldsOf(before), ciFieldsOf(after)];
