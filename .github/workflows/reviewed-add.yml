@@ -1,6 +1,6 @@
 name: Reviewed add
 # Adds the `reviewed` label when the PR's head has both a /code-review summary comment
-# (`<!-- code-review: <sha> -->`, by one of the repo's own accounts) and a stamped verify
+# (`<!-- code-review: <sha> -->`, by a user with write access to the repo) and a stamped verify
 # line in the body (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 # The rule is scripts/reviewed-add.ts; it waits for the head's reviewed-label run first,
 # and re-runs the head's reviewed-required run, since a label added with GITHUB_TOKEN
@@ -24,13 +24,15 @@ jobs:
   reviewed-add:
     name: reviewed-add
     # A same-repo PR's events, and only comments that can change the answer: a marked
-    # comment on a PR by one of the repo's own accounts (the script checks every comment again;
-    # keep the marker and the list in step with `MARKER` and `isTrustedAuthor` there).
+    # comment on a PR by a user, not a bot. Who counts is the script's call: it reads each
+    # author's permission on the repo (write or admin), since `author_association` shows an
+    # org member with a private membership as CONTRIBUTOR (RP-1159). Keep the marker and the
+    # user check in step with `MARKER` and `isTrustedAuthor` there.
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
       contains(github.event.comment.body, '<!-- code-review: ') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+      github.event.comment.user.type == 'User')
     # On the job, not the workflow: a skipped job (any other comment) never joins the group, so
     # it cannot replace a pending run that matters. One run per PR at a time; never cancelled,
     # since a run may be mid-way through adding the label, and two re-runs of one
@@ -41,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     # Two waits of up to 1500 s each (the reviewed-label run, then the reviewed-required run).
     timeout-minutes: 60
+    # The script's read of a comment author's permission (collaborators/{login}/permission)
+    # needs only metadata: read, which every GITHUB_TOKEN has.
     permissions:
       contents: read
       pull-requests: write
