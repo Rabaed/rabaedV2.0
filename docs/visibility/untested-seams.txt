@@ -3,29 +3,3 @@
 # This list only shrinks: scripts/check-scenario-seams.ts fails on a gap that isn't here, and on
 # a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
 # Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.
-
-# RP-427
-RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
-RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
-RP-427-4 db  # The Project Admin binds C2's MARs to an exception Workflow named after C2's Company, then 
-
-# RP-438
-RP-438-1 db  # C1 Submits a MAR and the K1 engineer sends it to the K1 manager; C1 opens "View workflow" 
-
-# RP-439
-RP-439-1 db  # Tower's Project Admin copies the MAR Workflow into Tower; another Project's Project Admin 
-
-# RP-441
-RP-441-1 db  # Tower's Project Admin duplicates, publishes and binds a MAR Workflow as the Project copy, 
-
-# RP-442
-RP-442-1 db  # TMC's Authorized Person saves Tower's own Workflow to TMC's Library, edits the Library cop
-
-# RP-443
-RP-443-1 db  # A Rabaed Engineer duplicates MAR's Workflow into another Rabaed Default's draft, saves and
-
-# RP-450
-RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds a Stage and an outcome, an
-
-# RP-555
-RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
