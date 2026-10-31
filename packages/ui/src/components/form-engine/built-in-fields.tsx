@@ -12,7 +12,8 @@ import { Select } from "../form/select.tsx";
 // the filler's Visibility covers, active Scopes); the renderer only filters by Trade.
 
 /** One value offered for Trade or Location, labelled in the viewer's language. */
-export type BuiltInChoice = { id: string; label: string };
+/** A Built-in Field's choice; a Trade's `code` gives its chip its hue on the Work Item page (RP-1188, row 48). */
+export type BuiltInChoice = { id: string; label: string; code?: string };
 
 /** What the Built-in Fields offer, and how the read view names the answers. */
 export type BuiltInChoices = {

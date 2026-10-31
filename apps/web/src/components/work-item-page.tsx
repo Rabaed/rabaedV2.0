@@ -320,6 +320,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
       documents={documents}
       replyChecklists={replyChecklists}
       folding={{ lead, tail, labels: sectionLabels, nothing: t("nothingAnswered"), folded: ["details"] }}
+      // File cards, the Trade chip, the Location chip and Scopes tags (gap table rows 47–48).
+      look={{ answers: "page" }}
     />
   );
   const tabs = [

@@ -2,6 +2,7 @@
 
 import { formatNumber, type AttachmentsField as AttachmentsFieldSchema, type DocumentSummary, type Locale } from "@rabaed/domain";
 import { useRef } from "react";
+import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -60,6 +61,8 @@ export type AttachmentsFieldProps = {
   onUpload?: (file: File) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (documentId: string) => void;
+  /** "cards": the Work Item page's file cards in read mode (RP-1188, gap table row 47). */
+  look?: "list" | "cards";
 };
 
 /** Whether the field shows a file input now: the files may change, and it has room for another. */
@@ -104,13 +107,42 @@ export function attachmentsLimits(field: AttachmentsFieldSchema, locale: Locale,
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-export function AttachmentsField({ field, files, mode, locale, labels: text, onUpload, onOpen, onRemove }: AttachmentsFieldProps) {
+export function AttachmentsField({ field, files, mode, locale, labels: text, onUpload, onOpen, onRemove, look = "list" }: AttachmentsFieldProps) {
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
   const upload = takesUpload(field, files, mode);
   // Without a file input, the Field's label, help and error name and describe the list as a group.
   const { labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
   const group = !upload && labelId ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy } : {};
+  if (look === "cards" && mode === "read") {
+    // The Work Item page's file cards (RP-1188, gap table row 47): its type's icon on a tile, its name, its size, and a view button.
+    return (
+      <ul className="flex flex-col gap-2" {...group}>
+        {documents.map((d) => (
+          <li key={d.id} data-file-card="" className="flex items-center gap-3 rounded-[12px] bg-surface p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-[10px]",
+                d.contentType === "application/pdf" ? "bg-danger-tint text-danger-fg" : "bg-info-tint text-info-fg",
+              )}
+            >
+              <Icon name={d.contentType.startsWith("image/") ? "photo" : "file-text"} size={20} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] font-bold text-text">
+                <bdi>{d.fileName}</bdi>
+              </p>
+              <p className="text-[12px] text-muted">{fileSize(d.sizeBytes, locale, text)}</p>
+            </div>
+            <IconButton label={text.open(d.fileName)} size="sm" onClick={() => onOpen?.(d.id)}>
+              <Icon name="eye" size={18} />
+            </IconButton>
+          </li>
+        ))}
+      </ul>
+    );
+  }
   return (
     <div className="flex flex-col gap-2" {...group}>
       {documents.length > 0 ? (

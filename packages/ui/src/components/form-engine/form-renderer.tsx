@@ -63,6 +63,7 @@ import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 import { formSectionSummary } from "./section-summary.ts";
 import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
+import { tradeChipClass } from "../views/kanban-card.tsx";
 
 /** The fields a folded section's summary reads: the ones that read as one short line. */
 const summarised: ReadonlySet<string> = new Set([
@@ -235,7 +236,7 @@ export type FormRendererProps = {
    * its preview on a phone only (the page shows it beside the Form on a wide screen). Left out,
    * the Form renders as every other.
    */
-  look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards" };
+  look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards"; answers?: "plain" | "page" };
   /**
    * The page lays the sections out itself (the Work Item page's folding cards, RP-1151): each shown
    * section's key, title, one-line summary and content, in order; the attention banner stays above.
@@ -677,6 +678,8 @@ export function FormRenderer({
   className,
 }: FormRendererProps) {
   const templateCards = look.checklistTemplate === "cards";
+  // The Work Item page's read answers (RP-1188, gap table rows 47–48): file cards, the Trade chip, the Location chip, Scopes tags.
+  const pageAnswers = look.answers === "page";
   const fieldId = (key: string) => `${idPrefix}-${key}`;
   const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
   const visibility = formVisibility(schema, answers);
@@ -921,7 +924,7 @@ export function FormRenderer({
     if (field.type === "attachments") {
       const own = filesOf(files, field);
       return own && own.documents.length > 0 ? (
-        <AttachmentsField field={field} files={own} mode="read" locale={locale} labels={labels.attachments} onOpen={files?.onOpen} />
+        <AttachmentsField field={field} files={own} mode="read" locale={locale} labels={labels.attachments} onOpen={files?.onOpen} {...(pageAnswers ? { look: "cards" as const } : {})} />
       ) : null;
     }
     if (field.type === "photos") {
@@ -958,6 +961,7 @@ export function FormRenderer({
     if (isBuiltInField(field)) {
       const names = builtInAnswerLabels(field.type, value, choices);
       if (names.length === 0) return null;
+      if (pageAnswers) return <PageBuiltInAnswer type={field.type} names={names} code={field.type === "trade" ? choices.trades.find((c) => c.id === value)?.code : undefined} />;
       return field.type === "scopes" ? (
         <ul className="flex flex-col gap-1">
           {names.map((label) => (
@@ -973,7 +977,7 @@ export function FormRenderer({
     // Another Company's Member comes named, without their id (V14).
     const naming = named[field.key];
     if (isUnanswered(value) && !naming) return null;
-    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} labels={labels.table} optionLists={optionLists} />;
+    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} labels={labels.table} optionLists={optionLists} {...(pageAnswers ? { look: "page" as const } : {})} />;
     const shown = formatFormValue(field, value, locale, naming, optionLists, {}, suppliers);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency" || field.type === "calculated") {
@@ -1136,5 +1140,38 @@ export function FormRenderer({
             </section>
           ))}
     </div>
+  );
+}
+
+/**
+ * A Built-in Field's answer on the Work Item page (RP-1188, gap table row 48): the Trade as its chip in its hue, the
+ * Location as a chip with a pin, the Scopes as tags.
+ */
+function PageBuiltInAnswer({ type, names, code }: { type: "trade" | "location" | "scopes"; names: readonly string[]; code: string | undefined }) {
+  const chip = "inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-surface-subtle px-2.5 text-[13px] font-semibold shadow-[inset_0_0_0_1px_var(--border-subtle)]";
+  if (type === "trade") {
+    return (
+      <span data-trade-chip="" className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", code ? tradeChipClass(code) : "bg-surface-subtle")}>
+        <bdi>{names[0]}</bdi>
+      </span>
+    );
+  }
+  if (type === "location") {
+    return (
+      <span className={chip}>
+        <Icon name="map-pin" size={14} className="text-muted" />
+        {/* A filling choice carries its depth as dashes: the chip names the place alone. */}
+        <bdi>{names[0]!.replace(/^(— )+/, "")}</bdi>
+      </span>
+    );
+  }
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {names.map((name) => (
+        <li key={name} className={cn(chip, "h-[26px] rounded-full text-[12.5px]")}>
+          <bdi>{name}</bdi>
+        </li>
+      ))}
+    </ul>
   );
 }

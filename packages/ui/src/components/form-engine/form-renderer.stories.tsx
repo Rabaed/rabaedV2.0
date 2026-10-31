@@ -1,7 +1,7 @@
 import { formSchema, validateAnswers, type FieldError } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { expect, screen, userEvent, waitFor } from "storybook/test";
+import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
 import type { BuiltInChoices } from "./built-in-fields.tsx";
@@ -85,7 +85,7 @@ const choices = (context: StoryContext): BuiltInChoices => {
   const text = (key: keyof typeof copy) => storyText(context, copy[key]);
   return {
     trades: [
-      { id: id.electrical, label: text("electrical") },
+      { id: id.electrical, label: text("electrical"), code: "EL" },
       { id: id.mechanical, label: text("mechanical") },
     ],
     locations: [
@@ -319,5 +319,21 @@ export const ReadOnly: Story = {
       await expect(context.canvas.getByText(storyText(context, value))).toBeVisible();
     }
     await expect(context.canvas.getAllByText(storyText(context, copy.unanswered))).toHaveLength(2);
+  },
+};
+
+/** On the Work Item page (RP-1188, gap table row 48): the Trade as its chip in its hue, the Location as a chip, the Scopes as tags. */
+export const ReadOnThePage: Story = {
+  args: { mode: "read", answers, look: { answers: "page" } },
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} choices={choices(context)} />,
+  play: async (context) => {
+    const trade = context.canvas.getByText(storyText(context, copy.electrical)).closest("[data-trade-chip]");
+    await expect(trade).not.toBeNull();
+    await expect(trade!.className).not.toContain("bg-surface-subtle");
+    // The chip names the place alone, without the depth dashes of a filling choice.
+    const place = context.canvas.getByText(storyText(context, copy.floor1).replace(/^(— )+/, "")).parentElement!;
+    await expect(place.querySelector("svg")).not.toBeNull();
+    const tags = context.canvas.getByText(storyText(context, copy.lighting)).closest("ul")!;
+    await expect(within(tags).getAllByRole("listitem")).toHaveLength(2);
   },
 };

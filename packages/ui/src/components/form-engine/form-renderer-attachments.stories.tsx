@@ -152,3 +152,17 @@ export const ReadOnly: Story = {
     await expect(args.files!.onOpen).toHaveBeenCalledWith(datasheet.id);
   },
 };
+
+/** On the Work Item page (RP-1188, gap table row 47): a read file is a card, its icon on a tile, its name and size, and a view button. */
+export const ReadOnThePage: Story = {
+  args: { mode: "read", files: files([{ ...datasheet, frozen: true }, general], false), look: { answers: "page" } },
+  play: async (context) => {
+    const { args, canvas, canvasElement } = context;
+    const card = canvasElement.querySelector<HTMLElement>("[data-file-card]");
+    await expect(card).not.toBeNull();
+    await expect(card).toHaveTextContent("RESCLITE-PRO datasheet.pdf");
+    await expect(card!.querySelector("svg")).not.toBeNull();
+    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.openDatasheet) }));
+    await expect(args.files!.onOpen).toHaveBeenCalledWith(datasheet.id);
+  },
+};
