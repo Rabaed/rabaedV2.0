@@ -65,7 +65,7 @@ const copy = {
   remarksHelp: { en: "TMC Constructions sees these Remarks with your name as signer.", ar: "ترى TMC Constructions هذه الملاحظات واسمك موقّعًا عليها." },
   remarksMissing: { en: "Write the Remarks for Code C.", ar: "اكتب الملاحظات للرمز C." },
   onlyYours: { en: "Only your Company sees it", ar: "لا يراها إلا شركتك" },
-  placeholder: { en: "For Design Consultants LLC only…", ar: "لـDesign Consultants LLC فقط…" },
+  placeholder: { en: "For Design Consultants LLC only…", ar: "لشركة Design Consultants LLC فقط…" },
 };
 
 // Story Companies, by name only.

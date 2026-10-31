@@ -89,6 +89,26 @@ const summarised: ReadonlySet<string> = new Set([
   "scopes",
 ]);
 
+/**
+ * A section's edit controls in the page's columns (RP-1188, gap table row 46: three a row at 1366, as the owner's
+ * design), a wide one and any layout across them all; as a plain list without the grid.
+ */
+function editGrid(fields: readonly FormField[], grid: boolean, nodes: ReactNode[]): ReactNode {
+  if (!grid) return nodes;
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-4 @[560px]/sdp:grid-cols-2 @[1160px]/sdp:grid-cols-3">
+      {nodes.map((node, i) => {
+        const field = fields[i]!;
+        return (
+          <div key={field.key} className={cn("min-w-0", (!isAnswerField(field) || wideAnswer(field)) && "col-span-full")}>
+            {node}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** An answer that reads across every column of a section's grid: long text, a table, files, a checklist, a pick of items. */
 const wideAnswer = (field: AnswerField) =>
   ["textarea", "table", "attachments", "photos", "checklist", "checklist_template", "work_item_ref", "scopes"].includes(field.type);
@@ -994,7 +1014,7 @@ export function FormRenderer({
    */
   function sectionBody(fields: FormField[], editing: boolean, grid: boolean): ReactNode {
     return editing ? (
-        fields.map((field) => {
+        editGrid(fields, grid, fields.map((field) => {
           if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
           const error = errorOf(field.key);
           if (isBuiltInField(field) && field.type !== "scopes" && fixedByNumber.includes(field.type)) {
@@ -1056,7 +1076,7 @@ export function FormRenderer({
           ) : (
             shownField
           );
-        })
+        }))
       ) : (
         fieldRuns(fields).map((run) =>
           Array.isArray(run) ? (

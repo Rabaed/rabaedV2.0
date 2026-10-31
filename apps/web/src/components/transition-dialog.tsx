@@ -503,7 +503,14 @@ export function TransitionDialog({
             {error}
           </p>
         )}
-        <div className={cn("flex justify-end gap-3", inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6")}>
+        <div
+          className={cn(
+            "flex justify-end gap-3",
+            inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6",
+            // The page's pop-up keeps its footer in view while the form scrolls (RP-1188, gap table row 34: `.wpop .tf`).
+            heading && !inspection && "sticky bottom-0 mx-0! mb-0! border-t border-border-subtle bg-surface px-5 py-3",
+          )}
+        >
           <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>

@@ -126,7 +126,8 @@ function StepCards({ route, locale, labels, holder, viewerRole }: ViewProps & { 
   const ownStop = (stop: RouteStop) => viewerRole !== null && stop.role === viewerRole && stop.companyName === null;
   const rows = route.stops.flatMap((stop, i) => {
     const steps = route.steps.filter((s) => s.stop === i);
-    if (steps.length === 0) return [];
+    // The closing stop has no Steps: the raiser receives the outcome there, as the strip says (ref screens 8 and 20).
+    if (steps.length === 0) return [{ key: `stop-${i}`, stop, i, steps, own: false }];
     return ownStop(stop)
       ? steps.map((s) => ({ key: s.step.key, stop, i, steps: [s], own: true }))
       : [{ key: `stop-${i}`, stop, i, steps, own: false }];
@@ -139,12 +140,21 @@ function StepCards({ route, locale, labels, holder, viewerRole }: ViewProps & { 
         // A card's state: an own Step by the item's own position, a block by its stop's (V14: never one of its Steps).
         const state = step ? stepState(route, step) : row.stop.state;
         const held = !row.own && row.stop.companyName !== null;
+        const closing = row.steps.length === 0;
         return (
           <li key={row.key} data-stop={row.own ? undefined : row.i} data-state={state} aria-current={held ? "step" : undefined} className={cn("relative grid grid-cols-[32px_minmax(0,1fr)] gap-3", !last && "pb-4")}>
             {!last && <span aria-hidden="true" className={cn("absolute start-[15px] top-8 bottom-0 w-0.5", state === "done" ? "bg-success" : "bg-border-subtle")} />}
-            <StateDot state={state} number={step ? formatNumber(step.number, locale) : null} role={row.stop.role} own={row.own} />
+            <StateDot state={state} number={step ? formatNumber(step.number, locale) : null} role={row.stop.role} own={row.own} block={!row.own && !closing} />
             {step ? (
               <OwnStepCard step={step} labels={labels} locale={locale} holder={step.current ? holder : undefined} />
+            ) : closing ? (
+              <div className="flex flex-col gap-1 rounded-[12px] bg-surface p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+                <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
+                  <RoleIcon role={row.stop.role} size={16} />
+                  {labels.role(row.stop.role)}
+                </span>
+                <b className="text-[14px] font-bold">{labels.outcome}</b>
+              </div>
             ) : (
               <div className={cn("flex flex-col gap-1.5 rounded-[12px] border border-dashed bg-surface-subtle p-3", held ? "border-brand" : "border-border")}>
                 <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
@@ -179,12 +189,14 @@ function stepState(route: SubmittalRoute, step: RouteStep): RouteStop["state"] {
   return step.number < here.number ? "done" : step.number === here.number ? "current" : "upcoming";
 }
 
-function StateDot({ state, number, role, own }: { state: RouteStop["state"]; number: string | null; role: RouteStop["role"]; own: boolean }) {
+/** A card's mark on the line: done, here or to come; another Company's block a rounded square (ref `.wsc.grp .k`). */
+function StateDot({ state, number, role, own, block }: { state: RouteStop["state"]; number: string | null; role: RouteStop["role"]; own: boolean; block: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "relative z-[1] flex size-8 items-center justify-center rounded-full text-[13px] font-bold",
+        "relative z-[1] flex size-8 items-center justify-center text-[13px] font-bold",
+        block ? "rounded-[9px]" : "rounded-full",
         state === "done" && "bg-success text-on-inverse",
         state === "current" && "bg-surface text-brand-fg shadow-[inset_0_0_0_2px_var(--brand)]",
         state === "upcoming" && "bg-surface text-muted shadow-[inset_0_0_0_2px_var(--border-strong)]",

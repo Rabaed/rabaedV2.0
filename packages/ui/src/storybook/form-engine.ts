@@ -448,7 +448,7 @@ export const actionFormLabels: Record<Locale, ActionFormLabels> = {
       optional: "اختياري",
       required: "مطلوب",
       internalNoteShort: "لا يراها إلا شركتك",
-      internalNotePlaceholder: (company) => `لـ${company} فقط…`,
+      internalNotePlaceholder: (company) => `لشركة ${company} فقط…`,
       remarksRequired: (code) => `مطلوبة مع الرمز ${code}`,
       remarksHelp: (company) => `ترى ${company} هذه الملاحظات واسمك موقّعًا عليها.`,
       remarksMissing: (code) => `اكتب الملاحظات للرمز ${code}.`,

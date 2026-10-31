@@ -1176,7 +1176,7 @@
         "optional": "اختياري",
         "required": "مطلوب",
         "internalNoteShort": "لا يراها إلا شركتك",
-        "internalNotePlaceholder": "لـ{company} فقط…",
+        "internalNotePlaceholder": "لشركة {company} فقط…",
         "remarksRequired": "مطلوبة مع الرمز {code}",
         "remarksHelp": "ترى {company} هذه الملاحظات واسمك موقّعًا عليها.",
         "remarksMissing": "اكتب الملاحظات للرمز {code}."
