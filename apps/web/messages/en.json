@@ -3279,6 +3279,7 @@
       "bar": "Transitions",
       "you": "{name} (you)",
       "none": "Nothing for you to do while it is with {company}.",
+      "noneHere": "Nothing for you to do at this Step.",
       "pickUpHelp": "Pick it up to take its Transitions.",
       "ended": "Nothing pending",
       "attention": "{count, plural, one {1 field needs your attention before sending.} other {{n} fields need your attention before sending.}}",

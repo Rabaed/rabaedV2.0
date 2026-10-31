@@ -238,7 +238,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
       {...(item.actions.pickUp
         ? { none: t("actions.pickUpHelp") }
         : !hasTransitions && !item.outcome && held && !mine
-          ? { none: t("actions.none", { company: anotherCompany ? held.companyName[locale] : (holderText ?? held.companyName[locale]) }) }
+          ? { none: anotherCompany ? t("actions.none", { company: held.companyName[locale] }) : t("actions.noneHere") }
           : {})}
       {...(item.actions.createRevision && item.outcome
         ? {
@@ -279,7 +279,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
       icon: "paperclip",
       title: tItems("attachments.title"),
       summary: t("attachmentsSummary", { count: fileCount, n: n(fileCount) }),
-      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />,
+      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} titleHidden />,
     },
     {
       key: "links",
@@ -287,7 +287,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
       title: tItems("links.title"),
       summary: t("linksSummary", { count: links.links.length, n: n(links.links.length), from: n(linkedFrom.length) }),
       children: (
-        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels}>
+        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels} titleHidden>
           <WorkItemLinkedFrom items={[...linkedFrom]} />
         </WorkItemLinks>
       ),
