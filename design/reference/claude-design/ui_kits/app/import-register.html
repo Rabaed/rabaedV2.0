@@ -1,0 +1,62 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Submittals — Import register" subtitle="Upload → sheet & header → mapping (+ value matching) → preview with bad rows → confirm → result · Imports page + one import · EN / AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Submittals · Import register</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="snag/snag.css">
+<link rel="stylesheet" href="wf/wf.css">
+<link rel="stylesheet" href="bulk/bulk.css">
+<link rel="stylesheet" href="imp/imp.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}.segv a{display:contents}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="imp/data.js"></script>
+<script src="imp/wizard.js"></script>
+<script src="imp/imports.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='dmt';S.tab=1;
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+const SCR=[['upload','Upload','الرفع'],['sheet','Sheet','الورقة'],['map','Map fields','ربط الحقول'],['values','Map values','ربط القيم'],['setup','Assign & packages','الإسناد والحزم'],['validate','Validate','التحقق'],['result','Result','النتيجة'],['list','Imports','الاستيراد'],['det','One import','استيراد واحد']];
+function jump(k){const W=IMW.V;if(k==='list'||k==='det'){IMP.V.scr=k;if(k==='det'){IMP.V.det='IMP-014';IMP.V.dt='rows'}}else{IMP.V.scr='w';const i=IMW.STEPS().indexOf(k);if(i>0&&!W.file)W.file='TMC_Submittal_Register_Rev4.xlsx';if(k==='result'&&!W.done){const st=IMW.stat();W.done={id:'IMP-014',ok:st.ok.length,bad:st.bad.length,nw:IMW.newPk(st.ok),ex:IMW.exPk(st.ok)}}W.step=i;if(k==='validate'){W.vst='done';W.vtab='err'}}location.hash=k;render();const c=document.querySelector('.ct');if(c)c.scrollTop=0}
+function curScr(){return IMP.V.scr==='w'?IMW.cur():IMP.V.scr}
+function revBar(){const L=(e,a)=>S.lang==='ar'?a:e;const c=curScr();return `<div class="ir-rev" id="irrev"><span>${L('Screens','الشاشات')}</span>${SCR.map(s=>`<button class="${c===s[0]?'on':''}" data-jump="${s[0]}">${L(s[1],s[2])}</button>`).join('')}<i class="sep"></i><button class="${S.lang==='en'?'on':''}" data-rlang="en">EN</button><button class="${S.lang==='ar'?'on':''}" data-rlang="ar">ع</button><i class="sep"></i><a href="rabaed-admin-import.html" style="color:#d5d8de;text-decoration:none;padding:0 8px;white-space:nowrap">${L('Rabaed Admin variant','نسخة إدارة ربائد')} →</a></div>`}
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;const p=RP.PROJECTS.find(x=>x.id==='dmt');
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':'';
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}})}${RS.tabs()}<main class="ct ir-ct" id="lvroot">${IMP.view()}</main></div></div>${revBar()}`;
+ save();
+}
+document.addEventListener('click',e=>{const j=e.target.closest('[data-jump],[data-rlang]');if(j){if(j.dataset.jump)return jump(j.dataset.jump);S.lang=j.dataset.rlang;return render()}
+ const b=e.target.closest('button,[data-act]');if(!b||b.closest('#lvroot')||!document.contains(b))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){if(+d.tab===1){location.href='submittals-list.html';return}if(+d.tab===2){location.href='packages.html';return}return goShell({project:'dmt',tab:+d.tab})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.act==='collapse'){S.col=!S.col;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#lvroot')){S.menu=null;render()}});
+const R=()=>{const r=document.getElementById('lvroot');const y=r.scrollTop;r.innerHTML=IMP.view();r.scrollTop=y;const rb=document.getElementById('irrev');if(rb)rb.outerHTML=revBar()};
+IMP.bind(document.getElementById('app'),R);
+const h=location.hash.slice(1);if(h)jump(h);else render();
+</script>
+</body>
+</html>
