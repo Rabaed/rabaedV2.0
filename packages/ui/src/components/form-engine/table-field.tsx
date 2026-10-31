@@ -205,21 +205,25 @@ export function TableRead({
   locale,
   labels: text,
   optionLists,
+  look = "plain",
 }: {
   field: TableField;
   value: unknown;
   locale: Locale;
   labels: TableFieldLabels;
   optionLists?: readonly OptionList[];
+  /** "page": the Work Item page's Items table (RP-1188, gap table row 46): rounded, a tinted header, compact rows. */
+  look?: "plain" | "page";
 }) {
+  const page = look === "page";
   const rows = rowsOf(value).filter((row) => !Object.values(row).every(isUnanswered));
   return (
     <div className="flex flex-col gap-3">
-      <Table label={field.label[locale]}>
+      <Table label={field.label[locale]} {...(page ? { containerClassName: "rounded-[10px] border-border-subtle", className: "text-[13px]" } : {})}>
         <TableHeader>
           <TableRow>
             {field.columns.map((column) => (
-              <TableHead key={column.key} align={isNumeric(column) ? "end" : "start"}>
+              <TableHead key={column.key} align={isNumeric(column) ? "end" : "start"} className={cn(page && "h-9 bg-surface-subtle text-[11.5px]")}>
                 {column.label[locale]}
               </TableHead>
             ))}

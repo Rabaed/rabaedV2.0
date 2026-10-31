@@ -36,6 +36,10 @@ const copy = {
   openSettings: { en: "Open in Workflow settings", ar: "فتح في إعدادات سير العمل" },
   close: { en: "Close", ar: "إغلاق" },
   pending: { en: "Pending Approval", ar: "بانتظار الاعتماد" },
+  stepsTab: { en: "Steps", ar: "الخطوات" },
+  mapTab: { en: "Map", ar: "الخريطة" },
+  hereNow: { en: "Here now", ar: "هنا الآن" },
+  privateSteps: { en: "Who works on these Steps, and which one has it, stays with them.", ar: "من يعمل على هذه الخطوات، وأيها لديه، يبقى لديهم." },
 };
 
 const labels = (locale: Locale): SubmittalWorkflowMapLabels => ({
@@ -54,7 +58,14 @@ const labels = (locale: Locale): SubmittalWorkflowMapLabels => ({
   newOnly: copy.newOnly[locale],
   openSettings: copy.openSettings[locale],
   close: copy.close[locale],
+  stepsTab: copy.stepsTab[locale],
+  mapTab: copy.mapTab[locale],
+  hereNow: copy.hereNow[locale],
+  privateSteps: copy.privateSteps[locale],
 });
+
+/** The holder of the Contractor's own Step: a Member of the viewer's own Company (V14). Story data only. */
+const holderName = "Hafiz Hamdan";
 
 const bi = (en: string, ar: string) => ({ en, ar });
 /** The item inside the Consultant, as the Contractor's map read gives it: the role and Company only (V14). */
@@ -95,7 +106,16 @@ function Demo({ context, position, settingsHref, startOpen = false }: DemoArgs &
       route={
         <div className="px-5 pb-4">
           <SubmittalRouteStrip locale={locale} labels={labels(locale)} stops={route.stops} onOpen={() => setMapOpen(true)} />
-          <SubmittalWorkflowMap open={mapOpen} onOpenChange={setMapOpen} locale={locale} labels={labels(locale)} map={map} settingsHref={settingsHref} />
+          <SubmittalWorkflowMap
+            open={mapOpen}
+            onOpenChange={setMapOpen}
+            locale={locale}
+            labels={labels(locale)}
+            map={map}
+            settingsHref={settingsHref}
+            // The page passes its own Member holding its own Step, and nobody else (V14).
+            {...(position?.kind === "own" ? { holder: holderName } : {})}
+          />
         </div>
       }
     />
@@ -148,16 +168,28 @@ export const InsideTheConsultant: Story = {
     await expect(map.querySelectorAll("[data-step][aria-current]")).toHaveLength(0);
     const block = map.querySelector<HTMLElement>("[data-stop][aria-current]")!;
     await expect(block.querySelectorAll("[data-step]")).toHaveLength(2);
-    // "You are here" belongs on the viewer's own Step; another Company's block says who holds it.
+    // "Here now" belongs on the viewer's own Step; another Company's block says who holds it.
     await expect(block).toHaveTextContent(storyText(context, bi("With Design Consultants LLC", "لدى ديزاين للاستشارات")));
-    await expect(block).not.toHaveTextContent(storyText(context, copy.youAreHere));
+    await expect(block).not.toHaveTextContent(storyText(context, copy.hereNow));
+    // Its Steps by name, and nobody working on them (RP-1188, gap table row 58).
+    await expect(block).toHaveTextContent(storyText(context, copy.privateSteps));
+    await expect(block).not.toHaveTextContent(holderName);
+    await expect(map).not.toHaveTextContent(holderName);
+    await noTimesOrCounts(map);
+    // The Map tab: the large strip and the cards per Step, the Consultant's block marked, none of its Steps.
+    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await waitFor(() => expect(map.querySelector("[data-map-step='consultant_engineer']")).not.toBeNull());
+    await expect(map.querySelector("[data-step]")).toBeNull();
     await noTimesOrCounts(map);
     // Only a Member who may edit Workflows sees the way to its settings.
     await expect(within(map).queryByRole("link", { name: storyText(context, copy.openSettings) })).toBeNull();
   },
 };
 
-/** Scenario RP-1064-1's positive control: the Contractor's own Step is the one outlined, "You are here". */
+/**
+ * Scenario RP-1064-1's positive control: the Contractor's own Step is the one outlined, "Here now", with its
+ * own Member holding it; the Steps before it done, the Consultant's and Owner's blocks to come (RP-1188, row 57).
+ */
 export const OwnStep: Story = {
   args: { position: ownStep, startOpen: true },
   parameters: overlay,
@@ -165,8 +197,15 @@ export const OwnStep: Story = {
     const map = await waitFor(mapOf);
     const here = [...map.querySelectorAll<HTMLElement>("[data-step][aria-current='step']")];
     await expect(here.map((el) => el.dataset.step)).toEqual(["internal_review"]);
-    await expect(here[0]).toHaveTextContent(storyText(context, copy.youAreHere));
+    await expect(here[0]).toHaveTextContent(storyText(context, copy.hereNow));
+    await expect(here[0]).toHaveTextContent(holderName);
     await expect(currentStops(map)[0]).toHaveTextContent(storyText(context, copy.roles.contractor));
+    // Only the Step holding it names who holds it.
+    await expect(map.querySelectorAll("[data-step]:not([aria-current])").length).toBeGreaterThan(0);
+    for (const other of map.querySelectorAll<HTMLElement>("[data-step]:not([aria-current])")) await expect(other).not.toHaveTextContent(holderName);
+    // In the Map tab, the same Step is "You are here".
+    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await waitFor(() => expect(map.querySelector("[data-map-step='internal_review']")).toHaveTextContent(storyText(context, copy.youAreHere)));
   },
 };
 

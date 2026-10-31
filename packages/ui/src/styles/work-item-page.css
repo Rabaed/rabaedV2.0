@@ -73,3 +73,17 @@
     padding-inline: 40px;
   }
 }
+
+/*
+ * The Form's edit inputs (RP-1188, gap table row 46): 8px corners and 40px boxes, as the owner's design,
+ * and a field to fix tinted red as well as outlined. Only in the page's main column.
+ */
+.wip .sdp-main :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"]), textarea, select, button[role="combobox"]) {
+  border-radius: 8px;
+}
+.wip .sdp-main :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"]), select, button[role="combobox"]) {
+  min-height: 40px;
+}
+.wip .sdp-main :is(input, textarea)[aria-invalid="true"] {
+  background-color: var(--danger-tint);
+}

@@ -607,11 +607,11 @@ describe("the README walkthrough", () => {
     const rev1 = created.json().id as string;
     const chain = async (who: Caller, id: string) => ((await who.get(`/v1/work-items/${id}/revisions`)).json() as RevisionChain).revisions;
     expect(await chain(hafiz, rev1)).toEqual([
-      { id: original, documentNumber: base, revisionNo: 0 },
-      { id: rev1, documentNumber: null, revisionNo: 1 },
+      { id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }) },
+      { id: rev1, documentNumber: null, revisionNo: 1, stage: expect.objectContaining({ key: "draft" }) },
     ]);
     for (const who of [mohammed, faisal]) {
-      expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0 }]);
+      expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }) }]);
       expect((await links(who, original)).links).toEqual([]); // not hidden-from: the original has no Link yet for anyone; the one to Rev 1 comes at its Submit
     }
     await expectHiddenFrom({ read: readById(`/v1/work-items/${rev1}`), target: rev1, seenBy: hafiz, hiddenFrom: [mohammed, faisal], name: whoIs, label: "Rev 1, a Draft" });
@@ -637,7 +637,7 @@ describe("the README walkthrough", () => {
   it("15. Its Rev 1, Submitted by TMC, reaches the Consultant, whose Revision drop-down lists the original and Rev 1", async () => {
     const [original, rev1] = await codeCChain();
     const base = (await (await mohammed.get(`/v1/work-items/${original!.id}`)).json()).documentNumber as string;
-    expect(rev1).toEqual({ id: expect.any(String), documentNumber: `${base} Rev 1`, revisionNo: 1 });
+    expect(rev1).toEqual({ id: expect.any(String), documentNumber: `${base} Rev 1`, revisionNo: 1, stage: expect.objectContaining({ category: "in_progress" }) });
     for (const who of [hafiz, ali, ahmed, mohammed, faisal]) {
       const chain = (await who.get(`/v1/work-items/${rev1!.id}/revisions`)).json() as RevisionChain;
       expect(chain.revisions).toEqual([original, rev1]);

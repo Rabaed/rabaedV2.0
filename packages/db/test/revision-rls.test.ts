@@ -344,6 +344,31 @@ describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
       await expectHiddenFrom({ read: fromRevision, target, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: "the chain from the Draft Revision's id" });
     }
   });
+
+  // The drop-down's line under each Revision (RP-1188): its Stage as app.step_as_seen gives it to the reader.
+  const chainStages = (as: string, id: string) =>
+    call<{ id: string; stage_key: string }>(
+      as,
+      sql`select c.work_item_id as id, seen.stage_key from app.revision_chain(${id}::uuid) c cross join lateral app.step_as_seen(c.work_item_id) seen order by c.revision_no`,
+    );
+
+  it("gives C1 each Revision's Stage: the original's closed one and the Draft's (RP-1188-1)", async () => {
+    const expected = [
+      { id: closed, stage_key: "revise_resubmit" },
+      { id: revision, stage_key: "draft" },
+    ];
+    expect(await chainStages(c1.member, closed)).toEqual(expected);
+    expect(await chainStages(c1Pm, revision)).toEqual(expected);
+  });
+
+  it("gives K1 and the Owner the original's Stage only, and no Stage of the Draft Revision (RP-1188-1)", async () => {
+    for (const other of [k1.member, ow.member]) {
+      expect(await chainStages(other, closed)).toEqual([{ id: closed, stage_key: "revise_resubmit" }]);
+    }
+    for (const from of [closed, revision]) {
+      await expectHiddenFrom({ read: (as) => chainStages(as, from), target: revision, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member], label: `the chain's Stages from ${from === closed ? "the original" : "the Draft Revision"}` });
+    }
+  });
 });
 
 // The Link the engine adds from the revised item to its Revision at the Revision's

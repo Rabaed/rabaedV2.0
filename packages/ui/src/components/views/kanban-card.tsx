@@ -110,10 +110,11 @@ export function tradeChipClass(code: string): string {
 }
 
 /** The Trade chip: "Electrical Works (EL)" in its Trade's hue (the card, the List, the Submittal Panel). */
-export function TradeChip({ code, name }: { code: string; name: string }) {
+export function TradeChip({ code, name, label }: { code: string; name: string; label?: string }) {
   return (
-    <span className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(code))}>
-      {name} (<bdi translate="no">{code}</bdi>)
+    <span data-trade-chip="" className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", tradeChipClass(code))}>
+      {/* `label`: already written with its code, e.g. a Form choice's "Electrical (EL)" (the Work Item page, RP-1188). */}
+      {label !== undefined ? <bdi>{label}</bdi> : <>{name} (<bdi translate="no">{code}</bdi>)</>}
     </span>
   );
 }

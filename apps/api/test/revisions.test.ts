@@ -348,6 +348,12 @@ describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)",
   });
 });
 
+/** A Revision's Stage in the drop-down (RP-1188), by the Project's Stage key and category; its name is the Project's copy. */
+const atStage = (key: string, category: string) => expect.objectContaining({ key, category, name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }) });
+const closedAtC = atStage("revise_resubmit", "closed_negative");
+const inDraft = atStage("draft", "draft");
+const withConsultant = atStage("pending_approval", "in_progress");
+
 describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   let closed = "";
   let base = "";
@@ -362,7 +368,7 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
 
   it("lists only the original to K1 and the Owner Representative while Rev 1 is C1's (scenario 51)", async () => {
     for (const who of [k1Engineer, k1Manager, orEngineer]) {
-      expect(await chain(who, closed)).toEqual({ revisions: [{ id: closed, documentNumber: base, revisionNo: 0 }] });
+      expect(await chain(who, closed)).toEqual({ revisions: [{ id: closed, documentNumber: base, revisionNo: 0, stage: closedAtC }] });
     }
     const hiddenFrom = [k1Engineer, k1Manager, orEngineer];
     await expectHiddenFrom({ read: chainOf(closed), target: rev1, seenBy: [engineer, pm], hiddenFrom, name: named, label: "the original's drop-down" });
@@ -372,8 +378,8 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   it("lists the original and the Draft Rev 1, with no number yet, to C1", async () => {
     const expected = {
       revisions: [
-        { id: closed, documentNumber: base, revisionNo: 0 },
-        { id: rev1, documentNumber: null, revisionNo: 1 },
+        { id: closed, documentNumber: base, revisionNo: 0, stage: closedAtC },
+        { id: rev1, documentNumber: null, revisionNo: 1, stage: inDraft },
       ],
     };
     for (const who of [engineer, pm, viewer]) {
@@ -392,8 +398,8 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
     await submit(rev1);
     const expected = {
       revisions: [
-        { id: closed, documentNumber: base, revisionNo: 0 },
-        { id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1 },
+        { id: closed, documentNumber: base, revisionNo: 0, stage: closedAtC },
+        { id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1, stage: withConsultant },
       ],
     };
     for (const who of [k1Manager, orEngineer]) {
@@ -410,6 +416,14 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
     const history = async (id: string) => (await ok(k1Manager.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[];
     expect((await history(closed)).map((e) => e.type)).toContain("issue_code");
     expect((await history(rev1)).map((e) => e.type)).not.toContain("issue_code"); // not hidden-from: Rev 1 has no Code yet; the closed MAR's stays its own
+  });
+
+  it("gives each Revision the Stage its own page shows the reader (RP-1188-1)", async () => {
+    for (const who of [engineer, pm, viewer, k1Engineer, k1Manager, orEngineer]) {
+      for (const revision of (await chain(who, rev1)).revisions) {
+        expect(revision.stage, `${named(who)}, Revision ${revision.revisionNo}`).toEqual((await detail(who, revision.id)).stage);
+      }
+    }
   });
 });
 
@@ -496,7 +510,7 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
       expectHiddenFrom({ read, target: rev1, seenBy: [engineer, k1Manager, orB], hiddenFrom: orA, name: named, label });
     await hidden(item(rev1), "Rev 1");
     expect((await ok(orA.get(`/v1/work-items/${closed}/revisions`), 200)).json()).toEqual({
-      revisions: [{ id: closed, documentNumber: base, revisionNo: 0 }],
+      revisions: [{ id: closed, documentNumber: base, revisionNo: 0, stage: closedAtC }],
     });
     // orB doesn't see the original, so its Links and Linked from are read by those who see both.
     const ofClosed = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
@@ -512,7 +526,7 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
       expectHiddenFrom({ read, target: closed, seenBy, hiddenFrom: orB, name: named, label });
     await hidden(item(closed), [engineer, k1Manager, orA], "the original");
     expect((await ok(orB.get(`/v1/work-items/${rev1}/revisions`), 200)).json()).toEqual({
-      revisions: [{ id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1 }],
+      revisions: [{ id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1, stage: withConsultant }],
     });
     await hidden(linkedFromOf(rev1), [engineer, k1Manager], "Rev 1's Linked from");
     await hidden(linksOf(rev1), [engineer, k1Manager], "Rev 1's Links");

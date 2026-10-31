@@ -15,11 +15,14 @@ const copy = {
   draft: b("Draft", "مسودة"),
   open: b("Open", "مفتوح"),
   noNumber: b("No number yet: Revision 1", "لا رقم بعد: المراجعة 1"),
+  // The Project's Stage names, as the API gives each Revision's Stage (RP-1188, gap table row 10).
+  closedAtC: b("Revise & Resubmit", "مراجعة وإعادة تقديم"),
+  drafts: b("Drafts", "المسودات"),
 };
 
 const chain = [
-  { id: "0190a1b2-0000-7000-8000-000000000001", documentNumber: "TWR-TMC-EL-MAR-0003", revisionNo: 0 },
-  { id: "0190a1b2-0000-7000-8000-000000000002", documentNumber: null, revisionNo: 1 },
+  { id: "0190a1b2-0000-7000-8000-000000000001", documentNumber: "TWR-TMC-EL-MAR-0003", revisionNo: 0, stage: { name: copy.closedAtC } },
+  { id: "0190a1b2-0000-7000-8000-000000000002", documentNumber: null, revisionNo: 1, stage: { name: copy.drafts } },
 ];
 
 const labels = (context: StoryContext): RevisionMenuLabels => ({
@@ -62,6 +65,9 @@ export const Open: Story = {
     await expect(current).toHaveTextContent(storyText(context, copy.open));
     await expect(within(menu).getByText("TWR-TMC-EL-MAR-0003").closest("bdi")).toHaveAttribute("dir", "ltr");
     await expect(within(menu).getByText(storyText(context, copy.noNumber))).toBeVisible();
+    // Each Revision's line names it and its Stage (RP-1188, gap table row 10).
+    await expect(within(menu).getByText(`${storyText(context, copy.original)} · ${storyText(context, copy.closedAtC)}`)).toBeVisible();
+    await expect(within(menu).getByText(`${storyText(context, copy.revision1)} · ${storyText(context, copy.drafts)}`)).toBeVisible();
   },
 };
 
@@ -86,7 +92,7 @@ export const Choose: Story = {
 export const OnlyTheDraft: Story = {
   render: (_args, context) => (
     <div className="p-4">
-      <RevisionMenu locale={storyLocale(context)} labels={labels(context)} revisions={[{ id: chain[0]!.id, documentNumber: null, revisionNo: 0 }]} currentId={chain[0]!.id} onOpen={onOpen} />
+      <RevisionMenu locale={storyLocale(context)} labels={labels(context)} revisions={[{ id: chain[0]!.id, documentNumber: null, revisionNo: 0, stage: { name: copy.drafts } }]} currentId={chain[0]!.id} onOpen={onOpen} />
     </div>
   ),
   play: async (context) => {

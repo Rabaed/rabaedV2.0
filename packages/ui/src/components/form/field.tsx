@@ -80,6 +80,14 @@ export type FieldProps = {
   layout?: "stacked" | "inline";
   /** For a RadioGroup or SegmentedControl: the label names the group (via `aria-labelledby`) rather than one control. */
   group?: boolean;
+  /** Beside the label, not part of the control's name: a tag such as "Optional" (the Work Item page's pop-up, RP-1188). */
+  aside?: ReactNode;
+  /** Between the label and the control, e.g. the Internal Note's amber line (RP-1188). */
+  banner?: ReactNode;
+  /** The error above the help, as the owner's pop-up draws it (RP-1188); the help first otherwise. */
+  errorFirst?: boolean;
+  /** The label's look, where a design sets its own (the pop-up's bold labels). */
+  labelClassName?: string;
   /** The control's id; generated when omitted. */
   id?: string;
   className?: string;
@@ -99,6 +107,10 @@ export function Field({
   readOnly = false,
   layout = "stacked",
   group = false,
+  aside,
+  banner,
+  errorFirst = false,
+  labelClassName,
   id: idProp,
   className,
   children,
@@ -129,7 +141,7 @@ export function Field({
       )}
     </>
   );
-  const labelClass = cn("text-body font-medium text-text", disabled && "text-muted");
+  const labelClass = cn("text-body font-medium text-text", labelClassName, disabled && "text-muted");
   const labelElement = group ? (
     <span id={labelId} className={labelClass}>
       {labelContent}
@@ -140,19 +152,21 @@ export function Field({
     </label>
   );
 
+  const helpText = help && (
+    <p id={helpId} className="text-sm text-muted">
+      {help}
+    </p>
+  );
+  const errorText = error && (
+    <p id={errorId} className="flex items-start gap-1 text-sm text-danger-fg">
+      <Icon name="alert-circle" size={16} className="mt-0.5" />
+      <span>{error}</span>
+    </p>
+  );
   const messages = (help || error) && (
     <div className="flex flex-col gap-1">
-      {help && (
-        <p id={helpId} className="text-sm text-muted">
-          {help}
-        </p>
-      )}
-      {error && (
-        <p id={errorId} className="flex items-start gap-1 text-sm text-danger-fg">
-          <Icon name="alert-circle" size={16} className="mt-0.5" />
-          <span>{error}</span>
-        </p>
-      )}
+      {errorFirst ? errorText : helpText}
+      {errorFirst ? helpText : errorText}
     </div>
   );
 
@@ -166,7 +180,15 @@ export function Field({
           </div>
         ) : (
           <>
-            {labelElement}
+            {aside ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {labelElement}
+                {aside}
+              </div>
+            ) : (
+              labelElement
+            )}
+            {banner}
             {children}
           </>
         )}

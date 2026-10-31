@@ -4,7 +4,7 @@ import { useState } from "react";
 import { expect, userEvent } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { actionFormLabels } from "../../storybook/form-engine.ts";
-import { ActionForm } from "./action-form.tsx";
+import { ActionForm, type ActionFormPage } from "./action-form.tsx";
 
 // A Transition's pop-up (RP-300; form-engine.md §4 part 3): its Action Form, a
 // Form schema drawn by the Form engine, then the Internal Note, which every
@@ -29,6 +29,27 @@ const returnForm = formSchema.parse({
   ],
 });
 
+/** A code's Remarks, as the MAR Workflow's Screens hold them: required with Code C, optional with A. */
+const remarksForm = (required: boolean) =>
+  formSchema.parse({
+    sections: [
+      {
+        key: "code_remarks",
+        title: { en: "Remarks", ar: "الملاحظات" },
+        fields: [
+          {
+            key: "remarks",
+            type: "textarea",
+            required,
+            maxLength: 4000,
+            label: { en: "Remarks", ar: "الملاحظات" },
+            help: { en: "Shared with everyone who sees this item.", ar: "يراها كل من يرى هذا العنصر." },
+          },
+        ],
+      },
+    ],
+  });
+
 const copy = {
   reason: { en: "Reason", ar: "السبب" },
   internalNote: { en: "Internal Note", ar: "ملاحظة داخلية" },
@@ -38,12 +59,32 @@ const copy = {
   },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
   sectionTitle: { en: "Return", ar: "إعادة" },
+  remarks: { en: "Remarks", ar: "الملاحظات" },
+  requiredWithC: { en: "Required with Code C", ar: "مطلوبة مع الرمز C" },
+  optional: { en: "Optional", ar: "اختياري" },
+  remarksHelp: { en: "TMC Constructions sees these Remarks with your name as signer.", ar: "ترى TMC Constructions هذه الملاحظات واسمك موقّعًا عليها." },
+  remarksMissing: { en: "Write the Remarks for Code C.", ar: "اكتب الملاحظات للرمز C." },
+  onlyYours: { en: "Only your Company sees it", ar: "لا يراها إلا شركتك" },
+  placeholder: { en: "For Design Consultants LLC only…", ar: "لشركة Design Consultants LLC فقط…" },
 };
+
+// Story Companies, by name only.
+const onThePage = (code: string): ActionFormPage => ({ code, remarksReader: "TMC Constructions", ownCompany: "Design Consultants LLC" });
 
 type StoryContext = { globals: Record<string, unknown> };
 
 /** The pop-up being filled, checked with the validator as the page does before sending. */
-function Filling({ context, schema, initialErrors = [] }: { context: StoryContext; schema: typeof returnForm | null; initialErrors?: FieldError[] }) {
+function Filling({
+  context,
+  schema,
+  initialErrors = [],
+  page,
+}: {
+  context: StoryContext;
+  schema: typeof returnForm | null;
+  initialErrors?: FieldError[];
+  page?: ActionFormPage;
+}) {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [note, setNote] = useState("");
   const [errors, setErrors] = useState<FieldError[]>(initialErrors);
@@ -65,8 +106,11 @@ function Filling({ context, schema, initialErrors = [] }: { context: StoryContex
         labels={actionFormLabels[storyLocale(context)]}
         onChange={(changes) => setAnswers({ ...answers, ...changes })}
         onInternalNoteChange={setNote}
+        {...(page ? { page } : {})}
       />
-      <button type="submit">OK</button>
+      <button type="submit" className={page ? "mt-4 min-h-6 px-2" : undefined}>
+        OK
+      </button>
     </form>
   );
 }
@@ -124,5 +168,48 @@ export const Refused: Story = {
   play: async (context) => {
     await expect(context.canvas.getByRole("alert")).toBeVisible();
     await expect(context.canvas.getByRole("textbox", { name: storyText(context, copy.reason) })).toHaveAttribute("aria-invalid", "true");
+  },
+};
+
+/**
+ * The Work Item page's Code C pop-up (RP-1188, gap table rows 35–36): Remarks with the pill "Required
+ * with Code C" and the help naming who reads them, the design's error when left empty; the Internal
+ * Note tagged Optional, the amber line above the box and the placeholder naming the taker's own Company.
+ */
+export const CodeCOnThePage: Story = {
+  render: (_args, context) => <Filling context={context} schema={remarksForm(true)} page={onThePage("C")} />,
+  play: async (context) => {
+    const remarks = context.canvas.getByRole("textbox", { name: storyText(context, copy.remarks) });
+    const note = context.canvas.getByRole("textbox", { name: storyText(context, copy.internalNote) });
+    await expect(remarks).toBeRequired();
+    await expect(context.canvas.getByText(storyText(context, copy.requiredWithC))).toBeVisible();
+    await expect(remarks).toHaveAccessibleDescription(storyText(context, copy.remarksHelp));
+    await expect(context.canvas.queryByText(storyText(context, { en: "Shared with everyone who sees this item.", ar: "يراها كل من يرى هذا العنصر." }))).toBeNull();
+    await expect(context.canvas.getByText(storyText(context, copy.optional))).toBeVisible();
+    await expect(context.canvas.getByText(storyText(context, copy.onlyYours))).toBeVisible();
+    await expect(note).toHaveAttribute("placeholder", storyText(context, copy.placeholder));
+    await expect(note).not.toBeRequired();
+    // Remarks first, then the Internal Note.
+    await expect(remarks.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(context.canvas.getByRole("button", { name: "OK" }));
+    await expect(remarks).toHaveAttribute("aria-invalid", "true");
+    await expect(context.canvas.getByText(storyText(context, copy.remarksMissing))).toBeVisible();
+    await userEvent.type(remarks, "Add the wiring diagram");
+    await userEvent.click(context.canvas.getByRole("button", { name: "OK" }));
+    await expect(remarks).not.toHaveAttribute("aria-invalid", "true");
+    await expect(context.canvas.queryByText(storyText(context, copy.remarksMissing))).toBeNull();
+  },
+};
+
+/** Code A's pop-up on the page: its Remarks are optional, so they read "Optional" and nothing is refused. */
+export const CodeAOnThePage: Story = {
+  render: (_args, context) => <Filling context={context} schema={remarksForm(false)} page={onThePage("A")} />,
+  play: async (context) => {
+    const remarks = context.canvas.getByRole("textbox", { name: storyText(context, copy.remarks) });
+    await expect(remarks).not.toBeRequired();
+    await expect(context.canvas.getAllByText(storyText(context, copy.optional))).toHaveLength(2);
+    await userEvent.click(context.canvas.getByRole("button", { name: "OK" }));
+    await expect(remarks).not.toHaveAttribute("aria-invalid", "true");
   },
 };

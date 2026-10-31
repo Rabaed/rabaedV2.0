@@ -1,12 +1,12 @@
 "use client";
 
-import { backwardKinds, type Locale, type OutcomeLook, type WorkItemActions as Actions } from "@rabaed/domain";
+import { backwardKinds, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
 import { Badge, Button, cn } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { StampRequired, useMyCompanyRead } from "@/components/company-stamp";
 import { SignatureRequired } from "@/components/signature";
-import { TransitionDialog, useWorkItemCalls, type TransitionChoice } from "@/components/transition-dialog";
+import { TransitionDialog, useWorkItemCalls, type TransitionChoice, type TransitionHeading } from "@/components/transition-dialog";
 import { loaded, transitionGate } from "@/lib/transition-gate";
 
 type Transition = Actions["transitions"][number];
@@ -31,7 +31,7 @@ export function useTransitionOpener(
   workItemId: string,
   actions: Actions,
   locale: Locale,
-  heading?: (transition: Transition) => { code: string | null; look?: OutcomeLook | undefined; documentNumber: string | null },
+  heading?: (transition: Transition) => TransitionHeading,
 ) {
   const calls = useWorkItemCalls(workItemId);
   const [asking, setAsking] = useState<{ transition: Transition; choices?: TransitionChoice[] } | null>(null);

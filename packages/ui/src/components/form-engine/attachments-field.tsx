@@ -2,6 +2,7 @@
 
 import { formatNumber, type AttachmentsField as AttachmentsFieldSchema, type DocumentSummary, type Locale } from "@rabaed/domain";
 import { useRef } from "react";
+import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -60,6 +61,8 @@ export type AttachmentsFieldProps = {
   onUpload?: (file: File) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (documentId: string) => void;
+  /** "cards": the Work Item page's file cards, read and edited alike (RP-1188, gap table row 47). */
+  look?: "list" | "cards";
 };
 
 /** Whether the field shows a file input now: the files may change, and it has room for another. */
@@ -104,22 +107,34 @@ export function attachmentsLimits(field: AttachmentsFieldSchema, locale: Locale,
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-export function AttachmentsField({ field, files, mode, locale, labels: text, onUpload, onOpen, onRemove }: AttachmentsFieldProps) {
+export function AttachmentsField({ field, files, mode, locale, labels: text, onUpload, onOpen, onRemove, look = "list" }: AttachmentsFieldProps) {
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
   const upload = takesUpload(field, files, mode);
   // Without a file input, the Field's label, help and error name and describe the list as a group.
   const { labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
   const group = !upload && labelId ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy } : {};
+  const cards = look === "cards";
   return (
     <div className="flex flex-col gap-2" {...group}>
       {documents.length > 0 ? (
-        <ul className="divide-y divide-border rounded-md border border-border">
+        <ul className={cards ? "flex flex-col gap-2" : "divide-y divide-border rounded-md border border-border"}>
           {documents.map((d) => (
-            <li key={d.id} className="flex items-center gap-3 p-3">
-              <Icon name="file-text" size={20} className="shrink-0 text-muted" />
+            <li
+              key={d.id}
+              {...(cards ? { "data-file-card": "" } : {})}
+              className={cn("flex items-center gap-3 p-3", cards && "rounded-[12px] bg-surface shadow-[inset_0_0_0_1px_var(--border-subtle)]")}
+            >
+              {cards ? (
+                // The Work Item page's file cards (RP-1188, gap table row 47): the type's icon on a tile.
+                <span aria-hidden="true" className={cn("flex size-10 shrink-0 items-center justify-center rounded-[10px]", documentLook(d.contentType).tile)}>
+                  <Icon name={documentLook(d.contentType).icon} size={20} />
+                </span>
+              ) : (
+                <Icon name="file-text" size={20} className="shrink-0 text-muted" />
+              )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-body font-medium text-text">
+                <p className={cn("truncate text-text", cards ? "text-[13.5px] font-bold" : "text-body font-medium")}>
                   <bdi>{d.fileName}</bdi>
                 </p>
                 <p className="text-sm text-muted">
@@ -128,7 +143,7 @@ export function AttachmentsField({ field, files, mode, locale, labels: text, onU
                 </p>
               </div>
               <IconButton label={text.open(d.fileName)} size="sm" onClick={() => onOpen?.(d.id)}>
-                <Icon name="external-link" size={16} />
+                <Icon name={cards ? "eye" : "external-link"} size={cards ? 18 : 16} />
               </IconButton>
               {canRemove && !d.frozen && (
                 <IconButton label={text.remove(d.fileName)} size="sm" disabled={files?.pending} onClick={() => onRemove?.(d.id)}>
@@ -147,4 +162,14 @@ export function AttachmentsField({ field, files, mode, locale, labels: text, onU
       )}
     </div>
   );
+}
+
+/** A Document's look by its type: the icon, and the tile behind it (a PDF red, an image or other blue). Shared with the page's chips. */
+export function documentLook(contentType: string): { icon: "photo" | "file-text"; tile: string; tint: string } {
+  const pdf = contentType === "application/pdf";
+  return {
+    icon: contentType.startsWith("image/") ? "photo" : "file-text",
+    tile: pdf ? "bg-danger-tint text-danger-fg" : "bg-info-tint text-info-fg",
+    tint: pdf ? "text-danger-fg" : "text-muted",
+  };
 }

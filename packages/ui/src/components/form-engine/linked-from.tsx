@@ -27,21 +27,24 @@ export type LinkedFromListProps = {
   hrefFor: (workItemId: string) => string;
   /** The link component, e.g. the app's `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
+  /** "rows": the Work Item page's rows under a small label (RP-1188, gap table row 53). */
+  look?: "list" | "rows";
   className?: string;
 };
 
 /** "Linked from": the Submitted items linking to this one, under its own heading in the Links section. */
-export function LinkedFromList({ labels: text, items, hrefFor, linkAs = "a", className }: LinkedFromListProps) {
+export function LinkedFromList({ labels: text, items, hrefFor, linkAs = "a", look = "list", className }: LinkedFromListProps) {
   const titleId = useId();
+  const rows = look === "rows";
   return (
     <div className={cn("flex flex-col gap-2", className)} data-testid="work-item-linked-from">
-      <h3 id={titleId} className="text-body font-medium text-text">
+      <h3 id={titleId} className={rows ? "text-[12px] font-normal text-muted" : "text-body font-medium text-text"}>
         {text.title}
       </h3>
       {items.length === 0 ? (
         <p className="text-sm text-muted">{text.none}</p>
       ) : (
-        <ul aria-labelledby={titleId} className="flex flex-col divide-y divide-border rounded-md border border-border">
+        <ul aria-labelledby={titleId} className={rows ? "flex flex-col gap-2" : "flex flex-col divide-y divide-border rounded-md border border-border"}>
           {items.map((item, i) => (
             // A hidden item has no id; the API lists each item once, by Document Number.
             <LinkedItemRow
@@ -51,6 +54,7 @@ export function LinkedFromList({ labels: text, items, hrefFor, linkAs = "a", cla
               subject={item.subject}
               href={item.workItemId ? hrefFor(item.workItemId) : null}
               linkAs={linkAs}
+              look={look}
             />
           ))}
         </ul>

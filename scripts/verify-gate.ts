@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { ciOverHttp, ciOwnChanges, ciRunningLine, ciVerdict, readCiEvidence, type CiEvidence, type CiReads } from "./ci-green.ts";
 import { onlyCleanCommitsSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEvent } from "./reviewed-required.ts";
 
@@ -12,6 +13,10 @@ import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEve
 // `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request and merge_group,
 // so a merge started from GitHub's button cannot skip it (14 PRs merged without a valid line, retro
 // 2026-10-29).
+//
+// CI green counts too (RP-1190): GitHub CI's ci.yml pull_request run on the exact head, every required job
+// passed, from this repo, for a PR that changes none of CI's own files (scripts/ci-green.ts). `verifiedOrGreen`
+// is the one rule; the stamped line still counts and is the only way for a PR that edits ci.yml or a test config.
 //
 // The stamp: a full, clean run's last line ends `Stamp <16 hex>.`, a hash of the line before it
 // (`stampLine`, written by scripts/verify-steps.ts `finalLine`). A line typed or edited by hand (another
@@ -87,19 +92,42 @@ export function verifyGate(body: string, head: string, git: ReviewedGit): Verify
   return { ok: false, reason: parts.join("; ") };
 }
 
+export type Verified = { ok: true; via: "stamp"; commit: string } | { ok: true; via: "ci"; runId: number } | { ok: false; reason: string; running?: string[] };
+
+/**
+ * The verify gate's one rule for the check, reviewed-add and `pnpm queue` (RP-1094, RP-1190): the body's stamped
+ * line passes `verifyGate` for `head`, or CI is green on that exact head (`ciVerdict`, scripts/ci-green.ts). The
+ * line is read first, so an API error never blocks it. `ownChanges` is `ciOwnChanges` of the PR; `running` is set
+ * while the head's CI run is still going, with the required jobs left.
+ */
+export function verifiedOrGreen(body: string, head: string, pr: number, git: ReviewedGit, ownChanges: string[], evidence: CiEvidence): Verified {
+  const line = verifyGate(body, head, git);
+  if (line.ok) return { ok: true, via: "stamp", commit: line.commit };
+  const ci = ciVerdict(head, pr, ownChanges, evidence);
+  if (ci.state === "green") return { ok: true, via: "ci", runId: ci.runId };
+  if (ci.state === "running") return { ok: false, running: ci.left, reason: `${ciRunningLine(head, ci.left)}, and ${line.reason}` };
+  return { ok: false, reason: `${ci.reason}; and ${line.reason}` };
+}
+
+/** What a passing `verifiedOrGreen` rests on, for the summaries. */
+export const verifiedBy = (verified: Extract<Verified, { ok: true }>) => (verified.via === "stamp" ? `\`pnpm verify\` on ${verified.commit}` : `CI green (run ${verified.runId})`);
+
 /** False only for a PR with the `docs-only` label that changes only docs: it needs no verify run (as `pnpm queue` has it). */
 export const needsVerify = (labels: string[], changedFiles: string[]): boolean => !(labels.includes(DOCS_ONLY_LABEL) && changedFiles.every(isDoc));
 
 /** The fix both the check and `pnpm queue` print. */
-export const verifyFix = (pr: number, head: string) => `Fix: run \`pnpm verify\` on ${head} (a clean checkout of it), put its last line, stamp included, in the PR body: \`pnpm verify --pr ${pr}\` writes it there (or \`gh pr edit ${pr} --body-file <file>\`)`;
+export const verifyFix = (pr: number, head: string) =>
+  `Fix: wait for CI to pass on ${head} (a PR that changes CI's own files cannot use it), or run \`pnpm verify\` on ${head} (a clean checkout of it) and put its last line, stamp included, in the PR body: \`pnpm verify --pr ${pr}\` writes it there (or \`gh pr edit ${pr} --body-file <file>\`)`;
 
-export interface GateSeam extends ReviewedGit {
+export interface GateSeam extends ReviewedGit, CiReads {
   /** The PR now: its body, head and labels. */
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[] }>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
   /** Paths `head` changes against main: `git diff --name-only origin/main...<head>`. */
   changedFiles(head: string): string[];
+  /** A file's text at the merge base of origin/main and `head` and at `head`; undefined where it does not exist. */
+  packageJsonVersions(head: string, file: string): { before: string | undefined; after: string | undefined };
 }
 
 export async function requireVerified(event: RequiredEvent, seam: GateSeam): Promise<{ ok: boolean; summary: string }> {
@@ -114,16 +142,20 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
   const pull = await seam.pull(pr);
   // On a PR the check answers for the event's head; in the queue the PR's head is pinned.
   const head = event.kind === "pull_request" ? event.headSha : pull.headSha;
+  let ownChanges: string[];
   try {
     seam.fetchPull(pr);
     // Against main (the queue's base_ref), never merge_group.base_sha: that includes the entries ahead.
-    if (!needsVerify(pull.labels, seam.changedFiles(head))) return { ok: true, summary: `PR #${pr} has the '${DOCS_ONLY_LABEL}' label and changes only docs: no verify run needed.` };
+    const changed = seam.changedFiles(head);
+    if (!needsVerify(pull.labels, changed)) return { ok: true, summary: `PR #${pr} has the '${DOCS_ONLY_LABEL}' label and changes only docs: no verify run needed.` };
+    ownChanges = ciOwnChanges(changed, (file) => seam.packageJsonVersions(head, file));
   } catch (error) {
     return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
   }
-  const gate = verifyGate(pull.body, head, seam);
+  const gate = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
+  if (gate.ok && gate.via === "ci") return { ok: true, summary: `PR #${pr}: CI passed on its head ${head} (run ${gate.runId}), and it changes none of CI's own files: passes.` };
   if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main and screenshot-bot baseline commits led to the head ${head} from`}: passes.` };
-  return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body runs this check again.` };
+  return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body, or CI finishing, runs this check again.` };
 }
 
 export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Pick<GateSeam, "pull"> {
@@ -139,7 +171,20 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
   };
 }
 
-export function realGateGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): Omit<GateSeam, "pull"> {
+/** A file's text at the merge base of origin/main and `commit` (what the three-dot diff diffs against) and at `commit`; undefined where it does not exist. */
+export function packageJsonVersionsVia(cwd: string, spawn: typeof spawnSync): (commit: string, file: string) => { before: string | undefined; after: string | undefined } {
+  const run = (args: string[]) => spawn("git", args, { cwd, encoding: "utf8" });
+  return (commit, file) => {
+    const show = (ref: string) => {
+      const done = run(["show", `${ref}:${file}`]);
+      return done.status === 0 ? (done.stdout ?? "") : undefined;
+    };
+    const base = run(["merge-base", "origin/main", commit]);
+    return { before: base.status === 0 ? show((base.stdout ?? "").trim()) : undefined, after: show(commit) };
+  };
+}
+
+export function realGateGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): Omit<GateSeam, "pull" | keyof CiReads> {
   const must = (args: string[]) => {
     const done = spawn("git", args, { cwd, encoding: "utf8" });
     if (done.status !== 0) throw new Error(`git ${args.slice(0, 3).join(" ")} failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
@@ -147,6 +192,7 @@ export function realGateGit(cwd: string = process.cwd(), spawn: typeof spawnSync
   };
   return {
     ...realGit(cwd, spawn),
+    packageJsonVersions: packageJsonVersionsVia(cwd, spawn),
     fetchPull: (pr) => void must(["fetch", "--no-tags", "origin", `refs/pull/${pr}/head`]),
     // --no-renames lists a rename's old path too, so code renamed to .md is not a docs-only change (RP-606).
     changedFiles: (head) =>
@@ -163,7 +209,7 @@ async function main() {
   if (!token || !repository || !eventName) throw new Error("GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_NAME must be set");
   // The same event shapes as reviewed-required's.
   const event = requiredEvent(eventName, JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")), repository);
-  const result = await requireVerified(event, { ...realGateGit(), ...overHttp(repository, token) });
+  const result = await requireVerified(event, { ...realGateGit(), ...overHttp(repository, token), ...ciOverHttp(repository, token) });
   (result.ok ? console.log : console.error)(result.summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${result.summary}\n`);
   process.exit(result.ok ? 0 : 1);

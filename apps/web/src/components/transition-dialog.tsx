@@ -53,6 +53,19 @@ export type TransitionChoice = {
   proposed?: true;
 };
 
+/** The Work Item page's pop-up header (RP-1151, RP-1188). */
+export type TransitionHeading = {
+  code: string | null;
+  look?: OutcomeLook | undefined;
+  documentNumber: string | null;
+  /** Where the Transition takes the item, after the number: "Goes back to ‹Company›"; null when it says nothing. */
+  goesTo: string | null;
+  /** The Company that reads the Remarks with the signer's name; null when they stay with the taker's own. */
+  remarksReader: string | null;
+  /** The taker's own Company, which alone reads the Internal Note (V5). */
+  ownCompany: string;
+};
+
 /** The "Assign to" choice that leaves the next Step to its Step Pool. */
 const TO_POOL = "pool";
 /** The Recommended Code choice that recommends none. */
@@ -248,9 +261,11 @@ export function TransitionDialog({
   /**
    * The Work Item page's header (RP-1151, gap table rows 34 and 38): the code tile of the Review Code the
    * Transition issues, its label, the item's number under it and a close button; 560px wide, a sheet from
-   * the bottom on a phone. Absent: the plain heading (the Kanban's move).
+   * the bottom on a phone. Absent: the plain heading (the Kanban's move). RP-1188 (rows 34–36): the line
+   * after the number ("Goes back to ‹Company›"), when there is one; the Company that reads the Remarks, and the
+   * taker's own, for the Remarks' and the Internal Note's words.
    */
-  heading?: { code: string | null; look?: OutcomeLook | undefined; documentNumber: string | null };
+  heading?: TransitionHeading;
   idPrefix: string;
   onClose: () => void;
 }) {
@@ -344,9 +359,11 @@ export function TransitionDialog({
             {heading.code && <CodeTile code={heading.code} look={heading.look} size="lg" />}
             <div className="min-w-0 flex-1">
               <h2 className="text-[16px] font-bold">{title}</h2>
-              {heading.documentNumber && (
+              {(heading.documentNumber || heading.goesTo) && (
                 <p className="text-[12.5px] text-muted">
-                  <DocNo value={heading.documentNumber} />
+                  {heading.documentNumber && <DocNo value={heading.documentNumber} />}
+                  {heading.documentNumber && heading.goesTo && " · "}
+                  {heading.goesTo}
                 </p>
               )}
             </div>
@@ -448,6 +465,7 @@ export function TransitionDialog({
           onInternalNoteChange={setInternalNote}
           idPrefix={idPrefix}
           {...(reply.files ? { files: reply.files } : {})}
+          {...(heading && !inspection ? { page: { code: heading.code, remarksReader: heading.remarksReader, ownCompany: heading.ownCompany } } : {})}
         />
         {reply.message && (
           <p role="status" className="text-sm text-muted">
@@ -485,7 +503,14 @@ export function TransitionDialog({
             {error}
           </p>
         )}
-        <div className={cn("flex justify-end gap-3", inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6")}>
+        <div
+          className={cn(
+            "flex justify-end gap-3",
+            inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6",
+            // The page's pop-up keeps its footer in view while the form scrolls (RP-1188, gap table row 34: `.wpop .tf`).
+            heading && !inspection && "sticky bottom-0 mx-0! mb-0! border-t border-border-subtle bg-surface px-5 py-3",
+          )}
+        >
           <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
