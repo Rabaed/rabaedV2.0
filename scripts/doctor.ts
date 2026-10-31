@@ -43,7 +43,13 @@ export function parseSettings(text: string): Parsed {
     return { ok: true, value: JSON.parse(text) };
   } catch (error) {
     // The parser's message is not printed: it can quote the file. Only its position is used.
-    const found = /position (\d+)/.exec((error as Error).message);
+    const message = (error as Error).message;
+    // Running out of text (a truncated file) has no position: the error is at the end of the text.
+    if (/^Unexpected end of JSON input/.test(message)) {
+      const { line, column } = lineAndColumn(text, text.length);
+      return { ok: false, where: `at line ${line}, column ${column} (end of text)` };
+    }
+    const found = /position (\d+)/.exec(message);
     if (!found) return { ok: false, where: "(no position reported)" };
     const { line, column } = lineAndColumn(text, Number(found[1]));
     return { ok: false, where: `at line ${line}, column ${column}` };
@@ -61,11 +67,8 @@ function enablesPlugin(value: unknown): boolean {
 /** Runs every check, in the order it prints them. */
 export function runChecks(env: DoctorEnv): Check[] {
   const checks: Check[] = [];
-  const settingsFiles = [
-    join(env.homeDir, ".claude", "settings.json"),
-    join(env.cwd, ".claude", "settings.json"),
-    join(env.cwd, ".claude", "settings.local.json"),
-  ];
+  const homeSettingsPath = join(env.homeDir, ".claude", "settings.json");
+  const settingsFiles = [homeSettingsPath, join(env.cwd, ".claude", "settings.json"), join(env.cwd, ".claude", "settings.local.json")];
   const enabledIn: string[] = [];
 
   for (const path of settingsFiles) {
@@ -100,12 +103,14 @@ export function runChecks(env: DoctorEnv): Check[] {
       : {
           name: "plugin",
           ok: false,
-          message: `mattpocock-skills is not enabled: no readable settings enables enabledPlugins "${PLUGIN_PREFIX}…" to true. Turn it on in ${settingsFiles[0]}, or fix the parse error above first.`,
+          message: `mattpocock-skills is not enabled: no readable settings enables enabledPlugins "${PLUGIN_PREFIX}…" to true. Turn it on in ${homeSettingsPath}, or fix the parse error above first.`,
         },
   );
 
+  let ghInstalled = false;
   for (const tool of TOOLS) {
     const version = env.run(tool, ["--version"]);
+    if (tool === "gh") ghInstalled = version !== undefined;
     checks.push(
       version === undefined
         ? { name: tool, ok: false, message: `${tool}: missing (not on PATH). Install it, then open a new shell.` }
@@ -113,7 +118,6 @@ export function runChecks(env: DoctorEnv): Check[] {
     );
   }
 
-  const ghInstalled = checks.some((c) => c.name === "gh" && c.ok);
   if (!ghInstalled) {
     checks.push({ name: "gh login", ok: false, message: "gh login: cannot test, gh is missing." });
   } else if (env.run("gh", ["auth", "status"]) === undefined) {

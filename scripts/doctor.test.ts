@@ -41,7 +41,7 @@ describe("runChecks", () => {
 
   it("names the file, line and column of invalid JSON, and never prints its contents", () => {
     // The trailing comma on line 2 makes the parser fail at the closing brace on line 3.
-    const secret = "sk-test-not-a-real-key";
+    const secret = "not-a-real-secret-value";
     const broken = `{\n  "apiKey": "${secret}",\n}`;
     const checks = runChecks(fakeEnv({ [userSettings]: enabled, [projectLocal]: broken }));
 
@@ -64,7 +64,7 @@ describe("runChecks", () => {
     const off = JSON.stringify({ enabledPlugins: { "mattpocock-skills@mattpocock": false, other: true } });
     const checks = runChecks(fakeEnv({ [userSettings]: off }));
 
-    const plugin = checks.find((c) => c.message.includes("mattpocock-skills"));
+    const plugin = checks.find((c) => c.name === "plugin");
     expect(plugin?.ok).toBe(false);
     expect(exitCodeOf(checks)).toBe(1);
   });
@@ -72,7 +72,7 @@ describe("runChecks", () => {
   it("names the project file that enables the plugin", () => {
     const checks = runChecks(fakeEnv({ [projectSettings]: enabled }));
 
-    const plugin = checks.find((c) => c.message.includes("is enabled in"));
+    const plugin = checks.find((c) => c.name === "plugin");
     expect(plugin?.ok).toBe(true);
     expect(plugin?.message).toContain(projectSettings);
   });
@@ -82,7 +82,32 @@ describe("runChecks", () => {
     const checks = runChecks(fakeEnv({ [userSettings]: truncated }));
 
     expect(checks.find((c) => c.name === userSettings)?.ok).toBe(false);
-    expect(checks.find((c) => c.message.includes("is not enabled"))?.ok).toBe(false);
+    expect(checks.find((c) => c.name === "plugin")?.ok).toBe(false);
+  });
+
+  it("reports the end of an empty file, where the parser gives no position", () => {
+    // Running out of text names no position, so the error is taken to be at the end of the text.
+    const checks = runChecks(fakeEnv({ [userSettings]: "" }));
+
+    const bad = checks.find((c) => c.name === userSettings);
+    expect(bad?.ok).toBe(false);
+    expect(bad?.message).toContain("at line 1, column 1 (end of text)");
+  });
+
+  it("reports the line and column the parser gives for a file cut off mid-object", () => {
+    const truncated = `{\n  "a": 1`;
+    const checks = runChecks(fakeEnv({ [userSettings]: truncated }));
+
+    expect(checks.find((c) => c.name === userSettings)?.message).toContain("at line 2, column 9.");
+  });
+
+  it("says the parser gave no position when the error has none and the text does not end early", () => {
+    // A bare token fails with a message that names no position.
+    const checks = runChecks(fakeEnv({ [userSettings]: "x" }));
+
+    const bad = checks.find((c) => c.name === userSettings);
+    expect(bad?.ok).toBe(false);
+    expect(bad?.message).toContain("(no position reported)");
   });
 
   it("reports each tool's version", () => {
