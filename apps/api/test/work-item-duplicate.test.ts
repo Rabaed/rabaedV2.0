@@ -79,17 +79,29 @@ beforeAll(async () => {
   await take(at.c1Pm, closed, "submit", { internalNote: "C1 only: submitted early" });
   await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit", internalNote: "K1 only: their price is high" });
-  // A file K1 uploaded to the item (as if its Form let K1 attach one): never C1's to copy.
-  await sql`
+  // A file K1 put in the Code's reply Screen (as if its Screen let K1 attach one), taken by the Code, so
+  // C1 reads it (ADR 0024; RP-955: a file K1 added otherwise would stay K1's after the close): never C1's to copy.
+  const { rows } = await sql<{ id: string }>`
       with k1 as (
         select p.id from participant p
         where p.project_id = ${at.projectId}::uuid and p.company_id = (select company_id from member where id = ${k1.company.authorizedPerson.id}::uuid)
-      ), doc as (select gen_random_uuid() as id)
+      ), doc as (select gen_random_uuid() as id), code as (
+        select e.id from work_item_event e
+        where e.work_item_id = ${closed}::uuid and e.type in ('transition', 'issue_code') and e.audience = 'shared'
+        order by e.created_at desc, e.seq desc limit 1
+      )
       insert into document (id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
-        uploaded_by_member_id, uploaded_by_participant_id, confirmed_at)
+        uploaded_by_member_id, uploaded_by_participant_id, confirmed_at, reply, field_key, reply_event_id)
       select doc.id, ${at.projectId}::uuid, ${closed}::uuid, 'k1-sample-report.pdf', 10, 'application/pdf',
-        app.document_storage_key(${at.projectId}::uuid, ${closed}::uuid, doc.id), ${k1.company.authorizedPerson.id}::uuid, k1.id, now()
-      from k1, doc
+        app.document_storage_key(${at.projectId}::uuid, ${closed}::uuid, doc.id), ${k1.company.authorizedPerson.id}::uuid, k1.id, now(),
+        true, 'code_files', code.id
+      from k1, doc, code
+      returning id
+  `.execute(migrator);
+  // Added during the arrival the close follows (the insert stamps the current one), and frozen by the Code.
+  await sql`
+      update document d set arrival = w.arrivals - 1, frozen_at = d.confirmed_at
+      from work_item w where w.id = d.work_item_id and d.id = ${rows[0]!.id}::uuid
   `.execute(migrator);
 });
 
