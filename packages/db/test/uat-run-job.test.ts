@@ -2,18 +2,24 @@
 // report, run now. It queues what the scheduled job would, sends with the worker's own handlers (a fake
 // mailer here), and never claims the scheduled run, so the real schedule still runs. `--member` sends
 // only that Member's: nobody else's row is queued. `--dry-run` lists who would get one and sends nothing.
+// Every email is built on the worker's own connection (rabaed_app, no Member set), so it says exactly
+// what the worker's would (Main 4, 2026-10-31: visibility first).
+import { randomUUID } from "node:crypto";
 import type { NotificationDigest, StepAgeReport } from "@rabaed/domain";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { runJob } from "../dev-tools/index.ts";
-import { createDb, notificationDigestHandler, stepAgeReportHandler, type Db } from "../src/index.ts";
+import { runJob, type JobConnections } from "../dev-tools/index.ts";
+import { createDb, notificationDigestHandler, runScheduledJobs, stepAgeReportHandler, weeklyStepAgeReportJob, type Db } from "../src/index.ts";
 import { buildSeamTwoTower, drainOutbox, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { statementRoles } from "../test-support/statement-roles.ts";
 
 const urls = testDatabaseUrls();
 let migrator: pg.Client;
 let app: Db;
 let tool: Db;
 let tower: SeamTwoTower;
+/** The tool's two connections: it queues as the migrator, and sends on the worker's. */
+const jobDbs = (worker: Db = app): JobConnections => ({ migrator: tool, worker });
 
 let digests: NotificationDigest[] = [];
 let reports: StepAgeReport[] = [];
@@ -69,7 +75,7 @@ describe("uat:run-job digest", () => {
   it("--dry-run lists who would get one, and queues and sends nothing", async () => {
     const engineer = await emailOf(tower.c1.members.engineer);
     digests = [];
-    const run = await runJob(tool, "digest", { handlers, memberEmail: engineer, dryRun: true });
+    const run = await runJob(jobDbs(), "digest", { handlers, memberEmail: engineer, dryRun: true });
     expect(run.queued.map((r) => r.email)).toEqual([engineer]);
     expect(run.processed).toEqual([]);
     expect(digests).toEqual([]);
@@ -80,7 +86,7 @@ describe("uat:run-job digest", () => {
     const engineer = await emailOf(tower.c1.members.engineer);
     const claimed = await runsOf("daily_digest");
     digests = [];
-    const run = await runJob(tool, "digest", { handlers, memberEmail: engineer, dryRun: false });
+    const run = await runJob(jobDbs(), "digest", { handlers, memberEmail: engineer, dryRun: false });
     expect(run.processed.map((r) => r.email)).toEqual([engineer]);
     expect(digests.map((d) => d.to)).toEqual([engineer]);
     expect(digests[0]!.projects.map((p) => p.projectId)).toEqual([tower.projectId]);
@@ -97,7 +103,7 @@ describe("uat:run-job weekly-report", () => {
     expect(members.length).toBeGreaterThan(holders.length);
     reports = [];
     const claimed = await runsOf("weekly_step_age_report");
-    await runJob(tool, "weekly-report", { handlers, dryRun: false });
+    await runJob(jobDbs(), "weekly-report", { handlers, dryRun: false });
     const ours = reports.filter((r) => r.projectId === tower.projectId).map((r) => r.to);
     expect(ours.sort()).toEqual(holders);
     expect(await runsOf("weekly_step_age_report")).toBe(claimed);
@@ -107,7 +113,7 @@ describe("uat:run-job weekly-report", () => {
     const [holder, other] = await assignHolders();
     const holderId = (await migrator.query<{ id: string }>("select id from member where email = $1", [holder])).rows[0]!.id;
     reports = [];
-    const run = await runJob(tool, "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+    const run = await runJob(jobDbs(), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
     expect(new Set(reports.map((r) => r.to))).toEqual(new Set([holder]));
     expect(run.leftOut).toBeGreaterThan(0);
     expect(await queuedFor("step_age_report", holderId)).toBe(0);
@@ -117,8 +123,38 @@ describe("uat:run-job weekly-report", () => {
     }
   });
 
+  it("builds every email on the worker's connection: each statement of the sending runs as rabaed_app", async () => {
+    const [holder] = await assignHolders();
+    const recorded = statementRoles(urls.app);
+    try {
+      reports = [];
+      const run = await runJob(jobDbs(recorded.db), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+      expect(run.processed.map((r) => r.email)).toEqual([holder]);
+      expect(recorded.statements.some((s) => s.sql.includes("app.take_step_age_report"))).toBe(true);
+      expect([...new Set(recorded.statements.map((s) => s.role))]).toEqual(["rabaed_app"]);
+    } finally {
+      await recorded.db.destroy();
+    }
+  });
+
+  it("sends a Member exactly the report the worker's own scheduled run sends them", async () => {
+    const [holder] = await assignHolders();
+    reports = [];
+    await runJob(jobDbs(), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+    const fromTool = reports.filter((r) => r.to === holder && r.projectId === tower.projectId);
+    expect(fromTool).toHaveLength(1);
+
+    // The worker's run: the scheduled job, due at a Sunday 07:00 in Riyadh (its own name, so no run of
+    // another test is in the way), then the outbox as the worker processes it.
+    reports = [];
+    const job = { ...weeklyStepAgeReportJob, name: `test_${randomUUID()}` };
+    expect(await runScheduledJobs(app, [job], new Date("2026-11-01T07:00:00+03:00"))).toMatchObject([{ outcome: "ran" }]);
+    await drainOutbox(app, { step_age_report: handlers.step_age_report });
+    expect(reports.filter((r) => r.to === holder && r.projectId === tower.projectId)).toEqual(fromTool);
+  });
+
   it("refuses a --member no Member has", async () => {
-    await expect(runJob(tool, "weekly-report", { handlers, memberEmail: "nobody-at-all@rabaed.test", dryRun: true })).rejects.toThrow(
+    await expect(runJob(jobDbs(), "weekly-report", { handlers, memberEmail: "nobody-at-all@rabaed.test", dryRun: true })).rejects.toThrow(
       "no Member has the email nobody-at-all@rabaed.test",
     );
   });
@@ -127,7 +163,7 @@ describe("uat:run-job weekly-report", () => {
     const [holder] = await assignHolders();
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [tower.projectId]);
     reports = [];
-    const run = await runJob(tool, "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+    const run = await runJob(jobDbs(), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
     expect(reports.filter((r) => r.projectId === tower.projectId)).toEqual([]);
     expect(run.processed.filter((r) => r.projectId === tower.projectId)).toEqual([]);
   });
