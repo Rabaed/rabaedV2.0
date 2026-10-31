@@ -89,6 +89,16 @@ describe("overHttp", () => {
     expect(urls).toEqual(["https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=1", "https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=2"]);
   });
 
+  it("names a deleted user's label as GitHub's ghost, so the label still counts as a hand label", async () => {
+    const { github } = recorded(() => ({ status: 200, body: [{ event: "labeled", label: { name: "reviewed" }, actor: null }] }));
+    expect(await github.reviewedLabelers(9)).toEqual(["ghost"]);
+  });
+
+  it("throws rather than judge a PR whose events run past the last page it reads: the newest label could be cut off", async () => {
+    const full = Array.from({ length: 100 }, () => ({ event: "commented" }));
+    await expect(recorded(() => ({ status: 200, body: full })).github.reviewedLabelers(9)).rejects.toThrow(/3000/);
+  });
+
   it("pages through the changed files until a short page", async () => {
     const { urls, github } = recorded((url) => ({ status: 200, body: url.endsWith("page=1") ? Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}` })) : [{ filename: "last" }] }));
     const files = await github.files(9);
@@ -153,6 +163,11 @@ describe("requireReviewed on merge_group", () => {
 
   it("drops a PR that entered the queue through GitHub auto-merge: only `pnpm queue` enqueues (RP-1167, #531)", async () => {
     const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 3, autoMergeBy: "mmhaleess90" }) });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
+  it("drops a queued PR whose reviewed label was added by hand (RP-1167)", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 3 }), reviewedLabelers: async () => ["mmhaleess90"] });
     expect((await requireReviewed(event, seam)).ok).toBe(false);
   });
 
@@ -283,7 +298,17 @@ describe("requireReviewed on pull_request", () => {
       expect(result.summary).toContain("auto-merge");
       expect(result.summary).toContain("gh pr merge 7 --disable-auto");
       expect(result.summary).toContain("pnpm queue 7");
+      // Turning it off starts no run of this check (reviewed-required.yml has no auto_merge_disabled).
+      expect(result.summary).toContain("re-run this check");
     }
+  });
+
+  it("tells a fork's PR that only docs-only can pass it: reviewed-add never labels a fork", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: [], changedFiles: 1 }) });
+    const result = await requireReviewed({ ...event, sameRepo: false }, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("fork");
+    expect(result.summary).not.toContain("review-post.ts");
   });
 
   it("does not wait on a fork's PR (it never gets a reviewed-label run) or before the workflow exists", async () => {

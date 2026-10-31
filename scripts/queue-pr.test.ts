@@ -85,7 +85,9 @@ describe("queuePr", () => {
     expect(result.ok).toBe(false);
     const text = result.lines.join("\n");
     expect(text).toContain("reviewed");
-    expect(text).toContain("gh pr edit 149 --add-label reviewed");
+    // CI's reviewed-add adds the label; a hand label does not count (RP-1167).
+    expect(text).toContain("node scripts/review-post.ts 149");
+    expect(text).not.toContain("--add-label reviewed");
     expect(text).toContain("gh pr edit 149 --add-label docs-only");
     expect(enqueued).toEqual([]);
   });

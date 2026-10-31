@@ -54,8 +54,8 @@ export function queuedPrNumber(headRef: string): number | undefined {
 }
 
 /**
- * Who CI's reviewed-add workflow labels as (RP-1118): it adds `reviewed` with GITHUB_TOKEN. Every session acts as the
- * owner's one login, so a `reviewed` that anyone else added last does not count (RP-1167): it was added by hand.
+ * Who CI's reviewed-add workflow labels as (RP-1118): it adds `reviewed` with GITHUB_TOKEN. Every session acts as one
+ * GitHub login, so a `reviewed` that anyone else added last does not count (RP-1167): it was added by hand.
  */
 export const REVIEWED_ADD_ACTOR = "github-actions[bot]";
 
@@ -111,19 +111,10 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   if (pull.autoMergeBy !== undefined) {
     return {
       ok: false,
-      summary: `PR #${pr}: GitHub auto-merge is on (turned on by ${pull.autoMergeBy}), so GitHub would enqueue it out of order (RP-1167). Turn it off with \`gh pr merge ${pr} --disable-auto\`, then queue it with \`pnpm queue ${pr}\`.`,
+      summary: `PR #${pr}: GitHub auto-merge is on (turned on by ${pull.autoMergeBy}), so GitHub would enqueue it out of order (RP-1167). Turn it off with \`gh pr merge ${pr} --disable-auto\`, re-run this check (turning it off starts no run of it), then queue it with \`pnpm queue ${pr}\`.`,
     };
   }
-  // A `reviewed` that reviewed-add did not add last counts as no label; docs-only can still pass.
-  let labels = pull.labels;
-  let handLabel: string | undefined;
-  if (labels.includes(REVIEWED_LABEL)) {
-    const by = (await seam.reviewedLabelers(pr)).at(-1);
-    if (by !== REVIEWED_ADD_ACTOR) {
-      handLabel = by ?? "someone GitHub's events do not name";
-      labels = labels.filter((label) => label !== REVIEWED_LABEL);
-    }
-  }
+  const { labels, handLabeler } = pull.labels.includes(REVIEWED_LABEL) ? countedLabels(pull.labels, await seam.reviewedLabelers(pr)) : { labels: pull.labels };
   const needsFiles = !labels.includes(REVIEWED_LABEL) && labels.includes(DOCS_ONLY_LABEL);
   let files: string[] | undefined;
   if (needsFiles) {
@@ -134,13 +125,26 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
   const gate = reviewGate(labels, files);
   if (gate.ok) return { ok: true, summary: `PR #${pr} has the '${gate.via}' label${gate.via === DOCS_ONLY_LABEL ? " and changes only docs" : ""}: passes.` };
   const reason =
-    handLabel === undefined
+    handLabeler === undefined
       ? gate.reason
-      : `the '${REVIEWED_LABEL}' label was last added by ${handLabel}, not by CI's reviewed-add (${REVIEWED_ADD_ACTOR}), so it does not count: no session labels its own PR (RP-1167). Remove it with \`gh pr edit ${pr} --remove-label ${REVIEWED_LABEL}\``;
+      : `the '${REVIEWED_LABEL}' label was last added by ${handLabeler}, not by CI's reviewed-add (${REVIEWED_ADD_ACTOR}), so it does not count: no session labels its own PR (RP-1167). Remove it with \`gh pr edit ${pr} --remove-label ${REVIEWED_LABEL}\``;
+  const docsOnly = `A PR that changes only docs takes \`gh pr edit ${pr} --add-label ${DOCS_ONLY_LABEL}\``;
+  // reviewed-add skips a fork's PR (the reviewed-label job does too), so no review gets one the label.
+  if (event.kind === "pull_request" && !event.sameRepo) return { ok: false, summary: `PR #${pr}: ${reason}. CI's reviewed-add never labels a fork's PR, so only ${DOCS_ONLY_LABEL} can pass it. ${docsOnly}.` };
   return {
     ok: false,
-    summary: `PR #${pr}: ${reason}. Run /code-review, push its fixes, post its summary with \`node scripts/review-post.ts ${pr} <summary-file>\` and put the stamped \`pnpm verify\` line in the body: CI's reviewed-add then adds '${REVIEWED_LABEL}' (re-run its last run on the PR if both were already there). A PR that changes only docs takes \`gh pr edit ${pr} --add-label ${DOCS_ONLY_LABEL}\` instead.`,
+    summary: `PR #${pr}: ${reason}. Run /code-review, push its fixes, post its summary with \`node scripts/review-post.ts ${pr} <summary-file>\` and put the stamped \`pnpm verify\` line in the body: CI's reviewed-add then adds '${REVIEWED_LABEL}' (re-run its last run on the PR if both were already there). ${docsOnly} instead.`,
   };
+}
+
+/**
+ * The labels that count: a `reviewed` that CI's reviewed-add did not add last counts as no label, and
+ * `handLabeler` names who did (RP-1167). `labelers` lists who added `reviewed`, oldest first.
+ */
+export function countedLabels(labels: string[], labelers: string[]): { labels: string[]; handLabeler?: string } {
+  const last = labelers.at(-1);
+  if (last === REVIEWED_ADD_ACTOR) return { labels };
+  return { labels: labels.filter((label) => label !== REVIEWED_LABEL), handLabeler: last ?? "a login GitHub's events do not name" };
 }
 
 /** The event the workflow ran for, from its payload (GITHUB_EVENT_PATH). */
@@ -157,6 +161,9 @@ export function requiredEvent(eventName: string, payload: unknown, repository: s
   throw new Error(`reviewed-required runs on pull_request and merge_group, not ${eventName}`);
 }
 
+const PER_PAGE = 100;
+const MAX_PAGES = 30;
+
 export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Omit<RequiredSeam, "sleep"> {
   const get = async (path: string, allow404 = false): Promise<unknown> => {
     const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
@@ -169,27 +176,28 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
   return {
     async pull(pr) {
       const pull = (await get(`pulls/${pr}`)) as { labels: { name: string }[]; changed_files: number; auto_merge?: { enabled_by: { login: string } | null } | null };
-      const autoMergeBy = pull.auto_merge ? (pull.auto_merge.enabled_by?.login ?? "an account GitHub does not name") : undefined;
+      const autoMergeBy = pull.auto_merge ? (pull.auto_merge.enabled_by?.login ?? "a login GitHub does not name") : undefined;
       return { labels: pull.labels.map((label) => label.name), changedFiles: pull.changed_files, ...(autoMergeBy === undefined ? {} : { autoMergeBy }) };
     },
     async reviewedLabelers(pr) {
       const logins: string[] = [];
-      // 30 pages of 100 events: far more than any PR here has. The API lists them oldest first.
-      for (let page = 1; page <= 30; page++) {
-        const batch = (await get(`issues/${pr}/events?per_page=100&page=${page}`)) as { event: string; label?: { name: string }; actor: { login: string } | null }[];
-        for (const event of batch) if (event.event === "labeled" && event.label?.name === REVIEWED_LABEL) logins.push(event.actor?.login ?? "");
-        if (batch.length < 100) break;
+      // The API lists events oldest first. A deleted user shows as no actor; GitHub calls them ghost.
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const batch = (await get(`issues/${pr}/events?per_page=${PER_PAGE}&page=${page}`)) as { event: string; label?: { name: string }; actor: { login: string } | null }[];
+        for (const event of batch) if (event.event === "labeled" && event.label?.name === REVIEWED_LABEL) logins.push(event.actor?.login ?? "ghost");
+        if (batch.length < PER_PAGE) return logins;
       }
-      return logins;
+      // Past the last page the newest `labeled` may be missing, so the last one read proves nothing.
+      throw new Error(`PR #${pr} has more than ${MAX_PAGES * PER_PAGE} issue events; reviewed-required cannot tell who added '${REVIEWED_LABEL}' last`);
     },
     async files(pr) {
       const files: string[] = [];
-      // 30 pages of 100 is the API's 3000-file limit.
-      for (let page = 1; page <= 30; page++) {
-        const batch = (await get(`pulls/${pr}/files?per_page=100&page=${page}`)) as { filename: string; previous_filename?: string }[];
+      // MAX_PAGES of PER_PAGE is the API's 3000-file limit.
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const batch = (await get(`pulls/${pr}/files?per_page=${PER_PAGE}&page=${page}`)) as { filename: string; previous_filename?: string }[];
         // A rename's old path counts too: code renamed to .md is still a code change.
         files.push(...batch.flatMap((file) => (file.previous_filename ? [file.filename, file.previous_filename] : [file.filename])));
-        if (batch.length < 100) break;
+        if (batch.length < PER_PAGE) break;
       }
       return files;
     },
