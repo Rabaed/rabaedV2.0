@@ -160,10 +160,10 @@ jobs:
           node scripts/uat-deploy.ts migrate
           node scripts/uat-deploy.ts app-role-check
 
-      # The demo, unless it is there: UAT keeps its data between deploys. With the
-      # api's own R2 key, the api the command builds stores the demo's images, and on
-      # a demo already there it puts back any demo Signature, logo or Stamp R2 lacks
-      # (ADR 0007, RP-672); a second deploy stores nothing new.
+      # The demo, unless it is there: UAT keeps its data between deploys. The command
+      # runs the api in-process with the api's own R2 key, so the api's code stores the
+      # demo's images; on a demo already there it puts back any demo Signature, logo
+      # or Stamp R2 lacks (ADR 0007, RP-672). A second deploy stores nothing new.
       - name: Seed the demo if missing, store any missing demo image
         env:
           DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}

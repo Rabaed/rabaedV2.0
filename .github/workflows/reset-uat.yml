@@ -47,8 +47,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      # With the api's own R2 key, the api the command builds stores the demo's
-      # images, as the api stores anyone's (ADR 0007, RP-672).
+      # The command runs the api in-process with the api's own R2 key, so the api's
+      # code stores the demo's images, as it stores anyone's (ADR 0007, RP-672).
       - name: Drop, migrate and seed the demo
         env:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
