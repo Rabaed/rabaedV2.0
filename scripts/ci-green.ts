@@ -44,20 +44,33 @@ export const CI_OWN_FILES: readonly string[] = [
   "packages/eslint-plugin/**",
   "**/tsconfig*.json",
   "**/.storybook/**",
+  // The image CI's "web image starts" job builds.
+  "**/Dockerfile*",
+  "**/.dockerignore",
+  // The shared test helpers (`expectHiddenFrom`, the towers, the id sweeps): one that returns early turns every test
+  // using it green. Any other non-test code under a test/ folder counts too (`isTestHelper`).
+  "**/test-support/**",
+  "**/test/support/**",
+  "scripts/*.fixtures.ts",
+  // The repo-wide checks unit tests run against the real repo (scenario IDs, leak channels, hidden asserts): CI's
+  // judges, not code under test. Their own tests match too.
+  "scripts/check-*.ts",
   // Dependencies: a swapped vitest, an override or an install script decides what the tests do.
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".npmrc",
-  // The vitest configs' global setups.
+  // The vitest configs' global setups (the other two are under test-support/ and test/support/).
   "scripts/test-services.ts",
-  "packages/db/test-support/global-setup.ts",
-  "apps/api/test/support/seed-demo.ts",
   // The scripts ci.yml and the root scripts run, and the scripts/ files they import.
   "scripts/check-migration-drift.ts",
   "scripts/check-migrations-hidden-sort.ts",
   "scripts/check-migrations-immutable.ts",
   "scripts/check-workflows.ts",
+  "scripts/ci-green.ts",
+  "scripts/claims.ts",
   "scripts/claude-sessions.ts",
+  "scripts/db-fn.ts",
+  "scripts/design-strip-fonts.ts",
   "scripts/desktop-sessions.ts",
   "scripts/docs-only.ts",
   "scripts/hidden-columns.ts",
@@ -66,12 +79,16 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/new-screenshots-reporter.ts",
   "scripts/paths.ts",
   "scripts/pnpm.ts",
+  "scripts/pr-overlap.ts",
   "scripts/reviewed-label.ts",
   "scripts/reviewed-required.ts",
   "scripts/session-lock.ts",
   "scripts/story-run.ts",
   "scripts/test-timing.ts",
+  "scripts/test-titles.ts",
   "scripts/typecheck.ts",
+  "scripts/verify-gate.ts",
+  "scripts/visibility-scenarios.ts",
   "scripts/worktrees-stale.ts",
   "scripts/worktrees.ts",
 ];
@@ -85,8 +102,11 @@ const globPattern = (glob: string) =>
   );
 const OWN = CI_OWN_FILES.map(globPattern);
 
-/** True for a path in `CI_OWN_FILES`. */
-export const isCiOwnFile = (path: string): boolean => OWN.some((pattern) => pattern.test(path));
+/** Code in a test/ folder that is not itself a test (`*.test.ts(x)`) nor test data under test/fixtures/: a helper. */
+const isTestHelper = (path: string) => /(^|\/)test\/(?!fixtures\/)(.+\/)?[^/]+\.[cm]?[jt]sx?$/.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path);
+
+/** True for a path in `CI_OWN_FILES`, or a test helper. ci-green.test.ts checks every helper a test imports is one. */
+export const isCiOwnFile = (path: string): boolean => isTestHelper(path) || OWN.some((pattern) => pattern.test(path));
 
 /** A package.json's fields that matter to CI (all but `version` and `description`), as comparable text; undefined when it cannot be read. */
 const ciFieldsOf = (text: string | undefined): string | undefined => {
@@ -100,13 +120,34 @@ const ciFieldsOf = (text: string | undefined): string | undefined => {
 };
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`, and each package.json that differs between the merge base and
- * the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot parse,
- * or read on either side, counts.
+ * The visibility ratchets: lists of known weak asserts (scripts/check-hidden-asserts.ts) and untested scenarios
+ * (scripts/check-scenario-seams.ts) that may only shrink. The checks read the PR's own list, in CI and in `pnpm
+ * queue`'s merge checks alike, so a list that gains an entry lets a weaker test through: its CI run does not count.
+ * One that only shrinks, or goes, is the fix they ask for.
+ */
+const RATCHETS = ["docs/visibility/hidden-asserts/", "docs/visibility/untested-seams/"];
+
+/** A ratchet list's entries: one a line, blank lines and `#` lines left out. */
+const ratchetEntries = (text: string) =>
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+
+/**
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`); and each
+ * package.json that differs between the merge base and the head (`versions`, as `pnpm queue` reads them) in more than
+ * its `version` or `description`. One it cannot parse, or read on either side, counts.
  */
 export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
+    if (RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt")) {
+      const { before, after } = versions(path);
+      if (after === undefined) return before === undefined ? [`${path} (gains an entry)`] : [];
+      const was = new Set(ratchetEntries(before ?? ""));
+      return ratchetEntries(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
+    }
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);
     const [was, now] = [ciFieldsOf(before), ciFieldsOf(after)];

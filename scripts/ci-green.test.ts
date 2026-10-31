@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
-  CI_OWN_FILES,
   CI_WORKFLOW,
   ciOverHttp,
   ciOwnChanges,
@@ -180,8 +181,116 @@ describe("isCiOwnFile", () => {
       expect(isCiOwnFile(path), path).toBe(true);
   });
 
-  it("leaves app code, tests and other workflows alone", () => {
-    for (const path of ["apps/api/src/app.ts", "scripts/queue-pr.ts", "apps/api/test/links.test.ts", ".github/workflows/deploy-uat.yml", "docs/visibility.md", "my-vitest.config.ts.md"]) expect(isCiOwnFile(path), path).toBe(false);
+  it("leaves app code, tests, test data and other workflows alone", () => {
+    for (const path of [
+      "apps/api/src/app.ts",
+      "apps/worker/src/record/golden-fixtures.ts",
+      "scripts/queue-pr.ts",
+      "apps/api/test/links.test.ts",
+      "packages/ui/test/stories.test.tsx",
+      "apps/api/test/fixtures/registers/formats.xlsx",
+      ".github/workflows/deploy-uat.yml",
+      "docs/visibility.md",
+      "my-vitest.config.ts.md",
+      "apps/api/src/latest/support.ts",
+    ])
+      expect(isCiOwnFile(path), path).toBe(false);
+  });
+
+  it("names the image CI's 'web image starts' job builds", () => {
+    for (const path of ["Dockerfile", ".dockerignore", "apps/web/Dockerfile"]) expect(isCiOwnFile(path), path).toBe(true);
+  });
+
+  it("names the shared test helpers: a helper that returns early turns every test using it green", () => {
+    for (const path of [
+      "packages/db/test-support/hidden-from.ts",
+      "packages/db/test-support/id-sweep.ts",
+      "apps/api/test/support/harness.ts",
+      "apps/api/test/support/tower.ts",
+      "apps/admin/test/support/harness.ts",
+      "packages/domain/test/support/mar-workflow.ts",
+      "packages/infra/test/support.ts",
+      "packages/db/test/uat-tool-support.ts",
+      "packages/db/test/outbox-crash-worker.ts",
+      "scripts/check-migration-drift.fixtures.ts",
+    ])
+      expect(isCiOwnFile(path), path).toBe(true);
+  });
+
+  it("names the repo-wide checks unit tests run against the real repo: they judge, they are not code under test", () => {
+    for (const path of ["scripts/check-scenario-ids.ts", "scripts/check-leak-channels.ts", "scripts/check-hidden-asserts.ts"]) expect(isCiOwnFile(path), path).toBe(true);
+  });
+});
+
+describe("a PR that weakens expectHiddenFrom", () => {
+  it("gets no CI credit: every visibility scenario would pass with it returning early", () => {
+    const ownChanged = ciOwnChanges(["packages/db/test-support/hidden-from.ts", "apps/api/src/app.ts"], () => ({ before: undefined, after: undefined }));
+    expect(ownChanged).toEqual(["packages/db/test-support/hidden-from.ts"]);
+    const verdict = ciVerdict(HEAD, PR, ownChanged, evidence(run()));
+    expect(verdict.state).toBe("refused");
+    if (verdict.state === "refused") expect(verdict.reason).toContain("packages/db/test-support/hidden-from.ts");
+  });
+});
+
+/**
+ * Files outside src/ that tests import as the code they test, not as helpers: a change to one is what CI tests.
+ * A new import outside src/ fails the test below until it is named here or is CI's own.
+ */
+const CODE_UNDER_TEST = ["packages/db/dev-tools/", "apps/web/next.config.ts", "scripts/screens-examples/", "scripts/uat-sheet/"];
+
+/** Tests whose code samples hold import lines that name no real file (lint rules' tests). */
+const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/uat-imports.test.ts"];
+
+describe("every helper a test imports", () => {
+  const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.test.ts", "*.test.tsx"], { encoding: "utf8" }).stdout.split("\0").filter(Boolean);
+  const workspaces = ["apps", "packages"].flatMap((root) =>
+    spawnSync("git", ["ls-files", "--", `${root}/*/package.json`], { encoding: "utf8" })
+      .stdout.split("\n")
+      .filter(Boolean)
+      .map((file) => ({ dir: posix.dirname(file), ...(JSON.parse(readFileSync(file, "utf8")) as { name: string; exports?: Record<string, string> }) })),
+  );
+  const unresolved = new Set<string>();
+  const asFile = (base: string) => [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find((path) => existsSync(path) && !statSync(path).isDirectory());
+  // A relative import, or a workspace package's own (`@rabaed/<name>[/<sub>]`, by its `exports` map as pnpm resolves
+  // it); undefined for any other package. Throws for one of ours it cannot find, so nothing slips past unread.
+  const resolve = (from: string, specifier: string): string | undefined => {
+    if (specifier.startsWith(".")) {
+      const found = asFile(posix.normalize(posix.join(posix.dirname(from), specifier)));
+      // Not a file: an import line inside a code sample (a lint rule's test); `SAMPLES` names where that is expected.
+      if (found === undefined) unresolved.add(`${from}: "${specifier}"`);
+      return found;
+    }
+    const workspace = workspaces.find((each) => specifier === each.name || specifier.startsWith(`${each.name}/`));
+    if (workspace === undefined) return undefined;
+    const sub = `.${specifier.slice(workspace.name.length)}`;
+    const target = workspace.exports?.[sub] ?? (sub === "." ? undefined : sub);
+    const found = target === undefined ? asFile(`${workspace.dir}/src/index`) : asFile(posix.join(workspace.dir, target));
+    if (found === undefined) unresolved.add(`${from}: "${specifier}"`);
+    return found;
+  };
+  // `from "x"` (one line or several), `import "x"`, `import("x")`, `vi.mock("x")`, `require("x")`, either quote.
+  const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bvi\.mock\(\s*|\brequire\(\s*)(["'])([^"'\n]+)\1/g;
+
+  it("reads every import form", () => {
+    const text = `import a from "./a.ts";\nimport {\n  b,\n} from './b.ts';\nimport "./c.ts";\nawait import("./d.ts");\nvi.mock("./e.ts");\nrequire("./f.ts");`;
+    expect([...text.matchAll(SPECIFIER)].map(([, , specifier]) => specifier)).toEqual(["./a.ts", "./b.ts", "./c.ts", "./d.ts", "./e.ts", "./f.ts"]);
+  });
+
+  // A scripts/ file a test imports is the code under test, as src/ is; its fixtures and the checks are not.
+  it("is CI's own, unless it is code under test (under src/, or a scripts/ file) or another test", () => {
+    expect(tracked.length).toBeGreaterThan(100);
+    const missing = new Set<string>();
+    for (const file of tracked) {
+      for (const [, , specifier = ""] of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
+        const path = resolve(file, specifier);
+        if (path === undefined || /\.test\.[cm]?[jt]sx?$/.test(path) || /(^|\/)src\//.test(path) || !/\.[cm]?[jt]sx?$/.test(path)) continue;
+        if (isCiOwnFile(path) || CODE_UNDER_TEST.some((prefix) => path.startsWith(prefix))) continue;
+        if (/^scripts\/[^/]+\.ts$/.test(path)) continue;
+        missing.add(`${path} (imported by ${file})`);
+      }
+    }
+    expect([...missing]).toEqual([]);
+    expect([...unresolved].filter((entry) => !SAMPLES.some((file) => entry.startsWith(`${file}:`)))).toEqual([]);
   });
 });
 
@@ -201,6 +310,25 @@ describe("ciOwnChanges", () => {
 
   it("leaves a package.json alone when only its version or description changed", () => {
     expect(ciOwnChanges(["packages/ui/package.json"], versions({ name: "@rabaed/ui", version: "1.0.0", description: "a" }, { name: "@rabaed/ui", version: "1.1.0", description: "b" }))).toEqual([]);
+  });
+
+  it("counts a hidden-asserts or untested-seams list that gains an entry: it lets a weaker test through, and the check reads the PR's own list", () => {
+    const list = (...entries: string[]) => `# comment\n${entries.map((entry) => `${entry}\n`).join("")}`;
+    const hidden = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    const gaps = "docs/visibility/untested-seams/RP-412.txt";
+    const at = (before: string | undefined, after: string | undefined) => () => ({ before, after });
+    expect(ciOwnChanges([hidden], at(list("empty a :: x"), list("empty a :: x", "text b :: y")))).toEqual([`${hidden} (gains an entry)`]);
+    expect(ciOwnChanges([gaps], at(undefined, list("RP-412-1 api")))).toEqual([`${gaps} (gains an entry)`]);
+    // An entry changed in place is one gone and one gained.
+    expect(ciOwnChanges([gaps], at(list("RP-412-1 api"), list("RP-412-1 db")))).toEqual([`${gaps} (gains an entry)`]);
+    expect(ciOwnChanges([gaps], at(undefined, undefined))).toEqual([`${gaps} (gains an entry)`]);
+  });
+
+  it("leaves a list that only shrinks or is deleted alone, and its README", () => {
+    const hidden = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\ntext b :: y\n", after: "# fixed b\nempty a :: x\n" }))).toEqual([]);
+    expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\n", after: undefined }))).toEqual([]);
+    expect(ciOwnChanges(["docs/visibility/hidden-asserts/README.md"], () => ({ before: "a", after: "b" }))).toEqual([]);
   });
 
   it("counts a new package.json, one it cannot parse, and one it could read on neither side", () => {
@@ -227,7 +355,9 @@ describe("CI_OWN_FILES", () => {
   });
 
   it("names every scripts/ file the listed scripts import, all the way down", () => {
-    const listed = CI_OWN_FILES.filter((entry) => /^scripts\/[\w.-]+\.ts$/.test(entry));
+    const listed = readdirSync("scripts")
+      .map((name) => `scripts/${name}`)
+      .filter((path) => path.endsWith(".ts") && !/\.test\.ts$/.test(path) && isCiOwnFile(path));
     const seen = new Set<string>();
     const walk = (path: string) => {
       if (seen.has(path)) return;
