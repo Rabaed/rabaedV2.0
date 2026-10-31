@@ -37,6 +37,9 @@ export const SEALING_CERTIFICATE_KEY = "sealing/pdf-sealing.pem";
 /** Where the licensed Thmanyah fonts are kept in the build assets bucket (packages/infra FONTS_PREFIX). */
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
 
+/** A secret that may be absent or empty: either is unset. */
+const optionalSecret = z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional());
+
 const env = z.object({
   RECORD_SEALING: z.enum(["local", "kms", "uat"]).optional(),
   // Set by ECS in every task: the worker runs in AWS.
@@ -47,8 +50,9 @@ const env = z.object({
   TIMESTAMP_AUTHORITY_URL: z.url().optional(),
   CHROMIUM_PATH: z.string().min(1).optional(),
   RECORD_FONTS_DIR: z.string().min(1).optional(),
-  UAT_SEALING_AUTHORITY_KEY: z.string().min(1).optional(),
-  UAT_SEALING_AUTHORITY_CERTIFICATE: z.string().min(1).optional(),
+  // Empty counts as unset (a .env may hold them as ""), so the worker still starts in local mode.
+  UAT_SEALING_AUTHORITY_KEY: optionalSecret,
+  UAT_SEALING_AUTHORITY_CERTIFICATE: optionalSecret,
 });
 
 /** A PEM as a host keeps it: a dashboard may store its line breaks as a backslash and `n`. */

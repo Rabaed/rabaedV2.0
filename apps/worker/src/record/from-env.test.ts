@@ -82,6 +82,13 @@ describe("RECORD_SEALING", () => {
       expect(() => recordSealingFromEnv({ RECORD_SEALING: "uat", ...ecs })).toThrow(/never sealed with the UAT test key/);
     });
 
+    it("empty secrets count as unset: local still starts, and uat fails its jobs saying they are not set", async () => {
+      // A lane's .env copied from .env.example once held them as "" (Main 6's review of #560).
+      const empty = { UAT_SEALING_AUTHORITY_KEY: "", UAT_SEALING_AUTHORITY_CERTIFICATE: "" };
+      expect((await recordSealingFromEnv({ RECORD_SEALING: "local", ...empty }).signer()).test).toBe(true);
+      await expect(recordSealingFromEnv({ RECORD_SEALING: "uat", ...empty }).signer()).rejects.toThrow("UAT_SEALING_AUTHORITY_KEY and UAT_SEALING_AUTHORITY_CERTIFICATE are not set");
+    });
+
     it("local and kms print no mark", () => {
       expect(recordSealingFromEnv({ RECORD_SEALING: "local" }).uatMark).toBe(false);
       expect(recordSealingFromEnv({ RECORD_SEALING: "kms", ...ecs }).uatMark).toBe(false);
