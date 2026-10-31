@@ -114,7 +114,7 @@ export function runChecks(env: DoctorEnv): Check[] {
     checks.push(
       version === undefined
         ? { name: tool, ok: false, message: `${tool}: missing (not on PATH). Install it, then open a new shell.` }
-        : { name: tool, ok: true, message: `${tool}: ${version.split("\n")[0]}` },
+        : { name: tool, ok: true, message: `${tool}: ${version.split("\n")[0] || "version not printed"}` },
     );
   }
 
