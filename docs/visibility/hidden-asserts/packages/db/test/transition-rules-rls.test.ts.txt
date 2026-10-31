@@ -1,0 +1,7 @@
+empty not the same person (RP-430-1) > hides Approve from the K1 manager who sent the item to the Manager, and offers it to another :: expect(await offered(k1Manager, id)).not.toContain("approve_a");
+empty not the same person (RP-430-1) > reads the acting Member's own moves only: the C1 PM who raised and sent it can't submit it a second time :: expect(await offered(c1Pm, id)).not.toContain("submit_separate");
+empty not the same person keeps that Member from holding the next Step (RP-430-1) > leaves the Member out of the next Step's pool, of Assign to and of coming back :: expect(await call(k1Manager, sql<{ action: string }>`select action from app.work_item_actions(${id}::uuid) where action = 'pick_up'`)).toEqual([]);
+empty not the same person keeps that Member from holding the next Step (RP-430-1) > is refused with the usual answer when nobody is left to hold the next Step :: expect(await offered(k1.member, id)).not.toContain("fresh_eyes");
+empty has been through a Step (RP-430-2) > never holds for K1 on the Contractor's Step, though C1's Submit left it :: expect(await offered(k1Manager, id)).not.toContain("check_contractor_route");
+empty has been through a Step (RP-430-2) > holds for C1 on its own Step once the item has been there :: expect(await offered(c1Pm, id)).not.toContain("submit_direct");
+empty all Comments closed (RP-430-3) > reads only the Comments the K1 manager sees, and names none :: expect(await offered(k1Manager2, id)).not.toContain("reject_d");

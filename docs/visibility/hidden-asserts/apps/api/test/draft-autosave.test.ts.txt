@@ -1,0 +1,4 @@
+empty one Draft, saved by its holder only (RP-514) > lets the holder's later save, from an older page, overwrite their own earlier one :: expect((res.json() as SavedAnswers).keptFromOthers).toEqual([]);
+empty history > writes no answers_changed event for Draft saves, autosave or not, and one per button save after Draft :: expect(await diffs(engineer, id)).toEqual([]);
+text history > writes no answers_changed event for Draft saves, autosave or not, and one per button save after Draft :: expect(await diffs(pm, id)).toHaveLength(1);
+text history > writes no answers_changed event for Draft saves, autosave or not, and one per button save after Draft :: expect(await diffs(pm, id)).toHaveLength(2);

@@ -1,0 +1,1 @@
+empty the setting Show Inspections in the Submittals tab > is read on the Project and not written by the app role :: expect(outsider.rows).toEqual([]);

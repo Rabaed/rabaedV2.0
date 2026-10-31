@@ -1,0 +1,1 @@
+empty the MAR Form Version 2 > follows Version 1, and passes the part-1 publish checks against it :: expect(publishProblems(v2!, [v1!], { optionListIds: new Set(lists.map((l) => l.id)) })).toEqual([]);

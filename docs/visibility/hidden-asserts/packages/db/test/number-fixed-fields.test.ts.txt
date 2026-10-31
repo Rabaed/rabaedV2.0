@@ -1,0 +1,2 @@
+empty a Trade or Location the Document Number uses (RP-581) > locks neither under the default pattern (Project, Type, Participant, sequence) :: expect(await t.fixed(item)).toEqual([]);
+empty a Trade or Location the Document Number uses (RP-581) > leaves a Draft never numbered free, with nothing fixed :: expect(await t.fixed(draft!.work_item_id)).toEqual([]);

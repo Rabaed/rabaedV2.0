@@ -14,6 +14,7 @@ import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
+import { expectNoDeadlineWords } from "./support/deadline-words.ts";
 import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, memberOnProject, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -75,17 +76,27 @@ async function pdfOf(state: SnagReportState): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Everything the PDF prints, as one string without whitespace. */
-async function printed(bytes: Uint8Array): Promise<string> {
+/** The PDF's text runs, one string per page. */
+async function runsOf(bytes: Uint8Array): Promise<string[][]> {
   const task = getDocument({ data: bytes.slice(), useSystemFonts: false });
   const pdf = await task.promise;
-  let text = "";
+  const pages: string[][] = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     const content = await (await pdf.getPage(n)).getTextContent();
-    text += content.items.map((item) => ("str" in item ? item.str : "")).join("");
+    pages.push(content.items.map((item) => ("str" in item ? item.str : "")));
   }
   await task.destroy();
-  return text.replace(/\s+/g, "");
+  return pages;
+}
+
+/** Everything the PDF prints, as one string without whitespace. */
+async function printed(bytes: Uint8Array): Promise<string> {
+  return (await runsOf(bytes)).map((runs) => runs.join("")).join("").replace(/\s+/g, "");
+}
+
+/** Everything the PDF prints with its words apart (a space between text runs), for a whole-word check. */
+async function printedWords(bytes: Uint8Array): Promise<string> {
+  return (await runsOf(bytes)).map((runs) => runs.join(" ")).join("\n");
 }
 
 beforeAll(async () => {
@@ -128,7 +139,7 @@ describe("the Snag report (seam 1)", () => {
     expect(text).toContain("Cabletraynotbonded");
     expect(text).not.toContain("Paintdrips");
     expect(text).toMatch(/\d+weeks?/);
-    expect(text).not.toMatch(/overdue|duedate|deadline/i);
+    expectNoDeadlineWords(await printedWords(bytes), "the Snag report");
     // First's photo is drawn; second has none.
     expect(await imageCountOf(bytes)).toBe(1);
     expect(await imageCountOf(await pdfOf(await report(at.c1Pm, { ids: [second], language: "en" })))).toBe(0);

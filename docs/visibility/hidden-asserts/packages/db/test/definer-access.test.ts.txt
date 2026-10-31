@@ -1,0 +1,4 @@
+empty security definer functions in the app schema that take a work-item id > call app.sees_work_item, outside the allow-list :: expect(unchecked.filter((fn) => !(fn in CHECKS_ELSEWHERE))).toEqual([]);
+empty security definer functions in the app schema that take a work-item id > have an allow-list naming only such functions :: expect(Object.keys(CHECKS_ELSEWHERE).filter((fn) => !unchecked.includes(fn))).toEqual([]);
+empty security definer functions in the app schema that take a work-item id > are caught when a new one doesn't check, but not when it checks or the app role can't run it :: expect(found).not.toContain("app.checked_probe(uuid,timestamp with time zone)");
+empty security definer functions in the app schema that take a work-item id > are caught when a new one doesn't check, but not when it checks or the app role can't run it :: expect(found).not.toContain("app.internal_probe(uuid,timestamp with time zone)");

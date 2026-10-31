@@ -1,0 +1,1 @@
+empty member_appearance > is read by nobody else: not a colleague of the same Company, nor another Company's Member :: expect(await rowsAs(people.colleague, sql`select 1 from member_appearance`)).toEqual([]);

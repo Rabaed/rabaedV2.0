@@ -1,4 +1,5 @@
 ﻿import type { WorkItemRow } from "@rabaed/domain";
+import { deadlineWordInCopy } from "@rabaed/eslint-plugin/matchers";
 import { describe, expect, it } from "vitest";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
 
@@ -46,7 +47,7 @@ describe("the Snag List's Excel export (RP-629)", () => {
     expect(file.content).toContain('<Data ss:Type="String">Step Age (weeks)</Data>');
     expect(file.content).toContain('<Data ss:Type="String">3</Data>');
     expect(file.content).toContain("No number yet");
-    expect(file.content.toLowerCase()).not.toMatch(/due|overdue|deadline/);
+    expect(deadlineWordInCopy(file.content)).toBeNull();
   });
 
   it("escapes the Subject, keeps a formula as text, and reads right to left in Arabic", () => {

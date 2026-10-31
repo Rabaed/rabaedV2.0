@@ -1,0 +1,7 @@
+text (top level) :: const onboard = async (legalName: string): Promise<Company> => {
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+text (top level) :: const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+empty Linked from > shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 77) :: expect(res.body).not.toContain(busbars);
+empty Linked from > shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 77) :: await expectHidden(k1Mechanical.get(`/v1/work-items/${busbars}${path}`), path);
+empty Linked from > is hidden like the item from whoever can't see it, and for signed-in Members only :: await expectHidden(r);
+empty Linked from > lists every Submitted item that links here, and not the items this one links to :: expect((await linkedFrom(k1Manager, trays)).items).toEqual([]);

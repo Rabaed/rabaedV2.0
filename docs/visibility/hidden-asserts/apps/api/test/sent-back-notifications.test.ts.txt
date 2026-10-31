@@ -1,0 +1,4 @@
+empty a Send Back > tells C1's Members who see the item, with K1 by name only; never K1, the Owner Representative, C2, or a narrowed C1 Member :: expect(more).toEqual([]);
+empty a Send Back > tells C1's Members who see the item, with K1 by name only; never K1, the Owner Representative, C2, or a narrowed C1 Member :: for (const who of [at.k1Manager, k1Manager2, orEngineer, c2Engineer, c1Narrowed]) expect(await ofKind(who, id, "sent_back")).toEqual([]);
+empty email off, a mute and a closed Project > a Send Back: email off still shows in the bell; a mute sends nothing :: expect(await about(muted, id)).toEqual([]);
+empty email off, a mute and a closed Project > a closed Project: it reaches nobody :: expect(await routed(sentBack, "sent_back")).toEqual([]);

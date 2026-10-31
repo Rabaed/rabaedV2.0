@@ -1,0 +1,1 @@
+text restoring the demo's images (RP-672) > leaves another Company's Signature and Stamp alone :: expect(rows).toHaveLength(2);

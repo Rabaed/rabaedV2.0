@@ -1,0 +1,1 @@
+text changing Option Lists > has no route in the customer app: every way of writing is a 404 :: expect((await read(member)).options).toHaveLength(2);

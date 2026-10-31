@@ -1,0 +1,7 @@
+empty a new Project's Stages > are hidden from anyone not on the Project, as a made-up Project is :: await expectHidden(outsider.caller.get(stagesPath(t)));
+empty a new Project's Stages > are hidden from anyone not on the Project, as a made-up Project is :: await expectHidden(c1.caller.get(`/v1/projects/00000000-0000-4000-8000-000000000000/modules/submittals/stages`));
+text renaming a Stage > changes only that Project's Stages :: expect((await stagesOf(c1.caller, other)).stages.find((s) => s.key === "approved")!.name.en).toBe("Approved");
+empty renaming a Stage > is refused to a Project Member who isn't its Project Admin, and to anyone else as not found :: await expectHidden(rename(t.k1Manager, t, "approved", bilingual("Done")));
+empty renaming a Stage > is refused to a Project Member who isn't its Project Admin, and to anyone else as not found :: await expectHidden(rename(outsider.caller, t, "approved", bilingual("Done")));
+empty renaming a Stage > is refused to a Project Member who isn't its Project Admin, and to anyone else as not found :: await expectHidden(rename(c1.caller, t, "no_such_stage", bilingual("Done")));
+empty deleting a Stage > is refused to a Project Member who isn't its Project Admin, as not found :: await expectHidden(remove(t.k1Manager, t, "on_hold"));

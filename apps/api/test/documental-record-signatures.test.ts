@@ -28,6 +28,7 @@ import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { encodePng } from "../src/demo/demo-signature.ts";
+import { expectNoDeadlineWords } from "./support/deadline-words.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addOwnerReviewType } from "./support/owner-review.ts";
 import { bilingual, buildTower, detail, memberOnProject, ok, take, type Company, type Tower } from "./support/tower.ts";
@@ -158,6 +159,8 @@ interface Made {
   /** Each page's text, spaces squeezed out. */
   readonly pages: string[];
   readonly text: string;
+  /** The pages' text with its words apart (one space between the PDF's text runs), for a whole-word check. */
+  readonly words: string;
   readonly xml: string;
   /** The first pixel of each image the PDF holds, as "r,g,b". */
   readonly inks: Set<string>;
@@ -171,9 +174,13 @@ async function download(by: Caller, id: string): Promise<Made> {
   const task = getDocument({ data: bytes.slice(), useSystemFonts: false });
   const pdf = await task.promise;
   const pages: string[] = [];
+  const words: string[] = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     const content = await (await pdf.getPage(n)).getTextContent();
-    pages.push(squeeze(content.items.map((item) => ("str" in item ? item.str : "")).join("")));
+    const runs = content.items.map((item) => ("str" in item ? item.str : ""));
+    pages.push(squeeze(runs.join("")));
+    // \p{Cf}: the direction marks and isolates the header and footer carry (as squeeze drops them).
+    words.push(runs.join(" ").replace(/\p{Cf}/gu, ""));
   }
   // RECORD_PNG_DIR=<folder>: keep each page as a PNG, to look at (never set in CI; pdfjs draws with its optional canvas).
   if (process.env.RECORD_PNG_DIR) {
@@ -192,7 +199,7 @@ async function download(by: Caller, id: string): Promise<Made> {
   await task.destroy();
   const xml = new TextDecoder().decode((await attachedFiles(bytes))[0]!.bytes);
   const inks = new Set((await pdfImages(bytes)).flatMap((i) => (i.firstPixel && i.firstPixel.length === 3 ? [i.firstPixel.join(",")] : [])));
-  return { id, bytes, pages, text: pages.join(""), xml, inks };
+  return { id, bytes, pages, text: pages.join(""), words: words.join("\n"), xml, inks };
 }
 
 const inkOf = (rgb: readonly number[]) => rgb.join(",");
@@ -574,7 +581,8 @@ describe("the Disclaimer and the review duration", () => {
     expect(made.b.xml).toContain("<reviewDays>2</reviewDays>");
     expect(made.b.pages[0]).toContain("Reviewduration(days)");
     expect(made.a.xml).toContain("<reviewDays>0</reviewDays>");
-    for (const record of [made.a, made.b]) expect(record.text.toLowerCase()).not.toMatch(/overdue|deadline|duedate|sla/);
+    // Whole words (RP-1150): a Member named "Islam" is no deadline. The squeezed text has no words to match.
+    for (const record of [made.a, made.b]) expectNoDeadlineWords(record.words, "the record's text");
   });
 });
 

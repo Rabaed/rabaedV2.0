@@ -1,0 +1,5 @@
+empty a Stage's Steps for the viewer's own Participant (RP-519) > lists each own Step of the Stage with its count, in the Stage's column :: expect(column(b, "draft").steps).toEqual([]);
+empty scenario RP-519-1: another Participant's Steps never show on the Kanban > a Consultant sees no TMC Step name or per-Step count; C1's Stage count is all it has of C1's Steps :: expect(json).not.toContain(secret);
+empty scenario RP-519-1: another Participant's Steps never show on the Kanban > a Consultant sees no TMC Step name or per-Step count; C1's Stage count is all it has of C1's Steps :: expect(internal.steps).toEqual([]);
+empty scenario RP-519-1: another Participant's Steps never show on the Kanban > a Consultant sees no TMC Step name or per-Step count; C1's Stage count is all it has of C1's Steps :: expect(column(mine, "pending_approval").steps).toEqual([]);
+empty scenario RP-519-1: another Participant's Steps never show on the Kanban > a Consultant sees no TMC Step name or per-Step count; C1's Stage count is all it has of C1's Steps :: expect(JSON.stringify(mine)).not.toContain("consultant_review");

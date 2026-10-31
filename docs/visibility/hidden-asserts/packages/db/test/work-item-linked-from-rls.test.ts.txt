@@ -1,0 +1,4 @@
+empty Linked from > never lists a Draft or an item in internal review, whoever asks (scenario 78) :: for (const unsent of [a.draftLinker, a.internalLinker]) expect(listed).not.toContain(unsent);
+empty Linked from > is empty for an item the caller can't see, and for another Project's item :: expect(await linkedFrom(a.narrow, a.hiddenLinker)).toEqual([]);
+empty Linked from > is empty for an item the caller can't see, and for another Project's item :: expect(await linkedFrom(a.ap, b.target)).toEqual([]);
+empty Linked from > is empty for an item the caller can't see, and for another Project's item :: expect(await linkedFrom(b.ap, a.target)).toEqual([]);

@@ -1,0 +1,3 @@
+empty RP-982-1: never the Consultant's own work > carries no Recommended Code, Internal Note, Return reason, answer or photo from before the code :: expect(made.text, hidden).not.toContain(squeeze(hidden));
+empty RP-982-1: never the Consultant's own work > carries no Recommended Code, Internal Note, Return reason, answer or photo from before the code :: expect(made.xml, hidden).not.toContain(hidden);
+empty RP-982-1: never the Consultant's own work > carries no Recommended Code, Internal Note, Return reason, answer or photo from before the code :: expect(made.xml).not.toContain(sha256(photos.dropped));

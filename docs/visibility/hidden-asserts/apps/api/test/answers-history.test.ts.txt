@@ -1,0 +1,8 @@
+empty answers after Draft > records nothing for the saves made in Draft :: expect(await diffs(engineer, id)).toEqual([]);
+text answers after Draft > records the change as a field-level diff, internal to the raiser, with who and when :: expect(events).toHaveLength(1);
+text answers after Draft > records nothing for a save that changes nothing :: expect(await diffs(pm, id)).toHaveLength(1);
+text answers after Draft > checks the Form is complete again when it leaves the Draft :: expect(await diffs(pm, id)).toHaveLength(3);
+text answers after Draft > from Submit onwards > refuses every save of the Contractor's sections, everyone alike, and changes nothing :: expect(await diffs(pm, id)).toHaveLength(3);
+text answers after Draft > from Submit onwards > keeps the diffs in the raiser's history :: expect(await diffs(engineer, id)).toHaveLength(3);
+empty answers after Draft > from Submit onwards > never shows the diffs to the Consultant or the Owner Representative (V5) :: expect(body).not.toContain(DRAFTED);
+empty answers after Draft > from Submit onwards > never shows the diffs to the Consultant or the Owner Representative (V5) :: expect(body).not.toContain(DRAFT_MODEL);

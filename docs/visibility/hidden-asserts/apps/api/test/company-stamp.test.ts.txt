@@ -1,0 +1,5 @@
+empty the Company profile's logo and Stamp (RP-617-1) > is the plain 404 for another Company's Member, even its Authorized Person, as for a made-up id :: await expectHidden(upload(otherCompany.caller, companyId, kind, png(14)));
+empty the Company profile's logo and Stamp (RP-617-1) > is the plain 404 for another Company's Member, even its Authorized Person, as for a made-up id :: await expectHidden(upload(ap, "00000000-0000-4000-8000-000000000000", "stamp", png(14)));
+empty the Company profile's logo and Stamp (RP-617-1) > is the plain 404 for another Company's Member, even its Authorized Person, as for a made-up id :: await expectHidden(upload(ap, "not-an-id", "stamp", png(14)));
+empty the Company profile's logo and Stamp (RP-617-1) > is the plain 404 for another Company's Member, even its Authorized Person, as for a made-up id :: expect(JSON.stringify(await myCompany(otherCompany.caller))).not.toContain(before.stamp!.id);
+empty No Stamp, no Transition (RP-23-5) > is still the plain 404 for an item they can't see :: await expectHidden(tryTake(otherCompany, id, "send_for_review"));

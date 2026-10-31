@@ -1,0 +1,3 @@
+empty security definer functions in the migrations > all set search_path :: expect(unpinned).toEqual([]);
+empty the scan > passes one that sets it, whatever the order of the clauses :: expect(definerFunctionsWithoutSearchPath(sql)).toEqual([]);
+empty the scan > ignores invoker functions, comments, and text inside bodies :: expect(definerFunctionsWithoutSearchPath(sql)).toEqual([]);

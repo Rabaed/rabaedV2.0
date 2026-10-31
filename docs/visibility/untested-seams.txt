@@ -1,5 +1,0 @@
-# Visibility scenarios with no test at one seam, as of RP-1095 (2026-10-30).
-# One "RP-nnn-n api" (no test in apps/api/test/) or "RP-nnn-n db" (no test in packages/db/test/) a line.
-# This list only shrinks: scripts/check-scenario-seams.ts fails on a gap that isn't here, and on
-# a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
-# Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.

@@ -1,0 +1,1 @@
+empty Participant Codes at the database role > is read with the Participant it belongs to: the Project Admin sees every code, another Company only its own :: expect(await t.codeSeenBy(t.c2.ap, t.p1)).toEqual([]);

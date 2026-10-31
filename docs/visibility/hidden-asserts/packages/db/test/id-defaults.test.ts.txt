@@ -1,0 +1,2 @@
+empty ids (scenario 73) > default to gen_random_uuid() in every table :: expect(await idColumnsNotRandom(migrator)).toEqual([]);
+empty ids (scenario 73) > are caught when a new table's id carries a time, comes from a sequence or has no default :: expect(found.filter((f) => f.startsWith("public.random_probe.") || f.startsWith("public.other_probe.id"))).toEqual([]);
