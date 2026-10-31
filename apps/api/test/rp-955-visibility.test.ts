@@ -9,7 +9,7 @@
 // The Type is test-only, on the test Workflow with a Send Back and a Cancel (addSendBackType).
 import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, SharedWorkItem, WorkItemLinks } from "@rabaed/domain";
+import type { DocumentList, LinkedFrom, SharedWorkItem, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, readById, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
@@ -108,7 +108,11 @@ const documentsOf = (id: string) => async (by: Caller) => {
   return list?.documents ?? [];
 };
 const linksOf = (id: string) => async (by: Caller) => ((await ok(by.get(`/v1/work-items/${id}/links`), 200)).json() as WorkItemLinks).links;
-const sharedDocumentsOf = (id: string) => async (by: Caller) => ((await ok(by.get(`/v1/work-items/${id}/shared`), 200)).json() as SharedWorkItem).documents;
+const sharedOf = async (by: Caller, id: string): Promise<SharedWorkItem> => (await ok(by.get(`/v1/work-items/${id}/shared`), 200)).json();
+const sharedDocumentsOf = (id: string) => async (by: Caller) => (await sharedOf(by, id)).documents;
+/** The items linking to `to` that `by` reads in its Linked from, by id. */
+const linkedFromOf = (to: string) => async (by: Caller) =>
+  ((await ok(by.get(`/v1/work-items/${to}/linked-from`), 200)).json() as LinkedFrom).items.flatMap((i) => (i.workItemId === null ? [] : [{ id: i.workItemId }]));
 const download = (id: string, documentId: string) => readById(`/v1/work-items/${id}/documents/${documentId}/download`);
 
 /** The Documents the item's Documental Record holds, as the record job reads them (RP-147). */
@@ -124,13 +128,19 @@ async function expectHandedOverOnly(item: Awaited<ReturnType<typeof heldAfterSen
   await expectHiddenFrom({ read: documentsOf(id), target: item.held, seenBy: [engineer, pm], hiddenFrom: others(), name: nameOf, label: `${label}, the documents list` });
   await expectHiddenFrom({ read: download(id, item.held), idOf: () => item.held, target: item.held, seenBy: [engineer, pm], hiddenFrom: others(), name: nameOf, label: `${label}, a download by id` });
   await expectHiddenFrom({ read: linksOf(id), target: item.heldLink, seenBy: [engineer, pm], hiddenFrom: others(), name: nameOf, label: `${label}, the Links` });
+  await expectHiddenFrom({ read: linkedFromOf(y), target: id, seenBy: [engineer, pm], hiddenFrom: others(), name: nameOf, label: `${label}, Y's Linked from` });
   // What was handed over before is still everyone's.
   for (const viewer of [engineer, pm, ...others()]) {
     expect((await documentsOf(id)(viewer)).map((d) => d.id), `${label}: ${nameOf(viewer)} reads shared.pdf`).toContain(item.shared);
     expect((await linksOf(id)(viewer)).map((l) => l.id), `${label}: ${nameOf(viewer)} reads the Link to X`).toContain(item.sharedLink);
+    expect((await linkedFromOf(x)(viewer)).map((i) => i.id), `${label}: ${nameOf(viewer)} reads it in X's Linked from`).toContain(id);
   }
-  // The Download (`/shared`) is the item as everyone but its holder reads it: the holder too gets only shared.pdf.
-  for (const viewer of [engineer, k1Engineer, owner]) expect((await sharedDocumentsOf(id)(viewer)).map((d) => d.id), `${label}: ${nameOf(viewer)}'s Download`).toEqual([item.shared]);
+  // The Download (`/shared`) is the item as everyone but its holder reads it: the holder too gets only shared.pdf and the Link to X.
+  for (const viewer of [engineer, k1Engineer, owner]) {
+    const download = await sharedOf(viewer, id);
+    expect(download.documents.map((d) => d.id), `${label}: ${nameOf(viewer)}'s Download`).toEqual([item.shared]);
+    expect(download.links.map((l) => l.id), `${label}: ${nameOf(viewer)}'s Download Links`).toEqual([item.sharedLink]);
+  }
   // The live item and the sealed Record agree.
   expect((await documentsOf(id)(k1Engineer)).map((d) => d.id).sort(), `${label}: K1's Documents are the Record's`).toEqual(await recordDocuments(id));
   // C2, another Contractor, never sees the item.
@@ -230,6 +240,7 @@ describe("scenario RP-955-2: a reply file the closing Code took is handed over w
 
     await expectHiddenFrom({ read: documentsOf(id), target: reply, seenBy: [engineer, pm, ...others()], hiddenFrom: c2Engineer, name: nameOf, label: "RP-955-2, the documents list" });
     await expectHiddenFrom({ read: download(id, reply), idOf: () => reply, target: reply, seenBy: [engineer, pm, ...others()], hiddenFrom: c2Engineer, name: nameOf, label: "RP-955-2, a download by id" });
+    for (const viewer of [engineer, k1Engineer, owner]) expect((await sharedDocumentsOf(id)(viewer)).map((d) => d.id).sort(), `${nameOf(viewer)}'s Download`).toEqual([shared, reply].sort());
     expect((await documentsOf(id)(engineer)).map((d) => d.id).sort(), "C1's Documents are the Record's").toEqual(await recordDocuments(id));
     expect(await recordDocuments(id)).toEqual([shared, reply].sort());
   });

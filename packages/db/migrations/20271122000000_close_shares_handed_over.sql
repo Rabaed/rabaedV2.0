@@ -21,9 +21,10 @@
 --   Steps done at its `closed_at` too.
 -- * A reply file a shared event took (ADR 0024) was handed over with that event, whatever its arrival: a
 --   Code's own files, taken by the Transition that closes the item, as the Record prints them (its
---   `or d.reply_event_id is not null`). The documents readers add app.reply_taken_at_close to the arrival
---   rule; app.reply_event_seen still keeps one only an internal event took inside its Participant
---   (RP-1079). Links have no reply rows.
+--   `or d.reply_event_id is not null`). The Documents readers below share one rule for it,
+--   app.document_seen: the arrival rule, or such a reply file, and app.reply_event_seen, which still keeps
+--   one only an internal event took inside the Participants it reaches (RP-1079; there the Record, which
+--   prints a shared event's files only, holds less than those two read live). Links have no reply rows.
 --
 -- Rebuilt from main's newest bodies: app.item_row_as_arrived (20261110000000_sent_back_as_it_was.sql,
 -- read through app.item_row_seen by the document and work_item_link policies, app.work_item_links, the
@@ -34,14 +35,18 @@
 -- Not changed: the Record's own rule; the answers and Trade, Location and Scopes a holder changed after
 -- the last arrival, which a close still shares and the Record prints (RP-1149, for the owner to decide);
 -- app.transition_validation_failed and app.start_annotated_copy_upload, which act on open items only;
--- the Snag Report's reads (RP-1078 holds them), whose photos are a Snag's own, added before it arrived.
+-- the Snag Report's reads (RP-1078 holds them), whose photos are a Snag's own, added before it arrived:
+-- they check photos with app.item_row_seen alone, so a closing Code's reply photo would leave a report
+-- "gone" (it fails closed; app.document_seen is their rule to take up); app.create_revision, which copies
+-- only the raiser's own Form and Attachments files (a reply file's key is never the Form's).
 -- An item closed before arrivals were counted (backfilled to 1 in 20261110000000) shows its other
 -- Participants none of its rows now, as its Record would.
 
 -- Whether one of the acting Member's Participants held closed item `p_work_item_id` at its close: a Step
--- of its marked done at the moment the item closed. Only app.item_row_as_arrived calls it.
+-- of its marked done at the moment the item closed. Security invoker: only app.item_row_as_arrived, a
+-- definer function, calls it.
 create function app.held_at_close(p_work_item_id uuid) returns boolean
-  language plpgsql stable security definer
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
     begin
@@ -77,29 +82,31 @@ create or replace function app.item_row_as_arrived(p_work_item_id uuid, p_arriva
     end
   $$;
 
--- Whether a Document of item `p_work_item_id`, taken by event `p_reply_event_id`, is a reply file of a
--- closed item the acting Member sees: handed over by the event that took it, whatever its arrival (the
--- Record's own rule). app.reply_event_seen, beside it in every reader, says whether that event reaches them.
-create function app.reply_taken_at_close(p_work_item_id uuid, p_reply_event_id uuid) returns boolean
+-- Whether the acting Member reads a Document of item `p_work_item_id`, added during `p_arrival` and taken
+-- by event `p_reply_event_id` (null: no Transition took it): the one rule of every Documents reader below.
+-- It sees the item; the row is as the item arrived with them (app.item_row_as_arrived), or a reply file
+-- of a closed item, handed over by the event that took it whatever its arrival (the Record's own rule);
+-- and that event reaches them (app.reply_event_seen, RP-1079).
+create function app.document_seen(p_work_item_id uuid, p_arrival integer, p_reply_event_id uuid) returns boolean
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
     begin
-      return p_reply_event_id is not null and app.sees_work_item(p_work_item_id) and exists (
-        select 1 from work_item w where w.id = p_work_item_id and w.closed_at is not null);
+      return app.sees_work_item(p_work_item_id)
+        and (app.item_row_as_arrived(p_work_item_id, p_arrival, false)
+          or p_reply_event_id is not null and exists (select 1 from work_item w where w.id = p_work_item_id and w.closed_at is not null))
+        and app.reply_event_seen(p_work_item_id, p_reply_event_id);
     end
   $$;
-revoke all on function app.reply_taken_at_close(uuid, uuid) from public;
-grant execute on function app.reply_taken_at_close(uuid, uuid) to rabaed_app;
+revoke all on function app.document_seen(uuid, integer, uuid) from public;
+grant execute on function app.document_seen(uuid, integer, uuid) to rabaed_app;
 
 alter policy member_reads_documents on document
   using (confirmed_at is not null and removed_at is null
     and project_id in (select app.current_project_ids())
-    and app.sees_work_item(work_item_id)
-    and (app.item_row_seen(work_item_id, arrival, false) or app.reply_taken_at_close(work_item_id, reply_event_id))
-    and app.reply_event_seen(work_item_id, reply_event_id));
+    and app.document_seen(work_item_id, arrival, reply_event_id));
 
--- As in 20271101000000_reply_files_event_audience.sql, with a closing Code's reply files (as the policy).
+-- As in 20271101000000_reply_files_event_audience.sql, through app.document_seen (as the policy).
 create or replace function app.document_times(p_work_item_id uuid)
   returns table (document_id uuid, uploaded_at timestamptz, seq integer)
   language plpgsql stable security definer
@@ -115,8 +122,7 @@ create or replace function app.document_times(p_work_item_id uuid)
           -- The rows the documents policy shows the acting Member.
           select d.id, d.confirmed_at, d.file_name from document d
           where d.work_item_id = p_work_item_id and d.confirmed_at is not null and d.removed_at is null
-            and (app.item_row_seen(d.work_item_id, d.arrival, false) or app.reply_taken_at_close(d.work_item_id, d.reply_event_id))
-            and app.reply_event_seen(d.work_item_id, d.reply_event_id)
+            and app.document_seen(d.work_item_id, d.arrival, d.reply_event_id)
         ), origin as (
           -- Each Document back to the one first uploaded, through any copy of a copy.
           select v.id as document_id, v.id as source_id from visible v
@@ -172,7 +178,7 @@ create or replace function app.work_item_shared_links(p_work_item_id uuid)
     end
   $$;
 
--- As in 20271104000000_raised_from_check_item_photos.sql, with a closing Code's reply files (as the policy):
+-- As in 20271104000000_raised_from_check_item_photos.sql, through app.document_seen (as the policy):
 -- the failed check item's photos are the Inspection's own, taken by the Code that closed it.
 create or replace function app.raised_from_check_item_photos(p_work_item_id uuid) returns table (document_id uuid)
   language plpgsql stable security definer
@@ -193,7 +199,6 @@ create or replace function app.raised_from_check_item_photos(p_work_item_id uuid
           and s.work_item_id = l.to_id and s.item_key = l.item_key and s.confirmed_at is not null and s.removed_at is null
           and app.sees_work_item(l.to_id)
           -- As member_reads_documents and app.document_times: never an id the reader can't read.
-          and (app.item_row_seen(s.work_item_id, s.arrival, false) or app.reply_taken_at_close(s.work_item_id, s.reply_event_id))
-          and app.reply_event_seen(s.work_item_id, s.reply_event_id);
+          and app.document_seen(s.work_item_id, s.arrival, s.reply_event_id);
     end
   $$;
