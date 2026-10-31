@@ -52,7 +52,7 @@ describe("describeRun", () => {
     queued: [row("ahmed@tester.example"), row("pm@tester.example")],
     processed: [row("ahmed@tester.example")],
     takenByWorker: [row("pm@tester.example")],
-    failed: [{ row: row("third@tester.example"), error: "refused" }],
+    failed: [{ row: row("third@tester.example"), error: "550 rejected third@tester.example" }],
     leftOut: 3,
   };
   const sent = [{ to: "ahmed@tester.example", subject: "Weekly Step Age report: Hidden Tower" }];
@@ -63,7 +63,7 @@ describe("describeRun", () => {
       "Added 2 outbox row(s)",
       "3 row(s) for other Members were not queued",
       "1 row(s) already processed by worker",
-      "a row: not sent (refused); left queued for the worker's retries",
+      "a row: not sent (the send failed); left queued for the worker's retries",
       "Sent 1 email(s)",
     ]);
     expect(lines.join("\n")).not.toMatch(/@|Hidden Tower/);

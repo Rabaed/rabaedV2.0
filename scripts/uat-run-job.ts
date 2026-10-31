@@ -79,7 +79,9 @@ export function describeRun(run: JobRun, sent: SentEmail[], { dryRun, member, it
   const lines = [`${dryRun ? "Would add" : "Added"} ${run.queued.length} outbox row(s)${list(run.queued, who)}`];
   if (member) lines.push(`${run.leftOut} row(s) for other Members were not queued`);
   if (run.takenByWorker.length > 0) lines.push(`${run.takenByWorker.length} row(s) already processed by worker${list(run.takenByWorker, who)}`);
-  for (const { row, error } of run.failed) lines.push(`${itemText ? who(row) : "a row"}: not sent (${error}); left queued for the worker's retries`);
+  // A send's own error can quote its recipient: inside the job only a database error's code is printed.
+  const why = (error: string) => (itemText || /^database error [0-9A-Z]{5}$/.test(error) ? error : "the send failed");
+  for (const { row, error } of run.failed) lines.push(`${itemText ? who(row) : "a row"}: not sent (${why(error)}); left queued for the worker's retries`);
   if (!dryRun) lines.push(`Sent ${sent.length} email(s)${list(sent, (s) => `${s.to} "${s.subject}"`)}`);
   return lines;
 }
