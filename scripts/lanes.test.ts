@@ -1090,3 +1090,14 @@ describe("removeProject checks for a running verify itself (RP-1170, rule 4)", (
     ]);
   });
 });
+
+describe("removeProject never removes lane 7 (Main 6's review of #583)", () => {
+  it("throws before any Docker call for the harness's stack", () => {
+    const calls: string[][] = [];
+    const run = (args: string[]) => (calls.push(args), "");
+    expect(() => removeProject({ project: "rabaed-lane7", reason: "x", containers: ["db"], volumes: ["v"] }, { run, wait: () => {}, volumesKeptBecause: () => undefined })).toThrow(
+      /^rabaed-lane7 not removed: lane 7 holds Main 7's UAT harness data/,
+    );
+    expect(calls).toEqual([]);
+  });
+});

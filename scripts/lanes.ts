@@ -792,6 +792,9 @@ export function removeProject(
   stale: StaleProject,
   { keepVolumes = false, volumesKeptBecause = () => volumesKeptReason(verifiesRunningNow()), run = docker, wait = sleepSync }: RemoveProjectOptions = {},
 ): { volumesKept: string | undefined } {
+  // Every caller already keeps lane 7 (RP-1101); refused here too, so no future one can reach it.
+  const harness = protectedLaneReason(stale.project);
+  if (harness !== undefined) throw new Error(`${stale.project} not removed: ${harness}.`);
   const kept = keepVolumes ? "asked to keep them" : volumesKeptBecause();
   keepVolumes = kept !== undefined;
   const removed: string[] = [];

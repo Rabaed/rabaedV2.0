@@ -68,6 +68,8 @@ export type Candidate = {
   exists: boolean;
   isMain: boolean;
   isCurrent: boolean;
+  /** Under `<mainRoot>/.claude/worktrees/` (worktrees-pruning.ts isAppWorktree): the only worktrees lane:done removes. */
+  appWorktree: boolean;
   /** Why a running or desktop Claude session holds it (claude-sessions.ts holdReason), or undefined. */
   held: string | undefined;
   /** A running process's command line names its folder, such as its dev server. */
@@ -132,6 +134,8 @@ export const describeWorktree = (c: Pick<Candidate, "path" | "branch">) => `${c.
 function keepReason(c: Candidate, pr: PullRequest, force: boolean): string | undefined {
   if (c.isMain) return "the main checkout";
   if (c.isCurrent) return "the current worktree: run pnpm lane:done from another worktree (the Main's or the Orchestrator's)";
+  // A checkout elsewhere on the PR's branch or head (a reviewer's, a hand-made one) is never lane:done's to remove.
+  if (!c.appWorktree) return `not under .claude/worktrees: remove it by hand with \`pnpm worktree:remove ${c.path}\``;
   if (c.held !== undefined) return `held: ${c.held}`;
   if (c.heldByProcess) return `a running process holds its folder (a dev server?): \`pnpm servers:stop --yes --worktree ${c.path}\`, then re-run`;
   if (c.kind === "lane" && !c.onPr) return `its HEAD ${c.head} is not on PR #${pr.number}'s commits, so its own commits are not known to be merged`;

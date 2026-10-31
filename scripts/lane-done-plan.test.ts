@@ -33,6 +33,7 @@ const laneWt = (c: Partial<Candidate> = {}): Candidate => ({
   exists: true,
   isMain: false,
   isCurrent: false,
+  appWorktree: true,
   held: undefined,
   heldByProcess: false,
   lockLive: false,
@@ -320,5 +321,28 @@ describe("review fixes (RP-1170 /code-review)", () => {
     const decision = decideLaneDone(input({ lane: 41, candidates: [held] }));
     expect(decision.stack?.action).toBe("keep");
     expect(decision.stack?.why).toEqual(["rabaed-lane41-db-1 comes from G:/rabaed/.claude/worktrees/rp-1170, which stays"]);
+  });
+});
+
+describe("only the app's worktrees are removed (Main 6's review of #583)", () => {
+  it("keeps a worktree on the PR's branch outside .claude/worktrees, even with --force, and lists it", () => {
+    const outside = laneWt({ path: "D:/review/rp-1170", appWorktree: false });
+    const decision = decideLaneDone(input({ candidates: [outside], force: true }));
+    expect(decision.remove).toEqual([]);
+    expect(reasons(decision)).toEqual(["D:/review/rp-1170 (RP-1170-lane-done): not under .claude/worktrees: remove it by hand with `pnpm worktree:remove D:/review/rp-1170`"]);
+    expect(decision.stack?.action).toBe("keep");
+  });
+
+  it("keeps a reviewer's detached checkout at the PR's head outside .claude/worktrees", () => {
+    const detached = laneWt({ path: "D:/review/head", branch: undefined, appWorktree: false });
+    expect(reasons(decideLaneDone(input({ candidates: [detached], force: true })))[0]).toMatch(/^D:\/review\/head \(detached HEAD\): not under \.claude\/worktrees/);
+  });
+
+  it("names the main checkout as such, not as outside the folder", () => {
+    expect(reasons(decideLaneDone(input({ candidates: [laneWt({ path: "G:/rabaed", isMain: true, appWorktree: false })], force: true })))).toEqual(["G:/rabaed (RP-1170-lane-done): the main checkout"]);
+  });
+
+  it("refuses the whole run for the harness's worktree, even outside .claude/worktrees", () => {
+    expect(decideLaneDone(input({ candidates: [laneWt({ path: "D:/uat", project: "rabaed-lane7", appWorktree: false })], force: true })).refusal).toMatch(/lane 7 holds Main 7's UAT harness data/);
   });
 });

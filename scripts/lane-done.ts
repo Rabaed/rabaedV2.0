@@ -5,9 +5,11 @@
 //   2. Finds the lane's worktree (on the PR's branch, or a detached HEAD at its head) and the subagent
 //      worktrees (.claude/worktrees/agent-*) whose .env names the lane, and judges each
 //      (lane-done-plan.ts: the safety rules are there, with their tests). Every one kept is listed at once.
-//   3. Removes each with the long-path steps of `pnpm worktree:remove` (worktree-removal.ts: core.longpaths,
-//      `rd /s /q \\?\…`, `git worktree prune`), then its branch: the lane's when its tip is in origin/main,
-//      a subagent's (and the app's worktree-agent-* branch) when its files are all in origin/main.
+//   3. Removes each, only under .claude/worktrees/ and only past `pnpm worktree:remove`'s own refusals
+//      (worktree-removal.ts removalRefusal), with its long-path steps (core.longpaths, `rd /s /q \\?\…`,
+//      `git worktree prune`), then its branch: the lane's when its tip is in origin/main; a subagent's when
+//      every file it changed matches origin/main (a cherry-picked result: its commits are not in main);
+//      the app's worktree-agent-* branch only when its tip is in origin/main.
 //   4. Removes the lane's stack (containers, volumes, network; lanes.ts removeProject), never lane 7's and
 //      never one another worktree's .env or a live session uses, checked again just before; while a
 //      verify runs anywhere on the machine its volumes stay (verifies-running.ts).
@@ -40,11 +42,12 @@ import {
   type Volume,
 } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { keptLast, listedChanges, shallowRefusal } from "./prune-guards.ts";
+import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
-import { removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
-import { currentRoot, fetchPrune, gitChanges, gitError, isAgentWorktree, isAncestor, isShallowRepo, listWorktrees, refExists, systemLiveness, type Worktree } from "./worktrees.ts";
+import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
+import { isAppWorktree } from "./worktrees-pruning.ts";
+import { currentRoot, fetchPrune, gitChanges, gitError, isAgentWorktree, isAncestor, isShallowRepo, listWorktrees, refExists, systemLiveness, unpushedCount, type Worktree } from "./worktrees.ts";
 
 const TARGET = "origin/main";
 const parsed = parseLaneDoneArgs(process.argv.slice(2));
@@ -167,15 +170,29 @@ let failed = 0;
 const removedPaths: string[] = [];
 for (const c of decision.remove) {
   // Read again just before: a session may have moved in, or files changed, since the listing.
-  const held = holdReason(c.path, systemHolders(), { sinceListed: true });
-  const changesNow = c.exists && existsSync(join(c.path, ".git")) ? attempt(() => gitChanges(c.path)) : [];
-  const why = held ?? (!force && (changesNow === undefined || changesNow.length > 0) ? `uncommitted changes since it was listed${listedChanges(changesNow)}` : undefined);
-  if (why !== undefined) {
-    kept.push({ what: describeWorktree(c), reason: why });
+  const registered = worktrees.find((w) => samePath(w.path, c.path));
+  const exists = existsSync(c.path);
+  const readable = exists && existsSync(join(c.path, ".git"));
+  const target: RemoveTarget = {
+    path: c.path,
+    mainRoot,
+    currentRoot: here,
+    registered,
+    exists,
+    readable,
+    changes: readable ? attempt(() => gitChanges(c.path)) : undefined,
+    // Rule 3 found every change of a subagent's branch in origin/main, so its commits, never pushed, lose nothing.
+    unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unpushedCount(registered.head, mainRoot)) : undefined,
+    project: exists ? projectOf(c.path) : c.project,
+    held: holdReason(c.path, systemHolders(), { sinceListed: true }),
+  };
+  // `pnpm worktree:remove`'s own refusals, last: never the main checkout, the current worktree, a held one,
+  // lane 7's or one outside .claude/worktrees; without --force, none with changes or unpushed commits.
+  const refused = !isAppWorktree(c.path, mainRoot) ? `Not removed: ${c.path} is not under .claude/worktrees.` : removalRefusal(target, { force });
+  if (refused !== undefined) {
+    kept.push({ what: describeWorktree(c), reason: refused.replace(/^Not removed: /, "") });
     continue;
   }
-  const registered = worktrees.find((w) => samePath(w.path, c.path));
-  const target: RemoveTarget = { path: c.path, mainRoot, currentRoot: here, registered, exists: existsSync(c.path), readable: false, changes: undefined, unpushed: undefined, project: c.project, held: undefined };
   const { removed, steps } = removeWorktreeFolder(target, { run: (command, args) => execFileSync(command, args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), exists: existsSync });
   if (!removed) {
     failed++;
@@ -243,6 +260,7 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
     exists,
     isMain: samePath(w.path, mainRoot),
     isCurrent: samePath(w.path, here),
+    appWorktree: isAppWorktree(w.path, mainRoot),
     held: holdReason(w.path, live.holders),
     heldByProcess: exists && live.heldByProcess(w.path),
     lockLive: live.lockLive(w.locked),
@@ -256,7 +274,7 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
   };
 }
 
-/** The removed worktree's branches: the lane's when its tip is in origin/main; a subagent's, its files being there. */
+/** The removed worktree's branches: the lane's and the app's worktree-agent-* one when the tip is in origin/main; a subagent's when every file it changed matches origin/main, though its commits are not there. */
 function deleteBranches(c: Candidate): void {
   const branches = c.branch === undefined ? [] : [c.branch];
   const created = `worktree-${c.path.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}`;
