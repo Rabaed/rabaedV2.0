@@ -74,6 +74,21 @@ describe("overHttp", () => {
     expect(urls).toEqual(["https://api.github.com/repos/o/r/pulls/9"]);
   });
 
+  it("reads who turned GitHub auto-merge on", async () => {
+    const { github } = recorded(() => ({ status: 200, body: { labels: [], changed_files: 1, auto_merge: { enabled_by: { login: "mmhaleess90" }, merge_method: "merge" } } }));
+    expect((await github.pull(9)).autoMergeBy).toBe("mmhaleess90");
+    const off = recorded(() => ({ status: 200, body: { labels: [], changed_files: 1, auto_merge: null } }));
+    expect((await off.github.pull(9)).autoMergeBy).toBeUndefined();
+  });
+
+  it("lists who added the reviewed label, oldest first, from the PR's issue events across pages", async () => {
+    const labeled = (login: string, name = "reviewed") => ({ event: "labeled", label: { name }, actor: { login } });
+    const firstPage = [labeled("mmhaleess90"), { event: "unlabeled", label: { name: "reviewed" }, actor: { login: "github-actions[bot]" } }, ...Array.from({ length: 98 }, () => labeled("x", "docs-only"))];
+    const { urls, github } = recorded((url) => ({ status: 200, body: url.endsWith("page=1") ? firstPage : [labeled("github-actions[bot]"), { event: "commented" }] }));
+    expect(await github.reviewedLabelers(9)).toEqual(["mmhaleess90", "github-actions[bot]"]);
+    expect(urls).toEqual(["https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=1", "https://api.github.com/repos/o/r/issues/9/events?per_page=100&page=2"]);
+  });
+
   it("pages through the changed files until a short page", async () => {
     const { urls, github } = recorded((url) => ({ status: 200, body: url.endsWith("page=1") ? Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}` })) : [{ filename: "last" }] }));
     const files = await github.files(9);
@@ -106,6 +121,7 @@ function fakeSeam(overrides: Partial<RequiredSeam> = {}) {
   const seam: RequiredSeam = {
     pull: async () => ({ labels: ["reviewed"], changedFiles: 1 }),
     files: async () => ["docs/a.md"],
+    reviewedLabelers: async () => ["github-actions[bot]"],
     labelRuns: async () => [{ status: "completed" }],
     sleep: async (ms) => void slept.push(ms),
     ...overrides,
@@ -135,12 +151,19 @@ describe("requireReviewed on merge_group", () => {
     expect(slept).toEqual([]);
   });
 
+  it("drops a PR that entered the queue through GitHub auto-merge: only `pnpm queue` enqueues (RP-1167, #531)", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 3, autoMergeBy: "mmhaleess90" }) });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
   it("fails a queued PR without the label, so the queue drops it", async () => {
     const { seam } = fakeSeam({ pull: async () => ({ labels: [], changedFiles: 3 }) });
     const result = await requireReviewed(event, seam);
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("PR #12");
-    expect(result.summary).toContain("gh pr edit 12 --add-label reviewed");
+    // CI adds `reviewed` (RP-1118); the fix never says to add it by hand (RP-1167).
+    expect(result.summary).toContain("node scripts/review-post.ts 12");
+    expect(result.summary).not.toContain("--add-label reviewed");
   });
 
   it("fails when the queue ref names no PR", async () => {
@@ -219,6 +242,48 @@ describe("requireReviewed on pull_request", () => {
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("within 1500 s");
     expect(slept.reduce((a, b) => a + b, 0)).toBe(1_500_000);
+  });
+
+  it("fails a PR whose reviewed label was added by hand, saying who added it and why it does not count (RP-1167)", async () => {
+    const { seam } = fakeSeam({ reviewedLabelers: async () => ["mmhaleess90"] });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("mmhaleess90");
+    expect(result.summary).toContain("github-actions[bot]");
+    expect(result.summary).not.toContain("--add-label reviewed");
+  });
+
+  it("passes a reviewed label that CI's reviewed-add added (RP-1167)", async () => {
+    const { seam } = fakeSeam({ reviewedLabelers: async () => ["github-actions[bot]"] });
+    expect(await requireReviewed(event, seam)).toMatchObject({ ok: true });
+  });
+
+  it("judges the label by whoever added it last: a hand label after CI's fails, CI's after a hand label passes", async () => {
+    const handLast = fakeSeam({ reviewedLabelers: async () => ["github-actions[bot]", "mmhaleess90"] });
+    expect((await requireReviewed(event, handLast.seam)).ok).toBe(false);
+    const ciLast = fakeSeam({ reviewedLabelers: async () => ["mmhaleess90", "github-actions[bot]"] });
+    expect((await requireReviewed(event, ciLast.seam)).ok).toBe(true);
+  });
+
+  it("fails a reviewed label whose labeled event GitHub does not list", async () => {
+    const { seam } = fakeSeam({ reviewedLabelers: async () => [] });
+    expect((await requireReviewed(event, seam)).ok).toBe(false);
+  });
+
+  it("still passes a docs-only PR that also has a hand-added reviewed label: docs-only is unchanged", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed", "docs-only"], changedFiles: 1 }), files: async () => ["docs/a.md"], reviewedLabelers: async () => ["mmhaleess90"] });
+    expect(await requireReviewed(event, seam)).toMatchObject({ ok: true, summary: expect.stringContaining("docs-only") });
+  });
+
+  it("fails while GitHub auto-merge is on, even with CI's reviewed label or docs-only, saying how to turn it off (RP-1167)", async () => {
+    for (const labels of [["reviewed"], ["docs-only"]]) {
+      const { seam } = fakeSeam({ pull: async () => ({ labels, changedFiles: 1, autoMergeBy: "mmhaleess90" }) });
+      const result = await requireReviewed(event, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("auto-merge");
+      expect(result.summary).toContain("gh pr merge 7 --disable-auto");
+      expect(result.summary).toContain("pnpm queue 7");
+    }
   });
 
   it("does not wait on a fork's PR (it never gets a reviewed-label run) or before the workflow exists", async () => {
