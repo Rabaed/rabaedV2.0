@@ -15,6 +15,7 @@ import { optionListRoutes } from "./routes/option-lists.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { registerImportRoutes } from "./routes/register-imports.ts";
 import { sessionRoutes } from "./routes/session.ts";
+import { stepRoutes } from "./routes/steps.ts";
 import { resolveSession, type Seen } from "./sign-in.ts";
 
 // Rabaed Admin (ADR 0010): its own service, address and sign-in, never served
@@ -169,5 +170,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(workflowDefaultRoutes(context));
   await app.register(registerImportRoutes(context));
   await app.register(documentalRecordRoutes(context));
+  await app.register(stepRoutes(context));
   return app;
 }

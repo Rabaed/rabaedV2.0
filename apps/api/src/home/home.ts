@@ -124,7 +124,8 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
         from work_item_event e
         join work_item w on w.id = e.work_item_id
         join work_item_type wt on wt.id = w.work_item_type_id
-        left join workflow_transition t on t.id = e.transition_id
+        -- The Transition's kind, which everyone who reads the event is shown; its id is the actor's own (RP-1140).
+        left join app.event_transitions(${shown.map((e) => e.id)}::uuid[]) t on t.event_id = e.id
         left join outcome o on o.project_id = e.project_id and o.work_item_type_id = w.work_item_type_id and o.code = e.payload ->> 'outcome'
         where e.id = any(${shown.map((e) => e.id)}::uuid[])
       `.execute(trx);

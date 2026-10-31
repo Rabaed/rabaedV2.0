@@ -18,7 +18,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -35,6 +35,8 @@ async function one(text: string, values: unknown[]): Promise<string> {
 
 const rowsAs = <T = Record<string, unknown>>(memberId: string, query: RawBuilder<unknown>) =>
   withMember(app, memberId, (trx) => query.execute(trx)).then((r) => r.rows as T[]);
+/** A Member as a failure names them; null is no Member set. */
+const named = (as: string | null) => (as === null ? "no Member" : as === a.member ? "A's Member" : as === b.member ? "B's Member" : as);
 
 /** A Company whose Authorized Person creates a Project, as the app role. */
 async function side(engineer: string, name: string, code: string) {
@@ -85,9 +87,14 @@ describe("notification_setting and member_notification_preference", () => {
 
   it("are unreadable to any other Member, and with no Member set", async () => {
     for (const table of ["notification_setting", "member_notification_preference"]) {
-      expect(await rowsAs(b.member, sql`select * from ${sql.table(table)}`), table).toEqual([]);
-      const none = await app.transaction().execute((trx) => sql`select * from ${sql.table(table)}`.execute(trx));
-      expect(none.rows, table).toEqual([]);
+      // null: a session with no Member set.
+      const read = (as: string | null) => {
+        const query = sql<{ member_id: string }>`select member_id from ${sql.table(table)}`;
+        return as === null ? app.transaction().execute((trx) => query.execute(trx)).then((r) => r.rows) : rowsAs<{ member_id: string }>(as, query);
+      };
+      await expectHiddenFrom({ read, target: a.member, seenBy: a.member, hiddenFrom: [b.member, null], idOf: (r) => r.member_id, name: named, label: table });
+      // Nobody but A has a row here, so B and no Member read none at all.
+      for (const as of [b.member, null]) expect(await read(as), `${table} as ${named(as)}`).toEqual([]); // not hidden-from: A's row is proved above
     }
   });
 
@@ -117,17 +124,20 @@ describe("project_mute", () => {
     expect(await mute(a.member, a.projectId, true)).toBe("set");
     expect(await rowsAs(a.member, sql`select member_id, project_id from project_mute`)).toEqual([{ member_id: a.member, project_id: a.projectId }]);
     expect(await mute(a.member, a.projectId, false)).toBe("set");
-    expect(await rowsAs(a.member, sql`select * from project_mute`)).toEqual([]);
+    expect(await rowsAs(a.member, sql`select * from project_mute`)).toEqual([]); // not hidden-from: the Member's own mute, cleared
     await mute(a.member, a.projectId, true);
   });
 
   it("refuses another Project like a made-up one", async () => {
     for (const projectId of [b.projectId, randomUUID()]) expect(await mute(a.member, projectId, true)).toBe("not_found");
-    expect((await migrator.query("select 1 from project_mute where member_id = $1 and project_id = $2", [a.member, b.projectId])).rows).toEqual([]);
+    expect((await migrator.query("select 1 from project_mute where member_id = $1 and project_id = $2", [a.member, b.projectId])).rows).toEqual([]); // not hidden-from: the migrator's read, nothing was written
   });
 
   it("is unreadable to any other Member, and never written directly", async () => {
-    expect(await rowsAs(b.member, sql`select * from project_mute`)).toEqual([]);
+    await mute(a.member, a.projectId, true); // A's mute, so there is a row to read first
+    const mutes = (as: string) => rowsAs<{ member_id: string }>(as, sql`select member_id from project_mute`);
+    await expectHiddenFrom({ read: mutes, target: a.member, seenBy: a.member, hiddenFrom: b.member, idOf: (r) => r.member_id, name: named });
+    expect(await mutes(b.member)).toEqual([]); // not hidden-from: A's mute is proved above, and B has none of their own
     await expect(rowsAs(a.member, sql`delete from project_mute`)).rejects.toThrow(/permission denied/);
     await expect(
       rowsAs(b.member, sql`insert into project_mute (member_id, project_id) values (${b.member}::uuid, ${a.projectId}::uuid)`),

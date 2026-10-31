@@ -13,7 +13,7 @@
     {
       "text": "No Step, no person, no Internal Note in it",
       "ok": true,
-      "detail": "{\"id\":\"52688fcf-3290-4505-935f-07bfcab5e2e5\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 225328\",\"documentNum"
+      "detail": "{\"id\":\"792a9988-0212-4a73-b45f-04f4667e93d9\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 023915\",\"documentNum"
     },
     {
       "text": "A Draft has nothing shared: the plain 404",
@@ -21,8 +21,8 @@
     },
     {
       "text": "The row menu of the Submitted MAR offers Download",
-      "ok": true,
-      "detail": "Open | Duplicate | Download"
+      "ok": false,
+      "detail": "Open"
     },
     {
       "text": "A Draft offers no Download",
@@ -35,5 +35,5 @@
     "evidence/SUB-18-2-row-menu-draft.jpg"
   ],
   "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
-  "ranAt": "2026-10-27T22:53:36.351Z"
+  "ranAt": "2026-10-31T02:39:27.593Z"
 }

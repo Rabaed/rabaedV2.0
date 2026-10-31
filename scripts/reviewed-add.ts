@@ -8,7 +8,7 @@ import { realGateGit, verifyGate } from "./verify-gate.ts";
 // Adds the `reviewed` label to a PR (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 // It adds it only when both hold for the PR's current head:
 //   1. a /code-review summary comment for that head is on the PR: a comment holding `reviewMarker(<sha>)`, the
-//      hidden line `<!-- code-review: <40-hex sha> -->`, posted by a trusted author (`isTrustedAuthor`). The lane
+//      hidden line `<!-- code-review: <40-hex sha> -->`, posted by a user with write access (`isTrustedAuthor`). The lane
 //      posts it with `node scripts/review-post.ts <pr> <summary-file>` after /code-review (the skill lives outside
 //      this repo, so the repo's script writes the marker);
 //   2. the body's stamped verify line passes the verify gate (`verifyGate`, RP-1094) for that head.
@@ -32,39 +32,52 @@ export const reviewMarker = (sha: string) => `<!-- code-review: ${sha} -->`;
 const MARKER = /<!-- code-review: ([0-9a-f]{40}) -->/g;
 
 /**
- * The repo's own accounts, as GitHub tells a comment's author apart (`author_association`): its owner, the
- * organisation's members and invited collaborators, all of whom can push to it anyway. The lanes post as the owner's
- * account (a MEMBER of Rabaed). No bot counts: no review bot posts on this repo, and any workflow can comment as
- * github-actions[bot].
+ * GitHub's `permission` values (GET /repos/{o}/{r}/collaborators/{login}/permission) that can push to the repo:
+ * `maintain` is reported as `write`, `triage` as `read`. A marker counts only from a user with one of these, the
+ * people who could push or label the PR anyway. The lanes post as the owner's account. `author_association` is not
+ * used: GitHub reports MEMBER only for a public org membership, so CI's token saw the owner as CONTRIBUTOR (RP-1159).
+ * No bot counts: no review bot posts on this repo, and any workflow can comment as github-actions[bot].
  */
-const TRUSTED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const WRITE_PERMISSIONS: ReadonlySet<Permission> = new Set(["admin", "write"]);
+
+/** GitHub's legacy base role for a user on the repo (`permission` in the collaborator permission answer). */
+export type Permission = "admin" | "write" | "read" | "none";
 
 export interface ReviewComment {
   login: string;
   /** GitHub's `user.type`: "User" or "Bot". */
   type: string;
-  /** GitHub's `author_association`. */
-  association: string;
   body: string;
 }
 
-export const isTrustedAuthor = (comment: ReviewComment) => comment.type === "User" && TRUSTED_ASSOCIATIONS.has(comment.association);
-
 const markedCommits = (comment: ReviewComment) => [...comment.body.matchAll(MARKER)].map(([, sha = ""]) => sha);
+const hasMarker = (comment: ReviewComment) => markedCommits(comment).length > 0;
+
+/** The users among the markers' authors who can push to the repo; `permission` is asked once per login. */
+export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
+  const logins = new Set(comments.filter((comment) => comment.type === "User" && hasMarker(comment)).map((comment) => comment.login));
+  const writers = new Set<string>();
+  for (const login of logins) if (WRITE_PERMISSIONS.has(await permission(login))) writers.add(login);
+  return writers;
+}
+
+/** A user (never a bot) in `writers`: one who can push to the repo (`writersAmong`). */
+export const isTrustedAuthor = (comment: ReviewComment, writers: ReadonlySet<string>) => comment.type === "User" && writers.has(comment.login);
 
 export type ReviewFound = { ok: true; commit: string } | { ok: false; reason: string };
 
-/** A trusted review comment for `head`, or for a commit only clean commits led to it from. */
-export function reviewAt(comments: ReviewComment[], head: string, git: ReviewedGit): ReviewFound {
-  const trusted = comments.filter(isTrustedAuthor).flatMap(markedCommits);
+/** A review comment by one of `writers` for `head`, or for a commit only clean commits led to it from. */
+export function reviewAt(comments: ReviewComment[], head: string, git: ReviewedGit, writers: ReadonlySet<string>): ReviewFound {
+  const byWriter = (comment: ReviewComment) => isTrustedAuthor(comment, writers);
+  const trusted = comments.filter(byWriter).flatMap(markedCommits);
   const commit = trusted.find((candidate) => onlyCleanCommitsSince(candidate, head, git));
   if (commit !== undefined) return { ok: true, commit };
-  const untrusted = comments.filter((comment) => !isTrustedAuthor(comment) && markedCommits(comment).length > 0).map((comment) => comment.login);
+  const untrusted = comments.filter((comment) => !byWriter(comment) && hasMarker(comment)).map((comment) => comment.login);
   const parts = [
     trusted.length > 0
       ? `its /code-review comments name ${[...new Set(trusted)].join(", ")}, which is neither the head ${head} nor a commit only clean commits led to it from`
       : `no /code-review summary comment (\`${reviewMarker("<sha>")}\`) for its head ${head}`,
-    ...(untrusted.length > 0 ? [`a marker by ${[...new Set(untrusted)].join(", ")} does not count (not one of the repo's own accounts)`] : []),
+    ...(untrusted.length > 0 ? [`a marker by ${[...new Set(untrusted)].join(", ")} does not count (a bot, or a user without write access to the repo)`] : []),
   ];
   return { ok: false, reason: parts.join("; ") };
 }
@@ -84,6 +97,8 @@ export interface AddSeam extends ReviewedGit {
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
   /** Every comment on the PR's conversation. */
   comments(pr: number): Promise<ReviewComment[]>;
+  /** GitHub's `permission` for `login` on the repo. */
+  permission(login: string): Promise<Permission>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
@@ -142,7 +157,8 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
   if (pull.labels.includes(REVIEWED_LABEL)) return skip(`already has \`${REVIEWED_LABEL}\`.`);
-  const review = reviewAt(await seam.comments(pr), head, seam);
+  const comments = await seam.comments(pr);
+  const review = reviewAt(comments, head, seam, await writersAmong(comments, seam.permission));
   const verify = verifyGate(pull.body, head, seam);
   if (!review.ok || !verify.ok) {
     const reasons = [...(review.ok ? [] : [review.reason]), ...(verify.ok ? [] : [verify.reason])];
@@ -214,13 +230,17 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       for (let page = 1; page <= 30; page++) {
         const batch = (await call("GET", `issues/${pr}/comments?per_page=${PER_PAGE}&page=${page}`)) as {
           body: string | null;
-          author_association: string;
           user: { login: string; type: string } | null;
         }[];
-        all.push(...batch.map((comment) => ({ login: comment.user?.login ?? "", type: comment.user?.type ?? "", association: comment.author_association, body: comment.body ?? "" })));
+        all.push(...batch.map((comment) => ({ login: comment.user?.login ?? "", type: comment.user?.type ?? "", body: comment.body ?? "" })));
         if (batch.length < PER_PAGE) break;
       }
       return all;
+    },
+    async permission(login) {
+      // 404: no such user (a deleted account's ghost), so no access. Needs only the token's metadata read.
+      const found = (await call("GET", `collaborators/${encodeURIComponent(login)}/permission`, undefined, true)) as { permission: Permission } | undefined;
+      return found?.permission ?? "none";
     },
     async labelRuns(headSha) {
       return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));

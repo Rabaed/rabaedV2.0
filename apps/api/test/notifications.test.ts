@@ -6,7 +6,7 @@
 // recipient may see.
 import { randomUUID } from "node:crypto";
 import { createDb, deliverNotification, outboxStats, processOutbox, withMember, type OutboxRow } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -48,6 +48,10 @@ let k1Engineer: Member;
 let c2Engineer: Member;
 let engineerPm: Member; // C1 Engineer who is also a PM: in the pool they send to.
 let k1: { company: Company; participantId: string };
+
+/** A Member as a failure names them. */
+const named = (m: Member) =>
+  Object.entries({ engineer, pm, pmRemoved, pmNarrowed, manager, k1Engineer, c2Engineer, engineerPm }).find(([, v]) => v === m)?.[0] ?? m.id;
 
 async function ok(res: Promise<{ statusCode: number; body: string }>, status = 204) {
   const r = await res;
@@ -126,8 +130,8 @@ describe("Send for Review", () => {
   });
 
   it("writes one outbox row in the Transition's transaction, and notifies nobody before delivery", async () => {
-    expect(await outboxRows(id)).toHaveLength(1);
-    expect(await about(pm, id)).toEqual([]);
+    expect(await outboxRows(id)).toHaveLength(1); // not hidden-from: the migrator's outbox row
+    expect(await about(pm, id)).toEqual([]); // not hidden-from: not delivered yet
   });
 
   it("is delivered to the PM pool's Members who still see the item, and nobody else (scenario 12)", async () => {
@@ -138,8 +142,9 @@ describe("Send for Review", () => {
     const [n] = await about(pm, id);
     expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: "TWR-MARV-01-0001", readAt: null });
     expect(n!.step).toEqual({ name: { en: "Contractor review", ar: "مراجعة المقاول" } });
-    for (const who of [engineer, pmNarrowed, manager, k1Engineer, c2Engineer]) expect(await about(who, id), who.id).toEqual([]);
-    expect((await pmRemoved.caller.get("/v1/notifications")).json().notifications).toEqual([]);
+    const read = (who: Member) => about(who, id);
+    await expectHiddenFrom({ read, target: id, idOf: (n) => n.workItemId!, seenBy: pm, hiddenFrom: [engineer, pmNarrowed, manager, k1Engineer, c2Engineer, pmRemoved], name: named });
+    expect((await notifications(pmRemoved)).notifications).toEqual([]); // not hidden-from: the PM's delivered notification is proved above, and the removed PM never had one
     expect((await outboxRows(id))[0]).toMatchObject({ attempts: 0, dead_at: null });
     expect((await outboxRows(id))[0]!.processed_at).not.toBeNull();
   });
@@ -160,13 +165,13 @@ describe("Send for Review", () => {
     const own = await createDraft("Cable ladders", engineerPm);
     await take(engineerPm.caller, own, "send_for_review");
     await drainOutbox(worker);
-    expect(await about(engineerPm, own)).toEqual([]);
-    expect(await about(pm, own)).toHaveLength(1);
+    expect(await about(engineerPm, own)).toEqual([]); // not hidden-from: the mover's own move tells them nothing
+    expect((await about(pm, own)).map((n) => n.workItemId)).toEqual([own]);
   });
 
   it("is delivered once, however often the worker runs", async () => {
     await drainOutbox(worker);
-    expect(await about(pm, id)).toHaveLength(1);
+    expect((await about(pm, id)).map((n) => n.workItemId)).toEqual([id]);
   });
 });
 
@@ -181,10 +186,10 @@ describe("Return and Submit", () => {
   });
 
   it("notifies the Engineer the Return comes back to, not the PM who returned it", async () => {
-    expect(await about(engineer, id)).toHaveLength(1);
+    expect((await about(engineer, id)).map((n) => n.workItemId)).toEqual([id]);
     // Send for Review was delivered only after the PM had picked up and returned it: a
     // Step the item already left notifies nobody.
-    expect(await about(pm, id)).toEqual([]);
+    expect(await about(pm, id)).toEqual([]); // not hidden-from: a Step the item already left notifies nobody
   });
 
   it("notifies the Consultant's pool on Submit, never the Consultant's Engineer or the second Contractor", async () => {
@@ -194,14 +199,21 @@ describe("Return and Submit", () => {
     await drainOutbox(worker);
     const [n] = await about(manager, id);
     expect(n).toMatchObject({ title: "Lighting fixtures", step: { name: { en: "Consultant review" } } });
-    for (const who of [k1Engineer, c2Engineer]) expect(await about(who, id)).toEqual([]);
+    const read = (who: Member) => about(who, id);
+    await expectHiddenFrom({ read, target: id, idOf: (n) => n.workItemId!, seenBy: manager, hiddenFrom: [k1Engineer, c2Engineer], name: named });
   });
 
   it("shows only the recipient's own notifications, with nothing of items that aren't theirs", async () => {
     const mine = await notifications(manager);
     expect(mine.notifications.every((n) => n.workItemId === id)).toBe(true);
+    // An item of the PM's pool only: the PM's notification about it is never the Consultant manager's.
+    const own = await createDraft("Cable duct");
+    await take(engineer.caller, own, "send_for_review");
+    await drainOutbox(worker);
+    const read = async (who: Member) => (await notifications(who)).notifications;
+    await expectHiddenFrom({ read, target: own, idOf: (n) => n.workItemId ?? n.id, seenBy: pm, hiddenFrom: manager, name: named });
+    // The Return's reason is no notification's at all, so nobody reads it first.
     const body = JSON.stringify(mine);
-    expect(body).not.toContain("Cable trays");
     expect(body).not.toContain("Wrong tray size");
   });
 
@@ -218,7 +230,7 @@ describe("Return and Submit", () => {
     expect(await notifications(manager)).toEqual({ unread: 0, notifications: [] });
     await setVisibility(k1.company, k1.participantId, manager.id, all);
     // Seeing it again doesn't bring back its "Step reached": the Step was handed over, so it no longer waits for them.
-    expect(await about(manager, id)).toEqual([]);
+    expect(await about(manager, id)).toEqual([]); // not hidden-from: a Step handed over no longer waits for them
     await drainOutbox(worker);
     expect((await about(other, id)).map((n) => n.kind)).toEqual(["step_reached"]);
   });
@@ -236,9 +248,9 @@ describe("a rolled-back Transition", () => {
         throw new Error("roll back");
       }),
     ).rejects.toThrow("roll back");
-    expect(await outboxRows(id)).toEqual([]);
+    expect(await outboxRows(id)).toEqual([]); // not hidden-from: the migrator's outbox, rolled back
     await drainOutbox(worker);
-    expect(await about(pm, id)).toEqual([]);
+    expect(await about(pm, id)).toEqual([]); // not hidden-from: nothing was written to deliver
   });
 });
 
@@ -254,7 +266,7 @@ describe("a failing delivery", () => {
     };
 
     await processOutbox(worker, { handlers: { notification: flaky }, maxAttempts: 3, retryDelayMs: () => 3_600_000 });
-    expect(await about(pm, fine)).toHaveLength(1);
+    expect((await about(pm, fine)).map((n) => n.workItemId)).toEqual([fine]);
     expect(await outboxRows(failing)).toEqual([
       expect.objectContaining({ attempts: 1, processed_at: null, dead_at: null, last_error: "mail server down" }),
     ]);
@@ -267,7 +279,7 @@ describe("a failing delivery", () => {
     const [row] = await outboxRows(failing);
     expect(row).toMatchObject({ attempts: 3, processed_at: null, last_error: "mail server down" });
     expect(row!.dead_at).not.toBeNull();
-    expect(await about(pm, failing)).toEqual([]);
+    expect(await about(pm, failing)).toEqual([]); // not hidden-from: dead-lettered, never delivered
   });
 });
 

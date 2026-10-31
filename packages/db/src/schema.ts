@@ -149,7 +149,9 @@ export interface AdminActionTable {
     | "confirm_register_import"
     | "read_record_jobs"
     | "retry_record_job"
-    | "read_documental_record_history";
+    | "read_documental_record_history"
+    | "read_work_item_step"
+    | "reassign_step";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -757,6 +759,7 @@ export interface WorkItemEventTable {
   seq: Generated<number>;
   type: string;
   actor_member_id: string | null;
+  /** Not granted to the app role: no Member reads which Engineer it was (RP-1162). */
   actor_engineer_id: string | null;
   actor_participant_id: string | null;
   transition_id: string | null;

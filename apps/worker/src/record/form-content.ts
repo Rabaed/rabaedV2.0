@@ -18,12 +18,14 @@ import {
   type ChecklistField,
   type ChecklistTemplateChoice,
   type FormField,
+  type FormSection,
   type Locale,
   type OptionList,
   type SupplierChoice,
   type TableField,
 } from "@rabaed/domain";
 import { z } from "zod";
+import { recordPath } from "./record-path.ts";
 import { pick, same, type RecordLanguage, type RecordText } from "./record-text.ts";
 
 // The Form's content as the record prints it (form-engine.md §6, element 8): its
@@ -36,6 +38,12 @@ import { pick, same, type RecordLanguage, type RecordText } from "./record-text.
 // (RP-982): the answers a Transition on the path took into its shared event (the
 // facts give no other), on the item's copy of the Checklist Template, right after
 // the Form field that copied it, with its photos the code froze.
+//
+// A reply Screen's own files (ADR 0024; RP-1029): its `attachments` files are listed with the
+// shared Documents and get appendix pages; its `photos` files print as a Form `photos` field's,
+// after the Form, under their Screen section's title. Only files a shared event took before the
+// close are in the facts (app.documents_shared_before_close); an internal event's never are. The
+// Screens read are those of the Transitions on the record path, as for reply checklists.
 
 export interface RecordPhoto {
   readonly fileName: string;
@@ -101,22 +109,64 @@ export function isListedDocument(document: DocumentFact, attachmentFieldKeys: Re
   return document.itemKey === null && (document.fieldKey === null || attachmentFieldKeys.has(document.fieldKey));
 }
 
-/** The keys of the Form's fields of `type`. */
-function fieldKeysOf(facts: Pick<RecordFacts, "form">, type: FormField["type"]): Set<string> {
+/** The keys of the Form's fields of `type`, or of every type. */
+function fieldKeysOf(facts: Pick<RecordFacts, "form">, type?: FormField["type"]): Set<string> {
   const schema = formSchema.parse({ sections: facts.form.sections });
-  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => f.key)));
+  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => type === undefined || f.type === type).map((f) => f.key)));
 }
 
-/** The keys of the Form's `attachments` fields: their files are listed with the shared Documents. */
-export const attachmentFieldKeysOf = (facts: Pick<RecordFacts, "form">): Set<string> => fieldKeysOf(facts, "attachments");
+/** A reply Screen's file field (ADR 0024) and its Screen section. */
+interface ReplyFileField {
+  readonly field: FormField;
+  readonly section: FormSection;
+}
+
+/**
+ * The `attachments` and `photos` fields of the reply Screens (the Action Forms) of the Transitions
+ * on the record path (recordPath, as for reply checklists: never a Code sent back, V7), by key, in
+ * the path's order; the first one's where two show the same Screen. Which files they hold is the
+ * facts' to say: only those a shared event took before the close (app.documents_shared_before_close,
+ * V19). A file is matched by its field's key, not by the event that took it: an off-path event's
+ * file under a key a Screen on the path also shows prints too (as a reply checklist's photos do,
+ * RP-982). A Screen's file field never uses a key of the Form's.
+ */
+function replyFileFields(transitions: readonly TransitionFact[], formKeys: ReadonlySet<string>): Map<string, ReplyFileField> {
+  const fields = new Map<string, ReplyFileField>();
+  for (const t of transitions) {
+    const screen = formSchema.safeParse(t.actionForm);
+    if (!screen.success) continue;
+    for (const section of screen.data.sections) {
+      for (const field of section.fields) {
+        if ((field.type !== "attachments" && field.type !== "photos") || formKeys.has(field.key) || fields.has(field.key)) continue;
+        fields.set(field.key, { field, section });
+      }
+    }
+  }
+  return fields;
+}
+
+/** What the record reads of the item: its Form, and its Transitions where it has them (a Working Copy has none). */
+export type FormAndScreens = Pick<RecordFacts, "form"> & Partial<Pick<RecordFacts, "transitions">>;
+
+/** The reply Screens' file fields of `type`, by key. */
+function replyFieldsOf(facts: FormAndScreens, type: "attachments" | "photos"): Map<string, ReplyFileField> {
+  return new Map([...replyFileFields(recordPath(facts.transitions ?? []), fieldKeysOf(facts))].filter(([, f]) => f.field.type === type));
+}
+
+/**
+ * The keys of the Form's `attachments` fields, then the reply Screens' (RP-1029): their files are
+ * listed with the shared Documents and get appendix pages.
+ */
+export const attachmentFieldKeysOf = (facts: FormAndScreens): Set<string> =>
+  new Set([...fieldKeysOf(facts, "attachments"), ...replyFieldsOf(facts, "attachments").keys()]);
 
 /**
  * The Documents the record prints as photos, in the order they were added: a check item's (a Form
- * checklist's or a reply checklist's, RP-982) and a Form `photos` field's. Never a reply Screen's
- * own file field's, which no block prints.
+ * checklist's or a reply checklist's, RP-982), a Form `photos` field's and a reply Screen's
+ * `photos` field's (RP-1029).
  */
-export function printedPhotosOf(facts: Pick<RecordFacts, "form" | "documents">): DocumentFact[] {
-  const photoFields = fieldKeysOf(facts, "photos");
+export function printedPhotosOf(facts: FormAndScreens & Pick<RecordFacts, "documents">): DocumentFact[] {
+  const photoFields = new Set([...fieldKeysOf(facts, "photos"), ...replyFieldsOf(facts, "photos").keys()]);
   return facts.documents.filter((d) => d.itemKey !== null || (d.fieldKey !== null && photoFields.has(d.fieldKey)));
 }
 
@@ -204,7 +254,7 @@ function replyChecklists(
  * after the Form field whose copy it answers, or, when the Form shows none, in a section of its own.
  */
 export function formContent(
-  facts: Pick<RecordFacts, "form" | "documents"> & Partial<Pick<RecordFacts, "checklistCopies">>,
+  facts: FormAndScreens & Pick<RecordFacts, "documents"> & Partial<Pick<RecordFacts, "checklistCopies">>,
   language: RecordLanguage,
   path: readonly TransitionFact[] = [],
 ): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {
@@ -287,6 +337,15 @@ export function formContent(
     else if (blocks.length > 0) sections.push({ title: pick(section.title, language), blocks });
   }
   for (const r of replies) if (!placed.has(r)) sections.push({ title: r.title, blocks: [r.block] });
+  // A reply Screen's photos (RP-1029) print as a Form `photos` field's do, after the Form, under
+  // their Screen section's title: one section for each Screen section that took any.
+  const replyPhotoSections = new Map<FormSection, RecordBlock[]>();
+  for (const [key, { field, section }] of replyFieldsOf(facts, "photos")) {
+    const photos = photosOf(facts.documents, key, null);
+    if (photos.length === 0) continue;
+    replyPhotoSections.set(section, [...(replyPhotoSections.get(section) ?? []), { kind: "photos", label: labelOf(field, language), photos }]);
+  }
+  for (const [section, blocks] of replyPhotoSections) sections.push({ title: pick(section.title, language), blocks });
   return { sections, classification, attachmentFieldKeys };
 }
 

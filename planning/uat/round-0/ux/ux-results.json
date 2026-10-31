@@ -876,11 +876,94 @@
     "uxRecommendations": []
   },
   "UX-23": {
-    "status": "not-run",
-    "checks": [],
-    "screenshots": [],
-    "notes": "Waits for RP-588: Packages UI (RP-659 to RP-662).",
-    "uiIssues": [],
+    "status": "fail",
+    "ranAt": "2026-10-31T02:36:40.398Z",
+    "checks": [
+      {
+        "text": "Packages is a third toggle next to List and Kanban in Submittals (not a project tab)",
+        "ok": true,
+        "detail": "Kanban · List · Packages, EN and AR"
+      },
+      {
+        "text": "Board columns Open · In Progress · Done with counts",
+        "ok": true,
+        "detail": "Ali: Open 37, In Progress 31, Done 6"
+      },
+      {
+        "text": "Card: PKG-nnn LTR, owning Company, name, A–D chips, Still open, progress bar, status, n of m closed",
+        "ok": true,
+        "detail": "PKG-013: A 1, B 1, D 1, Still open 1, 3 of 4 closed"
+      },
+      {
+        "text": "New Package, search, Filter",
+        "ok": true,
+        "detail": "New Package for Ali (TMC), not for Mohammed (DCL)"
+      },
+      {
+        "text": "Visibility: another Company's Open Package is never shown",
+        "ok": true,
+        "detail": "Mohammed (DCL): Open 0, No Packages; In Progress and Done only"
+      },
+      {
+        "text": "Package page: header, counts panel, item table, Rename and Add items for the owner only, Comments (for information)",
+        "ok": true,
+        "detail": "Mohammed sees no Rename or Add items; With shows a Company name to Ali (V14), the person to Mohammed's own Company"
+      },
+      {
+        "text": "The item table fits at 1366",
+        "ok": false,
+        "detail": "Review Code or Stage is cut off and Step Age is hidden at 1366, EN and AR (they show at 1920). RP-1164"
+      },
+      {
+        "text": "One Arabic word for Submittals",
+        "ok": false,
+        "detail": "The tab says التقديمات; the Package page's breadcrumb, table heading and Comments line say الاعتمادات. RP-1164"
+      },
+      {
+        "text": "The Package page keeps the Project's header and tabs",
+        "ok": false,
+        "detail": "The top bar reads \"Projects\" and the Project's tabs are gone; the view shows them. RP-1164"
+      },
+      {
+        "text": "Bulk bar",
+        "ok": false,
+        "detail": "Not checked: no Package on lane 7 has several items waiting on one viewer. Covered by PKG cases."
+      }
+    ],
+    "screenshots": [
+      "ux/UX-23-r0c-view-top-en-1366.png",
+      "ux/UX-23-r0c-view-top-ar-1366.png",
+      "ux/UX-23-r0c-view-ali-en-1920.png",
+      "ux/UX-23-r0c-view-mohammed-en-1366.png",
+      "ux/UX-23-r0c-page-ali-en-1366.png",
+      "ux/UX-23-r0c-page-ali-ar-1366.png",
+      "ux/UX-23-r0c-page-ali-en-1920.png",
+      "ux/UX-23-r0c-page-mohammed-en-1366.png"
+    ],
+    "notes": "Round 0c, 31 Oct 2026, lane 7 at main 730ec3c1f after RP-659 to RP-662. Compared with design/prompts/packages.md (its table of known differences wins over packages.html).",
+    "uiIssues": [
+      {
+        "element": "Package page item table",
+        "reference": "packages.md §2; RP-660",
+        "expected": "All columns visible at 1366",
+        "actual": "Review Code or Stage cut off, Step Age hidden",
+        "screenshot": "ux/UX-23-r0c-page-ali-en-1366.png"
+      },
+      {
+        "element": "Arabic word for Submittals",
+        "reference": "GLOSSARY.md; ar.json",
+        "expected": "One word everywhere",
+        "actual": "التقديمات on the tab, الاعتمادات on the Package page",
+        "screenshot": "ux/UX-23-r0c-page-ali-ar-1366.png"
+      },
+      {
+        "element": "Package page shell",
+        "reference": "packages.html (page inside the Project)",
+        "expected": "Project header and tabs",
+        "actual": "Top bar reads Projects; no Project tabs",
+        "screenshot": "ux/UX-23-r0c-page-ali-en-1920.png"
+      }
+    ],
     "uxRecommendations": []
   },
   "UX-24": {
@@ -947,13 +1030,74 @@
     ]
   },
   "UX-25": {
-    "status": "not-run",
-    "checks": [],
-    "screenshots": [
-      "ux/UX-25-1-signature-en.png"
+    "status": "fail",
+    "ranAt": "2026-10-31T02:36:40.398Z",
+    "checks": [
+      {
+        "text": "Add Signature: Draw, Type, Upload tabs, EN and AR",
+        "ok": true,
+        "detail": "Hafiz, /profile/signature"
+      },
+      {
+        "text": "Draw: pen styles and colours, Clear",
+        "ok": true,
+        "detail": "Pen Fine/Medium/Bold, Ink Black/Blue, Clear"
+      },
+      {
+        "text": "Draw: Undo",
+        "ok": false,
+        "detail": "No Undo; signature-and-stamp.md §1 asks for Clear and Undo. RP-1165"
+      },
+      {
+        "text": "A preview Signature card (name, Position, Company, Signature, date)",
+        "ok": false,
+        "detail": "Not on Add Signature; Type and Upload preview the image only. RP-1165"
+      },
+      {
+        "text": "Profile shows the current Signature, Replace and the 'records keep' note",
+        "ok": true,
+        "detail": "Typed, in force since Oct 27, 2026; Replace Signature"
+      },
+      {
+        "text": "No-Signature pop-up: plain words, Add Signature and a secondary button",
+        "ok": true,
+        "detail": "Checked on main's story screenshots (people-signaturerequireddialog-*), not live: every lane 7 Member who can act has a Signature"
+      },
+      {
+        "text": "No-Stamp message names only the viewer's own Company; Add Stamp for the Authorized Person",
+        "ok": true,
+        "detail": "Story screenshots (people-stamprequireddialog-*), not live: every lane 7 Company has a Stamp"
+      },
+      {
+        "text": "Company profile: Logo (optional) and Stamp (required to act) cards, Replace, records-keep note; no-Stamp notice",
+        "ok": true,
+        "detail": "Saeed (Authorized Person) on lane 7; the no-Stamp notice from people-companyimages-no-stamp-yet"
+      }
     ],
-    "notes": "Waits for RP-23: Add Signature UI (RP-665, RP-666). A Profile signature page exists but the no-Signature and no-Stamp pop-ups and Company logo/Stamp were not checked.",
-    "uiIssues": [],
+    "screenshots": [
+      "ux/UX-25-r0c-signature-en-1366.png",
+      "ux/UX-25-r0c-signature-ar-1366.png",
+      "ux/UX-25-r0c-profile-en-1366.png",
+      "ux/UX-25-r0c-company-en-1366.png",
+      "ux/UX-25-r0c-company-ar-1366.png"
+    ],
+    "notes": "Round 0c, 31 Oct 2026, lane 7 at main 730ec3c1f after RP-665 and RP-666. The pop-ups were judged from main's story screenshots; a live check needs a Member without a Signature on a Step, or a Company without a Stamp.",
+    "uiIssues": [
+      {
+        "element": "Add Signature, Draw",
+        "reference": "signature-and-stamp.md §1",
+        "expected": "Clear and Undo",
+        "actual": "Clear only",
+        "screenshot": "ux/UX-25-r0c-signature-en-1366.png"
+      },
+      {
+        "element": "Add Signature preview",
+        "reference": "signature-and-stamp.md §1",
+        "expected": "A small Signature card: name, Position, Company, Signature, date",
+        "actual": "No card",
+        "screenshot": "ux/UX-25-r0c-signature-en-1366.png"
+      }
+    ],
     "uxRecommendations": []
   },
   "UX-26": {

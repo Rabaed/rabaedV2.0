@@ -532,7 +532,7 @@ A `work_item` folder is virtual: its contents and permissions come from the Work
 | `type` | `created, transition, recommend_code, issue_code, assigned, picked_up, returned_to_pool, vacated, admin_reassigned, admin_reset, internal_note, cancelled, answers_changed, internal_answers` (a reply's internal answers, RP-516; `payload.answers`); events written before RP-512 keep `claimed` and `released`) (field-level diffs of the answers after Draft: `payload.changes`) |
 | `actor_member_id` / `actor_engineer_id` | exactly one |
 | `actor_participant_id` | |
-| `transition_id`, `from_step_id`, `to_step_id` | |
+| `transition_id`, `from_step_id`, `to_step_id` | The Transition and the Step an event left are its actor's Participant's (RP-1140): `transition_id` and `from_step_id` are not granted to the app role (a Transition leaves one Step, so its id names it), and `app.event_transitions(event ids)` gives every reader of an event its Transition's label, kind and Action Form, and the Transition and the Step it left only for the reader's own Participant's events (or a Rabaed Engineer's). `to_step_id` is granted: on a shared event it is where the shared move took the item |
 | `payload jsonb` | Action Form answers, code, note text |
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |
@@ -543,7 +543,7 @@ A `work_item` folder is virtual: its contents and permissions come from the Work
 
 - The database role used by the app has `INSERT` only on this table: no `UPDATE` or `DELETE`.
 - Internal Communication = `audience = internal`, shown only to that Participant's Members.
-- Rabaed Engineers' events are always `shared` and always carry a reason.
+- Rabaed Engineers' events always carry a reason. As built (RP-1162): a reassign by Rabaed (`admin_reassigned`) is `internal` to the holding Participant, like a Member's own reassign, with no `actor_participant_id`; its reason is its `admin_action`'s, named by `payload.admin_action_id`, and read by no Company. `actor_engineer_id` is not granted to the app role.
 - A `recommend_code` event (RP-433) is written by `app.take_transition` with `p_recommended_code`, just before the Internal Note and the Transition it goes with: `payload.recommended_code` (a closing outcome of the Type's set), `from_step_id`, `transition_id`, always `internal` to the recommender's Participant. `app.work_item_history` gives it as `recommended_code`; the Activity Feed lists it through the same RLS; the watched-event trigger ignores it.
 - **The Owner's review** (ADR 0022, RP-593): a Submit into a `confirm_code` Step carries its Code as the Transition's `outcome`, and `app.transition_effects` writes its `recommend_code` event (`payload.recommended_code`) and the Submit's own `transition` event **twice, once `internal` to each Participant of the exchange** (the Consultant, and the Owner or Owner Representative holding the review); so does the Owner's Send Back. Every read that keeps V5 then keeps everyone else out, unchanged. The Owner's Confirm is one shared `issue_code` event. The Code to confirm is the `outcome` of the Transition of the latest `transition` event into the item's current Step (`app.code_to_confirm`, internal).
 
@@ -581,7 +581,7 @@ Rabaed Admin's own sign-in (ADR 0010), used by the admin service only, never the
 - **engineer_sign_in_event**: append-only log of every sign-in, failure and sign-out: `engineer_id` (null when the email matched none), `email`, `event`, `ip`, `user_agent`, `at`.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id` (`target_id` null for a read of a list), `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template, save and publish a Rabaed Default Workflow (`save_workflow_draft`, `publish_workflow`, RP-427).
+Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template, save and publish a Rabaed Default Workflow (`save_workflow_draft`, `publish_workflow`, RP-427). Reassign as built (RP-1162): `read_work_item_step` (the Projects list, and an item found by Document Number: `target_kind` `work_item`, or `project` when none is) and `reassign_step` (`before.holderMemberId`, `after.result`, `after.toMemberId`); workflow-engine.md §5.6.
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 

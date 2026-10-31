@@ -172,4 +172,6 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271119 | RP-655 | 41 | previous_raised_items |
 | 20271118 | RP-1108 | 31 | questions_any_role (moved from 20271114: main's RP-1110 took 20271115, RP-1054 holds 1116 and 1117) |
 | 20271121 | RP-1138 | 54 | owner_review_hides_holder |
+| 20271124 | RP-1162 | 43 | admin_reassign_step (20271122 is RP-955's, 20271123 RP-1140's #548) |
+| 20271123 | RP-1140 | 51 | event_from_step_own_participant (20271122 is RP-955's, claimed on RP-603) |
 | 20271122 | RP-955 | 31 | close_shares_handed_over |
