@@ -81,6 +81,8 @@ jobs:
         # tool's exit code is the step's.
         run: |
           if [ -n "$MEMBER" ]; then echo "::add-mask::$MEMBER"; fi
+          # The tool names its target with UAT's Supabase project: a variable, not a secret, kept out of the public log all the same.
+          if [ -n "$SUPABASE_PROJECT_REF" ]; then echo "::add-mask::$SUPABASE_PROJECT_REF"; fi
           masked() { sed -E 's/[^[:space:]",:<>]+@[^[:space:]",:<>]+/<email>/g'; }
           trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
           args=(--uat)
