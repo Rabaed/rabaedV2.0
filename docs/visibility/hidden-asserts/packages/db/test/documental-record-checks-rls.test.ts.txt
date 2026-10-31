@@ -1,1 +1,1 @@
-empty the Record Job Monitor > shows no Member a failed job's error text: the outbox has no read for the app role :: expect(await read("select last_error, last_failed_at from outbox where last_error like '%RP-670-1'")).toEqual([]);
+empty scenario RP-670-1: the Record Job Monitor > shows no Member a failed job's error text: the outbox has no read for the app role :: expect(await read("select last_error, last_failed_at from outbox where last_error like '%RP-670-1'")).toEqual([]);

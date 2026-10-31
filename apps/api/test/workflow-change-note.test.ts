@@ -53,7 +53,7 @@ const newDraft = async (): Promise<WorkflowDefinition> => {
 };
 
 describe("the change note", () => {
-  it("is kept with the Version it was published with, and the Versions history shows it to the Workflow's authors only", async () => {
+  it("RP-555-1: is kept with the Version it was published with, and the Versions history shows it to the Workflow's authors only", async () => {
     await ok(c1.caller.post(`/v1/workflows/${route}/publish`, { changeNote: "  Tower's own route for MARs.  " }), 200);
     const history = (await versions(c1.caller, 1)).history;
     expect(history).toEqual([{ versionNo: 1, publishedAt: expect.any(String), changeNote: "Tower's own route for MARs.", running: 0 }]);
@@ -86,7 +86,7 @@ describe("on an exception's Workflow", () => {
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: c3Participant, workflowId: exception }));
   });
 
-  it("is refused when it names the Participant the exception is for, and nothing is published", async () => {
+  it("RP-555-1: is refused when it names the Participant the exception is for, and nothing is published", async () => {
     const definition = (await ok(c1.caller.get(`/v1/workflows/${exception}/builder`), 200)).json().workflow.published.definition;
     await ok(c1.caller.request("PUT", `/v1/workflows/${exception}/draft`, { definition }), 200);
     const refused = await c1.caller.post(`/v1/workflows/${exception}/publish`, { changeNote: `Shorter route for ${C3_LEGAL_NAME.en}.` });
@@ -99,8 +99,7 @@ describe("on an exception's Workflow", () => {
   });
 });
 
-describe("items that keep their Version", () => {
-  // Scenario RP-555-1.
+describe("RP-555-1: items that keep their Version", () => {
   it("are counted as each reader sees them: the Project Admin counts no Draft it doesn't see", async () => {
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: route }));
     // The MAR itself (`draft` raises the legacy MAR by default, RP-437), which the route is bound for.

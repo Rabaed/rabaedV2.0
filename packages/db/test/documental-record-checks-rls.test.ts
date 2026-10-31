@@ -78,7 +78,7 @@ afterAll(async () => {
   await Promise.all([migrator.end(), admin.end(), app.destroy()]);
 });
 
-describe("what the checks found and the replaced PDFs", () => {
+describe("scenario RP-155-3: what the checks found and the replaced PDFs", () => {
   it("are not read by the app role at all", async () => {
     for (const table of ["documental_record_check", "documental_record_reproduction"]) {
       expect(await failure(seer, sql.raw(`select * from ${table}`)), table).toBe("42501");
@@ -142,7 +142,7 @@ describe("Rabaed Admin's functions", () => {
 
 // RP-670 (visibility.md RP-670-1): the Record Job Monitor is Rabaed's alone. A record job's error
 // text is read by a Rabaed Engineer; no Member's session reaches it, nor the retries.
-describe("the Record Job Monitor", () => {
+describe("scenario RP-670-1: the Record Job Monitor", () => {
   it("keeps the retries admin-only: no grant to the app role, a read for Rabaed Admin's role, no write", async () => {
     expect(await failure(seer, sql.raw("select * from record_job_retry"))).toBe("42501");
     expect(await failure(null, sql.raw("select id from record_job_retry"))).toBe("42501");

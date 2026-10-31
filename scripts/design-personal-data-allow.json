@@ -1,0 +1,12 @@
+{
+  "emailDomains": [
+    { "domain": "example.com", "reason": "Reserved for documentation (RFC 2606); no mailbox exists. Matches its subdomains too." },
+    { "domain": "example.org", "reason": "Reserved for documentation (RFC 2606); no mailbox exists." },
+    { "domain": "example.net", "reason": "Reserved for documentation (RFC 2606); no mailbox exists." },
+    { "domain": "test", "reason": "Reserved top-level domain (RFC 2606), such as rabaed.test, the placeholder domain the kit and the fixtures use." },
+    { "domain": "invalid", "reason": "Reserved top-level domain (RFC 2606) that never resolves." },
+    { "domain": "localhost", "reason": "Reserved top-level domain (RFC 2606) for the local machine." }
+  ],
+  "values": [],
+  "files": []
+}

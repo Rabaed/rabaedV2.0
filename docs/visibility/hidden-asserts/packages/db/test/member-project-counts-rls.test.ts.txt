@@ -1,8 +1,3 @@
-empty app.member_project_counts > gives a plain Member the counts of their own Company's Members, who may be on Projects they are not :: expect(counts[a.idle]).toBeUndefined();
-empty app.member_project_counts > names no Member of another Company, for either Company :: expect(seenByA).not.toContain(b.member);
-empty app.member_project_counts > names no Member of another Company, for either Company :: expect(seenByA).not.toContain(b.colleague);
-empty app.member_project_counts, as people come and go > does not count a Project Member who was removed :: expect((await countsAs(c.member))[leaver]).toBeUndefined();
-empty app.member_project_counts, as people come and go > does not count a Project whose Participant was withdrawn :: expect((await countsAs(c.member))[member]).toBeUndefined();
-empty app.member_project_counts, as people come and go > counts a Project shared with another Company for each Company's own people only :: expect(Object.keys(seenByD)).not.toContain(visitor);
-empty app.member_project_counts, as people come and go > counts a Project shared with another Company for each Company's own people only :: expect(Object.keys(seenByC)).not.toContain(d.colleague);
-empty app.member_project_counts, as people come and go > counts a Project shared with another Company for each Company's own people only :: expect(Object.keys(seenByC)).not.toContain(d.member);
+empty scenario RP-413-1: app.member_project_counts > gives a plain Member the counts of their own Company's Members, who may be on Projects they are not :: expect(counts[a.idle]).toBeUndefined();
+empty scenario RP-413-1: app.member_project_counts, as people come and go > does not count a Project Member who was removed :: expect((await countsAs(c.member))[leaver]).toBeUndefined();
+empty scenario RP-413-1: app.member_project_counts, as people come and go > does not count a Project whose Participant was withdrawn :: expect((await countsAs(c.member))[member]).toBeUndefined();

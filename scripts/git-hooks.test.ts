@@ -30,6 +30,7 @@ beforeEach(() => {
   copyFileSync(join(here, "..", ".githooks", "pre-commit"), join(repo, ".githooks", "pre-commit"));
   copyFileSync(join(here, "check-no-fonts.ts"), join(repo, "scripts", "check-no-fonts.ts"));
   copyFileSync(join(here, "check-secrets.ts"), join(repo, "scripts", "check-secrets.ts"));
+  for (const script of ["check-design-personal-data.ts", "design-personal-data-allow.json"]) copyFileSync(join(here, script), join(repo, "scripts", script));
   write({ "README.md": "# repo\n" });
   git("add", "-A");
   git("commit", "-q", "--no-verify", "-m", "start");
@@ -88,6 +89,23 @@ describe("pre-commit", () => {
     expect(commit.stderr).toContain("scripts/upload.sh:2: Atlassian API token");
     expect(commit.stdout + commit.stderr).not.toContain(token.slice(0, 12));
     expect(git("log", "--format=%s")).toBe("start\n");
+  });
+
+  // RP-1168: the address is made up.
+  it("refuses a commit that stages a real-looking email in design/, naming the file and line but not the address", () => {
+    write({ "design/reference/access.html": "<p>Members</p>\n<p>jane.doe@gmail.com</p>\n" });
+    git("add", "-A");
+    const commit = tryGit("commit", "-q", "-m", "design");
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain("design/reference/access.html:2: email");
+    expect(commit.stdout + commit.stderr).not.toContain("jane.doe");
+    expect(git("log", "--format=%s")).toBe("start\n");
+  });
+
+  it("lets a design page with placeholder contacts through, and a real-looking email outside design/", () => {
+    write({ "design/reference/access.html": "<p>sara@example.com, 050 000 0000</p>\n", "docs/notes.md": "jane.doe@gmail.com\n" });
+    git("add", "-A");
+    expect(tryGit("commit", "-q", "-m", "design").status).toBe(0);
   });
 
   it("lets a commit through that reads the token from the environment", () => {
