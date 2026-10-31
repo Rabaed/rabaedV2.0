@@ -10,6 +10,8 @@
     "dev": "docker compose up -d --wait db mailpit files && node scripts/pnpm.ts db:setup && node scripts/pnpm.ts dev:apps",
     "dev:apps": "node scripts/pnpm.ts --parallel --filter @rabaed/api --filter @rabaed/web --filter @rabaed/worker --filter @rabaed/admin run dev",
     "lane:env": "node scripts/lane-env.ts",
+    "lane:done": "node scripts/lane-done.ts",
+    "lanes": "node scripts/lanes-status.ts",
     "lanes:prune": "node scripts/lanes-prune.ts",
     "lanes:drop-dbs": "node scripts/lanes-drop-dbs.ts",
     "worktrees:clean": "node scripts/worktrees-clean.ts",
