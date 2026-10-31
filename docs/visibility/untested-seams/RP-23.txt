@@ -1,1 +1,0 @@
-RP-23-4 db  # A visitor not signed in scans the record's QR, then types its Verification Code without th

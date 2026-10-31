@@ -1,2 +1,0 @@
-RP-147-1 db  # C1's engineer drafts a submittal with PDFs, an image, other files and a Form photo, remove
-RP-147-2 db  # K1 Sends a Submitted item Back to C1's Draft; C1 adds a PDF and a text file; Rabaed closes
