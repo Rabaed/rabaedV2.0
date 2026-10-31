@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { isFontMime } from "./check-no-fonts.ts";
+import { decodePage, encodePage, isFontMime, isNestedPage, type ManifestEntry, manifestOf, manifestScript } from "./check-no-fonts.ts";
 
 // A Claude Design HTML export carries every asset base64 in its
 // `__bundler/manifest` script, fonts too: Thmanyah among them, which is licensed
@@ -8,31 +8,55 @@ import { isFontMime } from "./check-no-fonts.ts";
 // keeps the rest; the page then falls back to the system fonts. Run it before
 // committing an export: scripts/check-no-fonts.ts refuses embedded font data (RP-962).
 //
+// An export can nest whole other exports as text/html manifest entries, each with
+// its own fonts (RP-1146): those are decoded, stripped the same way and encoded
+// again as they were (gzipped when compressed). A nested page that loses nothing
+// is left byte for byte.
+//
 // The template's @font-face rules keep their src: url(<uuid>) for a removed font.
 // That is fine: the loader swaps in only the uuids still in the manifest, so the
 // url resolves to nothing and the browser uses the next font in the stack.
 //
 // Usage: pnpm design:strip-fonts <in.html> <out.html>
 
-/** One asset in a Claude Design manifest, keyed by uuid. */
-export type ManifestEntry = { mime: string; compressed?: boolean; data: string };
+export type { ManifestEntry };
 
-// The opening tag may carry more attributes than its type.
-const manifestScript = /(<script\b[^>]*\btype="__bundler\/manifest"[^>]*>)([\s\S]*?)(<\/script>)/;
 const extResourcesScript = /(<script\b[^>]*\btype="__bundler\/ext_resources"[^>]*>)([\s\S]*?)(<\/script>)/;
 
 /** JSON safe inside a script element: no "<" to start a "</script>" with. */
 const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 
-/** The page without its font resources, and the manifest keys removed. */
+/**
+ * The page without its font resources, nested pages' included, and the manifest
+ * keys removed: a nested page's as "<page uuid>/<font uuid>".
+ */
 export function stripFonts(page: string): { html: string; removed: string[] } {
-  const manifestMatch = manifestScript.exec(page);
-  if (!manifestMatch) throw new Error("This is not a Claude Design page: it has no __bundler/manifest script.");
-  const manifest = JSON.parse(manifestMatch[2]!) as Record<string, ManifestEntry>;
+  const stripped = stripPage(page);
+  if (!stripped) throw new Error("This is not a Claude Design page: it has no __bundler/manifest script.");
+  return stripped;
+}
 
-  const removed = Object.keys(manifest).filter((uuid) => isFontMime(manifest[uuid]!.mime ?? ""));
+/** stripFonts, or undefined for a page with no manifest. */
+function stripPage(page: string): { html: string; removed: string[] } | undefined {
+  const manifest = manifestOf(page);
+  if (!manifest) return undefined;
+
+  const removed: string[] = [];
+  const kept: Record<string, ManifestEntry> = {};
+  for (const [uuid, entry] of Object.entries(manifest)) {
+    if (isFontMime(entry.mime ?? "")) {
+      removed.push(uuid);
+      continue;
+    }
+    const nested = isNestedPage(entry) ? stripPage(decodePage(uuid, entry)) : undefined;
+    if (nested && nested.removed.length > 0) {
+      kept[uuid] = { ...entry, data: encodePage(nested.html, entry) };
+      removed.push(...nested.removed.map((key) => `${uuid}/${key}`));
+    } else {
+      kept[uuid] = entry;
+    }
+  }
   if (removed.length === 0) return { html: page, removed };
-  const kept = Object.fromEntries(Object.entries(manifest).filter(([uuid]) => !removed.includes(uuid)));
 
   // Replacer functions, so "$" in the data is never read as a replacement pattern.
   let html = page.replace(manifestScript, (_all, open: string, _json, close: string) => open + scriptJson(kept) + close);

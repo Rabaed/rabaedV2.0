@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { claudeDesignExport, fakeBase64, font } from "./claude-design-export.fixtures.ts";
-import { committedFontFiles, filesWithEmbeddedFonts, stagedFilesWithEmbeddedFonts, stagedFontFiles } from "./check-no-fonts.ts";
+import { claudeDesignExport, fakeBase64, font, nestedPage } from "./claude-design-export.fixtures.ts";
+import { committedFontFiles, embeddedFont, filesWithEmbeddedFonts, stagedFilesWithEmbeddedFonts, stagedFontFiles } from "./check-no-fonts.ts";
 import { stripFonts } from "./design-strip-fonts.ts";
 
 // A throwaway repository; the "fonts" are binary stand-ins, like real woff2 files.
@@ -205,6 +205,75 @@ describe("filesWithEmbeddedFonts", () => {
       "manifest.html": claudeDesignExport({ a1: { mime: "image/svg+xml", data: fakeBase64 } }),
     });
     expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+});
+
+// An export that nests whole other exports as text/html manifest entries, gzipped, each with its own fonts (RP-1146).
+describe("a font in a page nested in a Claude Design export", () => {
+  const withFont = () => claudeDesignExport({ app: { mime: "application/javascript", data: fakeBase64 }, thmanyah: { mime: font("woff2"), data: fakeBase64 } });
+  const board = (inner = withFont(), compressed = true) => claudeDesignExport({ logo: { mime: "image/svg+xml", data: fakeBase64 }, board: nestedPage(inner, compressed) });
+
+  it("is out of git grep's sight: the outer page alone shows no font", () => {
+    expect(new RegExp(embeddedFont, "i").test(board())).toBe(false);
+  });
+
+  it("is found in a staged export, gzipped or plain, at any depth", () => {
+    writeFileSync(join(repo, "gzipped.html"), board());
+    writeFileSync(join(repo, "plain.html"), board(withFont(), false));
+    writeFileSync(join(repo, "deep.html"), board(board()));
+    writeFileSync(join(repo, "unstaged.html"), board());
+    git("add", "gzipped.html", "plain.html", "deep.html");
+    expect(stagedFilesWithEmbeddedFonts(repo).sort()).toEqual(["deep.html", "gzipped.html", "plain.html"]);
+  });
+
+  it("is found by the same rule as the rest of the check: a nested page's inlined @font-face too", () => {
+    writeFileSync(join(repo, "face.html"), board(`<style>@font-face { src: url(data:${font("woff2")};base64,${fakeBase64}); }</style>`));
+    git("add", "face.html");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual(["face.html"]);
+  });
+
+  it("passes once design:strip-fonts has removed it, and a nested page without fonts passes", () => {
+    writeFileSync(join(repo, "stripped.html"), stripFonts(board()).html);
+    writeFileSync(join(repo, "clean.html"), board(claudeDesignExport({ app: { mime: "application/javascript", data: fakeBase64 } })));
+    git("add", "-A");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual([]);
+    git("commit", "-q", "-m", "clean");
+    expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+
+  it("is found in the history once committed, on any branch, though stripped later", () => {
+    git("checkout", "-q", "-b", "feature");
+    commit({ "design/handoff/Board.HTML": board() });
+    commit({ "design/handoff/Board.HTML": stripFonts(board()).html }, "strip");
+    git("checkout", "-q", "main");
+    expect(filesWithEmbeddedFonts(repo)).toEqual(["design/handoff/Board.HTML"]);
+  });
+
+  it("is found only in a range's own commits when given one", () => {
+    git("checkout", "-q", "-b", "other");
+    commit({ "other.html": board() });
+    git("checkout", "-q", "-b", "pr", "main");
+    commit({ "pr.htm": board(claudeDesignExport({})) });
+    expect(filesWithEmbeddedFonts(repo, "main..pr")).toEqual([]);
+    commit({ "pr.htm": board() });
+    expect(filesWithEmbeddedFonts(repo, "main..pr")).toEqual(["pr.htm"]);
+  });
+
+  it("is looked for only in pages, and a page whose manifest is no JSON nests none", () => {
+    writeFileSync(join(repo, "fixture.ts"), 'const page = `<script type="__bundler/manifest">${JSON.stringify(manifest)}</script>`;\n');
+    writeFileSync(join(repo, "notes.html"), '<pre><script type="__bundler/manifest">{ ... }</script></pre>\n');
+    git("add", "-A");
+    expect(stagedFilesWithEmbeddedFonts(repo)).toEqual([]);
+    git("commit", "-q", "-m", "notes");
+    expect(filesWithEmbeddedFonts(repo)).toEqual([]);
+  });
+
+  it("is refused by the pre-commit check, naming the file", () => {
+    writeFileSync(join(repo, "board.html"), board());
+    git("add", "board.html");
+    const result = spawnSync("node", [join(import.meta.dirname, "check-no-fonts.ts"), "--staged"], { cwd: repo, encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("board.html");
   });
 });
 
