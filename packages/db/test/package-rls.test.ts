@@ -9,7 +9,15 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db, type OutboxHandler } from "../src/index.ts";
-import { addTestWorkflow, approveBActionForm, drainOutbox, expectedContentSha256, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import {
+  addTestWorkflow,
+  approveBActionForm,
+  drainOutbox,
+  expectedContentSha256,
+  expectHiddenFrom,
+  joinProject,
+  testDatabaseUrls,
+} from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -41,11 +49,11 @@ async function member(companyId: string, who: string, creator = false): Promise<
   );
 }
 
-async function company(engineer: string, legalName: string): Promise<Company> {
+async function company(engineer: string, name: string): Promise<Company> {
   const cr = digits(10);
   const id = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
-    [JSON.stringify({ en: legalName, ar: legalName }), cr, `3${digits(13)}3`, engineer],
+    [JSON.stringify({ en: name, ar: name }), cr, `3${digits(13)}3`, engineer],
   );
   const ap = await member(id, "ap", true);
   await migrator.query("update company set authorized_person_id = $1 where id = $2", [ap, id]);
@@ -242,10 +250,15 @@ describe("scenario RP-588-1: C1's Open Package of two Drafts is C1's alone", () 
   });
 
   it("K1, C2 and the Owner read nothing of it: no row, no name, no items, no item's Package", async () => {
-    for (const who of [k1.member, k1.ap, c2.member, ow.member]) {
+    const others = [k1.member, k1.ap, c2.member, ow.member];
+    for (const who of others) {
       expect(await readsOf(who, packageId, items)).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
       expect(await readsOf(who, cablesId, [cable])).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
-      expect(await call(who, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([]);
+    }
+    // Nor among the Project's Packages, which C1's Members read both of.
+    const projectPackages = (as: string) => call<{ id: string }>(as, sql`select id from package where project_id = ${projectId}::uuid`);
+    for (const target of [packageId, cablesId]) {
+      await expectHiddenFrom({ read: projectPackages, target, seenBy: [c1.member, c1Pm], hiddenFrom: others, label: "the Project's Packages" });
     }
   });
 
@@ -432,13 +445,16 @@ describe("RP-641: who sees a Submitted Package, and each viewer's counts (scenar
     expect(reads).toEqual({ rows: [{ id: packageId }], sees: true, items: electricalItems, itemPackages: [] });
     // The overall status, from all its items, as one word.
     expect(await statusOf(k1Narrowed, packageId)).toBe("in_progress");
-    expect((await readsOf(k1Narrowed, packageId, electricalItems)).itemPackages).toHaveLength(6);
+    expect((await readsOf(k1Narrowed, packageId, electricalItems)).itemPackages).toEqual(electricalItems.map(() => ({ package_id: packageId })));
   });
 
   it("RP-588-3: C2 sees none of its items and reads nothing of it, while K1 and the Owner do", async () => {
     expect(await readsOf(c2.member, packageId, electricalItems)).toEqual({ rows: [], sees: false, items: [], itemPackages: [] });
-    expect(await call(c2.member, sql<{ id: string }>`select id from package where project_id = ${projectId}::uuid`)).toEqual([]);
-    expect(await summary(c2.member)).toEqual([]);
+    const seenBy = [k1.member, k1.ap, ow.member];
+    const projectPackages = (as: string) => call<{ id: string }>(as, sql`select id from package where project_id = ${projectId}::uuid`);
+    await expectHiddenFrom({ read: projectPackages, target: packageId, seenBy, hiddenFrom: c2.member, label: "the Project's Packages" });
+    // The summary is of Package packageId: a row is its.
+    await expectHiddenFrom({ read: summary, target: packageId, idOf: () => packageId, seenBy, hiddenFrom: c2.member, label: "app.package_summary" });
     expect(await ownerName(c2.member)).toBeNull();
     for (const who of [k1.member, k1.ap, k1Narrowed, ow.member]) {
       expect((await readsOf(who, packageId, [])).sees, who).toBe(true);
@@ -561,15 +577,20 @@ describe("scenario RP-588-2 (story 30): each chain counts once, by the latest Re
   });
 
   it("RP-588-2: K1 and the Owner, who don't see the Draft R1, count the Code C item: R1 is neither listed nor counted for them", async () => {
-    for (const who of [k1.ap, k1.member, ow.member]) {
+    const others = [k1.ap, k1.member, ow.member];
+    for (const who of others) {
       expect((await readsOf(who, packageId, [revision])).items, who).toEqual([coded]);
-      expect((await readsOf(who, packageId, [revision])).itemPackages, who).toEqual([]);
       expect(await latest(who), who).toEqual([{ work_item_id: coded, counted: true }]);
       expect(await summary(who), who).toEqual([{ total: 1, open: 0, codes: { C: 1 } }]);
     }
+    // R1's Package, which C1 reads.
+    const revisionPackage = async (as: string) => (await readsOf(as, packageId, [revision])).itemPackages.map((r) => ({ id: r.package_id }));
+    await expectHiddenFrom({ read: revisionPackage, target: packageId, seenBy: [c1Pm, c1.member], hiddenFrom: others, label: "R1's Package" });
     // C2 sees neither: nothing at all.
-    expect(await latest(c2.member)).toEqual([]);
-    expect(await summary(c2.member)).toEqual([]);
+    const latestIds = async (as: string) => (await latest(as)).map((r) => ({ id: r.work_item_id }));
+    await expectHiddenFrom({ read: latestIds, target: coded, seenBy: k1.ap, hiddenFrom: c2.member, label: "the latest items" });
+    await expectHiddenFrom({ read: latestIds, target: revision, seenBy: c1Pm, hiddenFrom: c2.member, label: "the latest items" });
+    await expectHiddenFrom({ read: summary, target: packageId, idOf: () => packageId, seenBy: [c1Pm, k1.ap], hiddenFrom: c2.member, label: "app.package_summary" });
   });
 });
 
@@ -637,7 +658,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
   it("RP-588-4: C1 reads three separate Code events naming K1's Company and the signer, with the Remarks, as for a single Code, never K1's internal Steps or Notes", async () => {
     const control = await historyOf(c1Pm, single);
     const code = control.filter((e) => e.outcome === "A");
-    expect(code).toHaveLength(1);
+    expect(code).toHaveLength(1); // not hidden-from: one Code event in the item's own history
     expect(code[0]).toMatchObject({ audience: "shared", company_name: { en: "K1" }, member_name: { en: "ap" }, remarks: REMARKS });
     for (const id of items) {
       const reads = await historyOf(c1Pm, id);
@@ -649,7 +670,9 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
         sql`select internal_note from app.work_item_history(${id}::uuid) where type = 'internal_note'`,
       );
       expect(k1Notes).toEqual([{ internal_note: INTERNAL_NOTE }]);
-      expect(await call(c1Pm, sql<{ internal_note: string }>`select internal_note from app.work_item_history(${id}::uuid) where internal_note is not null`)).toEqual([]);
+      const notes = (as: string) =>
+        call<{ internal_note: string }>(as, sql`select internal_note from app.work_item_history(${id}::uuid) where internal_note is not null`);
+      await expectHiddenFrom({ read: notes, target: INTERNAL_NOTE, idOf: (r) => r.internal_note, seenBy: k1.ap, hiddenFrom: c1Pm, label: `${id}'s Internal Note` });
     }
   });
 
@@ -682,7 +705,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
         "select id from outbox where kind = 'documental_record' and payload ->> 'closed_work_item_id' = $1",
         [id],
       );
-      expect(jobs, id).toHaveLength(1);
+      expect(jobs, id).toHaveLength(1); // not hidden-from: a migrator read of the outbox
       // The record job reads its facts as the worker, with no Member set.
       const { rows } = await sql<{ facts: { workItemId: string; outcome: string; transitions: Fact[] } }>`
         select app.documental_record_facts(${jobs[0]!.id}::uuid) as facts
@@ -693,7 +716,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk (RP-646)", (
       expect(coded).toEqual([expect.objectContaining({ companyName: expect.objectContaining({ en: "K1" }), memberName: expect.objectContaining({ en: "ap" }), remarks: REMARKS })]);
       // A move inside K1 (its engineer's Send to Manager) prints who took it (by design, RP-650), never answers (V5),
       // and the Internal Note is in no fact.
-      const insideK1 = facts.transitions.filter((x) => x.companyName.en === "K1" && x.remarks === null);
+      const insideK1 = facts.transitions.filter((x) => x.companyName.en === "K1" && x.remarks === null); // not hidden-from: K1's own moves; the facts name a Company by name only
       expect(insideK1.length).toBeGreaterThan(0);
       for (const t of insideK1) expect(t.answers).toBeNull();
       expect(JSON.stringify(facts)).not.toContain(INTERNAL_NOTE);
@@ -816,7 +839,7 @@ describe("RP-647: the Package's Comments, only those the caller sees (scenario R
       [[electricalItem, hvacItem]],
     );
     commentOf = new Map([electricalItem, hvacItem].map((i) => [i, rows.filter((r) => r.to_id === i).map((r) => r.from_id)]));
-    expect(commentOf.get(electricalItem)).toHaveLength(2);
+    expect(commentOf.get(electricalItem)).toHaveLength(2); // not hidden-from: a migrator read of the links
   });
 
   it("C1, K1 and the Owner read every Comment raised from its items, each with its item; never one of an item outside it", async () => {
@@ -825,7 +848,9 @@ describe("RP-647: the Package's Comments, only those the caller sees (scenario R
 
   it("RP-647-1: K1's engineer narrowed to Electrical reads the Electrical item's Comments only; C2 reads none", async () => {
     expect(await comments(k1Narrowed)).toEqual(expected(electricalItem));
-    expect(await comments(c2.member)).toEqual([]);
+    for (const target of [...commentOf.get(electricalItem)!, ...commentOf.get(hvacItem)!]) {
+      await expectHiddenFrom({ read: comments, target, idOf: (r) => r.work_item_id, seenBy: [c1Pm, k1.ap], hiddenFrom: c2.member, label: "the Package's Comments" });
+    }
     // A Comment is not in the Package: no package_id, so not among its items or in its counts.
     const [counted] = await call<{ total: number; codes: Record<string, number> }>(c1Pm, sql`select total, codes from app.package_summary(${packageId}::uuid)`);
     expect(counted).toEqual({ total: 2, codes: { B: 2 } });
@@ -913,7 +938,8 @@ describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notif
 
   it("reads nothing of another Member's, nor which items a notification holds", async () => {
     const [everything] = await notificationOf(k1.member);
-    expect(await packageOf(k1Electrical, everything!.id)).toEqual([]);
+    const packageIn = async (as: string) => (await packageOf(as, everything!.id)).map((r) => ({ id: r.package_id }));
+    await expectHiddenFrom({ read: packageIn, target: packageId, seenBy: k1.member, hiddenFrom: k1Electrical, label: "another Member's notification" });
     expect(
       (await call<{ n: number }>(k1Electrical, sql`select app.package_notification_count(${everything!.id}::uuid) as n`))[0]!.n,
     ).toBe(0);
@@ -921,14 +947,17 @@ describe("scenario RP-588-2 (RP-643: notification): a Package Submit's one notif
       withMember(app, k1Electrical, (trx) => sql`select work_item_id from notification_package_item`.execute(trx)),
     ).rejects.toThrow(/permission denied/);
     // C2 and the Owner got none.
-    for (const who of [c2.member, ow.member]) expect(await notificationOf(who)).toEqual([]);
+    await expectHiddenFrom({ read: notificationOf, target: everything!.id, seenBy: k1.member, hiddenFrom: [c2.member, ow.member], label: "the Package's notifications" });
   });
 
   it("is gone from the bell once its Member sees none of its items", async () => {
+    const before = (await notificationOf(k1Electrical)).map((n) => n.id);
+    expect(before).toEqual([expect.any(String)]);
     expect(await setTrade([])).toBe("set");
-    expect(await notificationOf(k1Electrical)).toEqual([]);
+    // The same Member read it just before, by id, so this is no empty read.
+    expect((await notificationOf(k1Electrical)).map((n) => n.id)).not.toContain(before[0]);
     expect(await setTrade([electrical])).toBe("set");
-    expect(await notificationOf(k1Electrical)).toHaveLength(1);
+    expect((await notificationOf(k1Electrical)).map((n) => n.id)).toEqual(before);
   });
 });
 

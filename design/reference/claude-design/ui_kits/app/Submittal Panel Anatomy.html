@@ -1,0 +1,38 @@
+<!-- @dsCard group="App" viewport="1600x1000" name="Submittal panel — anatomy" subtitle="Right slide-over from List & Kanban · Compact / Normal / Wide / Full · drag to resize · collapsible sections" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="design_doc_mode" content="canvas">
+<title>Rabaed — Submittal panel anatomy</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0}body{font-family:var(--font-ui);color:var(--ui-text)}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+.fr{position:absolute;display:flex;flex-direction:column;gap:12px}
+.fr h3{margin:0;font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px}
+.fr h3 span{font-size:13px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--tone-violet-tint);color:var(--tone-violet-fg)}
+.fr p{margin:0;font-size:15px;color:var(--ui-muted);max-width:860px;line-height:1.5}
+.vp{width:1440px;height:900px;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--ui-border),0 20px 50px rgba(16,24,40,.14);background:#fff}
+.vp iframe{width:1440px;height:900px;border:0;display:block}
+.hd{position:absolute;left:80px;top:60px;width:2960px}
+.hd h1{margin:0 0 10px;font-size:44px;letter-spacing:-.02em}
+.hd p{margin:0;font-size:18px;color:var(--ui-muted);max-width:1100px;line-height:1.5}
+.rule{position:absolute;left:80px;top:250px;width:2960px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.rule div{padding:16px 18px;border-radius:12px;background:#fff;box-shadow:inset 0 0 0 1px var(--ui-border)}
+.rule b{display:block;font-size:16px;margin-bottom:4px}.rule small{font-size:14px;color:var(--ui-muted);line-height:1.45}
+</style>
+</head>
+<body>
+<div class="hd"><h1>Submittal panel — anatomy</h1><p>Click a row in List view or a card in Kanban to open this panel from the right. Pick a size in the top bar or drag the edge to any width; the layout inside changes with the width. Headers such as Subject, Scope and Location fold to one line so the panel stays short.</p></div>
+<div class="rule"><div><b>Compact · 440px</b><small>One pane, stacked fields, key facts 2×2. Prev/next hidden.</small></div><div><b>Normal · 640px (default)</b><small>One pane, 2-column fields, 4 key facts in a row.</small></div><div><b>Wide · 960px</b><small>Two panes. Side rail: workflow, people, latest activity.</small></div><div><b>Full · to the sidebar</b><small>Two panes, 3-column fields, rail 360px. Works like a page.</small></div></div>
+<div class="fr" style="left:80px;top:400px"><h3>1 · Compact <span>440px</span></h3><p>Numbered outlines + legend show every part of the panel.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1281&size=sm&anat=1&col=none" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:1600px;top:400px"><h3>2 · Normal <span>640px</span></h3><p>Default size. Revisions show after the number — TWR-TMC-CV-MAR-280 Rev 1.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1280&size=md&anat=1&col=none" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:80px;top:1440px"><h3>3 · Wide <span>960px</span></h3><p>Side rail appears. The Workflow section moves out of the main column into the rail.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1282&size=lg&anat=1&col=none" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:1600px;top:1440px"><h3>4 · Full <span>to the sidebar</span></h3><p>Covers the list. Fields go to three columns. Drag the edge to shrink back.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1282&size=full&anat=1&col=none" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:80px;top:2480px"><h3>5 · Sections collapsed <span>Normal</span></h3><p>Every header folded. Each shows a one-line summary — Subject title, Scope trade, Location path, item and file counts.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1281&size=md&anat=0&col=all" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:80px;top:3520px"><h3>7 · Workflow template <span>click Workflow</span></h3><p>Press the route strip or “Workflow template” to see every step: party, roles, company and time allowed.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1281&size=lg&anat=0&tpl=1" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:1600px;top:3520px"><h3>8 · Internal communication <span>Wide</span></h3><p>A timeline like the approval log — internal returns, notes and re-sends. Only your company sees it.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1282&size=lg&anat=0&tab=int" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:80px;top:4560px"><h3>9 · Attachment viewer <span>in app</span></h3><p>Press the eye button (or the file row) to preview the PDF or photo right under the file — page thumbnails, zoom, print, download. No pop-up. ↗ opens it large inside the panel.</p><div class="vp"><iframe src="submittals-list.html?open=SUB-1282&size=md&anat=0&view=0" loading="lazy"></iframe></div></div>
+<div class="fr" style="left:1600px;top:2480px"><h3>6 · From Kanban <span>Wide</span></h3><p>Same panel from the board. The open card is outlined so you keep your place.</p><div class="vp"><iframe src="submittals-kanban.html?open=SUB-1281&size=lg&anat=0&col=none" loading="lazy"></iframe></div></div>
+</body>
+</html>

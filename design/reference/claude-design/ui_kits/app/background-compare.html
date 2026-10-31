@@ -38,7 +38,7 @@ body{background:#e4e6ea;font-family:var(--font-ui);color:#1f2430;-webkit-font-sm
 <div class="pane" data-p="br"><div class="lbl"><span class="sw" style="background:#2c1711"></span><span class="sw" style="background:#fff3ee"></span><span class="sw" style="background:#fffbf9"></span>4 · Brand-correlated · tomato-brown sidebar, tomato-50 header, blush boxes</div><div class="fr"><iframe id="fb" title="Brand correlated"></iframe></div></div>
 </div>
 <script>
-const K='rb-bgcmp';let st={s:'saas-shell.html',m:'four'};try{Object.assign(st,JSON.parse(localStorage.getItem(K)||'{}'))}catch(e){}
+const K='rb-bgcmp';let st={s:'saas-shell.html',m:'four'};try{Object.assign(st,JSON.parse(localStorage.getItem(K)||'{}'))}catch(e){}if(![...document.querySelectorAll('#scr button')].some(b=>b.dataset.s===st.s))st.s='saas-shell.html';
 function fit(){document.querySelectorAll('.fr').forEach(f=>{const i=f.querySelector('iframe');i.style.transform='scale('+(f.clientWidth/1440)+')'})}
 function thm(){try{return (JSON.parse(localStorage.getItem('rb-shell-v1')||'{}').mode)||'light'}catch(e){return 'light'}}
 function load(){document.getElementById('fg').src=st.s;document.getElementById('fw').src=st.s+'?bg=warm';document.getElementById('fi').src=st.s+'?bg=inv';document.getElementById('fb').src=st.s+'?bg=br';}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Settings · Workflow builder V2</title>
+<meta name="ext-resource-dependency" content="../../assets/brand/rabaed-mark.svg" data-resource-id="markSvg">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="settings/numbering.css">
+<link rel="stylesheet" href="snag/snag.css">
+<link rel="stylesheet" href="wf/wf.css">
+<link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css">
+<link rel="stylesheet" href="wf2/wf2.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}.btop a.cb{text-decoration:none}</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f8552f"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#f8552f"/><g fill="#fff"><rect x="280" y="350" width="170" height="100" rx="18"/><rect x="560" y="230" width="170" height="100" rx="18"/><rect x="560" y="470" width="170" height="100" rx="18"/><rect x="840" y="350" width="120" height="100" rx="50"/></g><g stroke="#fff" stroke-width="14" fill="none" stroke-linecap="round"><path d="M450 400 C505 400 505 280 560 280"/><path d="M450 400 C505 400 505 520 560 520"/><path d="M730 280 C785 280 785 400 840 400"/><path d="M730 520 C785 520 785 400 840 400"/></g></svg></template>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script>
+window.process=window.process||{env:{NODE_ENV:'production'}};
+(function(){const j=(t,p,k)=>React.createElement(t,k!==undefined?Object.assign({},p,{key:k}):p);window.jsxRuntime=window.jsxRuntime||{Fragment:React.Fragment,jsx:j,jsxs:j};})();
+</script>
+<script src="https://unpkg.com/reactflow@11.11.4/dist/umd/index.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="wf/data.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='dmt';S.tab=8;
+const host=document.createElement('div');host.id='rf2host';
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;const p=RP.PROJECTS.find(x=>x.id==='dmt');
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':'';
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}})}${RS.tabs()}<main class="ct" id="lvroot"></main></div></div>`;
+ document.getElementById('lvroot').appendChild(host);
+ save();dispatchEvent(new Event('rs-render'));
+}
+document.addEventListener('click',e=>{const b=e.target.closest('button,[data-act]');if(!b||b.closest('#lvroot'))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){if(+d.tab===8){location.href='settings-workflows.html';return}if(+d.tab===1){location.href='submittals-list.html';return}return goShell({project:'dmt',tab:+d.tab})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.act==='collapse'){S.col=!S.col;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#lvroot')){S.menu=null;render()}});
+render();
+</script>
+<script type="text/babel" src="wf2/forms.jsx"></script>
+<script type="text/babel" src="wf2/builder.jsx"></script>
+</body>
+</html>

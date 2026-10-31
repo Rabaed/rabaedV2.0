@@ -3,12 +3,17 @@
 // Project Member of every Participant lists their names, Trade, Scope and
 // status, never what put them there. Anyone else trying to change it gets a
 // 404 that names nothing, as the other settings commands do.
+// Scenarios RP-594-1 and RP-598-2 (seam 2: packages/db/test/sar-adds-supplier-rls.test.ts):
+// a SAR closed at Code A adds its supplier, which every Participant lists and a MAR names,
+// and nothing leads from the list or the MAR to the SAR.
 import { randomUUID } from "node:crypto";
 import type { ApprovedSupplier } from "@rabaed/domain";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, uploadDocument, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
+import { all, buildTower, detail, ok, projectMember, take, type Tower } from "./support/tower.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
@@ -125,14 +130,162 @@ describe("The Approved Supplier List (RP-592-1)", () => {
   it("of another Project is never listed or reachable", async () => {
     const otherTrade = await created(other.caller.post(`/v1/projects/${projectB}/trades`, { code: "EL", name: bilingual("Electrical") }));
     const otherSupplier = await created(addSupplier(other.caller, otherTrade, "Gulf Cables", null, projectB));
-    for (const caller of [host.caller, hostMember.caller, engineer.caller]) {
-      expect((await listSuppliers(caller)).map((s) => s.id)).not.toContain(otherSupplier);
-      await expectHidden(caller.get(`/v1/projects/${projectB}/approved-suppliers`));
-    }
+    // Every list the caller may read, this Project's and Project B's: Project B's Admin reads the supplier
+    // first, so this Project's Members listing neither it nor Project B's list is no empty read (RP-1095).
+    const everyList = async (by: Caller) => [...(await suppliersOf(projectId)(by)), ...(await suppliersOf(projectB)(by))];
+    await expectHiddenFrom({ read: everyList, target: otherSupplier, seenBy: other.caller, hiddenFrom: [host.caller, hostMember.caller, engineer.caller], name: whoIs });
     await expectHidden(withdraw(host.caller, otherSupplier));
-    // An Authorized Person who isn't a Project Member reads nothing of it (layer 2).
-    await expectHidden(consultant.caller.get(`/v1/projects/${projectId}/approved-suppliers`));
-    await expectHidden(other.caller.get(`/v1/projects/${projectId}/approved-suppliers`));
+    expect((await suppliersOf(projectB)(other.caller)).find((s) => s.id === otherSupplier)?.status).toBe("approved");
+    // An Authorized Person who isn't a Project Member reads nothing of it (layer 2), where its Members read it.
+    await expectHiddenFrom({ read: suppliersOf(projectId), target: najd, seenBy: [host.caller, engineer.caller], hiddenFrom: [consultant.caller, other.caller], name: whoIs });
     await expectHidden(host.caller.get(`/v1/projects/${randomUUID()}/approved-suppliers`));
+  });
+});
+
+/** Project `project`'s suppliers as `by` lists them, or none for the plain 404: for expectHiddenFrom. */
+const suppliersOf = (project: string) => async (by: Caller) =>
+  (await readById<{ suppliers: ApprovedSupplier[] }>(`/v1/projects/${project}/approved-suppliers`)(by)).flatMap((r) => r.suppliers);
+
+const whoIs = (by: Caller) =>
+  by === host.caller
+    ? "host's Project Admin"
+    : by === hostMember.caller
+      ? "host member"
+      : by === engineer.caller
+        ? "consultant engineer"
+        : by === consultant.caller
+          ? "consultant's Authorized Person"
+          : by === other.caller
+            ? "Project B's Admin"
+            : (sarPeople.get(by) ?? "someone");
+const sarPeople = new Map<Caller, string>();
+
+describe("a SAR closed at Code A adds its supplier (RP-594-1, RP-598-2)", () => {
+  let at: Tower;
+  let k1Engineer: Caller;
+  let c2: Company; // Another Contractor of the Project; its Authorized Person is not on it.
+  let c2Engineer: Caller;
+
+  /** C1's SAR for `name`, with its company profile, Submitted and closed by K1's manager with `closing`. */
+  async function closedSar(name: { en: string; ar: string }, closing: "approve_a" | "revise_c"): Promise<string> {
+    const res = await ok(
+      at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+        type: "SAR",
+        title: name.en,
+        answers: {
+          supplier_name_en: name.en,
+          supplier_name_ar: name.ar,
+          commercial_registration_number: "1010123456",
+          country_of_origin: "Saudi Arabia",
+          proposed_supply: "Cables and cable trays",
+          past_projects: [{ project_name: "Riyadh Metro Station 4", year: 2022 }],
+          trade: at.electrical,
+          location: at.buildingA,
+        },
+      }),
+      201,
+    );
+    const id = res.json().id as string;
+    await uploadDocument(at.c1Engineer, id, { fieldKey: "company_profile", fileName: "profile.pdf", contentType: "application/pdf", body: "%PDF-1.7 a profile (test)" });
+    await take(at.c1Engineer, id, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(at.c1Pm, id, "submit");
+    const verification = { sample_checked: true, matches_specification: true };
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+    await take(k1Engineer, id, "send_to_manager", { answers: verification, recommendedCode: closing === "approve_a" ? "A" : "C" });
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+    await take(at.k1Manager, id, closing, { answers: { ...verification, remarks: "Checked" } });
+    return id;
+  }
+
+  /** The Electrical suppliers named `en`, as C1's engineer lists them. */
+  const named = async (en: string) =>
+    (await suppliersOf(at.projectId)(at.c1Engineer)).filter((s) => s.tradeId === at.electrical && s.name.en.trim().toLowerCase() === en.toLowerCase()); // not hidden-from: picks the rows to compare by id
+
+  beforeAll(async () => {
+    const c1 = await api.projectCreator();
+    const k1 = await api.authorizedPerson();
+    at = await buildTower(api, { c1, k1 }, "SUP");
+    k1Engineer = await projectMember(api, k1, at.k1ParticipantId!, ["engineer"]);
+    c2 = await api.authorizedPerson();
+    const c2ParticipantId = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
+    c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
+    for (const [by, label] of [
+      [at.c1Engineer, "C1 engineer"],
+      [at.c1Pm, "C1 PM"],
+      [k1Engineer, "K1 engineer"],
+      [at.k1Manager, "K1 manager"],
+      [c2Engineer, "C2 engineer"],
+      [c2.caller, "C2's Authorized Person"],
+    ] as const) {
+      sarPeople.set(by, label);
+    }
+  });
+
+  it("RP-594-1: Najd Cables is listed for Electrical, approved, to every Participant's Members, with nothing of the SAR", async () => {
+    const sar = await closedSar({ en: "Najd Cables", ar: "كابلات نجد" }, "approve_a");
+    const [najdCables] = await named("Najd Cables");
+    const row = { id: najdCables!.id, name: { en: "Najd Cables", ar: "كابلات نجد" }, tradeId: at.electrical, scopeId: null, status: "approved" };
+    for (const by of [at.c1Engineer, k1Engineer, at.k1Manager, c2Engineer]) {
+      // The row as the list gives it: no source, SAR, person or time.
+      expect((await suppliersOf(at.projectId)(by)).find((s) => s.id === row.id), whoIs(by)).toEqual(row);
+    }
+    // C2 reads no SAR, no event of it and no Link of it, where C1 and K1 read each.
+    for (const path of [`/v1/work-items/${sar}`, `/v1/work-items/${sar}/history`, `/v1/work-items/${sar}/links`]) {
+      await expectHiddenFrom({
+        read: (by: Caller) => readById(path)(by).then((rows) => rows.map(() => ({ id: sar }))),
+        target: sar,
+        seenBy: [at.c1Engineer, k1Engineer],
+        hiddenFrom: [c2Engineer, c2.caller],
+        name: whoIs,
+        label: path,
+      });
+    }
+  });
+
+  it("RP-594-1: Code C adds nothing, and a second SAR for the same supplier, in other letter case and with outer spaces, adds no second entry", async () => {
+    // C1's whole list, by id, before and after: it holds Najd Cables from the test above, so it is no empty read.
+    const listIds = async () => (await suppliersOf(at.projectId)(at.c1Engineer)).map((s) => s.id);
+    const before = await listIds();
+    expect(before).toContain((await named("Najd Cables"))[0]!.id);
+    await closedSar({ en: "Rejected Wires", ar: "أسلاك مرفوضة" }, "revise_c");
+    expect(await listIds()).toEqual(before);
+    await closedSar({ en: "  najd CABLES ", ar: "كابلات نجد" }, "approve_a");
+    expect(await listIds()).toEqual(before);
+  });
+
+  it("RP-598-2: C2's MAR names Shared Cables by its id, read back as stored, and nothing in it leads to the SAR", async () => {
+    const sar = await closedSar({ en: "Shared Cables", ar: "كابلات مشتركة" }, "approve_a");
+    const [shared] = await named("Shared Cables");
+    const created = await ok(
+      c2Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+        type: "MAR",
+        title: "Cable drums",
+        answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: at.electrical, location: at.buildingA, supplier: shared!.id },
+      }),
+      201,
+    );
+    const mar = created.json().id as string;
+    const read = await detail(c2Engineer, mar);
+    expect(read.answers.supplier).toBe(shared!.id);
+    // The list names the id "Shared Cables" for C2, as for C1.
+    expect((await suppliersOf(at.projectId)(c2Engineer)).find((s) => s.id === shared!.id)).toEqual({
+      id: shared!.id,
+      name: { en: "Shared Cables", ar: "كابلات مشتركة" },
+      tradeId: at.electrical,
+      scopeId: null,
+      status: "approved",
+    });
+    // Nothing C2 reads of its MAR names the SAR, which C2 can't read (V1, V10).
+    expect(JSON.stringify(read), "C2's MAR names the SAR").not.toContain(sar);
+    await expectHiddenFrom({
+      read: (by: Caller) => readById(`/v1/work-items/${sar}`)(by),
+      target: sar,
+      seenBy: [at.c1Engineer, k1Engineer],
+      hiddenFrom: c2Engineer,
+      name: whoIs,
+      label: "the SAR",
+    });
   });
 });

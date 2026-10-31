@@ -10,7 +10,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -70,6 +70,20 @@ const seen = async (as: string, ids: string[]) =>
 /** The reviewed item's Comment counts as `as` reads them: none for an item they don't see. */
 const counts = (as: string, id: string) =>
   call<{ open_count: number; closed_count: number }>(as, sql`select open_count, closed_count from app.work_item_comment_counts(${id}::uuid)`);
+
+// Reads for expectHiddenFrom (RP-1095): each gives the rows `as` reads, by id.
+/** Item `id`, if `as` sees it. */
+const itemOf = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${id}::uuid`);
+/** The Links from item `id` that `as` reads. */
+const linksFrom = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item_link where from_id = ${id}::uuid`);
+/** The events of item `id` that `as` reads. */
+const eventsOf = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item_event where work_item_id = ${id}::uuid`);
+/** Item `id`'s Comment counts, as the item's id when `as` reads them. */
+const countsOf = (id: string) => async (as: string) => (await counts(as, id)).map(() => ({ id }));
+/** The migrator's one row of `query`'s id. */
+const idOf = async (query: string, values: unknown[]) => (await migrator.query<{ id: string }>(query, values)).rows[0]!.id;
+const whoIs = (as: string) =>
+  ({ [c1.member]: "C1 engineer", [c1Pm]: "C1 PM", [k1.member]: "K1 engineer", [k1.ap]: "K1 manager", [k1Mechanical]: "K1 Mechanical engineer", [c2.member]: "C2", [or.member]: "OR" })[as] ?? as;
 
 /** C1's item, Submitted, then closed by K1's engineer with Code B and these rows: the reviewed item and its Comments. */
 async function closedAtB(model: string, rows: { comment: string }[]): Promise<{ source: string; comments: string[] }> {
@@ -179,7 +193,7 @@ afterAll(async () => {
 describe("Code B's Comments reach exactly who sees the reviewed item", () => {
   it("makes one Comment per row, raised by K1, held by C1's Step Pool, Open", async () => {
     const { comments } = await closedAtB("Rows", [{ comment: "One" }, { comment: "Two" }]);
-    expect(comments).toHaveLength(2);
+    expect(comments).toHaveLength(2); // not hidden-from: the migrator's count of the Comments made, one per row
     const { rows } = await migrator.query<{ raiser: string; holder: string; stage: string; title: string }>(
       `select rp.company_id as raiser, ap.company_id as holder, w.current_stage_key as stage, w.title
        from work_item w
@@ -203,10 +217,15 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
 
   it("RP-434-1: C2, another Contractor of the same Trade, reads none of them, their Links or their count", async () => {
     const { source, comments } = await closedAtB("Hidden from C2", [{ comment: "Only C1's" }]);
-    expect(await seen(c2.member, comments)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from work_item_link where from_id = any(${comments}::uuid[])`)).toEqual([]);
-    expect(await call(c2.member, sql<{ id: string }>`select id from work_item_event where work_item_id = any(${comments}::uuid[])`)).toEqual([]);
-    expect(await counts(c2.member, source)).toEqual([]);
+    const comment = comments[0]!;
+    // C1, which holds it, and K1, which raised it, read each first, so C2's reads are no empty reads.
+    const hidden = { seenBy: [c1.member, k1.member], hiddenFrom: c2.member, name: whoIs };
+    await expectHiddenFrom({ ...hidden, read: itemOf(comment), target: comment, label: "the Comment" });
+    const link = await idOf("select id from work_item_link where from_id = $1 and kind = 'raised_from'", [comment]);
+    await expectHiddenFrom({ ...hidden, read: linksFrom(comment), target: link, label: "its Link" });
+    const raise = await idOf("select id from work_item_event where work_item_id = $1 and type = 'transition' order by seq limit 1", [comment]);
+    await expectHiddenFrom({ ...hidden, read: eventsOf(comment), target: raise, label: "its Raise" });
+    await expectHiddenFrom({ ...hidden, read: countsOf(source), target: source, label: "the reviewed item's counts" });
   });
 
   it("RP-434-2: K1 sees the Comments it raised, C1 holds them, the Owner Representative oversees them; each reads the shared Raise", async () => {
@@ -221,8 +240,10 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
 
   it("RP-434-3: counts only the Comments the Member sees: K1's Mechanical-only engineer sees neither the item nor its Comments", async () => {
     const { source, comments } = await closedAtB("Electrical only", [{ comment: "Not for Mechanical" }]);
-    expect(await seen(k1Mechanical, [source, ...comments])).toEqual([]);
-    expect(await counts(k1Mechanical, source)).toEqual([]);
+    // K1's engineer covering everything reads each; the Mechanical-only one reads none.
+    const hidden = { seenBy: k1.member, hiddenFrom: k1Mechanical, name: whoIs };
+    for (const id of [source, ...comments]) await expectHiddenFrom({ ...hidden, read: itemOf(id), target: id, label: "an Electrical item" });
+    await expectHiddenFrom({ ...hidden, read: countsOf(source), target: source, label: "the reviewed item's counts" });
     // A Comment closed counts as closed, for everyone who sees it.
     expect(await pickUp(c1Pm, comments[0]!)).toBe("picked_up");
     // The resolution note is C1's reply, in the Resolve Screen (RP-437, ADR 0019).
@@ -239,41 +260,44 @@ describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
   const pool = (as: string, id: string) => call<{ names: unknown[] }>(as, sql`select names from app.work_item_pool(${id}::uuid)`);
   const holder = (as: string, id: string) =>
     call<{ assignee_member_id: string | null }>(as, sql`select assignee_member_id from app.work_item_holder(${id}::uuid)`);
-  /** C1's pool and holder events of item `id` that `as` reads. */
-  const c1Events = (as: string, id: string) =>
-    call<{ type: string }>(
+  /** C1's pool and holder events of item `id` that `as` reads, by id. */
+  const c1Events = (id: string) => (as: string) =>
+    call<{ id: string }>(
       as,
-      sql`select e.type from work_item_event e join participant p on p.id = e.actor_participant_id
+      sql`select e.id from work_item_event e join participant p on p.id = e.actor_participant_id
           where e.work_item_id = ${id}::uuid and p.company_id = ${c1.id}::uuid and e.type in ('assigned', 'picked_up')`,
     );
+  /** Item `id`'s pool, as the item's id when `as` reads it. */
+  const poolOf = (id: string) => async (as: string) => (await pool(as, id)).map(() => ({ id }));
+  /** The held Step assignments of item `id` that `as` reads. */
+  const heldOf = (id: string) => (as: string) =>
+    call<{ id: string }>(as, sql`select id from step_assignment where work_item_id = ${id}::uuid and assignee_member_id is not null`);
 
   it("C1's own Members read who its Comment waits on, then who holds it; K1 reads neither, by any function or table", async () => {
     const { comments } = await closedAtB("Pooled", [{ comment: "Who has it" }]);
     const comment = comments[0]!;
     expect((await pool(c1.member, comment))[0]?.names.length).toBeGreaterThan(1);
-    for (const who of [k1.member, k1.ap]) {
-      expect(await pool(who, comment)).toEqual([]);
-      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
-      expect(await c1Events(who, comment)).toEqual([]);
-    }
+    await expectHiddenFrom({ read: poolOf(comment), target: comment, seenBy: c1.member, hiddenFrom: [k1.member, k1.ap], name: whoIs, label: "the pool" });
+    for (const who of [k1.member, k1.ap]) expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
     expect(await pickUp(c1Pm, comment)).toBe("picked_up");
     expect(await holder(c1.member, comment)).toEqual([{ assignee_member_id: c1Pm }]);
-    expect(await pool(c1.member, comment)).toEqual([]);
-    for (const who of [k1.member, k1.ap]) {
-      expect(await pool(who, comment)).toEqual([]);
-      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
-      expect(await c1Events(who, comment)).toEqual([]);
-      expect(await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${comment}::uuid and assignee_member_id is not null`)).toEqual([]);
-    }
+    expect(await pool(c1.member, comment)).toEqual([]); // not hidden-from: a held Step has no pool, for anyone
+    for (const who of [k1.member, k1.ap]) expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
+    // C1 reads its PM's pick-up and the held assignment, by id; K1 reads neither.
+    const pickedUp = await idOf("select id from work_item_event where work_item_id = $1 and type = 'picked_up'", [comment]);
+    await expectHiddenFrom({ read: c1Events(comment), target: pickedUp, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, k1.ap], name: whoIs, label: "C1's pick-up" });
+    const held = await idOf("select id from step_assignment where work_item_id = $1 and assignee_member_id is not null", [comment]);
+    await expectHiddenFrom({ read: heldOf(comment), target: held, seenBy: c1Pm, hiddenFrom: [k1.member, k1.ap], name: whoIs, label: "the held assignment" });
   });
 
   it("C1's only PM holds the internal review at once; K1 and OR never read that event once the item is Submitted", async () => {
     const { source } = await closedAtB("Held", [{ comment: "Held" }]);
-    const own = await call<{ type: string; actor_member_id: string }>(
+    const own = await call<{ id: string; type: string; actor_member_id: string }>(
       c1Pm,
-      sql`select type, actor_member_id from work_item_event where work_item_id = ${source}::uuid and type = 'assigned'`,
+      sql`select id, type, actor_member_id from work_item_event where work_item_id = ${source}::uuid and type = 'assigned'`,
     );
-    expect(own).toContainEqual({ type: "assigned", actor_member_id: c1Pm });
-    for (const who of [k1.member, k1.ap, or.member]) expect(await c1Events(who, source)).toEqual([]);
+    const assigned = own.find((e) => e.actor_member_id === c1Pm);
+    expect(assigned, "C1's PM reads their own assignment").toMatchObject({ type: "assigned", actor_member_id: c1Pm });
+    await expectHiddenFrom({ read: c1Events(source), target: assigned!.id, seenBy: c1Pm, hiddenFrom: [k1.member, k1.ap, or.member], name: whoIs, label: "C1's assignment" });
   });
 });
