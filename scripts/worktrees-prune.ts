@@ -226,16 +226,17 @@ removeProjectsNow({
   exists: existsSync,
   remove: (p) =>
     attempt(p.project, () => {
-      // Read again just before: a verify may have started since the prompt.
-      const keepVolumes = volumesStay !== undefined || volumesKeptReason(verifiesRunningNow()) !== undefined;
-      removeProject(p, { keepVolumes });
-      console.log(keepVolumes ? `Removed compose project ${p.project}'s containers; its volumes stay (a verify runs).` : `Removed compose project ${p.project}.`);
+      // removeProject reads the verifies again just before: one may have started since the prompt.
+      const { volumesKept } = removeProject(p, { keepVolumes: volumesStay !== undefined });
+      console.log(volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed compose project ${p.project}.`);
     }),
   log: (line) => logged.push(line),
 });
 // RP-1120: only the stories volumes listed above, judged again on the worktrees git lists now
-// (one kept since the prompt keeps its set) and the containers using them now.
-if (stories.remove.length > 0) {
+// (one kept since the prompt keeps its set) and the containers using them now. RP-1170: none when
+// the prompt said every volume stays, though the verify may have ended since.
+if (stories.remove.length > 0 && volumesStay !== undefined) logged.push(`Stories volumes not removed: ${volumesStay}; run \`pnpm worktrees:prune\` again once no verify runs.`);
+else if (stories.remove.length > 0) {
   const existingNow = listWorktrees(mainRoot)
     .map((w) => w.path)
     .filter((p) => existsSync(p));

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { processStart } from "./process-start.ts";
 import { describeHolder, liveHolder, lockFile, type LockHolder, type Processes } from "./verify-lock.ts";
 import { isRunning } from "./worktrees-stale.ts";
+import { listWorktrees } from "./worktrees.ts";
 
 // RP-1170, rule 4: volumes are removed only when no `pnpm verify` runs anywhere on the machine.
 // On 2026-10-31 `pnpm worktrees:prune --yes` removed 372 stories volumes while lanes verified:
@@ -47,12 +48,8 @@ export const volumesKeptReason = (check: VerifyCheck): string | undefined =>
 /** The running verifies of this clone, read now; `unknown` when git or the lock folder could not be read. */
 export function verifiesRunningNow(cwd: string = process.cwd()): VerifyCheck {
   try {
-    const git = (args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
-    const worktrees = git(["worktree", "list", "--porcelain"])
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("worktree "))
-      .map((line) => line.slice("worktree ".length));
+    const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const worktrees = listWorktrees(cwd).map((w) => w.path);
     const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [] };
     const self: LockHolder = { pid: process.pid, started: new Date(), command: "a clean-up" };
     return { runs: runningVerifies(verifyLockFiles(worktrees, common, readdirSync(common)), (file) => liveHolder(file, self, processes)) };

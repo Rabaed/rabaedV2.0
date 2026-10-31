@@ -4,6 +4,8 @@ import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import { holdReason, type Holders } from "./claude-sessions.ts";
 import { samePath } from "./paths.ts";
+import { sleepSync } from "./sleep-sync.ts";
+import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
@@ -74,7 +76,7 @@ export function laneProjects(n: number): string[] {
 }
 
 /** The lane whose compose project is `project` (`rabaed-lane32` → 32), or undefined. */
-const laneOfProject = (project: string): number | undefined => {
+export const laneOfProject = (project: string): number | undefined => {
   const m = /^rabaed-lane(\d+)$/.exec(project);
   return m ? Number(m[1]) : undefined;
 };
@@ -763,13 +765,12 @@ export function readProjectNow(project: string, { worktrees, cwd }: { worktrees:
   return { claims, containers, postgres: db && { container: db.name, connections: postgresConnections(db.name) } };
 }
 
-const pause = new Int32Array(new SharedArrayBuffer(4));
-const sleepSync = (ms: number) => void Atomics.wait(pause, 0, 0, ms);
-
 /** How removeProject runs Docker; injected in tests. */
 export type RemoveProjectOptions = {
-  /** Remove the containers and the network only (RP-1170: while a verify runs, no volume is removed). */
+  /** Remove the containers and the network only. */
   keepVolumes?: boolean;
+  /** Why no volume may go now (RP-1170, rule 4: a verify runs anywhere on the machine), read just before; undefined lets them go. */
+  volumesKeptBecause?: () => string | undefined;
   run?: (args: string[]) => string;
   wait?: (ms: number) => void;
 };
@@ -783,9 +784,16 @@ const KILL_PAUSE_MS = 5000;
  * Removes a project's containers, volumes and networks (what `docker compose down -v` would, without
  * its compose file). The containers go one at a time (RP-1170): one whose kill got no exit event is
  * tried again, three times in all with a pause between; one already gone counts as removed; any other
- * failure stops it, naming which containers went. keepVolumes leaves every volume, anonymous ones too.
+ * failure stops it, naming which containers went. keepVolumes, or a verify running anywhere on the
+ * machine (checked here, so no caller skips it; bulk volume removal during verifies hung Docker
+ * twice), leaves every volume, anonymous ones too; volumesKept then says why.
  */
-export function removeProject(stale: StaleProject, { keepVolumes = false, run = docker, wait = sleepSync }: RemoveProjectOptions = {}): { volumesKept: boolean } {
+export function removeProject(
+  stale: StaleProject,
+  { keepVolumes = false, volumesKeptBecause = () => volumesKeptReason(verifiesRunningNow()), run = docker, wait = sleepSync }: RemoveProjectOptions = {},
+): { volumesKept: string | undefined } {
+  const kept = keepVolumes ? "asked to keep them" : volumesKeptBecause();
+  keepVolumes = kept !== undefined;
   const removed: string[] = [];
   for (const [i, name] of stale.containers.entries()) {
     for (let attempt = 1; ; attempt++) {
@@ -808,7 +816,7 @@ export function removeProject(stale: StaleProject, { keepVolumes = false, run = 
   if (!keepVolumes && stale.volumes.length > 0) run(["volume", "rm", ...stale.volumes]);
   const networks = lines(run(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${stale.project}`]));
   if (networks.length > 0) run(["network", "rm", ...networks]);
-  return { volumesKept: keepVolumes };
+  return { volumesKept: kept };
 }
 
 /** A --db suffix: lowercase letters and digits, starting with a letter, and not "test" (rabaed_test is the shared test database). */

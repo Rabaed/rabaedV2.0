@@ -1,4 +1,4 @@
-import { protectedLaneReason, type Container, type Volume } from "./lanes.ts";
+import { laneOfProject, protectedLaneReason, type Container, type Volume } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import type { LockHolder } from "./verify-lock.ts";
 import { worktreeName } from "./worktrees.ts";
@@ -28,11 +28,7 @@ export type RowsInput = {
 
 export type StackRow = { stack: string; lane: string; main: string; containers: string; worktrees: string; pr: string; verify: string; idle: string };
 
-const LANE = /^rabaed-lane(\d+)$/;
-const laneOf = (project: string): number | undefined => {
-  const m = LANE.exec(project);
-  return m ? Number(m[1]) : undefined;
-};
+const laneOf = laneOfProject;
 
 /** The Main a lane belongs to: m for lane mL, the legacy lane m for m; undefined for lane 0 (the main folder). */
 export const mainOfLane = (lane: number | undefined): number | undefined => (lane === undefined || lane === 0 ? undefined : lane >= 10 ? Math.floor(lane / 10) : lane);

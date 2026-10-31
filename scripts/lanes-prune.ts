@@ -57,6 +57,7 @@ import {
   type Volume,
 } from "./lanes.ts";
 import { maxStacks, staleReport } from "./machine-load.ts";
+import { samePath } from "./paths.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
 import { volumesKeptReason, verifiesRunningNow } from "./verifies-running.ts";
@@ -170,7 +171,9 @@ if (withMerged) {
   // RP-1170: --lane N names everything that keeps its lane, all at once.
   const own = lane === undefined ? undefined : laneProject(lane);
   if (own !== undefined && !fresh.some((m) => m.project === own) && !known.has(own)) {
-    for (const k of mergedBlockers(own, { containers, worktrees })) keep({ ...k, reason: `not pruned as merged: ${k.reason}` });
+    // A merged worktree with uncommitted files counts as not merged there; it is listed above with its files.
+    const listed = (path: string) => dirty.some((d) => samePath(d.path, path));
+    for (const k of mergedBlockers(own, { containers, worktrees })) if (!listed(k.path)) keep({ ...k, reason: `not pruned as merged: ${k.reason}` });
   }
 }
 
@@ -233,10 +236,9 @@ for (const s of candidates) {
     continue;
   }
   try {
-    // Read again just before: a verify may have started since the prompt.
-    const keepVolumes = volumesStay !== undefined || volumesKeptReason(verifiesRunningNow()) !== undefined;
-    removeProject(s, { keepVolumes });
-    console.log(keepVolumes ? `Removed ${s.project}'s containers; its volumes stay (a verify runs).` : `Removed ${s.project}.`);
+    // removeProject reads the verifies again just before: one may have started since the prompt.
+    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined });
+    console.log(volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed ${s.project}.`);
   } catch (error) {
     failed++;
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);

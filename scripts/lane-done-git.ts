@@ -8,16 +8,17 @@ const git = (cwd: string, args: string[]) => execFileSync("git", ["-c", "core.qu
 const lines = (out: string) => out.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
 
 /**
- * Rule 3: the paths the commit's branch changed since it left the target whose content is not as
- * in the target. Empty when every change is in it, so a result cherry-picked onto main counts though
- * its commits are not there. Throws when git cannot tell (the worktree is then kept).
+ * Rule 3: the paths the commit's branch changed since it left the target (changed), and those whose
+ * content is not as in the target (notInTarget). notInTarget is empty when every change is in it, so a
+ * result cherry-picked onto main counts though its commits are not there; changed is empty for a branch
+ * with no change of its own, which lane:done does not count as merged (rule 2). Throws when git cannot tell.
  */
-export function filesNotInTarget(head: string, target: string, cwd: string): string[] {
+export function branchPaths(head: string, target: string, cwd: string): { changed: string[]; notInTarget: string[] } {
   const base = git(cwd, ["merge-base", target, head]).trim();
   const changed = lines(git(cwd, ["diff", "--name-only", "--no-renames", base, head]));
-  if (changed.length === 0) return [];
+  if (changed.length === 0) return { changed, notInTarget: [] };
   const differs = new Set(lines(git(cwd, ["diff", "--name-only", "--no-renames", target, head])));
-  return changed.filter((path) => differs.has(path));
+  return { changed, notInTarget: changed.filter((path) => differs.has(path)) };
 }
 
 /** Commits of head that the target does not have; throws when git cannot tell. */

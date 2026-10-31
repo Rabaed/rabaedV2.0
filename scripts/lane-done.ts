@@ -22,13 +22,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { holdReason, systemHolders } from "./claude-sessions.ts";
 import { confirmOrExit } from "./confirm.ts";
-import { aheadOf, filesNotInTarget } from "./lane-done-git.ts";
+import { aheadOf, branchPaths } from "./lane-done-git.ts";
 import { branchKey } from "./lane-claims.ts";
 import { describeWorktree, notMergedRefusal, parseLaneDoneArgs, decideLaneDone, releaseLines, type Candidate, type PullRequest } from "./lane-done-plan.ts";
 import {
   claimOf,
   composeProjectOfEnv,
   envClaims,
+  laneOfProject,
   laneProject,
   listContainers,
   listVolumes,
@@ -86,8 +87,10 @@ const worktrees = listWorktrees(mainRoot);
 const projectOf = (path: string) => (existsSync(path) ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined);
 const onPrBranch = (w: Worktree) => w.branch === pr.headRefName || (w.branch === undefined && w.head === pr.headRefOid);
 const lanes = worktrees.filter(onPrBranch);
-const laneNumber = parsed.lane ?? lanes.map((w) => /^rabaed-lane(\d+)$/.exec(projectOf(w.path) ?? "")?.[1]).map(Number).find((n) => Number.isInteger(n) && n >= 0);
+const laneNumber = parsed.lane ?? lanes.map((w) => laneOfProject(projectOf(w.path) ?? "")).find((n) => n !== undefined);
 const agents = laneNumber === undefined ? [] : worktrees.filter((w) => !onPrBranch(w) && isAgentWorktree(w.path, mainRoot) && projectOf(w.path) === laneProject(laneNumber));
+// A subagent worktree whose .env names no lane cannot be told apart from another lane's: named, left to worktrees:clean.
+const unattributed = worktrees.filter((w) => isAgentWorktree(w.path, mainRoot) && existsSync(w.path) && projectOf(w.path) === undefined).length;
 const candidates: Candidate[] = [...lanes.map((w) => facts(w, "lane")), ...agents.map((w) => facts(w, "agent"))];
 const isCandidate = (path: string) => candidates.some((c) => samePath(c.path, path));
 const claims = envClaims(
@@ -127,6 +130,9 @@ if (!dockerAnswers && decision.stack !== undefined) logged.push(`${decision.stac
 if (stack?.action === "keep") kept.push({ what: `stack ${stack.project}`, reason: stack.why.join("; ") });
 
 for (const line of decision.remarks) console.log(line);
+if (unattributed > 0) {
+  console.log(`${unattributed} subagent worktree${unattributed === 1 ? " has" : "s have"} no lane in .env, so lane:done cannot tell whose they are: \`pnpm worktrees:clean --into main --yes\` removes the merged ones.`);
+}
 if (decision.remove.length > 0) {
   console.log(`Worktrees of PR #${pr.number} to remove, with their folders and branches:`);
   for (const c of decision.remove) console.log(`  ${describeWorktree(c)}${c.kind === "agent" ? " (subagent)" : ""}`);
@@ -194,13 +200,15 @@ if (stack !== undefined && stackGoes) {
       });
   if (inUse !== undefined) kept.push({ what: `stack ${stack.project}`, reason: inUse });
   else {
-    const verifyNow = volumesKeptReason(verifiesRunningNow(mainRoot));
-    const keepVolumes = stack.action === "containers" || verifyNow !== undefined;
     try {
-      removeProject({ project: stack.project, reason: `PR #${pr.number} merged`, containers: stack.containers, volumes: stack.volumes }, { keepVolumes });
-      if (keepVolumes) {
+      // removeProject reads the verifies again just before (rule 4).
+      const { volumesKept } = removeProject(
+        { project: stack.project, reason: `PR #${pr.number} merged`, containers: stack.containers, volumes: stack.volumes },
+        { keepVolumes: stack.action === "containers", volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow(mainRoot)) },
+      );
+      if (volumesKept !== undefined) {
         console.log(`Removed ${stack.project}'s containers and network; its volumes stay.`);
-        logged.push(`${stack.project}'s volumes: ${verifyNow ?? volumesKeptBecause ?? "a verify runs"}; \`pnpm lanes:prune --lane ${laneNumber}\` removes them once no verify runs.`);
+        logged.push(`${stack.project}'s volumes: ${volumesKeptBecause ?? volumesKept}; \`pnpm lanes:prune --lane ${laneNumber}\` removes them once no verify runs.`);
       } else console.log(`Removed ${stack.project} with its volumes.`);
     } catch (error) {
       failed++;
@@ -226,6 +234,7 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
   const exists = existsSync(w.path);
   const readable = exists && existsSync(join(w.path, ".git"));
   const ahead = attempt(() => aheadOf(w.head, TARGET, mainRoot));
+  const paths = kind === "agent" ? attempt(() => branchPaths(w.head, TARGET, mainRoot)) : undefined;
   return {
     path: w.path,
     branch: w.branch,
@@ -237,11 +246,13 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
     held: holdReason(w.path, live.holders),
     heldByProcess: exists && live.heldByProcess(w.path),
     lockLive: live.lockLive(w.locked),
+    locked: w.locked,
+    ownChanges: paths?.changed.length,
     changes: !exists ? [] : readable ? attempt(() => gitChanges(w.path)) : undefined,
     project: projectOf(w.path),
     onPr: pr.commits.includes(w.head) || isAncestor(pr.headRefOid, w.head, mainRoot),
     ahead: Number.isInteger(ahead) ? ahead : undefined,
-    filesNotInMain: kind === "agent" ? attempt(() => filesNotInTarget(w.head, TARGET, mainRoot)) : undefined,
+    filesNotInMain: paths?.notInTarget,
   };
 }
 

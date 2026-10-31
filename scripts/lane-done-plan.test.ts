@@ -36,6 +36,8 @@ const laneWt = (c: Partial<Candidate> = {}): Candidate => ({
   held: undefined,
   heldByProcess: false,
   lockLive: false,
+  locked: undefined,
+  ownChanges: undefined,
   changes: [],
   project: "rabaed-lane41",
   onPr: true,
@@ -52,6 +54,8 @@ const agentWt = (id: string, c: Partial<Candidate> = {}): Candidate => ({
   kind: "agent",
   onPr: false,
   ahead: 2,
+  locked: "claude agent agent-x (pid 4242)",
+  ownChanges: 1,
   filesNotInMain: [],
   ...c,
 });
@@ -299,5 +303,22 @@ describe("releaseLines (rule 8: the last line is the RP-603 RELEASE text to past
     expect(releaseLines({ pr: { ...pr, headRefName: "claude/x" }, lane: undefined, openSiblings: [] })).toEqual([
       "RELEASE <claim comment id> — PR #580 (branch claude/x has no RP key; merged 2026-10-31 16:54 UTC as 254b6aa0e). lane unknown.",
     ]);
+  });
+});
+
+describe("review fixes (RP-1170 /code-review)", () => {
+  it("keeps a subagent worktree with no change of its own and no lock: its subagent may be starting (rule 2)", () => {
+    const starting = agentWt("e", { ownChanges: 0, locked: undefined, filesNotInMain: [] });
+    const decision = decideLaneDone(input({ candidates: [laneWt(), starting], force: true }));
+    expect(reasons(decision)).toEqual(["G:/rabaed/.claude/worktrees/agent-e (RP-11e-part): no change of its own yet and no lock to show its subagent has stopped"]);
+    // With the app's lock naming a session that has stopped, an empty one goes.
+    expect(decideLaneDone(input({ candidates: [laneWt(), { ...starting, locked: "claude agent agent-e (pid 1)" }] })).remove).toHaveLength(2);
+  });
+
+  it("keeps the stack while a kept worktree's folder holds a container of it, though its .env no longer has the lane (rule 2)", () => {
+    const held = laneWt({ project: undefined, held: "a running Claude session works in it" });
+    const decision = decideLaneDone(input({ lane: 41, candidates: [held] }));
+    expect(decision.stack?.action).toBe("keep");
+    expect(decision.stack?.why).toEqual(["rabaed-lane41-db-1 comes from G:/rabaed/.claude/worktrees/rp-1170, which stays"]);
   });
 });

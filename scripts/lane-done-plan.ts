@@ -1,5 +1,5 @@
 import { branchKey } from "./lane-claims.ts";
-import { isValidLane, laneProject, protectedLaneReason, type Container, type EnvClaim, type Volume } from "./lanes.ts";
+import { isValidLane, laneOfProject, laneProject, protectedLaneReason, type Container, type EnvClaim, type Volume } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { listedChanges } from "./prune-guards.ts";
 
@@ -74,6 +74,10 @@ export type Candidate = {
   heldByProcess: boolean;
   /** Its lock names a running Claude session (worktrees.ts Liveness.lockLive): its subagent may still run. */
   lockLive: boolean;
+  /** The lock reason ("" when locked without one), or undefined when not locked. */
+  locked: string | undefined;
+  /** agent: how many paths its branch changed since it left origin/main; undefined when git could not tell. */
+  ownChanges: number | undefined;
   /** `git status --porcelain` lines, untracked files included; undefined when git could not read them. */
   changes: string[] | undefined;
   /** COMPOSE_PROJECT_NAME from its .env. */
@@ -121,11 +125,7 @@ export type Decision = {
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const LANE_PROJECT = /^rabaed-lane(\d+)$/;
-const laneNumber = (project: string | undefined): number | undefined => {
-  const m = LANE_PROJECT.exec(project ?? "");
-  return m ? Number(m[1]) : undefined;
-};
+const laneNumber = (project: string | undefined): number | undefined => laneOfProject(project ?? "");
 export const describeWorktree = (c: Pick<Candidate, "path" | "branch">) => `${c.path} (${c.branch ?? "detached HEAD"})`;
 
 /** Why the candidate stays, or undefined when it goes. Only rule 6's reasons give way to --force. */
@@ -139,6 +139,8 @@ function keepReason(c: Candidate, pr: PullRequest, force: boolean): string | und
     if (c.lockLive) return "locked by a running session (its subagent may still run)";
     if (c.filesNotInMain === undefined) return "its changes could not be compared with origin/main";
     if (c.filesNotInMain.length > 0) return `${plural(c.filesNotInMain.length, "path")} its branch changed ${c.filesNotInMain.length === 1 ? "is" : "are"} not as in origin/main${listedChanges(c.filesNotInMain)}`;
+    // Rule 2: no change of its own is no proof of a merge; only the app's lock naming a stopped session shows it ended.
+    if (c.ownChanges === 0 && c.locked === undefined) return "no change of its own yet and no lock to show its subagent has stopped";
   }
   if (force || !c.exists) return undefined;
   const unread = c.changes === undefined || (c.kind === "lane" && c.ahead === undefined);
@@ -188,7 +190,9 @@ export function decideLaneDone({ pr, lane, candidates, claims, containers, volum
   for (const c of candidates) if (c.project === project && !goes(c.path)) why.push(`${c.path} is kept (above)`);
   for (const claim of claims) if (claim.project === project) why.push(`the .env of ${claim.path} (on ${claim.branch ?? "a detached HEAD"}) has it`);
   const mine = containers.filter((c) => c.project === project);
-  const named = (dir: string) => candidates.some((c) => samePath(c.path, dir, platform)) || claims.some((c) => samePath(c.path, dir, platform));
+  // A folder already named above for this project; any other folder that stays and holds a container keeps it too.
+  const named = (dir: string) =>
+    candidates.some((c) => c.project === project && samePath(c.path, dir, platform)) || claims.some((c) => c.project === project && samePath(c.path, dir, platform));
   const seen = new Set<string>();
   for (const c of mine) {
     if (c.workingDir === "" || !exists(c.workingDir) || goes(c.workingDir) || named(c.workingDir) || seen.has(c.workingDir)) continue;

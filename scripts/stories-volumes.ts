@@ -13,6 +13,7 @@
 // RP-1170: none is removed while a verify runs anywhere on the machine (verifies-running.ts), and the
 // sets go one at a time with a pause between, stopping at the first Docker does not answer in time.
 import { execFileSync } from "node:child_process";
+import { sleepSync } from "./sleep-sync.ts";
 import { STORIES_VOLUME_PREFIX, worktreeHash } from "./test-stories-linux.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 
@@ -205,7 +206,6 @@ export function removeStoriesVolumesNow(
   return { removed, kept, errors };
 }
 
-const pause = new Int32Array(new SharedArrayBuffer(4));
 /** RP-1170: the pause between two sets, so Docker's volume API is never asked back to back. */
 const SET_PAUSE_MS = 2000;
 const timedOut = (error: unknown) => (error as { code?: string }).code === "ETIMEDOUT" || /ETIMEDOUT/.test((error as Error).message ?? "");
@@ -217,7 +217,7 @@ const timedOut = (error: unknown) => (error as { code?: string }).code === "ETIM
  */
 export function removeStoriesVolumes(
   volumes: string[],
-  { run = (args) => docker(args, 2 * LIST_TIMEOUT_MS), wait = (ms) => void Atomics.wait(pause, 0, 0, ms) }: { run?: (args: string[]) => string; wait?: (ms: number) => void } = {},
+  { run = (args) => docker(args, 2 * LIST_TIMEOUT_MS), wait = sleepSync }: { run?: (args: string[]) => string; wait?: (ms: number) => void } = {},
 ): VolumeRemoval {
   const result: VolumeRemoval = { removed: [], refused: [], notTried: [] };
   const sets = storiesSets(volumes);
