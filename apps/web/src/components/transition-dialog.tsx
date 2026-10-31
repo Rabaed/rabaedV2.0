@@ -15,7 +15,7 @@ import {
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
-import { ActionForm, Badge, Button, CodeBadge, cn, DocNo, Field, Icon, IconButton, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
+import { ActionForm, Badge, Button, CodeBadge, CodeTile, cn, DocNo, Field, Icon, IconButton, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { InspectionTiles, liveTally, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
@@ -228,6 +228,7 @@ export function TransitionDialog({
   locale,
   description,
   recommendedCode: recommended,
+  heading,
   idPrefix,
   onClose,
 }: {
@@ -243,6 +244,12 @@ export function TransitionDialog({
   description?: string;
   /** The Recommended Code the taker's own Company sent with the item (RP-433, RP-86): internal to it, shown with a code's checklist. */
   recommendedCode?: WorkItemActions["recommendedCode"];
+  /**
+   * The Work Item page's header (RP-1151, gap table rows 34 and 38): the code tile of the Review Code the
+   * Transition issues, its label, the item's number under it and a close button; 560px wide, a sheet from
+   * the bottom on a phone. Absent: the plain heading (the Kanban's move).
+   */
+  heading?: { code: string | null; documentNumber: string | null };
   idPrefix: string;
   onClose: () => void;
 }) {
@@ -324,11 +331,28 @@ export function TransitionDialog({
       className={cn(
         "m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text backdrop:bg-text/40",
         // On a phone a WIR's pop-up is a sheet from the bottom of the screen, as the design draws it.
-        inspection && "max-h-[90dvh] overflow-y-auto max-md:mb-0 max-md:max-w-none max-md:rounded-b-none md:max-w-xl",
+        (inspection || heading) && "max-h-[90dvh] overflow-y-auto max-md:mb-0 max-md:max-w-none max-md:rounded-b-none",
+        inspection && "md:max-w-xl",
+        heading && !inspection && "rounded-[18px] p-0 md:max-w-[560px] max-md:rounded-b-none",
       )}
     >
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        {inspection ? (
+      <form onSubmit={onSubmit} className={cn("space-y-4", heading && !inspection && "[&>*:not(:first-child)]:mx-5 [&>:last-child]:mb-5")} noValidate>
+        {heading && !inspection ? (
+          <div className="flex items-center gap-3 border-b border-border-subtle px-5 py-4">
+            {heading.code && <CodeTile code={heading.code} size="lg" />}
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[16px] font-bold">{title}</h2>
+              {heading.documentNumber && (
+                <p className="text-[12.5px] text-muted">
+                  <DocNo value={heading.documentNumber} />
+                </p>
+              )}
+            </div>
+            <IconButton label={t("cancel")} onClick={() => dialog.current?.close()}>
+              <Icon name="x" size={20} />
+            </IconButton>
+          </div>
+        ) : inspection ? (
           // A WIR's sheet: its title over the WIR's number, and a close button (RP-655).
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5">
