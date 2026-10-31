@@ -15,7 +15,7 @@
 //      verify runs anywhere on the machine its volumes stay (verifies-running.ts).
 //   5. Prints the RP-603 RELEASE text as its last line. It never posts to Jira itself.
 //
-//   pnpm lane:done <pr> [--lane N] [--force] [--yes] [--dry-run]   (until its package.json line lands: node scripts/lane-done.ts)
+//   pnpm lane:done <pr> [--lane N] [--force] [--yes] [--dry-run]
 //     --lane N   the lane, when the PR's worktree is gone (or to check it is the one its .env names); never 7
 //     --force    removes worktrees with uncommitted or untracked files, or commits origin/main lacks
 //     --yes      skips the confirmation; --dry-run only lists, and removes nothing
