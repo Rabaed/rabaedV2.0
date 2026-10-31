@@ -24,16 +24,20 @@ import {
   localSealSigner,
   localTimestampAuthority,
   projectFilesFromEnv,
+  reproduceHandler,
   s3RecordFiles,
+  type RecordJobDeps,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAdmin } from "../../admin/test/support/harness.ts";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, readById, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, memberOnProject, ok, only, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
+const admin = await createTestAdmin();
 const urls = testDatabaseUrls();
 // The worker connects as the app role, with no Member set.
 const worker = createDb(urls.app, { max: 2 });
@@ -41,6 +45,7 @@ const migrator = createDb(urls.migrator, { max: 1 });
 const renderer = chromiumRenderer();
 afterAll(async () => {
   await renderer.close();
+  await admin.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
 });
@@ -102,6 +107,7 @@ interface Made {
   readonly xml: string;
 }
 let made: Made;
+let deps: RecordJobDeps;
 
 /** The record as `by` downloads it: its text without whitespace, and its Record Data. */
 async function download(by: Caller): Promise<Made> {
@@ -184,7 +190,7 @@ beforeAll(async () => {
 
   const signer = await localSealSigner();
   const timestamps = await localTimestampAuthority();
-  const handler: OutboxHandler = documentalRecordHandler({
+  deps = {
     files: s3RecordFiles(projectFilesFromEnv()),
     renderer,
     signer: async () => signer,
@@ -193,7 +199,8 @@ beforeAll(async () => {
     webUrl: "https://rabaed.test",
     // PDF/A validity is the record checks' own suites'.
     validator: { validate: async () => ({ compliant: true, problems: [] }) },
-  });
+  };
+  const handler: OutboxHandler = documentalRecordHandler(deps);
   // Anything earlier tests left in the outbox is not ours to judge.
   await drainOutbox(worker, { documental_record: handler });
 
@@ -284,5 +291,22 @@ describe("RP-1029-1: never a file an internal event took", () => {
         });
       }
     }
+  });
+});
+
+describe("Re-produce of the record", () => {
+  it("gives the same facts: the reply photo and the reply report found again by their fingerprints", { timeout: 300_000 }, async () => {
+    const engineer = await admin.signedInEngineer();
+    expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: "The PDF maker had a layout bug" })).statusCode).toBe(202);
+    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(deps) });
+    const { rows } = await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
+      select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
+      where r.work_item_id = ${id}::uuid order by c.ran_at, c.id
+    `.execute(migrator);
+    expect(rows.at(-1)).toMatchObject({ run_kind: "reproduce", passed: true });
+    const after = await download(people.c1Engineer);
+    const facts = (xml: string) => xml.replace(/(<comments) page="\d+"/g, "$1").replace(/\n *<replyFullText page="\d+"\/>/g, "").replace(/<pages first="\d+" last="\d+"\/>/g, "<pages/>");
+    expect(facts(after.xml)).toBe(facts(made.xml));
+    expect(sectionOf(after.xml, CODE_TITLE.en)).toBe(sectionOf(made.xml, CODE_TITLE.en));
   });
 });

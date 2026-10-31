@@ -132,9 +132,14 @@ describe("RP-1029-1: the record's facts hold the reply files the shared code too
       ["code-site.jpg", "code_photos", null, 64],
       ["cube-test.pdf", "code_reports", null, 64],
     ]);
-    // Anywhere in the facts, of the four files only the code's two: the Screens name no file.
+  });
+
+  it("name, anywhere in the facts, only the code's two files of the four, by storage key", async () => {
+    const all = [files.engineerPhoto, files.engineerReport, files.codePhoto, files.codeReport];
+    const { rows } = await migrator.query<{ id: string; storage_key: string }>("select id, storage_key from document where id = any($1::uuid[])", [all]);
+    const keyOf = new Map(rows.map((r) => [r.id, r.storage_key]));
     const text = JSON.stringify(facts);
-    expect(["engineer-site.jpg", "engineer-report.pdf", "code-site.jpg", "cube-test.pdf"].filter((n) => text.includes(n))).toEqual(["code-site.jpg", "cube-test.pdf"]);
+    expect(all.filter((file) => text.includes(keyOf.get(file)!))).toEqual([files.codePhoto, files.codeReport]);
   });
 
   it("app.documents_shared_before_close lists the code's two files only, by id", async () => {

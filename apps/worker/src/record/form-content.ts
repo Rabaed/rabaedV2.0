@@ -107,10 +107,10 @@ export function isListedDocument(document: DocumentFact, attachmentFieldKeys: Re
   return document.itemKey === null && (document.fieldKey === null || attachmentFieldKeys.has(document.fieldKey));
 }
 
-/** The keys of the Form's fields of `type`. */
-function fieldKeysOf(facts: Pick<RecordFacts, "form">, type: FormField["type"]): Set<string> {
+/** The keys of the Form's fields of `type`, or of every type. */
+function fieldKeysOf(facts: Pick<RecordFacts, "form">, type?: FormField["type"]): Set<string> {
   const schema = formSchema.parse({ sections: facts.form.sections });
-  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => f.key)));
+  return new Set(schema.sections.flatMap((s) => s.fields.filter((f) => type === undefined || f.type === type).map((f) => f.key)));
 }
 
 /** A reply Screen's file field (ADR 0024) and its Screen section. */
@@ -140,18 +140,12 @@ function replyFileFields(transitions: readonly TransitionFact[], formKeys: Reado
   return fields;
 }
 
-/** The keys of the Form's fields of every type. */
-function formFieldKeysOf(facts: Pick<RecordFacts, "form">): Set<string> {
-  const schema = formSchema.parse({ sections: facts.form.sections });
-  return new Set(schema.sections.flatMap((s) => s.fields.map((f) => f.key)));
-}
-
 /** What the record reads of the item: its Form, and its Transitions where it has them (a Working Copy has none). */
-type FormAndScreens = Pick<RecordFacts, "form"> & Partial<Pick<RecordFacts, "transitions">>;
+export type FormAndScreens = Pick<RecordFacts, "form"> & Partial<Pick<RecordFacts, "transitions">>;
 
 /** The reply Screens' file fields of `type`, by key. */
 function replyFieldsOf(facts: FormAndScreens, type: "attachments" | "photos"): Map<string, ReplyFileField> {
-  return new Map([...replyFileFields(facts.transitions ?? [], formFieldKeysOf(facts))].filter(([, f]) => f.field.type === type));
+  return new Map([...replyFileFields(facts.transitions ?? [], fieldKeysOf(facts))].filter(([, f]) => f.field.type === type));
 }
 
 /**
@@ -255,7 +249,7 @@ function replyChecklists(
  * after the Form field whose copy it answers, or, when the Form shows none, in a section of its own.
  */
 export function formContent(
-  facts: Pick<RecordFacts, "form" | "documents"> & Partial<Pick<RecordFacts, "checklistCopies" | "transitions">>,
+  facts: FormAndScreens & Pick<RecordFacts, "documents"> & Partial<Pick<RecordFacts, "checklistCopies">>,
   language: RecordLanguage,
   path: readonly TransitionFact[] = [],
 ): { sections: RecordSection[]; classification: RecordBlock[]; attachmentFieldKeys: Set<string> } {

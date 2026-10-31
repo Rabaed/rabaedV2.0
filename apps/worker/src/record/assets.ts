@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { RecordFacts } from "@rabaed/db";
 import { PDFDocument } from "pdf-lib";
 import type { RecordFiles } from "./files.ts";
-import { attachmentFieldKeysOf, isListedDocument, printedPhotosOf } from "./form-content.ts";
+import { attachmentFieldKeysOf, isListedDocument, printedPhotosOf, type FormAndScreens } from "./form-content.ts";
 
 // What the layout needs from the item's Documents (form-engine.md §6, elements 8
 // and 9): the page counts of the shared Documents, and the photos of the Form as
@@ -65,7 +65,7 @@ export async function inlinePhotos(
  * The Form's and Documents' assets: the listed Documents' page counts and the Form's photos inlined. A
  * Working Copy prints these only (RP-621: no Signature, logo or Stamp); the record adds its marks below.
  */
-export async function formAssets(facts: Pick<RecordFacts, "form" | "documents"> & Partial<Pick<RecordFacts, "transitions">>, files: RecordFiles): Promise<DocumentAssets> {
+export async function formAssets(facts: FormAndScreens & Pick<RecordFacts, "documents">, files: RecordFiles): Promise<DocumentAssets> {
   const attachmentFields = attachmentFieldKeysOf(facts);
   const pageCounts = new Map<string, number | null>();
   for (const d of facts.documents) {
