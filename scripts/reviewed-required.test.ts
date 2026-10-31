@@ -14,6 +14,7 @@ const eventBy = (event: string, createdAt = tick()): PrEvent => ({ event, actor:
 // The workflow the main ruleset requires: the queue must get the same check name as the PR.
 // It lands in its own PR after this script (rule 3, and it runs main's copy of the script), so these wait for it.
 const workflowPath = join(dirname(import.meta.filename), "..", ".github", "workflows", "reviewed-required.yml");
+const AUTO_MERGE_TYPES = ["auto_merge_enabled", "auto_merge_disabled"];
 describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
   // A skipped describe still runs its body, so read only when the file is there.
   const source = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : "jobs: {}";
@@ -29,8 +30,19 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
   });
 
   // The draft events land in the workflow's own PR after this script (rule 3, RP-1018), so this waits for them.
+  // The auto-merge events (RP-1167) are checked on their own below, so they are set aside here.
   it.skipIf(!types.includes("ready_for_review"))("re-runs when a draft is marked ready, and when a PR goes back to draft (RP-1018)", () => {
-    expect(types).toEqual(["opened", "reopened", "synchronize", "labeled", "unlabeled", "ready_for_review", "converted_to_draft"]);
+    expect(types.filter((type) => !AUTO_MERGE_TYPES.includes(type))).toEqual(["opened", "reopened", "synchronize", "labeled", "unlabeled", "ready_for_review", "converted_to_draft"]);
+  });
+
+  // RP-1167: the check fails while auto-merge is on, and turning it on or off starts no other run of it. These land in
+  // the workflow's own PR after this test change (rule 3), so they wait for it.
+  it.skipIf(!types.some((type) => AUTO_MERGE_TYPES.includes(type)))("re-runs the moment auto-merge is turned on or off (RP-1167)", () => {
+    expect(types).toEqual(expect.arrayContaining(AUTO_MERGE_TYPES));
+  });
+
+  it.skipIf(!types.some((type) => AUTO_MERGE_TYPES.includes(type)))("may read the PR's issue events it judges the label and the queue entry by (RP-1167)", () => {
+    expect(jobs[0]?.permissions?.issues).toBe("read");
   });
 
   it("is one job, named as the ruleset requires it, with no condition that could skip it", () => {
