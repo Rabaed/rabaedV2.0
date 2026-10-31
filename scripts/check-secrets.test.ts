@@ -281,7 +281,7 @@ describe("scanRange on real git history", () => {
       git("checkout", "-q", "-b", "pr");
       commit("pr.ts", "const ok = 1;\n");
       expect(check("main..pr")).toMatchObject({ status: 0, stdout: expect.stringContaining("No secrets in main..pr.") });
-      commit("upload.sh", `curl -u me:${tokens.atlassian} https://example.atlassian.net\n`);
+      commit("upload.sh", join2("curl -", "u me:", tokens.atlassian, " https://example.atlassian.net\n"));
       const failed = check("main..pr");
       expect(failed.status).toBe(1);
       expect(failed.stderr).toContain("upload.sh:1: Atlassian API token (atlassian-api-token)");
