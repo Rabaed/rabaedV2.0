@@ -21,13 +21,13 @@ export function fillingChoices(
   locale: Locale,
   item?: Pick<WorkItemDetail, "trade" | "location" | "scopes">,
 ): BuiltInChoices {
-  const trades = covered.trade.map((v) => ({ id: v.id, label: labelled(v.name, v.code, locale) }));
+  const trades = covered.trade.map((v) => ({ id: v.id, label: labelled(v.name, v.code, locale), code: v.code }));
   const locations = treeOrder(covered.location).map((v) => ({
     id: v.id,
     label: `${"— ".repeat(v.level)}${labelled(v.name, v.code, locale)}`,
   }));
   if (item && !trades.some((t) => t.id === item.trade.id)) {
-    trades.push({ id: item.trade.id, label: labelled(item.trade.name, item.trade.code, locale) });
+    trades.push({ id: item.trade.id, label: labelled(item.trade.name, item.trade.code, locale), code: item.trade.code });
   }
   if (item?.location && !locations.some((l) => l.id === item.location!.id)) {
     locations.push({ id: item.location.id, label: labelled(item.location.name, item.location.code, locale) });
@@ -45,7 +45,7 @@ export function fillingChoices(
 /** The choices to read an item's Form with: just its own values, by name. */
 export function readingChoices(item: WorkItemDetail, locale: Locale): BuiltInChoices {
   return {
-    trades: [{ id: item.trade.id, label: labelled(item.trade.name, item.trade.code, locale) }],
+    trades: [{ id: item.trade.id, label: labelled(item.trade.name, item.trade.code, locale), code: item.trade.code }],
     locations: item.location ? [{ id: item.location.id, label: labelled(item.location.name, item.location.code, locale) }] : [],
     scopes: item.scopes.map((s) => ({ id: s.id, tradeId: item.trade.id, parentId: s.parentId, label: s.name[locale] })),
   };

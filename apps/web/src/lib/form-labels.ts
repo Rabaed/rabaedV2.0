@@ -201,7 +201,20 @@ function photosLabels(t: Translate): FormRendererLabels["photos"] {
 export function useActionFormLabels(): ActionFormLabels {
   const t = useTranslations("workItems.actions");
   const form = useFormRendererLabels();
-  return { internalNote: t("internalNote"), internalNoteHelp: t("internalNoteHelp"), form };
+  return {
+    internalNote: t("internalNote"),
+    internalNoteHelp: t("internalNoteHelp"),
+    form,
+    page: {
+      optional: t("popup.optional"),
+      required: t("popup.required"),
+      internalNoteShort: t("popup.internalNoteShort"),
+      internalNotePlaceholder: (company) => t("popup.internalNotePlaceholder", { company }),
+      remarksRequired: (code) => t("popup.remarksRequired", { code }),
+      remarksHelp: (company) => t("popup.remarksHelp", { company }),
+      remarksMissing: (code) => t("popup.remarksMissing", { code }),
+    },
+  };
 }
 
 /** The Links section's words. */

@@ -49,6 +49,7 @@ const allowedInText: string[] = [
   "check them", // the verb, asking the reader to look again (sign-in: "Check them and try again."), not an Inspection.
   "in the name of", // the idiom "on behalf of" (sign-in: "dated in the name of whoever took it"), not a Subject.
   "full name", // a Member's full name (`member.full_name`).
+  "your name as signer", // the signer's own name under a code's Remarks (the Work Item page's pop-up, RP-1188), not a Subject.
   "project name", // a Project's name, which no Subject replaces.
   "pkg number or name", // the Packages view's search: a Package's own name (GLOSSARY.md Package), which no Subject replaces.
   "name english", // "Name (English)": the English half of a bilingual name field.

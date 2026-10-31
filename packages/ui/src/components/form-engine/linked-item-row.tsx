@@ -38,17 +38,35 @@ export type LinkedItemRowProps = {
   linkAs: ElementType;
   /** A button removing the item, when it may be removed. */
   remove?: { label: string; icon: IconName; disabled?: boolean; onRemove: () => void };
+  /**
+   * "rows": the Work Item page's rows (RP-1188, gap table rows 52–53): a bordered row each, a link icon, the
+   * number on one line, the Subject in the brand colour and an arrow; "list" (default): the plain list.
+   */
+  look?: "list" | "rows";
 };
 
 /** A list item: the linked item, opening it or saying the viewer may not see it, and its remove button. */
-export function LinkedItemRow({ labels: text, documentNumber, subject, href, hidden = href === null, linkAs: Anchor, remove }: LinkedItemRowProps) {
+export function LinkedItemRow({ labels: text, documentNumber, subject, href, hidden = href === null, linkAs: Anchor, remove, look = "list" }: LinkedItemRowProps) {
   const messageId = useId();
   const [explained, setExplained] = useState(false);
+  const rows = look === "rows";
   const target = cn(
-    "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-start hover:bg-ghost-hover active:bg-ghost-press",
+    rows
+      ? "flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-[10px] px-3 py-2 text-start text-[13px] hover:bg-ghost-hover active:bg-ghost-press"
+      : "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-start hover:bg-ghost-hover active:bg-ghost-press",
     focusRing,
   );
-  const label = (
+  const label = rows ? (
+    <>
+      <Icon name="link" size={14} className="shrink-0 text-muted" />
+      {/* The number on one line, whatever the row's width (row 53). */}
+      <DocNo value={documentNumber} className="shrink-0 font-bold whitespace-nowrap text-text" />
+      <span className="min-w-0 flex-1 text-brand-fg">
+        <bdi>{subject}</bdi>
+      </span>
+      {!hidden && <Icon name="arrow-up-right" size={14} className="shrink-0 text-muted rtl:-scale-x-100" />}
+    </>
+  ) : (
     <>
       <DocNo value={documentNumber} className="text-sm text-text" />
       <span className="text-body text-text">
@@ -57,7 +75,7 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, hid
     </>
   );
   return (
-    <li className="flex flex-col">
+    <li className={cn("flex flex-col", rows && "rounded-[10px] border border-border-subtle bg-surface")}>
       <div className="flex items-center gap-1 pe-1">
         {href !== null ? (
           <Anchor href={href} className={target}>

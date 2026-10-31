@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
+import type { BilingualText, Locale } from "@rabaed/domain";
 import { useState } from "react";
 import { cn } from "../../lib/cn.ts";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -24,7 +24,7 @@ export type RevisionMenuProps = {
   locale: Locale;
   labels: RevisionMenuLabels;
   /** The chain as the API lists it (`RevisionChain.revisions`): only those the viewer may see, the original first. */
-  revisions: readonly { id: string; documentNumber: string | null; revisionNo: number }[];
+  revisions: readonly { id: string; documentNumber: string | null; revisionNo: number; stage: { name: BilingualText } }[];
   /** The Revision on the page. */
   currentId: string;
   /** Opens the chosen Revision; never called for the one already open. */
@@ -35,9 +35,10 @@ export type RevisionMenuProps = {
  * The Work Item page's Revision pill (RP-1151, gap table rows 10–11; the owner's design): beside the
  * Document Number, naming the Revision on the page ("Original", "Revision 1"), always shown. It
  * opens "Revisions you can see": the chain's Revisions the viewer may see (V1 each), newest first,
- * each by its Document Number, left to right in both languages, or "No number yet: Revision n".
+ * each by its Document Number, left to right in both languages, or "No number yet: Revision n", with a line
+ * naming it and its Stage as the viewer reads it ("Original · Revise & Resubmit"; RP-1188, row 10).
  */
-export function RevisionMenu({ locale: _locale, labels, revisions, currentId, onOpen }: RevisionMenuProps) {
+export function RevisionMenu({ locale, labels, revisions, currentId, onOpen }: RevisionMenuProps) {
   const [open, setOpen] = useState(false);
   const current = revisions.find((r) => r.id === currentId);
   if (!current) return null;
@@ -75,7 +76,7 @@ export function RevisionMenu({ locale: _locale, labels, revisions, currentId, on
                   <Icon name={here ? "circle-check" : "file-text"} size={16} className={here ? "text-brand" : "text-faint"} />
                   <span className="min-w-0">
                     <b className="block text-[13px]">{r.documentNumber ? <DocNo value={r.documentNumber} /> : <span className="text-muted">{labels.noNumber(r.revisionNo)}</span>}</b>
-                    <small className="text-[11.5px] text-muted">{labels.name(r.revisionNo, r.documentNumber !== null)}</small>
+                    <small className="block text-[11.5px] text-muted">{`${labels.name(r.revisionNo, r.documentNumber !== null)} · ${r.stage.name[locale]}`}</small>
                   </span>
                   {here && <span className="ms-auto text-[11px] font-bold text-brand-fg">{labels.open}</span>}
                 </button>

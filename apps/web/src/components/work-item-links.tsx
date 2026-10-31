@@ -28,6 +28,7 @@ export function WorkItemLinks({
   locale,
   questionLabels,
   titleHidden = false,
+  look,
   children,
 }: {
   workItemId: string;
@@ -38,6 +39,8 @@ export function WorkItemLinks({
   questionLabels?: Readonly<Record<string, string>>;
   /** Its heading for screen readers only, where a card already shows it (the Work Item page, RP-1151). */
   titleHidden?: boolean;
+  /** "rows": the Work Item page's rows, beside Linked from (RP-1188, rows 52–53). */
+  look?: "rows";
   /** Shown below the Links: "Linked from". */
   children?: ReactNode;
 }) {
@@ -83,6 +86,7 @@ export function WorkItemLinks({
       linkAs={Link}
       questionLabels={questionLabels}
       titleHidden={titleHidden}
+      {...(look ? { look } : {})}
       pending={pending}
       message={message}
     >

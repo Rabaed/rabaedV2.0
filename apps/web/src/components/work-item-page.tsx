@@ -6,6 +6,7 @@ import {
   formatFormValue,
   formatNumber,
   isOpenStageCategory,
+  offersRevision,
   outcomeLook,
   watchOutcomeNames,
   type DocumentList,
@@ -56,8 +57,8 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
-import { DownloadRecordButton } from "@/components/download-record-button";
-import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
+import { useRecordDownload } from "@/components/download-record-button";
+import { useWorkingCopyDownload } from "@/components/download-working-copy-button";
 import { CreateRevisionButton } from "@/components/submittal-panel-host";
 import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
@@ -75,6 +76,7 @@ import type { AnsweredChecklists } from "@/lib/checklist-once";
 import { changeText, replyAnswers, replyFiles } from "@/lib/history-details";
 import { historyMoveLabel } from "@/lib/history-move-label";
 import { notPickedUpYetValues } from "@/lib/pool-line";
+import { transitionGoesTo } from "@/lib/transition-goes-to";
 
 
 export type WorkItemPageProps = {
@@ -121,6 +123,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
   const tMap = useTranslations("workflowMap");
   const tViews = useTranslations("workItemViews");
   const tRevision = useTranslations("revision");
+  const tPopup = useTranslations("workItems.actions.popup");
   const form = useWorkItemForm();
   const router = useRouter();
   const [tab, setTab] = useState("form");
@@ -132,11 +135,37 @@ export function WorkItemPage(props: WorkItemPageProps) {
     const outcome = typeOutcomes.find((o) => o.code === code);
     return outcome ? outcomeLook(outcome, typeOutcomes) : undefined;
   };
+  // The pop-up's header (rows 34–36): the raiser's Company reads the Remarks with the signer's name (V14:
+  // the final outcome and its signer are shown), unless the viewer is of the raiser's Company.
+  const raiser = item.raisedBy.companyName;
+  const raisedByOwn = sameName(raiser, me.company.legalName);
+  // A Send Back goes to the Company that Submitted the item here: the newest shared move by another Company,
+  // which the viewer reads by its Company's name (V14: the hand-overs are shown). The raiser's, failing that.
+  const submitter =
+    [...(history?.events ?? [])].reverse().find((e) => e.type === "transition" && e.audience === "shared" && e.by.companyName && !sameName(e.by.companyName, me.company.legalName))?.by
+      .companyName ?? raiser;
   const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => {
     const code = codes[tr.key] ?? null;
-    return { code, look: code ? lookOf(code) : undefined, documentNumber: item.documentNumber };
+    const outcome = code ? typeOutcomes.find((o) => o.code === code) : undefined;
+    const goes = transitionGoesTo({ kind: tr.kind, offersRevision: outcome ? offersRevision(outcome) : false });
+    // A code goes to the raiser; a Send Back to whoever Submitted it. Never the viewer's own Company.
+    const to = goes === "back" && tr.kind === "send_back" ? submitter : raiser;
+    const named = goes !== null && !sameName(to, me.company.legalName);
+    return {
+      code,
+      look: code ? lookOf(code) : undefined,
+      documentNumber: item.documentNumber,
+      goesTo: !named ? null : goes === "back" ? tPopup("goesBackTo", { company: to[locale] }) : tPopup("closesFor", { company: to[locale] }),
+      // Only a code's Remarks reach the raiser with the signer's name (V14); a move inside a Company promises nothing.
+      remarksReader: tr.kind === "close" && code !== null && !raisedByOwn ? raiser[locale] : null,
+      ownCompany: me.company.legalName[locale],
+    };
   });
   const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale);
+  // Download PDF: the Documental Record once closed, the Working Copy while open (V7).
+  const record = useRecordDownload(item.id, item.documentalRecord);
+  const workingCopy = useWorkingCopyDownload(item.id);
+  const pdf = item.outcome ? record : workingCopy;
   // Internal Communication, the panel's own (V5): its banner and entries, and no composer (gap table row 42).
   const log = useSubmittalPanelLog({ item, locale, outcomes: typeOutcomes.map((o) => ({ ...o, type: item.type.code })) });
   const chat = useSubmittalPanelChatTab({ item, locale, refreshKey: null });
@@ -251,7 +280,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
         : {})}
       footer={
         <>
-          {item.actions.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard />}
+          {item.actions.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard look="page" />}
           <OpenerAlert opener={opener} />
         </>
       }
@@ -279,7 +308,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
       icon: "paperclip",
       title: tItems("attachments.title"),
       summary: t("attachmentsSummary", { count: fileCount, n: n(fileCount) }),
-      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} titleHidden />,
+      children: <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} titleHidden look="chips" />,
     },
     {
       key: "links",
@@ -287,8 +316,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
       title: tItems("links.title"),
       summary: t("linksSummary", { count: links.links.length, n: n(links.links.length), from: n(linkedFrom.length) }),
       children: (
-        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels} titleHidden>
-          <WorkItemLinkedFrom items={[...linkedFrom]} />
+        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} questionLabels={questionLabels} titleHidden look="rows">
+          <WorkItemLinkedFrom items={[...linkedFrom]} look="rows" />
         </WorkItemLinks>
       ),
     },
@@ -300,6 +329,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
       documents={documents}
       replyChecklists={replyChecklists}
       folding={{ lead, tail, labels: sectionLabels, nothing: t("nothingAnswered"), folded: ["details"] }}
+      // File cards, the Trade chip, the Location chip and Scopes tags (gap table rows 47–48).
+      look={{ answers: "page" }}
     />
   );
   const tabs = [
@@ -335,10 +366,14 @@ export function WorkItemPage(props: WorkItemPageProps) {
 
             )}
             <WorkItemTopBarButton icon="route" label={tMap("view")} onClick={openMap} />
-            {/* Its Documental Record once closed, its Working Copy while open (V7). */}
-            {item.outcome ? <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} /> : <DownloadWorkingCopyButton workItemId={item.id} />}
+            {/* Its Documental Record once closed, its Working Copy while open (V7): by its icon only under 560px (row 6). */}
+            {(item.outcome ? record.canDownload : true) && (
+              <WorkItemTopBarButton icon="download" label={pdf.label} onClick={() => void pdf.download()} disabled={!item.outcome && workingCopy.pending} />
+            )}
           </>
         }
+        // Its message under the top bar, which keeps its 52px (row 6).
+        topBarStatus={pdf.message}
         identity={
           <SubmittalPanelIdentity
             locale={locale}

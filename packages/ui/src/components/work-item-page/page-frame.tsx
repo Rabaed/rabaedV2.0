@@ -17,6 +17,11 @@ export type WorkItemPageFrameProps = {
   crumb: ReactNode;
   /** The top bar's buttons: Watch, View workflow, the Record or Working Copy. */
   topBarEnd?: ReactNode;
+  /**
+   * A top-bar button's message, e.g. "Preparing the Working Copy…" (RP-1188, gap table row 6): a line
+   * under the 52px top bar, read as a status, so the bar keeps its height at every width.
+   */
+  topBarStatus?: ReactNode;
   identity?: ReactNode;
   route?: ReactNode;
   facts?: ReactNode;
@@ -43,7 +48,7 @@ export type WorkItemPageFrameProps = {
  * 880px, the rail; and a bar at the bottom. It is a `@container/sdp`, so the panel's own bands lay
  * it out (`submittal-panel.css`, `work-item-page.css`), by the page's width, not the window's.
  */
-export function WorkItemPageFrame({ locale, back, linkAs: Link = "a", crumb, topBarEnd, identity, route, facts, lead, children, railLabel, rail, bar, className }: WorkItemPageFrameProps) {
+export function WorkItemPageFrame({ locale, back, linkAs: Link = "a", crumb, topBarEnd, topBarStatus, identity, route, facts, lead, children, railLabel, rail, bar, className }: WorkItemPageFrameProps) {
   const transitionsOnly = bar !== undefined && !bar.start;
   return (
     <div
@@ -66,6 +71,10 @@ export function WorkItemPageFrame({ locale, back, linkAs: Link = "a", crumb, top
         </p>
         <div className="flex shrink-0 items-center gap-1.5">{topBarEnd}</div>
       </div>
+      {/* Always there, so a message that comes later is announced. */}
+      <p role="status" className={cn("shrink-0 text-end text-[12.5px] text-muted", topBarStatus && "border-b border-border-subtle bg-surface-subtle px-4 py-1.5")}>
+        {topBarStatus}
+      </p>
       <div className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="sdp-layout flex min-w-0">
           <div className="sdp-main min-w-0 flex-1 pb-6">
