@@ -395,7 +395,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
         lead={
           <>
             {result && (
-              <div className="mx-5 mt-3.5 @[880px]/sdp:mx-7">
+              <div className="mx-5 mt-[14px] @[880px]/sdp:mx-7">
                 <WorkItemResultCard
                   code={result.code}
                   title={outcomeName ?? result.code}
@@ -408,8 +408,8 @@ export function WorkItemPage(props: WorkItemPageProps) {
               </div>
             )}
             {/* Under 880px the Actions card sits in the flow; from 880px it is the rail's. */}
-            <div className="sdp-inflow px-5 pt-3.5">{actionsCard(false)}</div>
-            {notices && <div className="flex flex-col gap-3 px-5 pt-3.5 empty:hidden @[880px]/sdp:px-7">{notices}</div>}
+            <div className="sdp-inflow px-5 pt-[14px]">{actionsCard(false)}</div>
+            {notices && <div className="flex flex-col gap-3 px-5 pt-[14px] empty:hidden @[880px]/sdp:px-7">{notices}</div>}
             {!hasTransitions && <OpenerAlert opener={opener} className="px-5 pt-3" />}
           </>
         }

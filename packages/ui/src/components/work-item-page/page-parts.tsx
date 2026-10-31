@@ -75,7 +75,7 @@ export type WorkItemResultCardProps = {
 export function WorkItemResultCard({ code, title, issued, remarks, signedBy, signer, company }: WorkItemResultCardProps) {
   const id = useId();
   return (
-    <section aria-labelledby={id} data-result="" className="wi-result flex flex-col gap-2.5 rounded-[12px] bg-warning-tint p-3.5">
+    <section aria-labelledby={id} data-result="" className="wi-result flex flex-col gap-2.5 rounded-[12px] bg-warning-tint p-[14px]">
       <div className="flex items-center gap-2.5">
         <CodeTile code={code} size="lg" className="bg-surface" />
         <span className="min-w-0">
@@ -131,7 +131,7 @@ export type WorkItemActionsCardProps = {
 export function WorkItemActionsCard({ title, with: holder, transitions, attention, none, revision, footer }: WorkItemActionsCardProps) {
   const id = useId();
   return (
-    <section aria-labelledby={id} data-actions-card="" className="flex flex-col gap-3 rounded-[12px] bg-surface p-3.5 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+    <section aria-labelledby={id} data-actions-card="" className="flex flex-col gap-3 rounded-[12px] bg-surface p-[14px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
       <h3 id={id} className="text-[11.5px] font-bold tracking-[0.04em] text-muted uppercase rtl:tracking-normal">
         {title}
       </h3>
