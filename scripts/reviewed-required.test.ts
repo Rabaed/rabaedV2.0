@@ -248,6 +248,15 @@ describe("requireReviewed on merge_group", () => {
   it("still drops a PR re-queued while auto-merge stays on after a dequeue: the live auto-merge check catches it", async () => {
     const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("removed_from_merge_queue"), eventBy("added_to_merge_queue")];
     const { seam } = fakeSeam({ events: async () => events, pull: async () => ({ labels: ["reviewed"], changedFiles: 3, autoMergeBy: "mmhaleess90" }) });
+    const result = await requireReviewed(event, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("auto-merge is on");
+  });
+
+  it("still drops a PR that auto-merge re-queued after a drop and switched off in the same second: that disable shows auto-merge did the enqueue", async () => {
+    const second = "2026-10-31T16:00:00Z";
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("removed_from_merge_queue"), eventBy("added_to_merge_queue", second), eventBy("auto_merge_disabled", second)];
+    const { seam } = fakeSeam({ events: async () => events });
     expect((await requireReviewed(event, seam)).ok).toBe(false);
   });
 
