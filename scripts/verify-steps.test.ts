@@ -282,6 +282,18 @@ function scripted(...results: StepRun[]) {
 }
 
 describe("runStep", () => {
+  it("judges an async run the same way (verify polls the tree while a step runs, RP-1169)", async () => {
+    const calls: string[][] = [];
+    const run = async (args: string[]) => {
+      calls.push(args);
+      return { status: 0, output: "" };
+    };
+    expect(await runStep("lint", run)).toEqual({ passed: true, label: "lint" });
+    const failing = async () => ({ status: 2, output: "boom" });
+    expect(await runStep("lint", failing)).toEqual({ passed: false, status: 2, output: "boom", reran: false });
+    expect(calls).toEqual([["lint"]]);
+  });
+
   it("carries on when a seam step fails only on timeouts and a re-run of just those files passes, and says so in the step's label", async () => {
     const { run, calls } = scripted({ status: 1, output: `${testTimedOut}${summary(1)}` }, { status: 0, output: "" });
     expect(await runStep("test:seam1", run)).toEqual({ passed: true, label: "test:seam1 (re-ran 1 timed-out file)" });

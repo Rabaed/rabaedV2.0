@@ -195,6 +195,19 @@ export async function waitForLock(
   }
 }
 
+/**
+ * The live run holding the lock `file`, for a caller that only asks and never takes it (RP-1169: another worktree's
+ * lock). Undefined when there is no lock, it can't be read, or its holder is stale (gone, `self`'s own, or a reused pid).
+ */
+export function liveHolder(file: string, self: LockHolder, processes: Processes): LockHolder | undefined {
+  const holder = parseHolder(readText(file));
+  if (holder === undefined) return undefined;
+  return holderStatus(holder, self, file, processes).live ? holder : undefined;
+}
+
+/** What a holder reads as in a message: its pid, when it started and its command. */
+export const holderLabel = describeHolder;
+
 /** Removes the lock if `pid` holds it; a lock another run took (over) is left alone. */
 export function releaseLock(file: string, pid: number): void {
   if (parseHolder(readText(file))?.pid === pid) rmSync(file, { force: true });
