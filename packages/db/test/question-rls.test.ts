@@ -62,11 +62,11 @@ const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_st
 const seen = async (as: string, id: string) => (await call<{ id: string }>(as, sql`select id from work_item where id = ${id}::uuid`)).map((r) => r.id);
 /** The events of item `id` that `as` reads: type, audience, the acting Participant and the Transition's key. */
 const events = (as: string, id: string) =>
-  call<{ type: string; audience: string; actor_participant_id: string; transition_key: string | null }>(
+  call<{ type: string; audience: string; actor_participant_id: string; transition: string | null }>(
     as,
-    sql`select e.type, e.audience, e.actor_participant_id, t.key as transition_key
+    sql`select e.type, e.audience, e.actor_participant_id, t.label ->> 'en' as transition
         from work_item_event e
-        left join workflow_transition t on t.id = e.transition_id
+        left join app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${id}::uuid)) t on t.event_id = e.id
         where e.work_item_id = ${id}::uuid order by e.seq`,
   );
 const stepAsSeen = async (as: string, id: string) =>
@@ -240,15 +240,15 @@ describe("a Question reaches exactly its asker and the asked Company", () => {
     expect(await take(c1Pm, id, "close")).toBe("applied");
 
     const shared = async (who: string, of: string) =>
-      (await events(who, id)).filter((e) => e.actor_participant_id === of).map((e) => [e.type, e.audience, e.transition_key]);
+      (await events(who, id)).filter((e) => e.actor_participant_id === of).map((e) => [e.type, e.audience, e.transition]);
     expect(await shared(k1.member, participant.c1)).toEqual([
-      ["transition", "shared", "ask"],
-      ["transition", "shared", "ask_again"],
-      ["transition", "shared", "close"],
+      ["transition", "shared", "Ask"],
+      ["transition", "shared", "Ask again"],
+      ["transition", "shared", "Close"],
     ]);
     expect(await shared(c1.member, participant.k1)).toEqual([
-      ["transition", "shared", "answer"],
-      ["transition", "shared", "answer"],
+      ["transition", "shared", "Answer"],
+      ["transition", "shared", "Answer"],
     ]);
     expect(await seen(c2.member, id)).toEqual([]);
   });

@@ -68,6 +68,19 @@ export const Replaced: Story = {
   },
 };
 
+/** Sealed with a test key on UAT (RP-1042): never shown as genuine, and says it is a test record. */
+export const TestKey: Story = {
+  args: { verification: { ...storyVerification(), testKey: true } },
+  play: async (context) => {
+    const l = verificationLabels[storyLocale(context)];
+    const status = await screen.findByRole("status");
+    await expect(status).toHaveTextContent(l.testKey);
+    await expect(status).toHaveTextContent(l.testKeyHint);
+    await expect(status).not.toHaveTextContent(l.genuine);
+    await expect(status).toHaveAttribute("data-tone", "warning");
+  },
+};
+
 /** A dropped copy that is the original: fingerprinted in the browser, nothing uploaded. */
 export const CopyIsTheOriginal: Story = {
   play: async (context) => {

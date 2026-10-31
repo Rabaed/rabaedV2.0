@@ -149,19 +149,33 @@ jobs:
       # (DATABASE_ROLE_PASSWORDS=on-create, set by the script): Supavisor caches each
       # role's SCRAM secret, so re-setting them every deploy would lock the apps out.
       # Then, as rabaed_app: it cannot bypass row-level security or rewrite the audit
-      # trail (packages/db/src/app-role-check.ts), whatever the migrations did. Then
-      # the demo, unless it is there: UAT keeps its data between deploys.
-      - name: Migrate UAT's database, check the app role, seed the demo if missing
+      # trail (packages/db/src/app-role-check.ts), whatever the migrations did.
+      - name: Migrate UAT's database, check the app role
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+        run: |
+          node scripts/uat-deploy.ts migrate
+          node scripts/uat-deploy.ts app-role-check
+
+      # The demo, unless it is there: UAT keeps its data between deploys. The command
+      # runs the api in-process with the api's own R2 key, so the api's code stores the
+      # demo's images; on a demo already there it puts back any demo Signature, logo
+      # or Stamp R2 lacks (ADR 0007, RP-672). A second deploy stores nothing new.
+      - name: Seed the demo if missing, store any missing demo image
         env:
           DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
           DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
           DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
-        run: |
-          node scripts/uat-deploy.ts migrate
-          node scripts/uat-deploy.ts app-role-check
-          node scripts/uat-deploy.ts demo ensure
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
+          FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
+        run: node scripts/uat-deploy.ts demo ensure
 
       - name: Vercel CLI
         run: npm install --global vercel@63.1.2

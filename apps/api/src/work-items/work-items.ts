@@ -1399,11 +1399,16 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
  */
 async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<string, unknown>> {
   const { rows } = await sql<{ answers: Record<string, unknown> | null }>`
-    with arrival as (
+    -- An event's Transition, which app.event_transitions gives for the reader's own Participant's events (RP-1140).
+    with moves as (
+      select * from app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${workItemId}::uuid))
+    ),
+    arrival as (
       -- The last move the viewer reads. They hold the item, so it moved to their Step:
       -- by their own Participant (internal), or by another (a Submit, shared).
-      select e.seq, e.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
+      select e.seq, mv.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
       from work_item_event e
+      join moves mv on mv.event_id = e.id
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
         -- Taken by that Participant itself: the Owner's review writes the moves between the
         -- Consultant and the Owner internal to each (ADR 0022), and those cross Participants.
@@ -1417,8 +1422,9 @@ async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<s
       -- Its internal answers: the event app.take_transition writes for the same Transition
       -- just before it, after the move before it, internal to the same Participant.
       select i.payload -> 'answers' from work_item_event i
+      join moves im on im.event_id = i.id
       where i.work_item_id = ${workItemId}::uuid and i.type = 'internal_answers'
-        and i.transition_id = a.transition_id
+        and im.transition_id = a.transition_id
         and i.audience = 'internal' and i.audience_participant_id = a.audience_participant_id
         and i.seq < a.seq
         and i.seq > coalesce((

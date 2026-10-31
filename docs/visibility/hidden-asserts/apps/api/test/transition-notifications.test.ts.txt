@@ -1,9 +1,0 @@
-empty a Transition that notifies a Position > tells that Position's Members of the acting Participant who see the item, in the bell; nobody of another Company, Position or Visibility :: expect(await about(c1Engineer2, id)).toEqual([]);
-empty a Transition that notifies a Position > tells that Position's Members of the acting Participant who see the item, in the bell; nobody of another Company, Position or Visibility :: expect(more).toEqual([]);
-empty a Transition that notifies a Position > tells that Position's Members of the acting Participant who see the item, in the bell; nobody of another Company, Position or Visibility :: for (const who of [at.c1Pm, k1Engineer, c2Engineer, c1Narrowed]) expect(await movesOf(who, id)).toEqual([]);
-empty a Transition that notifies a Position > checks each recipient again at delivery: one narrowed off the item after the move hears nothing :: expect(await movesOf(c1Engineer2, id)).toEqual([]);
-empty a Transition that notifies a Position > checks each recipient again at delivery: one narrowed off the item after the move hears nothing :: expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([]);
-text a Transition that notifies the raiser > tells a raiser who stopped watching, who still sees the item :: expect(await movesOf(at.c1Engineer, id)).toHaveLength(1);
-text a Code issued > tells the recipients its Transition names, as any other move does: here the raiser who stopped watching :: expect(issued).toHaveLength(1);
-text in-app is always sent > reaches a Member who turned their email off, with no email routed :: expect(await movesOf(c1Engineer2, id)).toHaveLength(1);
-empty in-app is always sent > is still silenced by a Member's mute of the Project, which is their own setting a Workflow never overrides :: expect(await movesOf(c1Engineer2, id)).toEqual([]);

@@ -67,11 +67,18 @@ const printedFace = {
  * A record's printed face, as the worker takes it from the Record Data it printed and keeps it for
  * this page (documental_record_face): with the language(s) the record printed.
  */
-export const recordFace = z.object({ language: z.enum(["bilingual", "ar", "en"]), ...printedFace });
+export const recordFace = z.object({
+  language: z.enum(["bilingual", "ar", "en"]),
+  ...printedFace,
+  /** Sealed with a test key (UAT's, or development's), not Rabaed's own (RP-1042): the page says it is a test record. */
+  testKey: z.boolean().optional(),
+});
 export type RecordFace = z.infer<typeof recordFace>;
 
 const shown = {
   ...printedFace,
+  /** Present only for a record sealed with a test key (RP-1042): the page says it is a test record, not a valid one. */
+  testKey: z.literal(true).optional(),
   sealedAt: z.iso.datetime(),
   fingerprints: z.object({
     current: sha256Hex,
@@ -84,8 +91,9 @@ const shown = {
  * by a corrected copy (Re-produce) on a date; the Document Number, Subject, Project, outcome and
  * sealed date; each signer's name, Positions and Company; all as the record printed them, in the
  * language(s) it printed; and the fingerprints a dropped copy is compared with in the browser: the
- * current PDF's, and each replaced one's with the date it was replaced. Never the Documents, the
- * Form answers or the live item.
+ * current PDF's, and each replaced one's with the date it was replaced; and, for a record sealed
+ * with a test key (UAT), that it is a test record (RP-1042). Never the Documents, the Form answers
+ * or the live item.
  */
 export const recordVerification = z.discriminatedUnion("status", [
   z.object({ status: z.literal("genuine"), ...shown }),

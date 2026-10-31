@@ -56,5 +56,5 @@
     "evidence/I18N-05-1-faisal-english-browser.jpg"
   ],
   "notes": "FAIL (I18N-05): steps: sign in as Faisal (or Noura) with the browser language set to English (the harness's demo session; a Playwright context with locale en-US) and open the site root. Expected (Test Case I18N-05; strategy 5.11 'Their language is Arabic from sign-in (locale set at onboarding)'; CLAUDE.md 'Arabic and English from day one'): the app opens in Arabic for an Arabic-first Member. Actual: it opens /en, and Faisal's and Noura's stored language ar only sets the language of their emails; with an Arabic browser it opens /ar. Screenshot: evidence/I18N-05-1-faisal-english-browser.jpg.\nSign-in itself needs a password, so the harness uses each person's demo session. The app opens in the browser's language (the URL decides; next-intl negotiates it): the Member's stored language 'ar' only sets the language of their emails (apps/web/src/lib/browser-locale.ts, data-model member_notification_preference). The plan's expectation 'Arabic from sign-in' holds only for an Arabic browser.",
-  "ranAt": "2026-10-27T18:49:17.813Z"
+  "ranAt": "2026-10-31T02:42:12.219Z"
 }

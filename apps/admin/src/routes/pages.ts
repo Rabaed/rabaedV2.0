@@ -25,6 +25,8 @@ const pages: Record<string, Page> = {
   "/register-imports": { body: file("register-imports.html"), type: "text/html; charset=utf-8" },
   // The Record Job Monitor (RP-670).
   "/records": { body: file("records.html"), type: "text/html; charset=utf-8" },
+  // Stuck Steps (RP-1162).
+  "/steps": { body: file("steps.html"), type: "text/html; charset=utf-8" },
   "/assets/admin.js": { body: file("admin.js"), type: types[".js"]! },
   "/assets/admin.css": { body: file("admin.css"), type: types[".css"]! },
 };

@@ -21,6 +21,8 @@
     "demo:session": "node --env-file-if-exists=.env scripts/demo-session.ts",
     "screens": "node --env-file-if-exists=.env scripts/screens.ts",
     "demo:seed": "node scripts/pnpm.ts --filter @rabaed/api run demo:seed",
+    "uat:age": "node scripts/uat-age.ts",
+    "uat:run-job": "node scripts/uat-run-job.ts",
     "db:reset": "node scripts/pnpm.ts --filter @rabaed/db run reset",
     "check:migrations": "node scripts/check-migrations.ts",
     "design:strip-fonts": "node scripts/design-strip-fonts.ts",

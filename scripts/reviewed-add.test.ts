@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addEvent, addReviewed, isTrustedAuthor, reviewAt, reviewMarker, type AddSeam, type ReviewComment } from "./reviewed-add.ts";
+import { addEvent, addReviewed, isTrustedAuthor, overHttp, reviewAt, reviewMarker, writersAmong, type AddSeam, type Permission, type ReviewComment } from "./reviewed-add.ts";
 import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
 
@@ -8,8 +8,9 @@ const OLD = "b".repeat(40);
 const MAIN = "c".repeat(40);
 const verifyLine = (sha: string) => stampLine(`pnpm verify passed on ${sha.slice(0, 9)}: lint, typecheck, test:unit.`);
 
-const byOwner = (body: string): ReviewComment => ({ login: "mmhaleess90", type: "User", association: "MEMBER", body });
+const byOwner = (body: string): ReviewComment => ({ login: "mmhaleess90", type: "User", body });
 const review = (sha: string) => byOwner(`${reviewMarker(sha)}\n**/code-review summary at ${sha}**\n\nNo findings.`);
+const owner = new Set(["mmhaleess90"]);
 
 // HEAD is a clean merge of main into OLD; nothing else has parents.
 const git: ReviewedGit = {
@@ -29,46 +30,69 @@ describe("reviewMarker", () => {
 });
 
 describe("isTrustedAuthor", () => {
-  it("trusts the repo's own accounts: a user who owns, is a member of, or collaborates on the repo", () => {
-    for (const association of ["OWNER", "MEMBER", "COLLABORATOR"]) expect(isTrustedAuthor({ ...byOwner(""), association })).toBe(true);
+  it("trusts a user who can push to the repo", () => {
+    expect(isTrustedAuthor(byOwner(""), owner)).toBe(true);
   });
 
-  it("does not trust anyone else, nor any bot: a workflow could post as github-actions[bot]", () => {
-    for (const association of ["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE"]) expect(isTrustedAuthor({ ...byOwner(""), association })).toBe(false);
-    expect(isTrustedAuthor({ login: "github-actions[bot]", type: "Bot", association: "MEMBER", body: "" })).toBe(false);
+  it("does not trust a user without write access, nor any bot: a workflow could post as github-actions[bot]", () => {
+    expect(isTrustedAuthor({ ...byOwner(""), login: "stranger" }, owner)).toBe(false);
+    expect(isTrustedAuthor({ login: "github-actions[bot]", type: "Bot", body: "" }, new Set(["github-actions[bot]"]))).toBe(false);
+  });
+});
+
+describe("writersAmong", () => {
+  it("keeps the markers' authors whose permission is admin or write (GitHub reports maintain as write)", async () => {
+    const permissions: Record<string, Permission> = { admin1: "admin", writer: "write", reader: "read", triager: "read", gone: "none" };
+    const asked: string[] = [];
+    const comments = Object.keys(permissions).map((login) => ({ ...review(HEAD), login }));
+    const writers = await writersAmong([...comments, { ...review(OLD), login: "writer" }], async (login) => {
+      asked.push(login);
+      return permissions[login] ?? "none";
+    });
+    expect([...writers].sort()).toEqual(["admin1", "writer"]);
+    expect(asked.filter((login) => login === "writer")).toHaveLength(1);
+  });
+
+  it("asks nothing for comments without a marker, nor for bots", async () => {
+    const asked: string[] = [];
+    await writersAmong([byOwner("LGTM"), { login: "github-actions[bot]", type: "Bot", body: reviewMarker(HEAD) }], async (login) => {
+      asked.push(login);
+      return "admin";
+    });
+    expect(asked).toEqual([]);
   });
 });
 
 describe("reviewAt", () => {
   it("finds a trusted review comment for the head", () => {
-    expect(reviewAt([review(HEAD)], HEAD, noMerges)).toEqual({ ok: true, commit: HEAD });
+    expect(reviewAt([review(HEAD)], HEAD, noMerges, owner)).toEqual({ ok: true, commit: HEAD });
   });
 
   it("refuses a PR with no review comment at all", () => {
-    const found = reviewAt([byOwner("LGTM")], HEAD, noMerges);
+    const found = reviewAt([byOwner("LGTM")], HEAD, noMerges, owner);
     expect(found.ok).toBe(false);
     if (!found.ok) expect(found.reason).toContain(reviewMarker("<sha>"));
   });
 
   it("refuses a review comment for an older head that a code change followed", () => {
-    const found = reviewAt([review(OLD)], HEAD, noMerges);
+    const found = reviewAt([review(OLD)], HEAD, noMerges, owner);
     expect(found.ok).toBe(false);
     if (!found.ok) expect(found.reason).toContain(OLD);
   });
 
   it("takes a review comment for a commit only clean merges of main led to the head from (RP-1017)", () => {
-    expect(reviewAt([review(OLD)], HEAD, git)).toEqual({ ok: true, commit: OLD });
+    expect(reviewAt([review(OLD)], HEAD, git, owner)).toEqual({ ok: true, commit: OLD });
   });
 
-  it("does not count a marker from an untrusted author", () => {
-    const found = reviewAt([{ ...review(HEAD), login: "stranger", association: "NONE" }], HEAD, noMerges);
+  it("does not count a marker from an author without write access, and says why", () => {
+    const found = reviewAt([{ ...review(HEAD), login: "stranger" }], HEAD, noMerges, owner);
     expect(found.ok).toBe(false);
-    if (!found.ok) expect(found.reason).toContain("stranger");
+    if (!found.ok) expect(found.reason).toMatch(/stranger.*without write access/);
   });
 
   it("does not count a marker with an abbreviated sha, or one quoted inside other text", () => {
-    expect(reviewAt([byOwner(`<!-- code-review: ${HEAD.slice(0, 9)} -->`)], HEAD, noMerges).ok).toBe(false);
-    expect(reviewAt([byOwner(`<!-- code-review: ${HEAD}x -->`)], HEAD, noMerges).ok).toBe(false);
+    expect(reviewAt([byOwner(`<!-- code-review: ${HEAD.slice(0, 9)} -->`)], HEAD, noMerges, owner).ok).toBe(false);
+    expect(reviewAt([byOwner(`<!-- code-review: ${HEAD}x -->`)], HEAD, noMerges, owner).ok).toBe(false);
   });
 });
 
@@ -89,13 +113,24 @@ describe("addEvent", () => {
 
 type Pull = Awaited<ReturnType<AddSeam["pull"]>>;
 
-function fakeSeam(start: Partial<Pull> & { comments?: ReviewComment[]; graph?: ReviewedGit; headAfterAdd?: string; requiredRuns?: { id: number; status: string; conclusion: string | null }[] }) {
+function fakeSeam(
+  start: Partial<Pull> & {
+    comments?: ReviewComment[];
+    /** GitHub's `permission` per login; anyone else has "none". */
+    permissions?: Record<string, Permission>;
+    graph?: ReviewedGit;
+    headAfterAdd?: string;
+    requiredRuns?: { id: number; status: string; conclusion: string | null }[];
+  },
+) {
   const calls: string[] = [];
   let pull: Pull = { body: verifyLine(HEAD), headSha: HEAD, labels: [], draft: false, sameRepo: true, open: true, ...start };
+  const permissions = start.permissions ?? { mmhaleess90: "admin" };
   const seam: AddSeam = {
     ...(start.graph ?? noMerges),
     pull: async () => pull,
     comments: async () => start.comments ?? [review(HEAD)],
+    permission: async (login) => permissions[login] ?? "none",
     fetchPull: () => void calls.push("fetch"),
     labelRuns: async () => [{ status: "completed" }],
     requiredRuns: async () => start.requiredRuns ?? [{ id: 41, status: "completed", conclusion: "failure" }],
@@ -136,9 +171,28 @@ describe("addReviewed", () => {
   });
 
   it("never adds it for a review comment by an untrusted author", async () => {
-    const { seam, calls } = fakeSeam({ comments: [{ ...review(HEAD), login: "github-actions[bot]", type: "Bot", association: "CONTRIBUTOR" }] });
+    const { seam, calls } = fakeSeam({ comments: [{ ...review(HEAD), login: "github-actions[bot]", type: "Bot" }], permissions: { "github-actions[bot]": "admin" } });
     expect((await addReviewed({ pr: 5 }, seam)).added).toBe(false);
     expect(calls).not.toContain("add");
+  });
+
+  it("trusts a review comment by an author with write access, read from their repo permission, not their org membership (RP-1159)", async () => {
+    // On PR #542 CI's token saw the owner's private org membership as CONTRIBUTOR; the permission read sees admin.
+    for (const permission of ["admin", "write"] as const) {
+      const { seam, calls } = fakeSeam({ permissions: { mmhaleess90: permission } });
+      expect(await addReviewed({ pr: 5 }, seam)).toMatchObject({ ok: true, added: true });
+      expect(calls).toContain("add");
+    }
+  });
+
+  it("never adds it for a review comment by a user who can only read the repo", async () => {
+    for (const permission of ["read", "none"] as const) {
+      const { seam, calls } = fakeSeam({ permissions: { mmhaleess90: permission } });
+      const result = await addReviewed({ pr: 5 }, seam);
+      expect(result).toMatchObject({ ok: true, added: false });
+      expect(result.summary).toContain("without write access");
+      expect(calls).not.toContain("add");
+    }
   });
 
   it("adds it on a clean merge of main after the reviewed and verified commit", async () => {
@@ -226,5 +280,30 @@ describe("addReviewed", () => {
     const moving: AddSeam = { ...seam, pull: async () => ({ ...(await seam.pull(5)), headSha: reads++ === 0 ? HEAD : OLD }) };
     expect(await addReviewed({ pr: 5 }, moving)).toMatchObject({ ok: true, added: false });
     expect(calls).toEqual(["fetch"]);
+  });
+});
+
+describe("overHttp", () => {
+  const answering = (status: number, body: unknown) => {
+    const urls: string[] = [];
+    const fetcher = (async (url: string) => {
+      urls.push(url);
+      return new Response(status === 404 ? null : JSON.stringify(body), { status });
+    }) as typeof fetch;
+    return { http: overHttp("Rabaed/rabaedV2.0", "token", fetcher), urls };
+  };
+
+  it("reads a user's permission on the repo from the collaborator permission endpoint", async () => {
+    const { http, urls } = answering(200, { permission: "write", role_name: "maintain", user: { login: "mmhaleess90" } });
+    expect(await http.permission("mmhaleess90")).toBe("write");
+    expect(urls).toEqual(["https://api.github.com/repos/Rabaed/rabaedV2.0/collaborators/mmhaleess90/permission"]);
+  });
+
+  it("answers none for a login GitHub does not know", async () => {
+    expect(await answering(404, undefined).http.permission("ghost")).toBe("none");
+  });
+
+  it("fails on any other error rather than guessing", async () => {
+    await expect(answering(403, { message: "Resource not accessible by integration" }).http.permission("mmhaleess90")).rejects.toThrow(/403/);
   });
 });

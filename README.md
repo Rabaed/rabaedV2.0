@@ -151,6 +151,8 @@ Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers kee
 
 Several worktrees in one lane (a spec's implementer subagents) share its Postgres with `pnpm lane:env N --force --db <suffix>` (e.g. `--db rp322`): `--force` overwrites an existing `.env`, and `--db` names the databases `rabaed_<suffix>` and `rabaed_<suffix>_test`, so their seam suites never migrate the same database. `pnpm lanes:drop-dbs` drops those of worktrees that are gone. See `planning/parallel-sessions.md`, step 4 of `/implement-spec`.
 
+**UAT tool** (RP-922). Step Age takes weeks to show and the digest and weekly report wait for 07:00 Riyadh, so two commands bring them forward. They change data only on this worktree's lane database, with mail landing in the lane's Mailpit, and refuse anything else (`scripts/uat-guard.ts`). `pnpm uat:age --item <Document Number or exact Subject> --weeks <1-52> [--dry-run]` moves an open item back so it reads Step Age N to its holder; every time of the item moves by the same amount and its history is never changed. `pnpm uat:run-job digest|weekly-report [--member <email>] [--dry-run]` runs the job now, sending through the worker's own handlers on the worker's connection, without claiming the scheduled run. `--lane <n>` picks another lane. Vercel UAT's database is reached only from its GitHub job, never from a machine.
+
 ## Layout
 
 | Package | What it holds |

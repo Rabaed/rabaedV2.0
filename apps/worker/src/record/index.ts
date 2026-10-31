@@ -7,7 +7,7 @@ export { isPinnedImage, parseVeraPdfReport, PINNED_VERAPDF_IMAGE, veraPdfCli, ve
 export { documentalRecordHandler, verificationCode, type RecordJobDeps } from "./job.ts";
 export { filesUnder, projectFilesFromEnv, recordKeys, s3Client, s3RecordFiles, workingCopyKey, type RecordFiles, type S3Settings } from "./files.ts";
 export { workingCopyDataOf, workingCopyHandler, type WorkingCopyData, type WorkingCopyJobDeps } from "./working-copy.ts";
-export { recordJobFromEnv, SEALING_CERTIFICATE_KEY, THMANYAH_PREFIX } from "./from-env.ts";
+export { recordJobFromEnv, recordSealingFromEnv, SEALING_CERTIFICATE_KEY, THMANYAH_PREFIX } from "./from-env.ts";
 export { fallbackFonts, thmanyahFonts, type RecordFonts } from "./fonts.ts";
 export { recordHtml } from "./layout.ts";
 export { renderRecord } from "./pages.ts";
@@ -18,3 +18,5 @@ export { chromiumRenderer, type PdfRenderer } from "./render.ts";
 export { sealPdf, sealTamperOffsets, verifySeal, withByteChanged, type SealCheck } from "./seal.ts";
 export { kmsSealSigner, LOCAL_SEAL_NAME, localSealSigner, type SealSigner } from "./signer.ts";
 export { LOCAL_TSA_NAME, localTimestampAuthority, rfc3161TimestampAuthority, type TimestampAuthority } from "./timestamp.ts";
+export { UAT_MARK, uatMarkedRenderer } from "./uat-mark.ts";
+export { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SIGNER_NAME, uatSigner, type UatAuthority } from "./uat-signer.ts";

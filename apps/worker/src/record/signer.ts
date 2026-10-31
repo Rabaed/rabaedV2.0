@@ -17,6 +17,11 @@ export interface SealSigner {
   sign(message: Uint8Array): Promise<Uint8Array>;
   /** Revocation data for `certificates`, fetched now (revocation.ts); throws when one is revoked or has none. */
   revocation(): Promise<RevocationData>;
+  /**
+   * A test key's seal (the local signer, the UAT signer of uat-signer.ts): the verification page
+   * says the record is a test record, not a valid one (RP-1042). False only for Rabaed's own key.
+   */
+  readonly test: boolean;
 }
 
 /** The common name of the local signer's certificate: never Rabaed's real one. */
@@ -36,6 +41,7 @@ export async function localSealSigner(): Promise<SealSigner> {
     certificates,
     sign: async (message) => toBytes(await subtle.sign("RSASSA-PKCS1-v1_5", key.privateKey, toArrayBuffer(message))),
     revocation: () => fetchRevocationData(certificates, ca.fetch),
+    test: true,
   };
 }
 
@@ -66,5 +72,6 @@ export function kmsSealSigner(
       return signed.Signature;
     },
     revocation: () => fetchRevocationData(settings.certificates, fetchImpl),
+    test: false,
   };
 }

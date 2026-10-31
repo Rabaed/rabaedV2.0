@@ -65,11 +65,11 @@ const holder = async (id: string) =>
   (await migrator.query("select participant_id from step_assignment where work_item_id = $1 and status <> 'done'", [id])).rows.map((r) => r.participant_id as string);
 /** The events of item `id` that `as` reads: type, audience and the Transition's key. */
 const events = (as: string, id: string) =>
-  call<{ type: string; audience: string; transition_key: string | null }>(
+  call<{ type: string; audience: string; transition: string | null }>(
     as,
-    sql`select e.type, e.audience, t.key as transition_key
+    sql`select e.type, e.audience, t.label ->> 'en' as transition
         from work_item_event e
-        left join workflow_transition t on t.id = e.transition_id
+        left join app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${id}::uuid)) t on t.event_id = e.id
         where e.work_item_id = ${id}::uuid order by e.seq`,
   );
 type Rows = Promise<readonly unknown[]>;
@@ -271,10 +271,10 @@ describe("a Contractor's Question to Owner (scenario RP-1108-1)", () => {
     await hiddenIn(id, ["c1", "r1"], ["c2"], "closed");
     const access = await migrator.query("select participant_id, reason from work_item_access where work_item_id = $1 order by reason", [id]);
     expect(access.rows.find((r) => r.participant_id === participant.k1)?.reason).toBe("informed");
-    expect((await events(co.k1.member, id)).map((e) => [e.type, e.audience, e.transition_key])).toEqual([
-      ["transition", "shared", "ask"],
-      ["transition", "shared", "answer"],
-      ["transition", "shared", "close"],
+    expect((await events(co.k1.member, id)).map((e) => [e.type, e.audience, e.transition])).toEqual([
+      ["transition", "shared", "Ask"],
+      ["transition", "shared", "Answer"],
+      ["transition", "shared", "Close"],
     ]);
   });
 
