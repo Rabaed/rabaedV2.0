@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { addedLines, findSecrets, formatFinding, scanDiff, scanStaged, scanText, scanTree, SECRET_RULES } from "./check-secrets.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { addedLines, findSecrets, formatFinding, scanDiff, scanRange, scanStaged, scanText, scanTree, SECRET_RULES } from "./check-secrets.ts";
 
 // RP-1100. Every fake token here is built from parts at run time, so no file in
 // the repo holds anything shaped like a token: not this scan, gitleaks, nor a
@@ -191,6 +191,108 @@ describe("scanStaged on real git output", () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
+  });
+});
+
+// CI's step in secret-scan.yml: a pull request's base..head, a queue entry's main..head, or main's HEAD.
+describe("scanRange on real git history", () => {
+  let repo: string;
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", stdio: "pipe" });
+  const commit = (file: string, text: string) => {
+    writeFileSync(join(repo, file), text);
+    git("add", "-A");
+    git("commit", "-q", "-m", `change ${file}`);
+  };
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), "rabaed-secrets-range-"));
+    git("init", "-q", "-b", "main");
+    commit("README.md", "# repo\n");
+  });
+  afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("reads only the range's commits: another branch's token fails only that branch", () => {
+    git("checkout", "-q", "-b", "other");
+    commit("other.ts", `const key = "${tokens.github}";\n`);
+    git("checkout", "-q", "-b", "pr", "main");
+    commit("pr.ts", "const ok = 1;\n");
+    expect(scanRange(repo, "main..pr")).toEqual([]);
+    expect(scanRange(repo, "main..other")).toEqual([{ file: "other.ts", line: 1, rule: "github-token" }]);
+  });
+
+  it("reads a branch's whole history from one revision, the root commit included (main's push run)", () => {
+    writeFileSync(join(repo, "README.md"), `# repo\n${tokens.sendgrid}\n`);
+    git("commit", "-q", "-a", "--amend", "-m", "start");
+    commit("second.md", "clean\n");
+    expect(scanRange(repo, "HEAD")).toEqual([{ file: "README.md", line: 2, rule: "sendgrid-api-key" }]);
+  });
+
+  it("finds a token a later commit in the range removes: a pushed commit stays readable", () => {
+    git("checkout", "-q", "-b", "pr");
+    commit("notes.md", `upload with ${tokens.atlassian}\n`);
+    commit("notes.md", "upload with node scripts/jira-upload.ts\n");
+    expect(scanRange(repo, "main..pr")).toEqual([{ file: "notes.md", line: 1, rule: "atlassian-api-token" }]);
+  });
+
+  it("finds a token added in a merge commit itself, such as a conflict resolution", () => {
+    git("checkout", "-q", "-b", "side");
+    commit("side.ts", "const side = 1;\n");
+    git("checkout", "-q", "-b", "pr", "main");
+    commit("pr.ts", "const pr = 1;\n");
+    git("merge", "-q", "--no-ff", "--no-commit", "side");
+    writeFileSync(join(repo, "resolved.ts"), `const key = "${tokens.vercel}";\n`);
+    git("add", "-A");
+    git("commit", "-q", "-m", "merge side");
+    expect(scanRange(repo, "main..pr")).toEqual([{ file: "resolved.ts", line: 1, rule: "vercel-token" }]);
+  });
+
+  // main's whole history is one range on a push to main: its `git log -p` passed 366 MB at 3,438
+  // commits, near the 512 MB a single read (and a V8 string) can hold, so it is read a few commits at a time.
+  it("reads a range a few commits at a time and finds the same, merges and the root commit included", () => {
+    writeFileSync(join(repo, "README.md"), `# repo\n${tokens.sendgrid}\n`);
+    git("commit", "-q", "-a", "--amend", "-m", "start");
+    git("checkout", "-q", "-b", "side");
+    commit("side.ts", `const side = "${tokens.github}";\n`);
+    git("checkout", "-q", "main");
+    commit("main.ts", "const ok = 1;\n");
+    git("merge", "-q", "--no-ff", "--no-commit", "side");
+    writeFileSync(join(repo, "resolved.ts"), `const key = "${tokens.vercel}";\n`);
+    git("add", "-A");
+    git("commit", "-q", "-m", "merge side");
+    const sorted = (findings: ReturnType<typeof scanRange>) => [...findings].sort((a, b) => a.file.localeCompare(b.file));
+    const expected = [
+      { file: "README.md", line: 2, rule: "sendgrid-api-key" },
+      { file: "resolved.ts", line: 1, rule: "vercel-token" },
+      { file: "side.ts", line: 1, rule: "github-token" },
+    ];
+    expect(sorted(scanRange(repo, "HEAD", 1))).toEqual(expected);
+    expect(sorted(scanRange(repo, "HEAD", 2))).toEqual(expected);
+    expect(sorted(scanRange(repo, "HEAD"))).toEqual(expected);
+  });
+
+  it("refuses to read fewer than one commit at a time, which would never finish", () => {
+    expect(() => scanRange(repo, "HEAD", 0)).toThrow(RangeError);
+    expect(() => scanRange(repo, "HEAD", 1.5)).toThrow(RangeError);
+  });
+
+  describe("node scripts/check-secrets.ts --range", () => {
+    const check = (...args: string[]) => spawnSync("node", [join(import.meta.dirname, "check-secrets.ts"), "--range", ...args], { cwd: repo, encoding: "utf8" });
+
+    it("passes a clean range, and fails one that adds a token, naming the file and line but never the token", () => {
+      git("checkout", "-q", "-b", "pr");
+      commit("pr.ts", "const ok = 1;\n");
+      expect(check("main..pr")).toMatchObject({ status: 0, stdout: expect.stringContaining("No secrets in main..pr.") });
+      commit("upload.sh", join2("curl -", "u me:", tokens.atlassian, " https://example.atlassian.net\n"));
+      const failed = check("main..pr");
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("upload.sh:1: Atlassian API token (atlassian-api-token)");
+      expect(failed.stdout + failed.stderr).not.toContain(tokens.atlassian.slice(0, 12));
+    });
+
+    it("refuses to run without the revisions, so an empty range in CI fails the step", () => {
+      expect(check("")).toMatchObject({ status: 2, stderr: expect.stringContaining("--range needs the revisions") });
+      expect(check().status).toBe(2);
+      expect(check("--staged").status).toBe(2);
+    });
   });
 });
 

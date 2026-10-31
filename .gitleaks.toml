@@ -31,14 +31,15 @@ condition = "AND"
 regexes = ['''uat_frm09_denied''']
 paths = ['''^planning/uat/round-0/cases/FRM\.ts$''']
 
-# RP-1100's secret-scan test once spelled out the curl shape it guards against
-# (`curl -u someone@example.com:` before a fake token built at run time, commit
-# 2e80acaf9); it was never a secret, and the test now builds the curl from parts.
-# Only the default curl-auth-user rule, only that made-up address, only that file.
+# RP-1100's secret-scan test twice spelled out the curl shape it guards against,
+# before a fake token built at run time: `curl -u someone@example.com:` (commit
+# 2e80acaf9) and `curl -u me:${tokens.atlassian}` (commit a92126e86). Neither was
+# ever a secret, and the test now builds each curl from parts. Only the default
+# curl-auth-user rule, only those two made-up users, only that file.
 [[allowlists]]
-description = "RP-1100: a made-up curl user in the secret-scan test"
+description = "RP-1100: made-up curl users in the secret-scan test"
 targetRules = ["curl-auth-user"]
 condition = "AND"
 regexTarget = "line"
-regexes = ['''someone@example\.com''']
+regexes = ['''someone@example\.com''', '''curl -u me:\$\{tokens\.atlassian\}''']
 paths = ['''^scripts/check-secrets\.test\.ts$''']
