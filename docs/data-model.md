@@ -532,7 +532,7 @@ A `work_item` folder is virtual: its contents and permissions come from the Work
 | `type` | `created, transition, recommend_code, issue_code, assigned, picked_up, returned_to_pool, vacated, admin_reassigned, admin_reset, internal_note, cancelled, answers_changed, internal_answers` (a reply's internal answers, RP-516; `payload.answers`); events written before RP-512 keep `claimed` and `released`) (field-level diffs of the answers after Draft: `payload.changes`) |
 | `actor_member_id` / `actor_engineer_id` | exactly one |
 | `actor_participant_id` | |
-| `transition_id`, `from_step_id`, `to_step_id` | |
+| `transition_id`, `from_step_id`, `to_step_id` | The Transition and the Step an event left are its actor's Participant's (RP-1140): `transition_id` and `from_step_id` are not granted to the app role (a Transition leaves one Step, so its id names it), and `app.event_transitions(event ids)` gives every reader of an event its Transition's label, kind and Action Form, and the Transition and the Step it left only for the reader's own Participant's events (or a Rabaed Engineer's). `to_step_id` is granted: on a shared event it is where the shared move took the item |
 | `payload jsonb` | Action Form answers, code, note text |
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |

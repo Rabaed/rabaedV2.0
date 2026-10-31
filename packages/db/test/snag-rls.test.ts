@@ -63,13 +63,16 @@ const take = (as: string, id: string, transition: string, answers: object = {}) 
   );
 const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const seen = async (as: string, id: string) => (await call<{ id: string }>(as, sql`select id from work_item where id = ${id}::uuid`)).map((r) => r.id);
-/** The events of item `id` that `as` reads: type, audience, the acting Participant and the Transition's key. */
+/**
+ * The events of item `id` that `as` reads: type, audience, the acting Participant and the Transition's label, as
+ * app.event_transitions gives it to everyone who reads the event (the Transition itself is the actor's own, RP-1140).
+ */
 const events = (as: string, id: string) =>
-  call<{ type: string; audience: string; actor_participant_id: string; transition_key: string | null }>(
+  call<{ type: string; audience: string; actor_participant_id: string; transition: string | null }>(
     as,
-    sql`select e.type, e.audience, e.actor_participant_id, t.key as transition_key
+    sql`select e.type, e.audience, e.actor_participant_id, t.label ->> 'en' as transition
         from work_item_event e
-        left join workflow_transition t on t.id = e.transition_id
+        left join app.event_transitions(array(select x.id from work_item_event x where x.work_item_id = ${id}::uuid)) t on t.event_id = e.id
         where e.work_item_id = ${id}::uuid order by e.seq`,
   );
 const stepAsSeen = async (as: string, id: string) =>
@@ -220,10 +223,10 @@ describe("a Consultant's Snag reaches exactly K1 and C1", () => {
     // Each reads the other's events as the shared Transitions only: K1 C1's Resolve, never its moves or pick-ups.
     const other = async (who: string, of: string) => (await events(who, id)).filter((e) => e.actor_participant_id === of);
     expect(await other(k1.member, participant.c1)).toEqual([
-      { type: "transition", audience: "shared", actor_participant_id: participant.c1, transition_key: "resolve_in_progress" },
+      { type: "transition", audience: "shared", actor_participant_id: participant.c1, transition: "Resolve" },
     ]);
     expect(await other(c1.member, participant.k1)).toEqual([
-      { type: "transition", audience: "shared", actor_participant_id: participant.k1, transition_key: "raise" },
+      { type: "transition", audience: "shared", actor_participant_id: participant.k1, transition: "Raise" },
     ]);
   });
 
@@ -351,7 +354,7 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     expect(await take(c1Pm, id, transition, answers)).toBe("applied");
     await pickUp(c1Pm, id);
   }
-  const transitionKeys = async (who: string, id: string) => (await events(who, id)).map((e) => e.transition_key);
+  const transitionLabels = async (who: string, id: string) => (await events(who, id)).map((e) => e.transition);
 
   it("RP-625-1: K1 reads nothing of C1's Draft; from the Raise, its shared moves only, Open until C1 resolves it, aged from the Raise", async () => {
     const id = await drafted("Exposed rebar");
@@ -365,7 +368,7 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     // Step Age from the Raise, never from when C1 started the Draft (V14, Creation Date).
     expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
     expect(atRaise.stage_key).toBe("open");
-    expect(await transitionKeys(k1.member, id)).toEqual(["raise"]);
+    expect(await transitionLabels(k1.member, id)).toEqual(["Raise"]);
     // Its answers, as they left C1.
     const [answers] = await call<{ a: { description?: string } }>(k1.member, sql`select app.work_item_answers(${id}::uuid) as a`);
     expect(answers!.a.description).toBe("Exposed rebar");
@@ -375,7 +378,7 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     await move(id, "put_on_hold_in_progress");
     expect((await stepAsSeen(c1.member, id))!.stage_key).toBe("on_hold");
     expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
-    expect(await transitionKeys(k1.member, id)).toEqual(["raise"]);
+    expect(await transitionLabels(k1.member, id)).toEqual(["Raise"]);
     // K1 holds no Step and can't move it: refused as a Transition it isn't offered.
     expect(await call(k1.member, sql<{ id: string }>`select id from step_assignment where work_item_id = ${id}::uuid`)).toEqual([]);
     expect(await take(k1.member, id, "resolve_on_hold", { resolution_note: "Not K1's" })).toBe("not_holder");
@@ -385,9 +388,9 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     const resolved = (await stepAsSeen(k1.member, id))!;
     expect(resolved.stage_key).toBe("resolved");
     expect(resolved.entered_at.getTime()).toBeGreaterThan(atRaise.entered_at.getTime());
-    expect(await transitionKeys(k1.member, id)).toEqual(["raise", "resolve_on_hold"]);
+    expect(await transitionLabels(k1.member, id)).toEqual(["Raise", "Resolve"]);
     expect(await take(c1Pm, id, "close")).toBe("applied");
-    expect(await transitionKeys(k1.member, id)).toEqual(["raise", "resolve_on_hold", "close"]);
+    expect(await transitionLabels(k1.member, id)).toEqual(["Raise", "Resolve", "Close"]);
     // C2 never reads it (V3).
     expect(await seen(c2.member, id)).toEqual([]);
     expect(await events(c2.member, id)).toEqual([]);
@@ -433,7 +436,7 @@ describe("a Contractor's raised Snag informs the covering Consultants (RP-625)",
     await move(onC, "raise");
     expect(await seen(k1.member, onC)).toEqual([onC]);
     expect(await seen(k2.member, onC)).toEqual([onC]);
-    expect(await transitionKeys(k2.member, onC)).toEqual(["raise"]);
+    expect(await transitionLabels(k2.member, onC)).toEqual(["Raise"]);
   });
 
   it("RP-625-3: narrowing an informed Member's Visibility off the Snag hides it at once (layer 4)", async () => {

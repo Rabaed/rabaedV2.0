@@ -123,7 +123,7 @@ const codeAnswersAs = async (as: string, id: string) =>
   (
     await call<{ checklist: unknown }>(
       as,
-      sql`select payload -> ${FIELD} as checklist from work_item_event where work_item_id = ${id}::uuid and type in ('transition', 'issue_code') and transition_id is not null and payload ? ${FIELD}`,
+      sql`select payload -> ${FIELD} as checklist from work_item_event where work_item_id = ${id}::uuid and type in ('transition', 'issue_code') and payload ? ${FIELD}`,
     )
   ).map((r) => r.checklist);
 
