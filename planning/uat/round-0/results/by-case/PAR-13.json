@@ -1,5 +1,5 @@
 {
-  "status": "fail",
+  "status": "pass",
   "checks": [
     {
       "text": "Layla (Authorized Person) sees each Project DCL takes part in: name, code, number, Host Company, own role",
@@ -18,8 +18,8 @@
     },
     {
       "text": "Hafiz (a plain Member) opens Company Projects read-only (V15: every Member of a Participant sees it; design: 'other Members see it read-only')",
-      "ok": false,
-      "detail": "api 403 {\"error\":\"forbidden\"}; page ended at http://lane7.localhost:3700/en"
+      "ok": true,
+      "detail": "api 200 {\"participants\":[{\"id\":\"dbc39c40-8ce2-44cf-a6c9-df2b40b5d649\",\"project\":{\"id\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"projectNumber\":1,\"code\":\"TWR\",\"name\":{\"en\":\"Riyadh Gate Tower – Phase 2\",\"ar\":\"برج بوابة الرياض – المرحلة 2\"}},\"hostCompany\":{\"legalName\":{\"en\":\"TMC Constructions\",\"ar\":\"تي إم سي للإنشاءات\"}},\"projectRole\":{\"baseRole\":\"contractor\",\"name\":{\"en\":\"Contractor\",\"ar\":\"المقاول\"}}}]}; page ended at http://lane7.localhost:3700/en/participants"
     }
   ],
   "screenshots": [
@@ -27,5 +27,5 @@
     "evidence/PAR-13-2-layla-company-projects.jpg"
   ],
   "notes": "FAIL (PAR-13 Hafiz): steps: sign in as Hafiz (TMC Engineer, not an Authorized Person), open /en/participants (Company Projects). Expected: V15 first bullet, GLOSSARY Company Projects and design/prompts/participants.md: every Member of a Participant sees their Company Projects (other Members read-only): Project name, code, number, Host Company, own role and own Project Members. Actual: Hafiz is sent to Home. Screenshot: evidence/PAR-13-1-hafiz-company-projects.jpg (Home, no Company Projects page).\nHafiz: GET /v1/participants answers 403 and /en/participants redirects a non-Authorized Person to Home, so only the Authorized Person has a Company Projects page. docs/visibility.md V15 first bullet and design/prompts/participants.md say other Members see it read-only.",
-  "ranAt": "2026-10-27T18:04:50.330Z"
+  "ranAt": "2026-10-31T02:39:12.404Z"
 }

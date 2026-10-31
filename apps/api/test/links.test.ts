@@ -12,11 +12,11 @@
 // manager covering Mechanical only).
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { linksChangeField, type WorkItemHistory, type WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -41,10 +41,26 @@ const removeLink = (by: Caller, from: string, linkId: string) => by.request("DEL
 const links = async (by: Caller, id: string): Promise<WorkItemLinks> => (await ok(by.get(linksUrl(id)), 200)).json();
 const number = async (id: string) => (await tower.c1Engineer.get(`/v1/work-items/${id}`)).json().documentNumber as string;
 
-async function linksChanges(by: Caller, id: string) {
-  const events: WorkItemHistory["events"] = (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
-  return events.filter((e) => e.type === "answers_changed").map((e) => e.changes);
+type HistoryEvent = WorkItemHistory["events"][number];
+/** The item's answers_changed events `by` reads in its history. */
+async function answersChanged(by: Caller, id: string): Promise<HistoryEvent[]> {
+  const events: HistoryEvent[] = (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
+  return events.filter((e) => e.type === "answers_changed");
 }
+const linksChanges = async (by: Caller, id: string) => (await answersChanged(by, id)).map((e) => e.changes);
+/** A history event's key: its time and type (history events have no id). */
+const eventKey = (e: HistoryEvent) => `${new Date(e.at).toISOString()} ${e.type}`;
+/** A read for expectHiddenFrom: `target`, when the 200 body at `path` names it anywhere; else nothing. */
+const naming = (path: string, target: string) => async (by: Caller) => ((await ok(by.get(path), 200)).body.includes(target) ? [{ id: target }] : []);
+/** A caller as a failure names them. */
+const named = (by: Caller) =>
+  new Map<Caller, string>([
+    [tower.c1Engineer, "C1 engineer"],
+    [tower.c1Pm, "C1 PM"],
+    [tower.k1Manager, "K1 manager"],
+    [k1Mechanical, "K1 Mechanical manager"],
+    [c2Engineer, "C2 engineer"],
+  ]).get(by) ?? "someone";
 
 /** How many outbox rows (notifications on their way) name any of `ids`, as the migrator sees them. */
 const outboxRowsAbout = async (...ids: string[]) =>
@@ -59,8 +75,8 @@ const numbers = { c1Submitted: "", c1Approved: "" };
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  const onboard = async (legalName: string): Promise<Company> => {
-    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  const onboard = async (legalName: string): Promise<Company> => { // not hidden-from: names a Company to onboard
+    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: names a Company to onboard
     return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   };
   k1 = await onboard("Design Consultants LLC");
@@ -117,7 +133,7 @@ describe("free Links", () => {
       canChange: true,
     });
     // The Draft itself: nothing on the record yet.
-    expect(await linksChanges(tower.c1Engineer, mar)).toEqual([]);
+    expect(await linksChanges(tower.c1Engineer, mar)).toEqual([]); // not hidden-from: nothing recorded yet, for anyone
   });
 
   it("never link the same item twice, or the item to itself", async () => {
@@ -152,9 +168,9 @@ describe("free Links", () => {
     const added = (await ok(addLink(tower.c1Engineer, mar, item.c1Approved), 201)).json().id;
     await ok(removeLink(tower.c1Engineer, mar, added));
     expect((await links(tower.c1Engineer, mar)).links.map((l) => l.id)).toEqual([toSubmitted]);
-    await expectHidden(removeLink(tower.c1Engineer, mar, added));
-    await expectHidden(removeLink(tower.c1Engineer, mar, randomUUID()));
-    await expectHidden(removeLink(tower.c1Engineer, mar, "not-an-id"));
+    await expectHidden(removeLink(tower.c1Engineer, mar, added)); // not hidden-from: a Link already removed
+    await expectHidden(removeLink(tower.c1Engineer, mar, randomUUID())); // not hidden-from: a made-up id
+    await expectHidden(removeLink(tower.c1Engineer, mar, "not-an-id")); // not hidden-from: a made-up id
   });
 
   it("change after a Return to the Draft, by its holder, each change on its history after Draft, notifying nobody", async () => {
@@ -202,11 +218,19 @@ describe("free Links", () => {
       ],
       canChange: false,
     });
-    expect(res.body).not.toContain(item.c1Approved);
-    await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
-    // A K1 manager who sees the linked item gets its id; the changes stay the raiser's own (V5).
+    // A K1 manager who sees the linked item gets its id.
     expect((await links(tower.k1Manager, mar)).links.map((l) => l.workItemId)).toEqual([item.c1Approved]);
-    expect(await linksChanges(tower.k1Manager, mar)).toEqual([]);
+    await expectHiddenFrom({ read: naming(linksUrl(mar), item.c1Approved), target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
+    const linkedItem = readById(`/v1/work-items/${item.c1Approved}`);
+    await expectHiddenFrom({ read: linkedItem, target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
+    // The changes stay the raiser's own Participant's (V5).
+    const changes = (by: Caller) => answersChanged(by, mar);
+    // Every change on the record (the add and the remove of the "change after a Return" test), not only the first.
+    const recorded = await changes(tower.c1Engineer);
+    expect(recorded.length, "the raiser's history records the Link changes").toBeGreaterThan(0);
+    for (const change of recorded) {
+      await expectHiddenFrom({ read: changes, target: eventKey(change), idOf: eventKey, seenBy: [tower.c1Engineer, tower.c1Pm], hiddenFrom: [tower.k1Manager, k1Mechanical], name: named });
+    }
   });
 
   it("open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1)", async () => {
@@ -219,34 +243,37 @@ describe("free Links", () => {
       subject: "Cable trays, approved",
       workItemId: null,
     });
-    expect(res.body).not.toContain(item.c1Approved);
-    await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
     // A reader who sees the linked item gets its id, to open it.
     expect((await ok(tower.k1Manager.get(`${linksUrl(mar)}/${toApproved}`), 200)).json().workItemId).toBe(item.c1Approved);
+    await expectHiddenFrom({ read: naming(`${linksUrl(mar)}/${toApproved}`, item.c1Approved), target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${item.c1Approved}`), target: item.c1Approved, seenBy: tower.k1Manager, hiddenFrom: k1Mechanical, name: named });
     // A Link is read only through an item the reader sees, and only that item's own.
+    await expectHiddenFrom({ read: readById(`${linksUrl(mar)}/${toApproved}`), target: toApproved, seenBy: [k1Mechanical, tower.k1Manager], hiddenFrom: c2Engineer, name: named });
     for (const r of [
-      c2Engineer.get(`${linksUrl(mar)}/${toApproved}`),
+      tower.k1Manager.get(`${linksUrl(item.c1Submitted)}/${toApproved}`),
       k1Mechanical.get(`${linksUrl(item.c1Submitted)}/${toApproved}`),
       k1Mechanical.get(`${linksUrl(mar)}/${randomUUID()}`),
       k1Mechanical.get(`${linksUrl(mar)}/not-an-id`),
     ]) {
-      await expectHidden(r);
+      await expectHidden(r); // not hidden-from: another item's Link, or a made-up id, is 404 to every reader
     }
   });
 
   it("are changed by nobody but the raiser's Company, and hidden like the item from whoever can't see it", async () => {
     const k1Adds = await addLink(tower.k1Manager, mar, item.c1Submitted);
     expect(k1Adds.statusCode, k1Adds.body).toBe(409);
+    await expectHiddenFrom({ read: readById(linksUrl(mar)), target: mar, idOf: () => mar, seenBy: tower.c1Engineer, hiddenFrom: c2Engineer, name: named });
+    await expectHiddenFrom({ read: readById(linksUrl(item.c1Draft)), target: item.c1Draft, idOf: () => item.c1Draft, seenBy: tower.c1Engineer, hiddenFrom: tower.k1Manager, name: named });
+    // Changes nobody may make, so nobody makes them first.
     for (const r of [
-      c2Engineer.get(linksUrl(mar)),
       addLink(c2Engineer, mar, item.c2Submitted),
       removeLink(c2Engineer, mar, toApproved),
-      tower.k1Manager.get(linksUrl(item.c1Draft)),
       addLink(tower.k1Manager, item.c1Draft, item.c1Submitted),
-      tower.c1Engineer.get(linksUrl(randomUUID())),
-      tower.c1Engineer.get(linksUrl("not-an-id")),
     ]) {
       await expectHidden(r);
+    }
+    for (const r of [tower.c1Engineer.get(linksUrl(randomUUID())), tower.c1Engineer.get(linksUrl("not-an-id"))]) {
+      await expectHidden(r); // not hidden-from: a made-up id
     }
   });
 

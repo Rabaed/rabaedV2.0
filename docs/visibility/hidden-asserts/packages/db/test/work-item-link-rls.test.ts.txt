@@ -1,3 +1,0 @@
-empty a Link > of Project B never returns with a Member of Project A set, even by its id or through the reading function :: expect(await call(a.ap, sql<object>`select id from work_item_link where id = ${b.link}::uuid or from_id = ${b.from}::uuid`)).toEqual([]);
-empty a Link > of Project B never returns with a Member of Project A set, even by its id or through the reading function :: expect(await linksOf(a.ap, b.from)).toEqual([]);
-empty a Link > whose from item the reader can't see never returns :: expect(await linksOf(a.narrow, a.target)).toEqual([]);

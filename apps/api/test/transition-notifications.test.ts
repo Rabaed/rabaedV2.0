@@ -8,7 +8,7 @@
 // The test Workflow's `submit` (C1's Project Manager Submits to K1) notifies the
 // raiser, the watchers and C1's engineers.
 import { createDb } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { type Notification, type NotificationList, type NotificationSettings, type NotificationSettingsView } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -68,6 +68,9 @@ async function saveSettings(by: Caller, settings: Partial<NotificationSettings>)
 const about = async (by: Caller, id: string): Promise<Notification[]> =>
   ((await ok(by.get("/v1/notifications"), 200)).json() as NotificationList).notifications.filter((n) => n.workItemId === id);
 const movesOf = async (by: Caller, id: string) => (await about(by, id)).filter((n) => n.kind === "watched_event" && n.event?.transition?.en === "Submit");
+/** A caller as a failure names them. */
+const named = (by: Caller) =>
+  by === c1Engineer2 ? "C1 engineer 2" : by === at.c1Engineer ? "C1 engineer (raiser)" : by === at.c1Pm ? "C1 PM" : by === k1Engineer ? "K1 engineer" : by === c2Engineer ? "C2 engineer" : by === c1Narrowed ? "narrowed C1 engineer" : "someone";
 
 /** How delivery routed each Member's notifications about item `id` (the bell and email). */
 const routed = async (id: string) =>
@@ -124,16 +127,16 @@ describe("a Transition that notifies a Position", () => {
     const id = await inReview("Pumps");
     await drainOutbox(worker);
     // A Transition that names nobody tells the Position's Members nothing.
-    expect(await about(c1Engineer2, id)).toEqual([]);
+    expect(await about(c1Engineer2, id)).toEqual([]); // not hidden-from: nothing named them yet
 
     await take(at.c1Pm, id, "submit");
     await drainOutbox(worker);
 
     const [n, ...more] = await movesOf(c1Engineer2, id);
-    expect(more).toEqual([]);
+    expect(more).toEqual([]); // not hidden-from: one notification, not two
     expect(n).toMatchObject({ kind: "watched_event", title: "Pumps", readAt: null });
     // The actor, K1's engineer (another Participant's "engineer"), another Contractor and a narrowed C1 engineer hear nothing of it.
-    for (const who of [at.c1Pm, k1Engineer, c2Engineer, c1Narrowed]) expect(await movesOf(who, id)).toEqual([]);
+    await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: c1Engineer2, hiddenFrom: [at.c1Pm, k1Engineer, c2Engineer, c1Narrowed], name: named });
   });
 
   it("checks each recipient again at delivery: one narrowed off the item after the move hears nothing", async () => {
@@ -143,8 +146,9 @@ describe("a Transition that notifies a Position", () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1Engineer2Id}/visibility`, { trade: only(at.mechanical), location: all }));
     try {
       await drainOutbox(worker);
-      expect(await movesOf(c1Engineer2, id)).toEqual([]);
-      expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([]);
+      // The raiser, named by the same move and still seeing the item, hears of it.
+      await expectHiddenFrom({ read: (by: Caller) => movesOf(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: at.c1Engineer, hiddenFrom: c1Engineer2, name: named });
+      expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([]); // not hidden-from: the migrator's routing rows; the Member's bell is proved by expectHiddenFrom above
     } finally {
       await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1Engineer2Id}/visibility`, { trade: all, location: all }));
     }
@@ -157,7 +161,7 @@ describe("a Transition that notifies the raiser", () => {
     await ok(at.c1Engineer.delete(`/v1/work-items/${id}/watch`));
     await take(at.c1Pm, id, "submit");
     await drainOutbox(worker);
-    expect(await movesOf(at.c1Engineer, id)).toHaveLength(1);
+    expect((await movesOf(at.c1Engineer, id)).map((n) => n.workItemId)).toEqual([id]);
   });
 });
 
@@ -172,7 +176,7 @@ describe("a Code issued", () => {
     await take(at.k1Manager, id, "approve_a");
     await drainOutbox(worker);
     const issued = (await about(at.c1Engineer, id)).filter((n) => n.kind === "watched_event" && n.event?.transition?.en === "Approve · A");
-    expect(issued).toHaveLength(1);
+    expect(issued.map((n) => n.workItemId)).toEqual([id]);
   });
 });
 
@@ -182,7 +186,7 @@ describe("in-app is always sent", () => {
     const id = await inReview("Chillers");
     await take(at.c1Pm, id, "submit");
     await drainOutbox(worker);
-    expect(await movesOf(c1Engineer2, id)).toHaveLength(1);
+    expect((await movesOf(c1Engineer2, id)).map((n) => n.workItemId)).toEqual([id]);
     expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([{ member_id: c1Engineer2Id, kind: "watched_event", in_app: true, email: "none" }]);
   });
 
@@ -192,7 +196,7 @@ describe("in-app is always sent", () => {
       const id = await inReview("Boilers");
       await take(at.c1Pm, id, "submit");
       await drainOutbox(worker);
-      expect(await movesOf(c1Engineer2, id)).toEqual([]);
+      expect(await movesOf(c1Engineer2, id)).toEqual([]); // not hidden-from: their own mute silences it
     } finally {
       await ok(c1Engineer2.delete(`/v1/projects/${at.projectId}/mute`));
     }
