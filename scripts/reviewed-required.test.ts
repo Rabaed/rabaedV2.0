@@ -6,7 +6,7 @@ import { overHttp, queuedPrNumber, REQUIRED_CHECK, requiredEvent, requireReviewe
 
 /** The PR's issue events when each login in turn added `reviewed`. */
 const labeledBy = (...logins: string[]): PrEvent[] => logins.map((actor) => ({ event: "labeled", label: "reviewed", actor }));
-const by = (event: string): PrEvent => ({ event, actor: "mmhaleess90" });
+const eventBy = (event: string): PrEvent => ({ event, actor: "mmhaleess90" });
 
 // The workflow the main ruleset requires: the queue must get the same check name as the PR.
 // It lands in its own PR after this script (rule 3, and it runs main's copy of the script), so these wait for it.
@@ -182,7 +182,7 @@ describe("requireReviewed on merge_group", () => {
   });
 
   it("drops a PR that GitHub auto-merge put in the queue, even with auto-merge off by now (#564)", async () => {
-    const events = [...labeledBy("github-actions[bot]"), by("auto_merge_enabled"), by("added_to_merge_queue"), by("auto_merge_disabled")];
+    const events = [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("auto_merge_disabled")];
     const { seam } = fakeSeam({ events: async () => events });
     const result = await requireReviewed(event, seam);
     expect(result.ok).toBe(false);
@@ -191,15 +191,29 @@ describe("requireReviewed on merge_group", () => {
   });
 
   it("keeps a PR queued by `pnpm queue` after auto-merge was turned on and off earlier: only how it entered the queue counts", async () => {
-    const events = [by("auto_merge_enabled"), by("auto_merge_disabled"), ...labeledBy("github-actions[bot]"), by("added_to_merge_queue")];
+    const events = [eventBy("auto_merge_enabled"), eventBy("auto_merge_disabled"), ...labeledBy("github-actions[bot]"), eventBy("added_to_merge_queue")];
     const { seam } = fakeSeam({ events: async () => events });
     expect((await requireReviewed(event, seam)).ok).toBe(true);
   });
 
   it("judges the latest time it entered the queue: auto-merge's first entry, then a `pnpm queue` one, passes", async () => {
-    const events = [by("auto_merge_enabled"), by("added_to_merge_queue"), by("removed_from_merge_queue"), by("auto_merge_disabled"), ...labeledBy("github-actions[bot]"), by("added_to_merge_queue")];
+    const events = [eventBy("auto_merge_enabled"), eventBy("added_to_merge_queue"), eventBy("removed_from_merge_queue"), eventBy("auto_merge_disabled"), ...labeledBy("github-actions[bot]"), eventBy("added_to_merge_queue")];
     const { seam } = fakeSeam({ events: async () => events });
     expect((await requireReviewed(event, seam)).ok).toBe(true);
+  });
+
+  it("fails closed when GitHub lists no queue entry yet but auto-merge was last turned on", async () => {
+    const onNoEntry = fakeSeam({ events: async () => [...labeledBy("github-actions[bot]"), eventBy("auto_merge_enabled")] });
+    expect((await requireReviewed(event, onNoEntry.seam)).ok).toBe(false);
+    const offNoEntry = fakeSeam({ events: async () => [eventBy("auto_merge_enabled"), eventBy("auto_merge_disabled"), ...labeledBy("github-actions[bot]")] });
+    expect((await requireReviewed(event, offNoEntry.seam)).ok).toBe(true);
+  });
+
+  it("reads the PR's events once for both the queue entry and the label", async () => {
+    let reads = 0;
+    const { seam } = fakeSeam({ events: async () => (reads++, labeledBy("github-actions[bot]")) });
+    expect((await requireReviewed(event, seam)).ok).toBe(true);
+    expect(reads).toBe(1);
   });
 
   it("drops a PR turned back to draft while queued: draft does not leave the queue (#564)", async () => {

@@ -7,18 +7,19 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 // `docs-only` label on a PR that changes only docs. Without it, a merge started from GitHub skipped
 // the rule `pnpm queue` applies (PR #225 and #229 merged unreviewed). Both apply `reviewGate`.
 // Since RP-1167 the check also reads the PR's issue events: `reviewed` counts only when CI's
-// reviewed-add (github-actions[bot]) added it last, since every session acts as the owner's one
+// reviewed-add (github-actions[bot]) added it last, since every session acts as one GitHub
 // login and a hand label proves no review. It also fails while GitHub auto-merge is on, so only
-// `pnpm queue` enqueues; in the merge queue that drops a PR that went in through auto-merge.
+// `pnpm queue` enqueues. In the merge queue it also drops a PR that is a draft now, or that
+// entered the queue while auto-merge was on (#564: both, and it still merged).
 //
 // Run by .github/workflows/reviewed-required.yml, from the default branch's copy (a PR cannot edit
 // the script that checks it), on pull_request (opened, reopened, synchronize, labeled, unlabeled,
 // ready_for_review, converted_to_draft) and on merge_group, as one job name in both so the merge
 // queue runs it too. A draft PR passes with a note and is checked when marked ready (RP-1018: a
-// check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot enter
-// the merge queue). In
-// the queue the PR number comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the
-// labels are read live.
+// check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot be
+// queued, but a queued PR turned back to draft stays in the queue). In the queue the PR number
+// comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the labels, the draft flag
+// and the issue events are read live.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH.
 
@@ -127,7 +128,8 @@ export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, 
     }
   }
   // Auto-merge enqueues the PR the moment it is eligible, in no one's order (#531 went in ahead of #529 on
-  // 2026-10-30); only `pnpm queue` enqueues, and it never turns auto-merge on. In the queue this drops such a PR.
+  // 2026-10-30); only `pnpm queue` enqueues, and it never turns auto-merge on. In the queue this also catches
+  // auto-merge turned on after a `pnpm queue` entry, which the entry check above lets through.
   if (pull.autoMergeBy !== undefined) {
     return {
       ok: false,
@@ -163,12 +165,13 @@ export const reviewedLabelers = (events: PrEvent[]) => events.filter((event) => 
 /**
  * Whether auto-merge was on when the PR last entered the merge queue: the newest `auto_merge_enabled` or
  * `auto_merge_disabled` before its newest `added_to_merge_queue` is an enable. `pnpm queue` never turns auto-merge on,
- * so a PR it queued after auto-merge was turned off again passes.
+ * so a PR it queued after auto-merge was turned off again passes. While GitHub lists no entry yet, the newest switch
+ * of all decides, so a missing event fails closed. GitHub lists the enable before the entry it causes (#531, #564).
  */
 export function enteredQueueByAutoMerge(events: PrEvent[]): boolean {
   const entered = events.findLastIndex((event) => event.event === "added_to_merge_queue");
-  const switched = events.slice(0, Math.max(entered, 0)).findLast((event) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled");
-  return entered >= 0 && switched?.event === "auto_merge_enabled";
+  const before = entered === -1 ? events : events.slice(0, entered);
+  return before.findLast((event) => event.event === "auto_merge_enabled" || event.event === "auto_merge_disabled")?.event === "auto_merge_enabled";
 }
 
 /**
