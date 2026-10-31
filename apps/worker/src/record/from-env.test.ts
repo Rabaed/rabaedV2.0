@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { recordSealingFromEnv } from "./from-env.ts";
 import { LOCAL_SEAL_NAME } from "./signer.ts";
 import { parseCertificate, commonNameOf } from "./pki.ts";
+import { LOCAL_TSA_NAME, tokenCertificates } from "./timestamp.ts";
+import { newUatAuthority, UAT_AUTHORITY_NAME, UAT_SEAL_NAME } from "./uat-signer.ts";
 
 // RECORD_SEALING picks the seal's adapters explicitly (ADR 0023): never the local
 // test key in AWS, and nothing guessed from other settings.
@@ -47,6 +49,47 @@ describe("RECORD_SEALING", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("uat (the UAT Records container, RP-1042)", () => {
+    const secrets = async () => {
+      const authority = await newUatAuthority();
+      return { UAT_SEALING_AUTHORITY_KEY: authority.key, UAT_SEALING_AUTHORITY_CERTIFICATE: authority.certificate };
+    };
+
+    it("seals under the UAT authority the host's secrets hold, with the timestamp stand-in, and marks every page", async () => {
+      const sealing = recordSealingFromEnv({ RECORD_SEALING: "uat", ...(await secrets()) });
+      const signer = await sealing.signer();
+      expect(signer.test).toBe(true);
+      expect(commonNameOf(parseCertificate(signer.certificates[0]!))).toBe(UAT_SEAL_NAME);
+      expect(commonNameOf(parseCertificate(signer.certificates[1]!))).toBe(UAT_AUTHORITY_NAME);
+      const token = await (await sealing.timestamps()).timestamp(new Uint8Array(32));
+      expect(commonNameOf(parseCertificate(tokenCertificates(token)[0]!))).toBe(LOCAL_TSA_NAME);
+      expect(sealing.uatMark).toBe(true);
+    });
+
+    it("takes secrets whose line breaks the host's dashboard kept as \\n", async () => {
+      const s = await secrets();
+      const escaped = { UAT_SEALING_AUTHORITY_KEY: s.UAT_SEALING_AUTHORITY_KEY.replaceAll("\n", "\\n"), UAT_SEALING_AUTHORITY_CERTIFICATE: s.UAT_SEALING_AUTHORITY_CERTIFICATE.replaceAll("\n", "\\n") };
+      expect((await recordSealingFromEnv({ RECORD_SEALING: "uat", ...escaped }).signer()).test).toBe(true);
+    });
+
+    it("fails every record job, saying so, when the secrets are not set", async () => {
+      await expect(recordSealingFromEnv({ RECORD_SEALING: "uat" }).signer()).rejects.toThrow("UAT_SEALING_AUTHORITY_KEY and UAT_SEALING_AUTHORITY_CERTIFICATE are not set");
+    });
+
+    it("is refused outright on ECS, as local is", () => {
+      expect(() => recordSealingFromEnv({ RECORD_SEALING: "uat", ...ecs })).toThrow(/never sealed with the UAT test key/);
+    });
+
+    it("local and kms print no mark", () => {
+      expect(recordSealingFromEnv({ RECORD_SEALING: "local" }).uatMark).toBe(false);
+      expect(recordSealingFromEnv({ RECORD_SEALING: "kms", ...ecs }).uatMark).toBe(false);
+    });
+
+    it("uses the Thmanyah files in RECORD_FONTS_DIR, as local does", async () => {
+      expect((await recordSealingFromEnv({ RECORD_SEALING: "uat" }).fonts()).family).toBe("Record Sans");
+    });
   });
 
   it("refuses any other value", () => {

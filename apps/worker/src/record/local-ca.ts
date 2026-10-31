@@ -40,6 +40,11 @@ export interface AuthorityOptions {
    * §4.2.2.2), whose certificate the answer carries, marked id-pkix-ocsp-nocheck or not.
    */
   readonly responder?: "itself" | "delegated" | "delegated-nocheck";
+  /**
+   * Its own key and self-signed certificate, when it is not made afresh: the UAT authority, whose
+   * key is a host secret (uat-signer.ts, RP-1042). Its certificate's subject names what it issues.
+   */
+  readonly root?: LocalKey;
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -70,17 +75,20 @@ function keyUsage(bits: number[]): asn1js.BitString {
   return new asn1js.BitString({ valueHex: new Uint8Array([byte]).buffer, unusedBits: 7 - last });
 }
 
-async function newKeys(): Promise<webcrypto.CryptoKeyPair> {
-  return (await subtle.generateKey(RSA_SHA256, false, ["sign", "verify"])) as webcrypto.CryptoKeyPair;
+async function newKeys(extractable = false): Promise<webcrypto.CryptoKeyPair> {
+  return (await subtle.generateKey(RSA_SHA256, extractable, ["sign", "verify"])) as webcrypto.CryptoKeyPair;
 }
 
-/** A local certificate authority named `commonName`. */
-export async function localCertificateAuthority(
-  commonName: string,
-  { now = () => new Date(), responder = "itself" }: AuthorityOptions = {},
-): Promise<LocalCertificateAuthority> {
-  const base = `http://${Buffer.from(webcrypto.getRandomValues(new Uint8Array(6))).toString("hex")}.local-ca.invalid`;
-  const keys = await newKeys();
+export interface SelfSignedOptions {
+  /** Whether its private key may be exported (the UAT authority's, written once for a host secret). */
+  readonly extractable?: boolean;
+  /** When its certificate expires: ten years from now unless set. */
+  readonly notAfter?: Date;
+}
+
+/** A fresh key and a self-signed authority certificate for it, named `commonName`. */
+export async function selfSignedAuthority(commonName: string, { extractable = false, notAfter }: SelfSignedOptions = {}): Promise<LocalKey> {
+  const keys = await newKeys(extractable);
   const created = Date.now();
   const root = new pkijs.Certificate();
   root.version = 2;
@@ -88,7 +96,7 @@ export async function localCertificateAuthority(
   root.issuer.typesAndValues.push(...name(commonName));
   root.subject.typesAndValues.push(...name(commonName));
   root.notBefore.value = new Date(created - HOUR);
-  root.notAfter.value = new Date(created + 10 * 365 * DAY);
+  root.notAfter.value = notAfter ?? new Date(created + 10 * 365 * DAY);
   root.extensions = [
     extension(OID.basicConstraints, true, new pkijs.BasicConstraints({ cA: true })),
     // keyCertSign, cRLSign; digitalSignature for the OCSP answers it signs itself.
@@ -96,7 +104,20 @@ export async function localCertificateAuthority(
   ];
   await root.subjectPublicKeyInfo.importKey(keys.publicKey);
   await root.sign(keys.privateKey, "SHA-256");
-  const rootDer = certificateDer(root);
+  return { privateKey: keys.privateKey, certificate: certificateDer(root) };
+}
+
+/** A local certificate authority named `commonName`, made afresh, or from `root` when given. */
+export async function localCertificateAuthority(
+  commonName: string,
+  { now = () => new Date(), responder = "itself", root }: AuthorityOptions = {},
+): Promise<LocalCertificateAuthority> {
+  const base = `http://${Buffer.from(webcrypto.getRandomValues(new Uint8Array(6))).toString("hex")}.local-ca.invalid`;
+  const own = root ?? (await selfSignedAuthority(commonName));
+  const keys = { privateKey: own.privateKey };
+  const rootDer = own.certificate;
+  /** The issuer of what it issues, its CRLs and its own OCSP answers: its certificate's subject. */
+  const issuerName = () => parseCertificate(rootDer).subject.typesAndValues;
 
   const issued = new Set<string>();
   const revoked = new Map<string, Date>();
@@ -107,7 +128,7 @@ export async function localCertificateAuthority(
     const certificate = new pkijs.Certificate();
     certificate.version = 2;
     certificate.serialNumber = randomCertificateNumber();
-    certificate.issuer.typesAndValues.push(...name(commonName));
+    certificate.issuer.typesAndValues.push(...issuerName());
     certificate.subject.typesAndValues.push(...name(subjectName));
     const issuedAt = Date.now();
     certificate.notBefore.value = new Date(issuedAt - HOUR);
@@ -148,7 +169,7 @@ export async function localCertificateAuthority(
     const at = now();
     const list = new pkijs.CertificateRevocationList();
     list.version = 1;
-    list.issuer.typesAndValues.push(...name(commonName));
+    list.issuer.typesAndValues.push(...issuerName());
     list.thisUpdate = new pkijs.Time({ type: 0, value: at });
     list.nextUpdate = new pkijs.Time({ type: 0, value: new Date(at.getTime() + 7 * DAY) });
     if (revoked.size > 0) {
@@ -177,7 +198,7 @@ export async function localCertificateAuthority(
         : new asn1js.Primitive({ idBlock: { tagClass: 3, tagNumber: issued.has(number) ? 0 : 2 } });
       return new pkijs.SingleResponse({ certID: r.reqCert, certStatus, thisUpdate: at, nextUpdate: new Date(at.getTime() + 7 * DAY) });
     });
-    const responderID = new pkijs.RelativeDistinguishedNames({ typesAndValues: name(delegate ? responderName : commonName) });
+    const responderID = new pkijs.RelativeDistinguishedNames({ typesAndValues: delegate ? name(responderName) : issuerName() });
     const basic = new pkijs.BasicOCSPResponse({
       tbsResponseData: new pkijs.ResponseData({ responderID, producedAt: at, responses }),
       ...(delegate ? { certs: [parseCertificate(delegate.certificate)] } : {}),

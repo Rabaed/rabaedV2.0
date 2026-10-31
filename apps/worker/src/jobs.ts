@@ -28,6 +28,12 @@ import {
 // its own kind, list it in `scheduledJobs`, and add that kind's handler to
 // `outboxHandlers` (and to the outbox kind check).
 
+/**
+ * The Record job kinds (RP-1042): the ones that need Chromium or the signer, which the UAT Records
+ * container takes alone (outbox-mode.ts) and the api's cron pass never takes.
+ */
+export const RECORDS_CONTAINER_KINDS = ["documental_record", "documental_record_reproduce", "working_copy", "snag_report"] as const;
+
 /** Every scheduled job, run by the worker at each poll when due (once per run time). */
 export const scheduledJobs: readonly ScheduledJob[] = [dailyDigestJob, weeklyStepAgeReportJob, registerImportCleanupJob];
 

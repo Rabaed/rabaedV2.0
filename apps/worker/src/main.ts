@@ -3,6 +3,7 @@ import { createDbFromEnv, pingDatabase, processOutbox, runScheduledJobs } from "
 import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
 import { outboxHandlers, scheduledJobs } from "./jobs.ts";
+import { workerRunFromEnv } from "./outbox-mode.ts";
 import { documentalRecordHandler, recordJobFromEnv, reproduceHandler, workingCopyHandler } from "./record/index.ts";
 import { snagReportHandler } from "./snag-report/index.ts";
 import { createLogger } from "./log.ts";
@@ -13,10 +14,13 @@ import { createLogger } from "./log.ts";
 // the recipient's language, linking to the item on the customer web (WEB_URL). The api reports the backlog for the outbox alarms, so they
 // see a stopped worker (apps/api/src/outbox-report.ts). It connects as the app
 // role with no Member set, which the outbox functions require.
+// WORKER_OUTBOX=records (the UAT Records container, RP-1042; outbox-mode.ts) takes only the
+// Record job kinds and runs no scheduled job: Vercel Cron does the rest there (RP-1039).
 const env = z
   .object({ WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000), WEB_URL: z.url() })
   .parse(process.env);
 
+const run = workerRunFromEnv();
 const log = createLogger();
 const db = createDbFromEnv("app", { max: 2 });
 const stop = new AbortController();
@@ -40,7 +44,7 @@ const handlers = {
 };
 
 let lastOk: boolean | undefined;
-log.info("worker started");
+log.info({ outbox: run.kinds ?? "every kind", scheduledJobs: run.scheduledJobs }, "worker started");
 while (!stop.signal.aborted) {
   const ok = await pingDatabase(db);
   if (ok !== lastOk) {
@@ -50,16 +54,16 @@ while (!stop.signal.aborted) {
   lastOk = ok;
   if (ok) {
     // The scheduled jobs due now (the daily digest...), each once per run time; they queue outbox rows.
-    for (const run of await runScheduledJobs(db, scheduledJobs)) {
-      if (run.outcome === "ran") log.info({ job: run.job, runAt: run.runAt }, "scheduled job ran");
-      if (run.outcome === "failed") {
-        log.error({ job: run.job, err: run.error instanceof Error ? run.error : new Error(String(run.error)) }, "scheduled job failed");
+    for (const job of run.scheduledJobs ? await runScheduledJobs(db, scheduledJobs) : []) {
+      if (job.outcome === "ran") log.info({ job: job.job, runAt: job.runAt }, "scheduled job ran");
+      if (job.outcome === "failed") {
+        log.error({ job: job.job, err: job.error instanceof Error ? job.error : new Error(String(job.error)) }, "scheduled job failed");
       }
     }
     try {
       // Counts only: never a row's payload.
-      const run = await processOutbox(db, { handlers });
-      if (run.processed || run.failed || run.dead) log.info({ run }, "outbox run");
+      const done = await processOutbox(db, { handlers, ...(run.kinds ? { kinds: run.kinds } : {}) });
+      if (done.processed || done.failed || done.dead) log.info({ run: done }, "outbox run");
     } catch (error) {
       // Through the err serializer: a database error by its code only.
       log.error({ err: error instanceof Error ? error : new Error(String(error)) }, "outbox run failed");
