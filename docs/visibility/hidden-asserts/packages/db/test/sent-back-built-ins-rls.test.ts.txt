@@ -1,0 +1,2 @@
+empty C1 moves an item Sent Back to its Draft from Tower 1 to Building A, and changes its Scope (scenarios RP-582-1, RP-582-2) > keeps it with the Owner's Tower 1 engineer and K1 as it was: Tower 1, Lighting, found under Tower One only :: expect(r.valueRows).not.toContain(buildingA);
+empty C1 moves an item Sent Back to its Draft from Tower 1 to Building A, and changes its Scope (scenarios RP-582-1, RP-582-2) > keeps it with the Owner's Tower 1 engineer and K1 as it was: Tower 1, Lighting, found under Tower One only :: expect(r.scopeRows).not.toContain(power);

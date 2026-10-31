@@ -5,6 +5,7 @@
 // The font mime types are built at run time, so this file itself never holds
 // embedded font data for the check to find. The "font" bytes are plain text.
 
+import { gzipSync } from "node:zlib";
 import type { ManifestEntry } from "./design-strip-fonts.ts";
 
 /** A font mime type, e.g. font("woff2") is the woff2 one. */
@@ -30,4 +31,10 @@ export function claudeDesignExport(manifest: Record<string, ManifestEntry>, extR
     "</html>",
     "",
   ].join("\n");
+}
+
+/** A whole page nested in an export's manifest, as Claude Design writes one: base64, gzipped unless told not to (RP-1146). */
+export function nestedPage(html: string, compressed = true): ManifestEntry {
+  const bytes = Buffer.from(html, "utf8");
+  return { mime: "text/html", compressed, data: (compressed ? gzipSync(bytes) : bytes).toString("base64") };
 }

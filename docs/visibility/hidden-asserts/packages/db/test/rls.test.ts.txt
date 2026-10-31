@@ -1,0 +1,4 @@
+empty the app role > owns no tables (owners skip row-level security) :: expect(rows).toEqual([]);
+empty a row-level-security-protected table > returns zero rows with no Member set :: expect(rows).toEqual([]);
+empty a row-level-security-protected table > forgets the Member when the transaction ends :: expect(rows).toEqual([]);
+empty the schema > has row-level security enabled on every table the app role can read :: expect(rows).toEqual([]);

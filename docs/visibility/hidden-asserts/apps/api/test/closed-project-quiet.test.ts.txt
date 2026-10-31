@@ -1,0 +1,5 @@
+empty a Project closed with events still in the outbox > delivers no new in-app notification for it :: expect(now.filter((n) => n.workItemId === pending)).toEqual([]);
+empty a Project closed with events still in the outbox > emails nothing of it :: expect(emails).toEqual([]);
+empty a Project closed with events still in the outbox > queues no digest for what was collected before it closed, and sends none :: expect(digests.filter((d) => [raiser.email, pm.email].includes(d.to))).toEqual([]);
+text a Project closed with events still in the outbox > sends no weekly report of it :: expect(reportedWhileActive).toHaveLength(1);
+empty a Project closed with events still in the outbox > sends no weekly report of it :: expect(reports.filter((r) => r.projectId === at.projectId)).toEqual([]);

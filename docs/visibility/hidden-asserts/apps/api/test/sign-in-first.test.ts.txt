@@ -1,0 +1,2 @@
+empty a caller who isn't signed in > gets 401 not_signed_in from every other route, whatever the body, query or path :: expect(await refusals({})).toEqual([]);
+empty a caller who isn't signed in > gets the same 401 with a session cookie that isn't a session :: expect(await refusals({ [SESSION_COOKIE]: "not-a-session-token" })).toEqual([]);

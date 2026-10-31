@@ -1,0 +1,3 @@
+empty setting a Participant Code > is refused for anyone but a Project Admin, and hidden from a Member who cannot see the Participant (V15) :: await expectHidden(code(engineer, at.k1ParticipantId, "KKK"));
+empty setting a Participant Code > is refused for anyone but a Project Admin, and hidden from a Member who cannot see the Participant (V15) :: await expectHidden(code(engineer, randomUUID(), "KKK"));
+empty a Project Member of another Company > cannot set a code on a Participant of a Project they are not on :: await expectHidden(code(outsider, at.c1ParticipantId, "ZZZ"));

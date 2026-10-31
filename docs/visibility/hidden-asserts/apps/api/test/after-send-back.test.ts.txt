@@ -1,0 +1,1 @@
+empty an item Sent Back to an "Edit the Form" Step (scenario 71's behaviour) > lets the engineer change answers, Trade and Documents, and K1 sees them only once it is Submitted again :: expect((await documents(k1Pm, id)).documents.map((d) => d.id)).not.toContain(added);

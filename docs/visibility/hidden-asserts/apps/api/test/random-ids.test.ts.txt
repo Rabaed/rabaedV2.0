@@ -1,0 +1,2 @@
+text ids K1 receives once C1 Submits (scenario 73) > are random: the Work Item's, its Links' and its Documents' :: expect(links.links).toHaveLength(1);
+text ids K1 receives once C1 Submits (scenario 73) > are random: the Work Item's, its Links' and its Documents' :: expect(documents.documents).toHaveLength(1);

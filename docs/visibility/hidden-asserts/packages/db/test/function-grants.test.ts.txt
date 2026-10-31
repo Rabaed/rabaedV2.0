@@ -1,0 +1,6 @@
+empty function grants in the database > are explicit: no function is open to PUBLIC or to a role outside its allow-list :: expect(functionGrantProblems(grants, allow)).toEqual([]);
+empty function grants in the database > has no allow-list entry for a function that does not exist :: expect(Object.keys(allow).filter((name) => !names.has(name))).toEqual([]);
+empty function grants in the database > have one overload per name: no stale copy left beside the current signature :: expect(overloadProblems(await readFunctionGrants(migrator), overloadsAllowed)).toEqual([]);
+text the check > names a function nobody revoked from PUBLIC (a null proacl is that default) :: expect(problems).toHaveLength(1);
+empty the check > passes a grant the allow-list names, and the owner's own :: expect(functionGrantProblems(grants, { "app.shared": ["rabaed_app", "rabaed_admin"] })).toEqual([]);
+empty the check > passes an overload the allow-list names :: expect(overloadProblems(grants, ["app.both"])).toEqual([]);

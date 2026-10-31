@@ -1,0 +1,8 @@
+empty Trades and Locations > are changed only by a Project Admin :: await expectHidden(addTrade(consultant.caller, "CV"));
+empty Trades and Locations > are changed only by a Project Admin :: await expectHidden(consultant.caller.get(`/v1/projects/${projectId}/dimensions`));
+empty a Participant's Visibility > granting Tower 1 covers all its Buildings and Floors :: expect(mine.trade).toEqual([]);
+empty a Participant's Visibility > is granted only by a Project Admin :: await expectHidden(setParticipantVisibility(caller, participantId, body), `${who} → ${participantId}`);
+empty a Member's Visibility > is granted only by the Participant's own Authorized Person :: await expectHidden(setMemberVisibility(host.caller, engineer.member.id, body));
+empty other Participants' grants > are not visible to a Member of another Participant :: await expectHidden(engineer.caller.get(`/v1/participants/${hostParticipantId}/visibility`));
+empty other Participants' grants > are not visible to a Member of another Participant :: await expectHidden(hostMember.caller.get(`/v1/participants/${consultantParticipantId}/visibility`));
+empty other Participants' grants > show another Company's Project Admin the Participant's grant, never its Members' :: await expectHidden(res);

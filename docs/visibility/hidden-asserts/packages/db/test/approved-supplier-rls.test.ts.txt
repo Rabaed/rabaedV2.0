@@ -1,0 +1,2 @@
+empty The Approved Supplier List (RP-592-1) > is never returned to a Member of another Project, nor another Project's to this one's :: expect(await suppliersSeen(other.member)).toEqual([]);
+empty The Approved Supplier List (RP-592-1) > is never returned to a Member of another Project, nor another Project's to this one's :: expect(await suppliersSeen(consultant.ap)).toEqual([]);

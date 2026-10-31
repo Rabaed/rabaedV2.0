@@ -1,0 +1,2 @@
+text (top level) :: const k1 = await api.onboardCompany({ legalName: bilingual("Design Consultants LLC") });
+empty the MAR Form Version 3 > is the MAR's latest Version, and passes the part-1 publish checks against Versions 1 and 2 :: expect(publishProblems(v3!, [v1!, v2!], { optionListIds: new Set(lists.map((l) => l.id)) })).toEqual([]);

@@ -1,0 +1,2 @@
+empty the MAR Form Version 6 > is the previous Version plus a required supplier field of the Approved Supplier List :: expect(fieldsOf(before).map((f) => f.key)).not.toContain("supplier");
+text the supplier of a MAR (seam 1 acceptance) > takes an approved supplier of the MAR's Trade, and reads back its id for the list to name :: expect((await suppliersOf(engineer)).find((s) => s.id === supplier.civil)?.name.en).toBe("Riyadh Cement");

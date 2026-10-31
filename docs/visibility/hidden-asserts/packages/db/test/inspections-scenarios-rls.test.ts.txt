@@ -1,0 +1,7 @@
+text (top level) :: expect(read.item).toHaveLength(1);
+empty (top level) :: expect(read.events.map((e) => e.type)).not.toContain("recommend_code");
+empty (top level) :: expect(read.history.map((e) => e.type)).not.toContain("recommend_code");
+empty (top level) :: expect(JSON.stringify(read)).not.toContain(INTERNAL_NOTE);
+text (top level) :: expect((await itemAsRead(c2, c2Own)).item).toHaveLength(1);
+empty RP-656-1: C1's engineer annotates a photo on a MAR, then C1 Submits it > C1 and K1 read both, the copy linked to the untouched original; C2 reads neither and can't annotate it :: expect(await documents(c2.members.engineer)).toEqual([]);
+empty RP-656-1: C1's engineer annotates a photo on a MAR, then C1 Submits it > C1 and K1 read both, the copy linked to the untouched original; C2 reads neither and can't annotate it :: expect(await call(c2.members.engineer, sql<{ id: string }>`select id from document where id in (${original}::uuid, ${copy}::uuid)`)).toEqual([]);
