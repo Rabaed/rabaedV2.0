@@ -1,18 +1,22 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
-import { composeProjectOfEnv, envValue } from "./lanes.ts";
+import { composeProjectOfEnv, envValue, readWorktreeEnv } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
+import { samePath } from "./paths.ts";
 import { branchMix } from "./shared-files.ts";
 import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
+import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
-import { acquireLock, lockFile, mainSlot, releaseLock, waitForLock, type Processes } from "./verify-lock.ts";
+import { acquireLock, liveHolder, lockFile, mainSlot, releaseLock, waitForLock, type LockHolder, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
+import { snapshotHash, systemFileHash, systemGit, treeChanged, treeSnapshot, watchTree } from "./verify-tree.ts";
 import { isRunning } from "./worktrees-stale.ts";
+import { listWorktrees } from "./worktrees.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
@@ -29,6 +33,10 @@ import { isRunning } from "./worktrees-stale.ts";
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 // HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
+// RP-1169: so does the working tree changing (verify-tree.ts: the tracked and untracked files that differ from HEAD), checked
+// after every step, once more after waiting for the Main's slot, and every 15 s during a step, which is killed at once
+// (a merge by the app's base-branch sync half-done). A live verify in another worktree on the same lane database (same
+// compose project or Postgres port) stops it before the first step (verify-lane-db.ts).
 
 const root = process.cwd();
 const pnpm = join(import.meta.dirname, "pnpm.ts");
@@ -56,11 +64,15 @@ function stopEarly(message: string, code = 1): never {
 const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [process.ppid, ...processAncestors(process.ppid)] };
 const pidStarted = processStart(process.pid);
 const lock = lockFile(root);
-const taken = acquireLock(lock, { pid: process.pid, started: new Date(), pidStarted, command: ["pnpm verify", ...process.argv.slice(2)].join(" ") }, processes);
+const self: LockHolder = { pid: process.pid, started: new Date(), pidStarted, command: ["pnpm verify", ...process.argv.slice(2)].join(" ") };
+const taken = acquireLock(lock, self, processes);
 if (!taken.acquired) stopEarly(`${taken.message} Let it finish.`);
 process.on("exit", () => releaseLock(lock, process.pid));
 // A last line for an interrupted run too, so a background run's notification still says how it ended.
+// The step running now, killed with the run: it has a process group of its own off Windows, so Ctrl-C does not reach it.
+let runningChild: ReturnType<typeof spawn> | undefined;
 const interrupted = (signal: string, code: number) => () => {
+  if (runningChild) killTree(runningChild);
   out.end([`pnpm verify stopped: interrupted (${signal}).`], true);
   process.exit(code);
 };
@@ -114,6 +126,23 @@ const readHead = () => {
   return done.status === 0 ? done.stdout.trim() : "";
 };
 const startedOn = readHead();
+// And the working tree (RP-1169): HEAD stays put under a merge --no-commit or the app's base-branch sync half-done.
+const git = systemGit(root);
+const fileHash = systemFileHash(root);
+// Not the run's own --log file, which grows as it runs.
+const ownLog = options.log === undefined ? [] : [relative(root, resolve(root, options.log)).replaceAll("\\", "/")];
+const readTree = () => treeSnapshot(git, fileHash, ownLog);
+const startedTree = readTree();
+if (startedTree) out.info(`working tree ${snapshotHash(startedTree)} (${startedTree.size} changed path${startedTree.size === 1 ? "" : "s"})`);
+/** Why the run must stop: HEAD or the working tree is no longer what it started on; undefined while it is. */
+const moved = (): string | undefined => headMoved(startedOn, readHead()) ?? treeChanged(startedTree, readTree());
+/** The same during a step, but a HEAD that can't be read right now (a failed spawn under load) is not a move. */
+const movedMidStep = (): string | undefined => {
+  const head = readHead();
+  return head === "" ? treeChanged(startedTree, readTree()) : (headMoved(startedOn, head) ?? treeChanged(startedTree, readTree()));
+};
+// Polled during a step, so a merge in the middle of a 20-minute suite stops it at once and not after it.
+const watchEveryMs = 15_000;
 
 const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
@@ -136,6 +165,17 @@ const envFile = join(root, ".env");
 const envText = existsSync(envFile) ? readFileSync(envFile, "utf8") : "";
 const postgres = postgresOfEnv(envText);
 if (!postgres) stopEarly("No Postgres in this worktree's .env: run `pnpm lane:env <n>` first.");
+// One verify per lane database (RP-1169): another worktree's live verify on the same compose project or port stops this one.
+// The git folder's worktree list is the only place to find them; without it nothing is checked, as before.
+try {
+  const others = listWorktrees(root)
+    .filter((worktree) => !samePath(worktree.path, root))
+    .map((worktree) => ({ path: worktree.path, env: readWorktreeEnv(worktree.path), holder: liveHolder(lockFile(worktree.path), self, processes) }));
+  const sharedDatabase = laneDatabaseRefusal(envText, others, self);
+  if (sharedDatabase !== undefined) stopEarly(sharedDatabase);
+} catch (error) {
+  out.error(`Could not check the other worktrees for a verify on this lane's database (${error instanceof Error ? error.message.split("\n")[0] : String(error)}).`);
+}
 const postgresAnswers = () => tcpReachable(postgres.host, postgres.port);
 const project = composeProjectOfEnv(envText) ?? "rabaed";
 const health: HealthDeps = {
@@ -179,6 +219,37 @@ if (turn.waitedMs > 0) {
   out.info(`Got ${slot.name} after ${Math.round(turn.waitedMs / 60_000)} min.`);
   // The stack may have gone down while this run waited.
   await checkStack();
+  // And the branch may have moved: the run starts on what it waited with, not on what it began as.
+  const waitedMove = moved();
+  if (waitedMove !== undefined) stopEarly(`${runCommand(from)} stopped before its first step: ${waitedMove}`);
+}
+
+/** Kills a step's whole process tree: pnpm starts vitest and the like, so the child alone is not enough. */
+function killTree(child: ReturnType<typeof spawn>): void {
+  if (child.pid === undefined) return;
+  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  else {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
+  }
+}
+
+/** One `pnpm <args>` in the worktree, run async so the poll can fire while it runs; everything it printed, stdout then stderr. */
+function runPnpm(args: string[], onSpawn: (child: ReturnType<typeof spawn>) => void): Promise<StepRun & { exit: string }> {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [pnpm, ...args], { cwd: root, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    onSpawn(child);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+    const output = () => `${Buffer.concat(stdout).toString("utf8")}${Buffer.concat(stderr).toString("utf8")}`;
+    child.on("error", (error) => (runningChild = undefined, done({ status: 1, output: output(), exit: error.message })));
+    child.on("close", (code) => (runningChild = undefined, done({ status: code ?? 1, output: output(), exit: String(code) })));
+  });
 }
 
 const passed: string[] = [];
@@ -189,25 +260,39 @@ for (const { name, script } of steps) {
   // A step's name is its pnpm script. runStep calls this with that script, then the test files of a
   // re-run (RP-979: a seam step that failed only on timeouts is re-run once, on just those files,
   // unless its Postgres was terminated or no longer answers, RP-994).
+  // The poll (RP-1169): HEAD or the working tree changing while the step runs kills it and ends the run at once.
+  let changedMidStep: string | undefined;
+  let child: ReturnType<typeof spawn> | undefined;
+  const stopWatching = watchTree({
+    check: movedMidStep,
+    onChange: (message) => {
+      changedMidStep = message;
+      if (child) killTree(child);
+    },
+    everyMs: watchEveryMs,
+    setTimer: (tick, ms) => setInterval(tick, ms),
+    clearTimer: (timer) => clearInterval(timer as NodeJS.Timeout),
+  });
   const outcome = await runStep(
     script,
-    (args) => {
-      const result = spawnSync(process.execPath, [pnpm, ...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-      exit = String(result.status ?? result.error?.message);
-      const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-      out.stepOutput(["pnpm", ...args].join(" "), output);
-      return { status: result.error ? 1 : (result.status ?? 1), output };
+    async (args) => {
+      if (changedMidStep !== undefined) return { status: 1, output: "" };
+      const result = await runPnpm(args, (started) => (child = runningChild = started));
+      exit = String(result.exit);
+      out.stepOutput(["pnpm", ...args].join(" "), result.output);
+      return { status: result.status, output: result.output };
     },
     postgresAnswers,
   );
+  stopWatching();
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   // A pull or Auto-fix's merge of main mid-run (RP-1103): stop now, with no line to paste.
-  const moved = headMoved(startedOn, readHead());
+  const stopReason = changedMidStep ?? moved();
   if (outcome.passed) {
     out.info(`ok   ${outcome.label} (${seconds}s)`);
     passed.push(outcome.label);
-    if (moved !== undefined) {
-      out.end([`${runCommand(from)} stopped after ${name}: ${moved}`], true);
+    if (stopReason !== undefined) {
+      out.end([`${runCommand(from)} stopped after ${name}: ${stopReason}`], true);
       process.exit(1);
     }
     continue;
@@ -215,9 +300,9 @@ for (const { name, script } of steps) {
   out.error(`FAIL ${name} (${seconds}s, exit ${exit}${outcome.reran ? ", after one re-run" : ""}). The last ${tailLines} lines it printed:`);
   out.error(tail(outcome.output, tailLines));
   // The failure may come from the move rather than the diff: say so instead of the usual stop line.
-  if (moved !== undefined) {
-    out.end([`${runCommand(from)} stopped at ${name}: ${moved}`], true);
-    process.exit(outcome.status);
+  if (stopReason !== undefined) {
+    out.end([`${runCommand(from)} stopped at ${name}: ${stopReason}`], true);
+    process.exit(outcome.status || 1);
   }
   // Then a note for only timeouts or workers that never started (RP-607), and the stop line, which
   // says so when Postgres was terminated or no longer answers (RP-994: Docker stopped mid-run).

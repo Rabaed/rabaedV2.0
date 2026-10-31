@@ -42,6 +42,8 @@
 // when RABAED_MAX_STACKS (default 8, machine-load.ts) stacks already run; `pnpm lanes:prune --stale` lists them.
 // One lane:env runs at a time per clone (a lock in the common git folder, lanes-lock.ts), from reading the
 // lanes until .env is written, so two runs at once never choose the same lane.
+// RP-1169: once .env is written it runs `docker compose -p rabaed-laneNN up -d --wait` (lane-env-start.ts), or says plainly
+// that it didn't (Docker down, a --db worktree, a failed start) with the exact command to run.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -68,6 +70,7 @@ import {
   takenLanePorts,
   type TakeoverWorktree,
 } from "./lanes.ts";
+import { startStack, systemCompose } from "./lane-env-start.ts";
 import { acquireLaneLock, laneLockFile, systemLockDeps } from "./lanes-lock.ts";
 import { maxStacks, stackCap, type CapVerdict } from "./machine-load.ts";
 import { samePath } from "./paths.ts";
@@ -291,3 +294,12 @@ const { postgres: pg, api, admin, web, mailpit, files } = lanePorts(lane);
 writeFileSync(".env", laneEnv(readFileSync(".env.example", "utf8"), lane, db));
 console.log(`Wrote .env for lane ${lane}${db ? `, database rabaed_${db}` : ""}: Postgres ${pg}, api ${api}, Rabaed Admin ${admin}, web ${web}, Mailpit ${mailpit}, file store ${files}, compose project ${laneProject(lane)}.`);
 console.log(`Open the web app at http://lane${lane}.localhost:${web}/en (its own host keeps sign-in cookies separate).`);
+
+// RP-1169: start the stack too (verifies started on a stack that was down), or say plainly that it wasn't. Under the
+// lane lock still, so the stack cap above counted every stack this run could add. A --db worktree shares its lane's stack.
+const started = startStack(
+  laneProject(lane),
+  { dockerRunning: containers !== undefined, compose: systemCompose },
+  db === undefined ? undefined : "this --db worktree shares the lane's stack, which belongs to the lane's own session.",
+);
+for (const line of started.lines) console.log(line);
