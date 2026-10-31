@@ -146,7 +146,7 @@ function StepCards({ route, locale, labels, holder, viewerRole }: ViewProps & { 
             {step ? (
               <OwnStepCard step={step} labels={labels} locale={locale} holder={step.current ? holder : undefined} />
             ) : (
-              <div className={cn("flex flex-col gap-1.5 rounded-[12px] border border-dashed bg-surface-subtle p-3.5", held ? "border-brand" : "border-border")}>
+              <div className={cn("flex flex-col gap-1.5 rounded-[12px] border border-dashed bg-surface-subtle p-3", held ? "border-brand" : "border-border")}>
                 <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
                   <RoleIcon role={row.stop.role} size={16} />
                   {labels.role(row.stop.role)}
@@ -201,7 +201,7 @@ function OwnStepCard({ step, labels, locale, holder }: { step: RouteStep; labels
       data-step={step.step.key}
       aria-current={step.current ? "step" : undefined}
       className={cn(
-        "flex flex-col gap-1.5 rounded-[12px] bg-surface p-3.5",
+        "flex flex-col gap-1.5 rounded-[12px] bg-surface p-3",
         step.current ? "shadow-[inset_0_0_0_1.5px_var(--brand)]" : "shadow-[inset_0_0_0_1px_var(--border-subtle)]",
       )}
     >
