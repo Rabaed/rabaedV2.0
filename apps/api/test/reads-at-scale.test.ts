@@ -7,11 +7,11 @@
 // every row the api wrote for them, so the copies are read like the originals at a cost of seconds. The
 // copies are removed again afterwards, so the test files after this one find the database as before.
 import { createDb, type Db } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { Home, WorkItemBoard, WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi } from "./support/harness.ts";
+import { createTestApi, type Caller } from "./support/harness.ts";
 import { buildTower, detail, draft, inInternalReview, ok, submitted, take, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -134,6 +134,8 @@ async function removeCopies(db: Db, ids: readonly string[]): Promise<void> {
 }
 
 let at: Tower;
+/** C1's Drafts and items in its internal review, made through the api: C1's alone. */
+const c1Only: string[] = [];
 
 /** C1's PM moves Snag `id` by `transition`, and picks it up where it lands in C1's Step Pool. */
 async function move(id: string, transition: string) {
@@ -168,8 +170,8 @@ beforeAll(async () => {
   const k1 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SCL");
   for (let i = 0; i < 4; i++) {
-    await draft(at, at.c1Engineer, `Draft cable ${i}`);
-    await inInternalReview(at, at.c1Engineer, `Reviewed cable ${i}`);
+    c1Only.push(await draft(at, at.c1Engineer, `Draft cable ${i}`));
+    c1Only.push(await inInternalReview(at, at.c1Engineer, `Reviewed cable ${i}`));
     await submitted(at, at.c1Engineer, at.c1Pm, `Submitted tray ${i}`, i % 2 === 0 ? at.electrical : at.mechanical);
     await atK1(`Picked up duct ${i}`);
     await take(at.k1Manager, await atK1(`Approved panel ${i}`), "approve_a");
@@ -227,7 +229,20 @@ describe(`one Project of a few thousand work items (RP-1050)`, () => {
     const list: WorkItemList = (await ok(at.k1Manager.get(`/v1/projects/${at.projectId}/modules/submittals/work-items`), 200)).json();
     // Per copy: 4 Submitted, 4 picked up, 4 approved, 4 to revise.
     expect(list.stages.reduce((n, s) => n + s.count, 0)).toBe(16 * (COPIES + 1));
-    const board = (await ok(at.k1Manager.get(`/v1/projects/${at.projectId}/modules/submittals/work-items/kanban`), 200)).body;
-    for (const hidden of ["Draft cable", "Reviewed cable"]) expect(board).not.toContain(hidden);
+    // Each of C1's Drafts and items in internal review, by id: on C1's engineer's board first, never on K1's.
+    const boardCards = async (by: Caller) => {
+      const board: WorkItemBoard = (await ok(by.get(`/v1/projects/${at.projectId}/modules/submittals/work-items/kanban`), 200)).json();
+      return board.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards));
+    };
+    // Each board read once: at this size a read takes seconds.
+    const cards = new Map([
+      [at.c1Engineer, await boardCards(at.c1Engineer)],
+      [at.k1Manager, await boardCards(at.k1Manager)],
+    ]);
+    const name = (by: Caller) => (by === at.c1Engineer ? "C1 engineer" : "K1 manager");
+    expect(c1Only).toHaveLength(8); // not hidden-from: the api-made items this check covers
+    for (const id of c1Only) {
+      await expectHiddenFrom({ read: async (by: Caller) => cards.get(by)!, target: id, seenBy: at.c1Engineer, hiddenFrom: at.k1Manager, name, label: "C1's own item on the Kanban" });
+    }
   });
 });

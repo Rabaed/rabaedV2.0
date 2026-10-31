@@ -4,31 +4,6 @@
 # a line whose test now exists. Never add a line for a new scenario: write its test at both seams.
 # Grouped by the ticket that added the scenario; the comment after a line is the start of its Scenario cell.
 
-# RP-392
-RP-392-1 db  # C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its D
-RP-392-2 db  # C1 creates a Revision on day 5 and sends it for review on day 7
-
-# RP-407
-RP-407-1 db  # C1 has items Submitted to K1 and in its own internal review; C2 (a second Contractor on th
-RP-407-2 db  # C1 engineer's Draft has been a Draft for six weeks
-RP-407-3 db  # The Project closes while a C1 item waits, five weeks old, at C1's internal review
-RP-407-4 db  # A C1 item sits five weeks at C1's internal review, then is Submitted to K1
-RP-407-5 db  # K1 manager A is on two Projects, with C1 items Submitted on each
-RP-407-6 db  # As in RP-407-5
-RP-407-7 db  # On one Project C1 has a Draft, an item in its internal review and items Submitted to K1. K
-RP-407-8 db  # As in RP-407-7
-
-# RP-408
-RP-408-1 db  # As in RP-407-7, and in RP-407-3 (a Project that has closed)
-
-# RP-410
-RP-410-1 db  # A C1 item is Submitted and picked up by K1's manager; C1's PM picks up another in internal
-
-# RP-412
-RP-412-1 db  # Tower's Project Admin (C1, the Host Company) saves the Project pattern twice, gives the MA
-RP-412-2 db  # C1 has issued two MAR numbers; a C1 engineer, a C2 engineer and a K1 manager open Project 
-RP-412-3 api  # A C2 member who is also a Project Admin saves Tower's pattern; a Rabaed Engineer saves ano
-
 # RP-427
 RP-427-1 db  # A C1 member who isn't a Project Admin, K1's Authorized Person, and the Project Admin of an
 RP-427-2 db  # Tower's Project Admin binds the MAR to another Project's Workflow, to a Workflow in a Comp
@@ -54,10 +29,3 @@ RP-450-1 api  # Tower's Project Admin duplicates and publishes a Workflow, adds 
 
 # RP-555
 RP-555-1 db  # Tower's Project Admin publishes Tower's own MAR Workflow from the builder with a Change No
-
-# RP-1062
-RP-1062-1 api  # C1 Submits a WIR (a MAR at seam 1) to K1 and its Members post in its Chat; C2 Submits one 
-RP-1062-2 api  # K1's manager covers Building B only (seam 2), or Mechanical only (seam 1); C1's Submitted 
-RP-1062-3 api  # C1's engineer posts on an item still in C1's internal review
-RP-1062-4 api  # C1's engineer, K1's engineer (K1's manager at seam 1) and the Owner's Representative post 
-RP-1062-5 api  # The Owner's Representative (seam 2), or K1's Mechanical manager (seam 1), reads an item's 

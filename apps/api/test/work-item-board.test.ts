@@ -15,9 +15,9 @@ import {
   type WorkItemRow,
 } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
+import { LEGACY_MAR, expectHiddenFrom } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -66,6 +66,13 @@ const cardIds = (b: WorkItemBoard) => cards(b).map((c) => c.id);
 const column = (b: WorkItemBoard, stageKey: string) => b.columns.find((c) => c.stageKey === stageKey)!;
 const stage = (b: WorkItemBoard, key: string) => b.stages.find((s) => s.key === key)!;
 const cardOf = (b: WorkItemBoard, id: string) => cards(b).find((c) => c.id === id);
+/** The cards `by` reads on the board with `query`, for expectHiddenFrom. */
+const boardCards = (query: WorkItemQueryInput = {}) => async (by: Caller) => cards(await board(by, query));
+/** The board of Project `project` as `by` reads it: `[{ id: project }]` when answered, `[]` for the plain 404. */
+const boardOf = (project: string, query = "") => async (by: Caller) =>
+  (await readById(`/v1/projects/${project}/work-items/kanban${query}`)(by)).map(() => ({ id: project }));
+const whoIs = (by: Caller) =>
+  by === c1Engineer ? "C1 engineer" : by === c1Pm ? "C1 PM" : by === c2Engineer ? "C2" : by === k1ManagerA ? "K1 manager A" : by === k1ManagerB ? "K1 manager B" : by === outsider ? "outsider" : "someone";
 const laneOf = (b: WorkItemBoard, id: string) => b.columns.flatMap((c) => c.lanes).find((l) => l.cards.some((c) => c.id === id));
 
 /** Every column's and lane's count is of the cards it holds; every card sits in its own Stage's column. */
@@ -203,7 +210,7 @@ describe("columns and swimlanes (V14)", () => {
     if (k1Lane?.kind !== "role") throw new Error("expected K1's own role lane");
     const holder = cardOf(theirs, withK1)!.with;
     if (holder?.kind !== "own" || !holder.holder) throw new Error("expected K1's holder");
-    const k1Name = holder.companyName.en;
+    const k1Name = holder.companyName.en; // not hidden-from: K1's name as K1 reads it, which C1 is shown too (V5); C1's lane is matched by participantId
 
     const mine = await board(c1Engineer);
     const lane = laneOf(mine, withK1)!;
@@ -211,9 +218,12 @@ describe("columns and swimlanes (V14)", () => {
     expect(Object.keys(lane).sort()).toEqual(["cards", "companyName", "count", "kind", "participantId"]);
     expect(cardOf(mine, withK1)!.with).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
     const json = JSON.stringify(mine);
+    const theirJson = JSON.stringify(theirs);
     const k1Step = holder.step;
-    for (const secret of [holder.holder.name.en, holder.holder.name.ar, k1Step.name.en, k1Step.name.ar, "consultant_review"]) {
-      expect(json).not.toContain(secret);
+    const secrets = [holder.holder.name.en, holder.holder.name.ar, k1Step.name.en, k1Step.name.ar, "consultant_review"]; // not hidden-from: K1's own holder and Step, read from K1's board; each is shown below to be on it
+    for (const secret of secrets) {
+      expect(theirJson, `K1 reads ${secret} first`).toContain(secret);
+      expect(json).not.toContain(secret); // not hidden-from: secret text, read on K1's own board the line above
     }
     // K1's Positions never reach C1's answer: no lane or card names a role of another Company.
     const roles = [
@@ -221,8 +231,11 @@ describe("columns and swimlanes (V14)", () => {
       ...cards(mine).flatMap((c) => (c.with?.kind === "own" && c.with.role ? [c.with.role.position.key] : [])),
     ];
     expect(roles.every((k) => k === "engineer" || k === "project_manager"), JSON.stringify(roles)).toBe(true);
-    expect(json).not.toContain(k1Lane.position.name.en === "Manager" ? '"Manager"' : k1Lane.position.name.en);
-    expect(json).not.toContain('"Consultant"');
+    const k1Position = k1Lane.position.name.en === "Manager" ? '"Manager"' : k1Lane.position.name.en; // not hidden-from: K1's Position as K1 reads it, checked on K1's board next
+    for (const secret of [k1Position, '"Consultant"']) {
+      expect(theirJson, `K1 reads ${secret} first`).toContain(secret);
+      expect(json).not.toContain(secret); // not hidden-from: secret text, read on K1's own board the line above
+    }
   });
 
   it("puts closed items, which nobody holds, in the closed lane", async () => {
@@ -235,15 +248,16 @@ describe("one card per Revision chain, as in the List", () => {
   it("shows the raiser's Company its Rev 1, and K1 the original while Rev 1 is a Draft (V1)", async () => {
     const mine = cardIds(await board(c1Engineer));
     expect(mine).toContain(revision);
-    expect(mine).not.toContain(chainRoot);
+    expect(mine).not.toContain(chainRoot); // not hidden-from: one card per chain; C1 reads the original under "Show all Revisions" below
     const theirs = cardIds(await board(k1ManagerB));
     expect(theirs).toContain(chainRoot);
-    expect(theirs).not.toContain(revision);
+    // Rev 1, a Draft, is C1's alone (V1): C1 reads its card first.
+    await expectHiddenFrom({ read: boardCards(), target: revision, seenBy: c1Engineer, hiddenFrom: [k1ManagerA, k1ManagerB, c2Engineer], name: whoIs, label: "Rev 1" });
   });
 
   it('shows every Revision the viewer may see with "Show all Revisions"', async () => {
     expect(cardIds(await board(c1Engineer, { allRevisions: true }))).toEqual(expect.arrayContaining([chainRoot, revision]));
-    expect(cardIds(await board(k1ManagerB, { allRevisions: true }))).not.toContain(revision);
+    await expectHiddenFrom({ read: boardCards({ allRevisions: true }), target: revision, seenBy: c1Engineer, hiddenFrom: [k1ManagerB, c2Engineer], name: whoIs, label: "Rev 1, all Revisions" });
   });
 });
 
@@ -305,7 +319,16 @@ describe("a second Contractor (V3, scenario 17)", () => {
       expect(cards(b).every((c) => c.id === c2Item), label).toBe(true);
       expect(b.stages.reduce((sum, s) => sum + s.count, 0), label).toBe(cards(b).length);
       expect(b.columns.flatMap((c) => c.lanes).every((l) => l.kind === "role" || l.kind === "step"), label).toBe(true);
-      expect(b.filters.with.companies, label).toEqual([]);
+      // K1, which holds C1's items, is a "with" choice for C1 and never for C2.
+      await expectHiddenFrom({
+        read: async (by: Caller) => (await board(by, query)).filters.with.companies,
+        target: k1ParticipantId,
+        idOf: (c) => c.participantId,
+        seenBy: c1Engineer,
+        hiddenFrom: c2Engineer,
+        name: whoIs,
+        label: `K1 as a "with" choice, ${label}`,
+      });
     }
     const b = await board(c2Engineer);
     expect(cardIds(b)).toEqual([c2Item]);
@@ -326,8 +349,8 @@ describe("closed columns", () => {
 
     await api.later(2 * DAY);
     const after = await board(k1ManagerB);
-    expect(cardIds(after)).not.toContain(closedItem);
-    expect(cardIds(after)).not.toContain(chainRoot);
+    expect(cardIds(after)).not.toContain(closedItem); // not hidden-from: the 30-day cut of K1's own board; K1's List still has it below
+    expect(cardIds(after)).not.toContain(chainRoot); // not hidden-from: the 30-day cut of K1's own board; K1's List still has it below
     expect(column(after, closedStage).shown).toBe(0);
     expect(stage(after, closedStage).count).toBe(total);
     expectCountsAddUp(after);
@@ -345,9 +368,11 @@ describe("closed columns", () => {
 
 describe("refusals", () => {
   it("answers a Member off the Project as if it didn't exist", async () => {
-    await expectHidden(outsider.get(`/v1/projects/${projectId}/work-items/kanban`));
-    await expectHidden(outsider.get(`/v1/projects/${projectId}/work-items/kanban?stage=draft`));
-    await expectHidden(c1Engineer.get(`/v1/projects/${randomUUID()}/work-items/kanban`));
+    for (const query of ["", "?stage=draft"]) {
+      await expectHiddenFrom({ read: boardOf(projectId, query), target: projectId, seenBy: [c1Engineer, k1ManagerA, c2Engineer], hiddenFrom: outsider, name: whoIs, label: `the board${query}` });
+    }
+    // A made-up Project gets the same 404, from someone who reads this Project's board.
+    await expectHiddenFrom({ read: (project: string) => boardOf(project)(c1Engineer).then((rows) => rows.map(() => ({ id: "a board" }))), target: "a board", seenBy: projectId, hiddenFrom: randomUUID() });
   });
 
   it("refuses a filter that isn't one", async () => {

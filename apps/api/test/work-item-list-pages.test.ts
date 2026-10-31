@@ -4,12 +4,12 @@
 // only whether a next page exists. Every sort, either way, lists each visible row
 // once across the pages, and rows with nothing to sort by come last either way.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { workItemQuery, workItemSearchParams, workItemSorts, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { exportWorkItems } from "../src/work-items/query.ts";
-import { createTestApi, type Caller } from "./support/harness.ts";
+import { createTestApi, readById, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, ok, submitted, take, type Company, type Tower } from "./support/tower.ts";
 import { LEGACY_MAR } from "@rabaed/db/test-support";
 
@@ -98,10 +98,22 @@ describe("the Member's own columns (Save as my default)", () => {
     { key: "revision", shown: false },
   ];
 
+  /** The column layout `by` reads on the List, for expectHiddenFrom: `[{ id: <the layout> }]`, or `[]` for the design's. */
+  const layoutOf = async (by: Caller) => {
+    const layout = (await list(by, { page: 1 })).columnLayout;
+    return layout === undefined ? [] : [{ id: JSON.stringify(layout) }];
+  };
+  /** The engineer's own saved layout, as layoutOf reads it: the target the others must not read. */
+  const savedByEngineer = async () => {
+    const [own] = await layoutOf(at.c1Engineer);
+    expect(own, "the engineer saved a layout").toBeDefined();
+    return own!.id;
+  };
+
   it("start as the design's, and are kept for the Member who saved them, the locked columns first", async () => {
-    expect((await list(at.c1Engineer, { page: 1 })).columnLayout).toBeUndefined();
+    expect((await list(at.c1Engineer, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: the Member's own, before they save one
     const saved = (await ok(at.c1Engineer.request("PUT", path(), mine), 200)).json();
-    expect(saved.slice(0, 3)).toEqual([
+    expect((saved as unknown[]).slice(0, 3)).toEqual([
       { key: "documentNumber", shown: true },
       { key: "subject", shown: true },
       { key: "owner", shown: true },
@@ -110,8 +122,11 @@ describe("the Member's own columns (Save as my default)", () => {
   });
 
   it("are nobody else's: a colleague and another Company still see the design's", async () => {
-    expect((await list(at.c1Pm, { page: 1 })).columnLayout).toBeUndefined();
-    expect((await list(at.k1Manager, { page: 1 })).columnLayout).toBeUndefined();
+    // The engineer reads their saved layout first; neither the colleague nor K1 reads it.
+    const name = (by: Caller) => (by === at.c1Engineer ? "C1 engineer" : by === at.c1Pm ? "C1 PM" : "K1");
+    await expectHiddenFrom({ read: layoutOf, target: await savedByEngineer(), seenBy: at.c1Engineer, hiddenFrom: [at.c1Pm, at.k1Manager], name });
+    expect((await list(at.c1Pm, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: proven by the expectHiddenFrom above; the colleague has the design's
+    expect((await list(at.k1Manager, { page: 1 })).columnLayout).toBeUndefined(); // not hidden-from: proven by the expectHiddenFrom above; K1 has the design's
   });
 
   it("refuse a column twice, or one that isn't the List's", async () => {
@@ -137,10 +152,10 @@ describe("numbered pages", () => {
 
   it("opens any page by its number, the last too, and one past the end is empty", async () => {
     const last = await list(at.c1Engineer, { page: 3, pageSize: 10 });
-    expect(last.items).toHaveLength(5);
+    expect(last.items).toHaveLength(5); // not hidden-from: a page size of the viewer's own rows
     expect(last.page?.hasNext).toBe(false);
     const past = await list(at.c1Engineer, { page: 9, pageSize: 10 });
-    expect(past.items).toEqual([]);
+    expect(past.items).toEqual([]); // not hidden-from: a page past the end of the viewer's own rows
     expect(past.page?.hasNext).toBe(false);
   });
 
@@ -150,13 +165,13 @@ describe("numbered pages", () => {
 
   it("under a search, counts no more than the page shows: no total reaches the client", async () => {
     const first = await list(at.c1Engineer, { q: "Item", page: 1, pageSize: 10 });
-    expect(first.items).toHaveLength(10);
+    expect(first.items).toHaveLength(10); // not hidden-from: a page size of the viewer's own rows
     expect(first.page?.hasNext).toBe(true);
     // The Stage counts are the page's own rows, never the 21 matches.
     expect(total(first)).toBe(10);
     expect(JSON.stringify(first)).not.toMatch(/"(total|count)":21\b/);
     const third = await list(at.c1Engineer, { q: "Item", page: 3, pageSize: 10 });
-    expect(third.items).toHaveLength(1);
+    expect(third.items).toHaveLength(1); // not hidden-from: a page size of the viewer's own rows
     expect(total(third)).toBe(1);
     expect(third.page?.hasNext).toBe(false);
   });
@@ -172,14 +187,14 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
     const all = await exported(at.c1Engineer, { sort: "subject", page: 1, pageSize: 10 });
     expect(all.items).toHaveLength(created.length);
     expect(all.items.map((i) => i.title)).toEqual((await list(at.c1Engineer, { sort: "subject", page: 1 })).items.map((i) => i.title));
-    expect((await exported(at.c1Engineer, { stage: ["draft"] })).items).toHaveLength(21);
+    expect((await exported(at.c1Engineer, { stage: ["draft"] })).items).toHaveLength(21); // not hidden-from: the count of the viewer's own Drafts in the Export
   });
 
   it("under a search, gives only the pages read so far, and no total", async () => {
     const two = await exported(at.c1Engineer, { q: "Item", page: 2, pageSize: 10 });
-    expect(two.items).toHaveLength(20);
+    expect(two.items).toHaveLength(20); // not hidden-from: the pages read so far, of the viewer's own rows
     expect(two).toEqual({ items: expect.any(Array), capped: false });
-    expect((await exported(at.c1Engineer, { q: "Item", page: 1, pageSize: 10 })).items).toHaveLength(10);
+    expect((await exported(at.c1Engineer, { q: "Item", page: 1, pageSize: 10 })).items).toHaveLength(10); // not hidden-from: the pages read so far, of the viewer's own rows
   });
 
   it("stops at its cap, and says so; under a search the cap holds too", async () => {
@@ -195,9 +210,9 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
     const scope = { projectId: at.projectId, moduleKey: "submittals" as const };
     const capped = await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({}), new Date(), 3);
     expect(capped).toMatchObject({ capped: true });
-    expect(capped!.items).toHaveLength(3);
+    expect(capped!.items).toHaveLength(3); // not hidden-from: the Export's cap
     const searched = await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({ q: "Item", page: "1000", pageSize: "50" }), new Date(), 3);
-    expect(searched!.items).toHaveLength(3);
+    expect(searched!.items).toHaveLength(3); // not hidden-from: the Export's cap
     expect((await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({}), new Date()))!.capped).toBe(false);
   });
 
@@ -235,13 +250,22 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
 
   it("gives another Company only what it sees: never the Contractor's Drafts or internal review", async () => {
     const forK1 = await exported(at.k1Manager, {});
-    expect(forK1.items.map((i) => i.title).some((t) => t.startsWith("Item"))).toBe(false);
+    // Each of C1's 21 Drafts, by id: C1 exports it, K1 doesn't.
+    const rows = new Map<Caller, WorkItemList["items"]>([
+      [at.c1Engineer, (await exported(at.c1Engineer, {})).items],
+      [at.k1Manager, forK1.items],
+    ]);
+    const name = (by: Caller) => (by === at.c1Engineer ? "C1 engineer" : "K1");
+    for (const draft of created.slice(0, 21)) {
+      await expectHiddenFrom({ read: async (by: Caller) => rows.get(by)!, target: draft, seenBy: at.c1Engineer, hiddenFrom: at.k1Manager, name, label: "a C1 Draft in the Export" });
+    }
     expect(forK1.items.every((i) => i.submissionDate !== null)).toBe(true);
   });
 
   it("is not found on a Project the Member isn't on", async () => {
     const stranger = await api.authorizedPerson();
-    expect((await stranger.caller.get(`/v1/projects/${at.projectId}/modules/submittals/work-items/export`)).statusCode).toBe(404);
+    const exportOf = async (by: Caller) => (await readById(`/v1/projects/${at.projectId}/modules/submittals/work-items/export`)(by)).map(() => ({ id: at.projectId }));
+    await expectHiddenFrom({ read: exportOf, target: at.projectId, seenBy: [at.c1Engineer, at.k1Manager], hiddenFrom: stranger.caller, name: (by) => (by === stranger.caller ? "stranger" : "on the Project") });
   });
 });
 
@@ -286,10 +310,10 @@ describe("every column's sort", () => {
     const dates = rows.map((r) => r.submissionDate!);
     expect(dates).toEqual([...dates].sort());
     const owners = (await list(at.k1Manager, { sort: "owner", dir: "asc", page: 1, lang: "en" })).items.map((r) => {
-      if (r.closedBy) return r.closedBy.kind === "own" ? r.closedBy.name.en : r.closedBy.companyName.en;
+      if (r.closedBy) return r.closedBy.kind === "own" ? r.closedBy.name.en : r.closedBy.companyName.en; // not hidden-from: the owner each row shows, to check the sort
       if (!r.with) return null;
-      if (r.with.kind === "company") return r.with.companyName.en;
-      return r.with.holder ? r.with.holder.name.en : r.with.step.name.en;
+      if (r.with.kind === "company") return r.with.companyName.en; // not hidden-from: the owner each row shows, to check the sort
+      return r.with.holder ? r.with.holder.name.en : r.with.step.name.en; // not hidden-from: the owner each row shows, to check the sort
     });
     const shown = owners.filter((o): o is string => o !== null).map((o) => o.toLowerCase());
     expect(shown).toEqual([...shown].sort());

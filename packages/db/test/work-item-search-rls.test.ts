@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember } from "../src/index.ts";
-import { buildSeamTwoTower, c2Draft, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
+import { buildSeamTwoTower, c2Draft, expectHiddenFrom, testDatabaseUrls, wirAtConsultant } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const migrator = createDb(urls.migrator, { max: 1 });
@@ -91,8 +91,17 @@ describe("the search index", () => {
   });
 
   it("finds nothing for a caller who is no Member, or none at all", async () => {
-    expect(await searched(randomUUID(), "Slab")).toEqual([]);
-    const { rows } = await sql<{ id: string }>`select app.search_work_items(${projectId}::uuid, 'Slab') as id`.execute(app);
-    expect(rows).toEqual([]);
+    // C1's item, found by K1 with the same search first; then by neither a made-up Member nor no Member.
+    const stranger = randomUUID();
+    await expectHiddenFrom({
+      read: async (reader: string | null) =>
+        reader === null
+          ? (await sql<{ id: string }>`select app.search_work_items(${projectId}::uuid, 'Slab') as id`.execute(app)).rows
+          : (await searched(reader, "Slab")).map((id) => ({ id })),
+      target: c1Item,
+      seenBy: k1Engineer,
+      hiddenFrom: [stranger, null],
+      name: (reader) => (reader === null ? "no Member" : reader === stranger ? "no Member of Rabaed" : "K1"),
+    });
   });
 });
