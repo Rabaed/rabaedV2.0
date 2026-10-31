@@ -16,6 +16,8 @@ function useLabels(): { record: RecordVerificationLabels; form: VerificationCode
       genuine: t("genuine"),
       replaced: (date) => t("replaced", { date }),
       replacedHint: t("replacedHint"),
+      testKey: t("testKey"),
+      testKeyHint: t("testKeyHint"),
       documentNumber: t("documentNumber"),
       project: t("project"),
       outcome: t("outcome"),

@@ -14,7 +14,8 @@ import { Icon } from "../icon/icon.tsx";
 
 // The public verification page of a Documental Record (RP-157; visibility.md, the Verification page
 // row): genuine or replaced, what the record's first page prints, its signers, and a check of a copy
-// in the browser, which fingerprints the dropped PDF with Web Crypto and uploads nothing. Interim,
+// in the browser, which fingerprints the dropped PDF with Web Crypto and uploads nothing. A record
+// sealed with a test key (UAT, RP-1042) is never shown as genuine: the page says it is a test record. Interim,
 // built from the kit's parts with no reference screen yet (RP-665; restyle RP-666).
 
 export type RecordVerificationLabels = {
@@ -22,6 +23,9 @@ export type RecordVerificationLabels = {
   /** "This record was replaced by a corrected copy on {date}", given the date as the page writes it. */
   replaced: (date: string) => ReactNode;
   replacedHint: string;
+  /** "Test record: not a valid record", for a record sealed with a test key (RP-1042). */
+  testKey: string;
+  testKeyHint: string;
   documentNumber: string;
   project: string;
   outcome: string;
@@ -165,18 +169,24 @@ export function RecordVerificationView({
 }) {
   const v = verification;
   const genuine = v.status === "genuine";
+  const test = v.testKey === true;
   const status: ReactNode = v.status === "genuine" ? labels.genuine : labels.replaced(day(v.replacedAt, locale));
+  const good = genuine && !test;
   // As the record printed it: in the page's language when the record printed it, else in the one it did.
   const printed = (text: PrintedText) => <bdi dir="auto">{printedIn(text, locale)}</bdi>;
   return (
     <div className="flex flex-col gap-4" data-testid="record-verification">
       <div
         role="status"
-        className={cn("flex items-start gap-3 rounded-lg px-4 py-3", genuine ? "bg-success-tint text-success-fg" : "bg-warning-tint text-warning-fg")}
+        data-testid="verification-status"
+        data-tone={good ? "success" : "warning"}
+        className={cn("flex items-start gap-3 rounded-lg px-4 py-3", good ? "bg-success-tint text-success-fg" : "bg-warning-tint text-warning-fg")}
       >
-        <Icon name={genuine ? "circle-check" : "alert-triangle"} size={24} className="mt-0.5 shrink-0" />
+        <Icon name={good ? "circle-check" : "alert-triangle"} size={24} className="mt-0.5 shrink-0" />
         <div className="min-w-0">
-          <p className="font-display text-h6 font-semibold">{status}</p>
+          <p className="font-display text-h6 font-semibold">{test ? labels.testKey : status}</p>
+          {test && <p className="mt-1 text-body">{labels.testKeyHint}</p>}
+          {test && !genuine && <p className="mt-1 text-body">{status}</p>}
           {!genuine && <p className="mt-1 text-body">{labels.replacedHint}</p>}
         </div>
       </div>

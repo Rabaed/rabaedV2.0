@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyProject, automationBypass, PROJECTS, projectEnv, projectSettings, commandEnv, pnpmCommand, uatDatabase, type ProjectName } from "./uat-deploy.ts";
+import { applyProject, automationBypass, PROJECTS, projectEnv, projectSettings, commandEnv, pnpmCommand, recordsContainerEnv, recordsSecretsImport, uatDatabase, type ProjectName } from "./uat-deploy.ts";
 
 // The UAT deploy's helper (ADR 0026, RP-1043), run by deploy-uat.yml and reset-uat.yml
 // with environment `uat`'s secrets and variables. These values stand in for them.
@@ -405,5 +405,38 @@ describe("automationBypass", () => {
     );
     expect(await automationBypass("admin", env, api.fetch)).toBe(secret);
     expect(api.calls[1]).toMatchObject({ method: "PATCH", url: "https://api.vercel.com/v1/projects/prj_admin/protection-bypass?teamId=team_123", body: { generate: { note: "deploy-uat.yml smoke (RP-1043)" } } });
+  });
+});
+
+// The UAT Records container (RP-1042, ADR 0026): deploy-records-uat.yml imports these as its Fly
+// secrets, from the same `uat` environment, so the container reads the api's database and files.
+describe("the Records container's secrets", () => {
+  it("are the app role over the transaction pooler, the Project files store and the web's address, and nothing else", () => {
+    const vars = recordsContainerEnv(env, version);
+    expect(Object.keys(vars).sort()).toEqual(
+      ["APP_VERSION", "DATABASE_APP_URL", "DATABASE_POOL_MAX", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_ENDPOINT", "FILE_STORE_REGION", "FILE_STORE_SECRET_ACCESS_KEY", "PROJECT_FILES_BUCKET", "WEB_URL"].sort(),
+    );
+    expect(vars.DATABASE_APP_URL).toBe(varsOf("api").DATABASE_APP_URL);
+    expect(vars.WEB_URL).toBe(env.UAT_WEB_URL);
+    expect(vars.FILE_STORE_REGION).toBe("auto");
+    // Never the mail key, the cron secret, the fonts key or another role's password.
+    const all = JSON.stringify(vars);
+    for (const name of ["SENDGRID_API_KEY", "CRON_SECRET", "FONTS_SECRET_ACCESS_KEY", "DATABASE_ADMIN_PASSWORD", "DATABASE_MIGRATOR_PASSWORD"] as const) {
+      expect(all).not.toContain(env[name]!);
+    }
+  });
+
+  it("print as the lines `fly secrets import` reads, one NAME=VALUE a line", () => {
+    const lines = recordsSecretsImport({ A: "1", B: "postgres://x:y@h/db?sslmode=require" });
+    expect(lines).toBe("A=1\nB=postgres://x:y@h/db?sslmode=require\n");
+  });
+
+  it("refuse a value with a line break, which would break the import", () => {
+    expect(() => recordsSecretsImport({ A: "one\ntwo" })).toThrow(/A/);
+  });
+
+  it("fail, naming it, when a setting is missing", () => {
+    const { PROJECT_FILES_BUCKET: _omitted, ...rest } = env;
+    expect(() => recordsContainerEnv(rest, version)).toThrow(/PROJECT_FILES_BUCKET/);
   });
 });

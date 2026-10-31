@@ -3078,6 +3078,8 @@
     "genuine": "This record is genuine",
     "replaced": "This record was replaced by a corrected copy on {date}",
     "replacedHint": "Verify your copy below: an older copy is no longer the current record.",
+    "testKey": "Test record: not a valid record",
+    "testKeyHint": "This record was made on Rabaed UAT, for testing, and sealed with a test key. It proves nothing.",
     "documentNumber": "Document Number",
     "project": "Project",
     "outcome": "Outcome",

@@ -90,7 +90,7 @@ export function documentalRecordHandler(deps: RecordJobDeps): OutboxHandler {
       verificationTokenHash: await sha256(new TextEncoder().encode(token)),
       verificationCode: data.verification.code,
     });
-    if (saved) await saveDocumentalRecordFace(trx, row.id, recordFace(data)); // the verification page's (RP-157)
+    if (saved) await saveDocumentalRecordFace(trx, row.id, recordFace(data, (await deps.signer()).test)); // the verification page's (RP-157)
     if (saved) await finishRecord(trx, row.id, { pdf, data, layoutPages }, deps.validator);
   };
 }
