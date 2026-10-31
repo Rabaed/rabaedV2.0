@@ -26,6 +26,11 @@
 // RP-1122: without --lane N it also removes the veraPDF containers of test runs that were killed or
 // timed out (verapdf-containers.ts): those whose test process no longer runs, read again just before
 // each removal. One whose process runs, or of a worktree holding lane 7, stays and is named.
+//
+// RP-1170: --merged fetches origin first (a stale origin/main said "Nothing to prune"); with --lane N
+// it names every worktree that keeps the lane at once (mergedBlockers, keptByClaims); a container
+// whose kill got no exit event is tried again (lanes.ts removeProject); and while a verify runs
+// anywhere on the machine (verifies-running.ts) the containers go but every volume stays.
 import { existsSync } from "node:fs";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
@@ -38,6 +43,7 @@ import {
   LANE_SCHEME,
   laneProject,
   listContainers,
+  mergedBlockers,
   listVolumes,
   onlyLane,
   parsePruneArgs,
@@ -51,9 +57,11 @@ import {
   type Volume,
 } from "./lanes.ts";
 import { maxStacks, staleReport } from "./machine-load.ts";
+import { samePath } from "./paths.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLanes, sessionHeldProject, shallowRefusal, type JudgedLane } from "./prune-guards.ts";
-import { gitChanges, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
+import { volumesKeptReason, verifiesRunningNow } from "./verifies-running.ts";
+import { fetchPrune, gitChanges, gitError, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 import { pidAlive } from "./lanes-lock.ts";
 import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
@@ -131,6 +139,13 @@ if (withMerged) {
     console.error(shallow);
     process.exit(1);
   }
+  // RP-1170: judged on origin/main as it is now, not as of the last fetch.
+  try {
+    fetchPrune(mainRoot);
+  } catch (error) {
+    console.error(`lanes:prune --merged refused: \`git fetch --prune origin\` failed (${gitError(error)}), so "merged" cannot be judged.`);
+    process.exit(1);
+  }
   if (!refExists("origin/main", mainRoot)) {
     console.error("origin/main not found: run `git fetch origin main` and re-run.");
     process.exit(1);
@@ -153,6 +168,13 @@ if (withMerged) {
   fresh = merged.filter((m) => !known.has(m.project));
   stale.push(...fresh);
   for (const k of [...dirty, ...held]) if (!known.has(k.project)) keep({ ...k, reason: `not pruned as merged: ${k.reason}` });
+  // RP-1170: --lane N names everything that keeps its lane, all at once.
+  const own = lane === undefined ? undefined : laneProject(lane);
+  if (own !== undefined && !fresh.some((m) => m.project === own) && !known.has(own)) {
+    // A merged worktree with uncommitted files counts as not merged there; it is listed above with its files.
+    const listed = (path: string) => dirty.some((d) => samePath(d.path, path));
+    for (const k of mergedBlockers(own, { containers, worktrees })) if (!listed(k.path)) keep({ ...k, reason: `not pruned as merged: ${k.reason}` });
+  }
 }
 
 for (const k of claimed) if (!fresh.some((m) => m.project === k.project)) keep(k);
@@ -184,8 +206,15 @@ if (options.dryRun) {
   process.exit(0);
 }
 
+// RP-1170, rule 4: no volume is removed while a verify runs anywhere on the machine.
+const volumesStay = candidates.length > 0 ? volumesKeptReason(verifiesRunningNow()) : undefined;
+if (volumesStay !== undefined) console.log(`Volumes kept: ${volumesStay}. The containers go; run \`pnpm lanes:prune\` again once no verify runs to remove the volumes.`);
 const question =
-  candidates.length > 0 ? "Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist." : "Remove them? They only sleep; nothing in them is kept.";
+  candidates.length === 0
+    ? "Remove them? They only sleep; nothing in them is kept."
+    : volumesStay !== undefined
+      ? "Remove their containers and networks, keeping every volume?"
+      : "Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.";
 await confirmOrExit(question, {
   yes: options.yes,
   verb: "remove",
@@ -207,8 +236,9 @@ for (const s of candidates) {
     continue;
   }
   try {
-    removeProject(s);
-    console.log(`Removed ${s.project}.`);
+    // removeProject reads the verifies again just before: one may have started since the prompt.
+    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined });
+    console.log(volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed ${s.project}.`);
   } catch (error) {
     failed++;
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
