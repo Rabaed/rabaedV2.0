@@ -56,7 +56,7 @@ export const ITEM_TIMES: Readonly<Record<string, TableTimes>> = {
   reply_checklist: { rows: (item) => sql`work_item_id = ${item}::uuid`, moved: ["updated_at"], kept: {} },
   work_item_event: { rows: () => sql`false`, moved: [], kept: { created_at: `${AUDIT}: its times are inside the hash chain` } },
   package_event: { rows: () => sql`false`, moved: [], kept: { created_at: `${AUDIT}: append-only` } },
-  chat_message: { rows: () => sql`false`, moved: [], kept: { created_at: "kept: never changed (app.chat_message_insert_only); messages stay after the Submission Date" } },
+  chat_message: { rows: () => sql`false`, moved: [], kept: { created_at: "kept: never changed (app.chat_message_insert_only); it stays after the Submission Date" } },
   notification: {
     rows: () => sql`false`,
     moved: [],
@@ -68,7 +68,7 @@ export const ITEM_TIMES: Readonly<Record<string, TableTimes>> = {
     moved: [],
     kept: { made_at: "kept: a print made then", stale_at: "kept: a print made then", created_at: "kept: a print made then" },
   },
-  command_idempotency: { rows: () => sql`false`, moved: [], kept: { created_at: "kept: a request's replay record, never read as an item time" } },
+  command_idempotency: { rows: () => sql`false`, moved: [], kept: { created_at: "kept: a command's replay record, never read as an item time" } },
   work_item_watch: { rows: () => sql`false`, moved: [], kept: { created_at: "kept: a Member's watch, not a time of the item" } },
   approved_supplier: {
     rows: () => sql`false`,
@@ -140,7 +140,7 @@ async function blockers(trx: Transaction<Database>, item: string): Promise<strin
     from work_item w where w.id = ${item}::uuid`.execute(trx);
   const b = rows[0]!;
   return [
-    b.reply_files ? "reply files waiting to be sent" : undefined,
+    b.reply_files ? "reply Documents waiting to be sent" : undefined,
     b.reply_checklist ? "a reply checklist waiting to be sent" : undefined,
     b.removed_links ? "a removed Link not yet sent" : undefined,
     b.unfrozen ? "Documents added since it last arrived" : undefined,
