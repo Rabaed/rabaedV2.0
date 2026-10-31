@@ -2,6 +2,7 @@
 
 import { useId, useRef } from "react";
 import { cn } from "../../lib/cn.ts";
+import { documentLook } from "../form-engine/attachments-field.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 
@@ -66,7 +67,7 @@ export function AttachmentChips({ labels: text, documents, canChange, pending = 
                 onClick={() => onOpen(d.id)}
                 className={cn("inline-flex h-full min-w-0 items-center gap-1.5 rounded-[10px] px-3 hover:bg-hover", focusRing)}
               >
-                <Icon name={iconOf(d.contentType)} size={16} className={cn("shrink-0", d.contentType === "application/pdf" ? "text-danger-fg" : "text-muted")} />
+                <Icon name={documentLook(d.contentType).icon} size={16} className={cn("shrink-0", documentLook(d.contentType).tint)} />
                 <bdi className="truncate">{d.fileName}</bdi>
               </button>
               {removable && (
@@ -110,7 +111,3 @@ export function AttachmentChips({ labels: text, documents, canChange, pending = 
   );
 }
 
-function iconOf(contentType: string) {
-  if (contentType.startsWith("image/")) return "photo" as const;
-  return "file-text" as const;
-}

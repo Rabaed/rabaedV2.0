@@ -63,7 +63,7 @@ import type { SaveAnnotated } from "../photo/photo-screens.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 import { formSectionSummary } from "./section-summary.ts";
 import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
-import { tradeChipClass } from "../views/kanban-card.tsx";
+import { TradeChip } from "../views/kanban-card.tsx";
 
 /** The fields a folded section's summary reads: the ones that read as one short line. */
 const summarised: ReadonlySet<string> = new Set([
@@ -756,6 +756,7 @@ export function FormRenderer({
           onUpload={(file) => files?.onUpload?.(field.key, [file])}
           onOpen={files?.onOpen}
           onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
+          {...(pageAnswers ? { look: "cards" as const } : {})}
         />
       ),
     };
@@ -1151,9 +1152,7 @@ function PageBuiltInAnswer({ type, names, code }: { type: "trade" | "location" |
   const chip = "inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-surface-subtle px-2.5 text-[13px] font-semibold shadow-[inset_0_0_0_1px_var(--border-subtle)]";
   if (type === "trade") {
     return (
-      <span data-trade-chip="" className={cn("inline-flex h-6 items-center rounded-[7px] px-2 text-caption font-semibold", code ? tradeChipClass(code) : "bg-surface-subtle")}>
-        <bdi>{names[0]}</bdi>
-      </span>
+      <TradeChip code={code ?? ""} name={names[0]!} label={names[0]!} />
     );
   }
   if (type === "location") {

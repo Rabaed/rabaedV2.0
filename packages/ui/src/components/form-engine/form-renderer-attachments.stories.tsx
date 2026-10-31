@@ -166,3 +166,14 @@ export const ReadOnThePage: Story = {
     await expect(args.files!.onOpen).toHaveBeenCalledWith(datasheet.id);
   },
 };
+
+/** Editing on the Work Item page (RP-1188, gap table row 47): the files are cards too, each with its remove button, and the upload stays. */
+export const EditOnThePage: Story = {
+  args: { files: files([datasheet, general]), look: { answers: "page" } },
+  play: async (context) => {
+    const { args, canvas, canvasElement } = context;
+    await expect(canvasElement.querySelectorAll("[data-file-card]")).toHaveLength(1);
+    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.removeDatasheet) }));
+    await expect(args.files!.onRemove).toHaveBeenCalledWith("datasheet", datasheet.id);
+  },
+};
