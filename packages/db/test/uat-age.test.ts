@@ -18,12 +18,36 @@ let tool: Db;
 let tower: SeamTwoTower;
 let serial = 0;
 
+/** A test-only Position with View and Assign on Submittals (as apps/api/test/step-age-report.test.ts makes its own): the report goes to whoever holds Assign. */
+const REPORT_LEAD = "uat_report_lead";
+async function giveAssign(t: SeamTwoTower): Promise<void> {
+  await migrator.query(
+    `insert into position (owner_kind, base_role, key, name, sort)
+     select 'rabaed', r, $1, '{"en": "Report lead (test)", "ar": "Report lead (test)"}', 99
+     from unnest(array['contractor', 'consultant', 'owner', 'owner_representative']) r
+     on conflict (base_role, key) do nothing`,
+    [REPORT_LEAD],
+  );
+  await migrator.query(
+    `insert into position_permission (position_id, module_key, permission)
+     select p.id, 'submittals', x from position p cross join unnest(array['view', 'assign']) x where p.key = $1
+     on conflict do nothing`,
+    [REPORT_LEAD],
+  );
+  // C1's Project Manager and K1's Engineer hold Assign; C1's Engineer does not.
+  for (const [company, member, position] of [[t.c1, t.c1.members.project_manager, "project_manager"], [t.k1, t.k1.members.engineer, "engineer"]] as const) {
+    const outcome = await t.outcome(company.ap, sql`select app.set_project_member_positions(${company.participantId}::uuid, ${member}::uuid, ${[position, REPORT_LEAD]}::text[]) as outcome`);
+    if (outcome !== "set") throw new Error(`giveAssign: ${outcome}`);
+  }
+}
+
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
   tool = createDb(urls.migrator, { max: 1 });
   tower = await buildSeamTwoTower(app, migrator, { projectCode: "RUA" });
+  await giveAssign(tower);
 });
 afterAll(async () => {
   await migrator?.end();

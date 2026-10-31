@@ -6,6 +6,7 @@
 // what the worker's would (Main 4, 2026-10-31: visibility first).
 import { randomUUID } from "node:crypto";
 import type { NotificationDigest, StepAgeReport } from "@rabaed/domain";
+import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runJob, type JobConnections } from "../dev-tools/index.ts";
@@ -55,12 +56,36 @@ async function towerMembers(): Promise<string[]> {
   return rows.map((r) => r.email);
 }
 
+/** A test-only Position with View and Assign on Submittals (as apps/api/test/step-age-report.test.ts makes its own): the report goes to whoever holds Assign. */
+const REPORT_LEAD = "uat_report_lead";
+async function giveAssign(t: SeamTwoTower): Promise<void> {
+  await migrator.query(
+    `insert into position (owner_kind, base_role, key, name, sort)
+     select 'rabaed', r, $1, '{"en": "Report lead (test)", "ar": "Report lead (test)"}', 99
+     from unnest(array['contractor', 'consultant', 'owner', 'owner_representative']) r
+     on conflict (base_role, key) do nothing`,
+    [REPORT_LEAD],
+  );
+  await migrator.query(
+    `insert into position_permission (position_id, module_key, permission)
+     select p.id, 'submittals', x from position p cross join unnest(array['view', 'assign']) x where p.key = $1
+     on conflict do nothing`,
+    [REPORT_LEAD],
+  );
+  // C1's Project Manager and K1's Engineer hold Assign; C1's Engineer does not.
+  for (const [company, member, position] of [[t.c1, t.c1.members.project_manager, "project_manager"], [t.k1, t.k1.members.engineer, "engineer"]] as const) {
+    const outcome = await t.outcome(company.ap, sql`select app.set_project_member_positions(${company.participantId}::uuid, ${member}::uuid, ${[position, REPORT_LEAD]}::text[]) as outcome`);
+    if (outcome !== "set") throw new Error(`giveAssign: ${outcome}`);
+  }
+}
+
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
   tool = createDb(urls.migrator, { max: 1 });
   tower = await buildSeamTwoTower(app, migrator, { projectCode: "RUJ" });
+  await giveAssign(tower);
   // C1's Engineer raised it, so watches it: its moves wait for the Engineer's digest (the default).
   await wirAtConsultant(tower, { type: "WIR", title: `Job pour ${Date.now()}` });
   await drainOutbox(app);
@@ -77,8 +102,8 @@ describe("uat:run-job digest", () => {
     digests = [];
     const run = await runJob(jobDbs(), "digest", { handlers, memberEmail: engineer, dryRun: true });
     expect(run.queued.map((r) => r.email)).toEqual([engineer]);
-    expect(run.processed).toEqual([]);
-    expect(digests).toEqual([]);
+    expect(run.processed).toEqual([]); // not hidden-from: a dry run sends nothing
+    expect(digests).toEqual([]); // not hidden-from: a dry run sends nothing
     expect(await queuedFor("digest", tower.c1.members.engineer)).toBe(0);
   });
 
@@ -142,7 +167,7 @@ describe("uat:run-job weekly-report", () => {
     reports = [];
     await runJob(jobDbs(), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
     const fromTool = reports.filter((r) => r.to === holder && r.projectId === tower.projectId);
-    expect(fromTool).toHaveLength(1);
+    expect(fromTool).toHaveLength(1); // not hidden-from: the tool sent the holder one report
 
     // The worker's run: the scheduled job, due at a Sunday 07:00 in Riyadh (its own name, so no run of
     // another test is in the way), then the outbox as the worker processes it.
@@ -150,7 +175,7 @@ describe("uat:run-job weekly-report", () => {
     const job = { ...weeklyStepAgeReportJob, name: `test_${randomUUID()}` };
     expect(await runScheduledJobs(app, [job], new Date("2026-11-01T07:00:00+03:00"))).toMatchObject([{ outcome: "ran" }]);
     await drainOutbox(app, { step_age_report: handlers.step_age_report });
-    expect(reports.filter((r) => r.to === holder && r.projectId === tower.projectId)).toEqual(fromTool);
+    expect(reports.filter((r) => r.to === holder && r.projectId === tower.projectId)).toEqual(fromTool); // not hidden-from: the tool's report equals the worker's
   });
 
   it("refuses a --member no Member has", async () => {
@@ -164,7 +189,7 @@ describe("uat:run-job weekly-report", () => {
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [tower.projectId]);
     reports = [];
     const run = await runJob(jobDbs(), "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
-    expect(reports.filter((r) => r.projectId === tower.projectId)).toEqual([]);
-    expect(run.processed.filter((r) => r.projectId === tower.projectId)).toEqual([]);
+    expect(reports.filter((r) => r.projectId === tower.projectId)).toEqual([]); // not hidden-from: a closed Project sends nothing
+    expect(run.processed.filter((r) => r.projectId === tower.projectId)).toEqual([]); // not hidden-from: a closed Project queues nothing
   });
 });
