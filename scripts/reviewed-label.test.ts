@@ -174,7 +174,9 @@ describe("dropLabelOnPush", () => {
     const text = await dropLabelOnPush({ pr: 7, action: "synchronize", labels: ["reviewed", "x"], before: "R", after: "N" }, git({ parents: () => ["R"] }), github);
     expect(removed).toEqual([7]);
     expect(text).toContain("removed");
-    expect(text).toContain("--add-label reviewed");
+    // CI's reviewed-add adds it back; a hand label does not count (RP-1167).
+    expect(text).toContain("review-post.ts");
+    expect(text).not.toContain("--add-label reviewed");
   });
 
   it("keeps the label when the push only merged main in", async () => {

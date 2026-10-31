@@ -142,7 +142,7 @@ export async function dropLabelOnPush(
   }
   await github.removeLabel(event.pr);
   const why = event.action === "synchronize" ? "the new push" : `the ${event.action} PR's head`;
-  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; ${why} needs a /code-review again, then \`gh pr edit ${event.pr} --add-label ${REVIEWED_LABEL}\`.`;
+  return `PR #${event.pr}: removed \`${REVIEWED_LABEL}\`; ${why} needs a /code-review again, posted with scripts/review-post.ts, and a stamped verify line for it in the body: CI's reviewed-add then adds the label (a hand label does not count, RP-1167).`;
 }
 
 export function realGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReviewedGit {
