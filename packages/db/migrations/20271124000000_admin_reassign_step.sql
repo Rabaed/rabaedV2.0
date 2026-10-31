@@ -50,9 +50,12 @@ create function app.work_item_step_for_engineer(p_project_id uuid, p_document_nu
     step_name jsonb, stage_name jsonb, draft_step boolean, assignment_status text,
     participant_id uuid, company_name jsonb, role_name jsonb, holder_member_id uuid, pool jsonb
   )
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
 as $$
+  #variable_conflict use_column
+  begin
+  return query
   select w.id, w.document_number, w.title, t.name, w.closed_at is not null,
     s.name, coalesce(ps.name, rs.name), coalesce(app.is_draft_step(a.step_id), false), a.status,
     a.participant_id, c.legal_name, r.name, a.assignee_member_id,
@@ -72,7 +75,8 @@ as $$
   where w.project_id = p_project_id
     and w.document_number is not null
     and upper(w.document_number) = upper(btrim(p_document_number))
-    and w.discarded_at is null
+    and w.discarded_at is null;
+  end
 $$;
 
 create function app.reassign_step_by_engineer(
