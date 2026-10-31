@@ -14,6 +14,7 @@ import {
   keptByClaims,
   laneClashes,
   laneKeptByClaim,
+  mergedBlockers,
   newClaimant,
   readWorktreeEnv,
   staleProjects,
@@ -200,5 +201,40 @@ describe("lanes:prune with a lane another worktree's .env names (RP-1007)", () =
     expect(newClaimant("rabaed-lane32", listed, listed)).toBeUndefined();
     expect(newClaimant("rabaed-lane32", [], listed)).toEqual(listed[0]);
     expect(newClaimant("rabaed-lane33", [], listed)).toBeUndefined();
+  });
+});
+
+describe("lanes:prune lists every blocking worktree at once (RP-1170: lane 42's prune refused 8 times, once per subagent worktree)", () => {
+  const agent = (id: string) => `G:/rabaed/.claude/worktrees/agent-${id}`;
+  const stale = [{ project: "rabaed-lane42", reason: "not running", containers: ["rabaed-lane42-db-1"], volumes: [] }];
+
+  it("keptByClaims names every worktree whose .env names a kept project", () => {
+    const claims: EnvClaim[] = ["a", "b", "c"].map((id) => ({ path: agent(id), branch: `RP-9${id}`, project: "rabaed-lane42" }));
+    expect(keptByClaims(stale, claims).kept.map((k) => k.path)).toEqual([agent("a"), agent("b"), agent("c")]);
+  });
+
+  it("mergedBlockers names every unmerged worktree whose .env names the project, and every container folder that is no merged worktree", () => {
+    const containers = [
+      container({ name: "rabaed-lane42-db-1", project: "rabaed-lane42", workingDir: "G:/rabaed/.claude/worktrees/rp-42" }),
+      container({ name: "rabaed-lane42-files-1", project: "rabaed-lane42", workingDir: "D:/elsewhere" }),
+    ];
+    const worktrees = [
+      { path: "G:/rabaed/.claude/worktrees/rp-42", branch: "RP-42-x", merged: true, project: "rabaed-lane42" },
+      { path: agent("a"), branch: "RP-9a", merged: false, project: "rabaed-lane42" },
+      { path: agent("b"), branch: undefined, merged: false, project: "rabaed-lane42" },
+      { path: agent("c"), branch: "RP-9c", merged: false, project: "rabaed-lane43" },
+    ];
+    expect(mergedBlockers("rabaed-lane42", { containers, worktrees, platform: "linux" })).toEqual([
+      { project: "rabaed-lane42", path: agent("a"), reason: "not merged into origin/main (on RP-9a), and its .env has rabaed-lane42" },
+      { project: "rabaed-lane42", path: agent("b"), reason: "not merged into origin/main (on a detached HEAD), and its .env has rabaed-lane42" },
+      { project: "rabaed-lane42", path: "D:/elsewhere", reason: "rabaed-lane42-files-1 comes from it, and it is no merged worktree of this clone" },
+    ]);
+  });
+
+  it("chooseMerged names every merged worktree a session holds, not only the first", () => {
+    const containers = [container({ name: "rabaed-lane42-db-1", state: "exited", project: "rabaed-lane42", workingDir: agent("a") })];
+    const lanes = ["a", "b"].map((id) => ({ path: agent(id), branch: `RP-9${id}`, merged: true, project: "rabaed-lane42" }));
+    const holders: Holders = { ...none, runningSession: () => "a running Claude session is in it" };
+    expect(chooseMerged({ containers, volumes: [], worktrees: lanes, cwd: second, currentProject: undefined, holders }).kept.map((k) => k.path)).toEqual([agent("a"), agent("b")]);
   });
 });

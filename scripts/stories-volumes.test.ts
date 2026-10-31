@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
+import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumes, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
 import { volumeName, worktreeHash } from "./test-stories-linux.ts";
 import { parseWorktrees } from "./worktrees.ts";
 
@@ -175,5 +175,49 @@ describe("parseRemoval", () => {
 
   it("names Docker's whole message when it names no volume", () => {
     expect(parseRemoval(["v1"], "", "Cannot connect to the Docker daemon\n")).toEqual({ removed: [], refused: [{ volume: "v1", reason: "Cannot connect to the Docker daemon" }] });
+  });
+});
+
+describe("stories volumes and running verifies (RP-1170: 361 of 372 removals timed out during verifies and hung Docker's volume API)", () => {
+  it("removes none while a verify runs anywhere, and says so", () => {
+    const asked: string[][] = [];
+    const docker: StoriesDocker = { list: () => volumes, mountedBy: () => noMounts, remove: (list) => (asked.push(list), { removed: list, refused: [] }), busy: () => "a verify runs (pid 7, in G:/x)" };
+    expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32")).toEqual({
+      removed: [],
+      kept: ["Stories volumes not removed: a verify runs (pid 7, in G:/x); run `pnpm worktrees:prune` again once no verify runs."],
+      errors: [],
+    });
+    expect(asked).toEqual([]);
+  });
+
+  it("removes one set at a time with a pause between, and stops at the first timeout", () => {
+    const calls: string[][] = [];
+    const waits: number[] = [];
+    const sets = [...setOf(gone), ...setOf(live), ...setOf(mainRoot)];
+    const run = (args: string[]) => {
+      calls.push(args);
+      if (calls.length === 2) throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { code: "ETIMEDOUT" });
+      return args.slice(2).join("\n");
+    };
+    const result = removeStoriesVolumes(sets, { run, wait: (ms) => waits.push(ms) });
+    expect(calls).toHaveLength(2);
+    expect(waits).toEqual([2000]);
+    expect(result.removed).toHaveLength(3);
+    expect(result.refused).toHaveLength(3);
+    expect(result.refused[0]!.reason).toBe("Docker did not answer (spawnSync docker ETIMEDOUT)");
+    expect(result.notTried).toHaveLength(3);
+  });
+
+  it("names the volumes it did not try in one line", () => {
+    const docker: StoriesDocker = {
+      list: () => volumes,
+      mountedBy: () => noMounts,
+      remove: (list) => ({ removed: [], refused: [{ volume: list[0]!, reason: "Docker did not answer (ETIMEDOUT)" }], notTried: list.slice(1) }),
+      busy: () => undefined,
+    };
+    expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").errors).toEqual([
+      `Could not remove stories volume ${volumeName(gone, ".")}: Docker did not answer (ETIMEDOUT)`,
+      "2 stories volumes not tried: Docker stopped answering, so they wait for the next `pnpm worktrees:prune`.",
+    ]);
   });
 });

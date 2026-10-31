@@ -285,14 +285,12 @@ type MergedInput = {
 /** A project chooseMerged would have pruned as merged, kept because a session holds the worktree at path. */
 export type KeptProject = { project: string; path: string; reason: string };
 
-/** The first of the paths a session holds, with why (claude-sessions.ts holdReason), or undefined. */
-const firstHeld = (paths: string[], holders: Holders): { path: string; reason: string } | undefined => {
-  for (const path of paths) {
+/** Every one of the paths a session holds, with why (claude-sessions.ts holdReason); RP-1170: all of them, not the first. */
+const allHeld = (paths: string[], holders: Holders): { path: string; reason: string }[] =>
+  paths.flatMap((path) => {
     const reason = holdReason(path, holders);
-    if (reason !== undefined) return { path, reason };
-  }
-  return undefined;
-};
+    return reason === undefined ? [] : [{ path, reason }];
+  });
 
 /**
  * The rabaed-* compose projects (lanes:prune --merged) whose containers all come from
@@ -301,7 +299,7 @@ const firstHeld = (paths: string[], holders: Holders): { path: string; reason: s
  * current worktree's project always stays. Projects whose worktree is gone are staleProjects'.
  * A project that would go, but one of whose worktrees a running Claude session is in (RP-956)
  * or whose Claude desktop session is open (RP-612), or when they cannot be checked, is kept
- * instead, with the first holder and why.
+ * instead, with every holder and why (RP-1170). mergedBlockers says what keeps the others.
  */
 export function chooseMerged({ containers, volumes, worktrees, cwd, currentProject, holders, platform }: MergedInput): {
   merged: StaleProject[];
@@ -320,12 +318,12 @@ export function chooseMerged({ containers, volumes, worktrees, cwd, currentProje
     if (owners.length < dirs.length) continue;
     // RP-1007: the merged worktrees whose .env names the project hold it too, while a session holds them.
     const claimants = worktrees.filter((w) => w.merged && w.project === project && !owners.includes(w));
-    const held = firstHeld(
+    const held = allHeld(
       [...owners, ...claimants].map((w) => w.path),
       holders,
     );
-    if (held) {
-      kept.push({ project, ...held });
+    if (held.length > 0) {
+      kept.push(...held.map((h) => ({ project, ...h })));
       continue;
     }
     const named = owners.map((w) => `${w.branch ?? "a detached HEAD"} at ${w.path}`).join(", ");
@@ -340,17 +338,36 @@ export function chooseMerged({ containers, volumes, worktrees, cwd, currentProje
 }
 
 /**
+ * What keeps chooseMerged from picking a project (RP-1170: lanes:prune --merged --lane 42 refused eight
+ * times, naming one subagent worktree each time): every worktree that is not merged and names it in
+ * its .env, and every folder a container of it comes from that is no merged worktree of this clone.
+ * Empty when nothing of these keeps it (a session may still: chooseMerged's kept).
+ */
+export function mergedBlockers(project: string, { containers, worktrees, platform }: { containers: Container[]; worktrees: WorktreeLane[]; platform?: NodeJS.Platform }): KeptProject[] {
+  const blockers: KeptProject[] = worktrees
+    .filter((w) => !w.merged && w.project === project)
+    .map((w) => ({ project, path: w.path, reason: `not merged into origin/main (on ${w.branch ?? "a detached HEAD"}), and its .env has ${project}` }));
+  const seen = new Set<string>();
+  for (const c of containers.filter((x) => x.project === project)) {
+    if (seen.has(c.workingDir) || worktrees.some((w) => samePath(w.path, c.workingDir, platform))) continue;
+    seen.add(c.workingDir);
+    blockers.push({ project, path: c.workingDir, reason: `${c.name} comes from it, and it is no merged worktree of this clone` });
+  }
+  return blockers;
+}
+
+/**
  * lanes:prune's stale candidates split by the other worktrees' .env claims (RP-1007): a project
  * a worktree that still exists names in its .env stays, though it is not running or has only
- * volumes left, as that worktree's lane database; kept names the first such worktree.
+ * volumes left, as that worktree's lane database; kept names every such worktree (RP-1170).
  */
 export function keptByClaims(candidates: StaleProject[], claims: EnvClaim[]): { prune: StaleProject[]; kept: KeptProject[] } {
   const prune: StaleProject[] = [];
   const kept: KeptProject[] = [];
   for (const candidate of candidates) {
-    const claim = claims.find((c) => c.project === candidate.project);
-    if (claim === undefined) prune.push(candidate);
-    else kept.push({ project: candidate.project, path: claim.path, reason: `its .env names ${claim.project} (on ${claim.branch ?? "a detached HEAD"}), so the lane is still in use` });
+    const mine = claims.filter((c) => c.project === candidate.project);
+    if (mine.length === 0) prune.push(candidate);
+    for (const claim of mine) kept.push({ project: candidate.project, path: claim.path, reason: `its .env names ${claim.project} (on ${claim.branch ?? "a detached HEAD"}), so the lane is still in use` });
   }
   return { prune, kept };
 }
@@ -746,12 +763,52 @@ export function readProjectNow(project: string, { worktrees, cwd }: { worktrees:
   return { claims, containers, postgres: db && { container: db.name, connections: postgresConnections(db.name) } };
 }
 
-/** Removes a project's containers, volumes and networks (what `docker compose down -v` would, without its compose file). */
-export function removeProject(stale: StaleProject): void {
-  if (stale.containers.length > 0) docker(["rm", "-f", "-v", ...stale.containers]);
-  if (stale.volumes.length > 0) docker(["volume", "rm", ...stale.volumes]);
-  const networks = lines(docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${stale.project}`]));
-  if (networks.length > 0) docker(["network", "rm", ...networks]);
+const pause = new Int32Array(new SharedArrayBuffer(4));
+const sleepSync = (ms: number) => void Atomics.wait(pause, 0, 0, ms);
+
+/** How removeProject runs Docker; injected in tests. */
+export type RemoveProjectOptions = {
+  /** Remove the containers and the network only (RP-1170: while a verify runs, no volume is removed). */
+  keepVolumes?: boolean;
+  run?: (args: string[]) => string;
+  wait?: (ms: number) => void;
+};
+
+/** RP-1170: twice on 2026-10-30 a `docker rm -f` failed with this, and went through when run again. */
+const NO_EXIT_EVENT = /did not receive an exit event/i;
+const KILL_TRIES = 3;
+const KILL_PAUSE_MS = 5000;
+
+/**
+ * Removes a project's containers, volumes and networks (what `docker compose down -v` would, without
+ * its compose file). The containers go one at a time (RP-1170): one whose kill got no exit event is
+ * tried again, three times in all with a pause between; one already gone counts as removed; any other
+ * failure stops it, naming which containers went. keepVolumes leaves every volume, anonymous ones too.
+ */
+export function removeProject(stale: StaleProject, { keepVolumes = false, run = docker, wait = sleepSync }: RemoveProjectOptions = {}): { volumesKept: boolean } {
+  const removed: string[] = [];
+  for (const [i, name] of stale.containers.entries()) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        run(["rm", "-f", ...(keepVolumes ? [] : ["-v"]), name]);
+        break;
+      } catch (error) {
+        const reason = (error as { stderr?: string }).stderr?.trim() || String(error);
+        if (/no such container/i.test(reason)) break;
+        if (NO_EXIT_EVENT.test(reason) && attempt < KILL_TRIES) {
+          wait(KILL_PAUSE_MS);
+          continue;
+        }
+        const tries = NO_EXIT_EVENT.test(reason) ? ` after ${KILL_TRIES} tries` : "";
+        throw new Error(`Could not remove container ${name}${tries} (${reason}). Removed: ${removed.join(", ") || "none"}. Not removed: ${stale.containers.slice(i).join(", ")}.`, { cause: error });
+      }
+    }
+    removed.push(name);
+  }
+  if (!keepVolumes && stale.volumes.length > 0) run(["volume", "rm", ...stale.volumes]);
+  const networks = lines(run(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${stale.project}`]));
+  if (networks.length > 0) run(["network", "rm", ...networks]);
+  return { volumesKept: keepVolumes };
 }
 
 /** A --db suffix: lowercase letters and digits, starting with a letter, and not "test" (rabaed_test is the shared test database). */

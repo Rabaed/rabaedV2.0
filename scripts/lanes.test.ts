@@ -36,6 +36,7 @@ import {
   protectedLaneReason,
   pruneCommand,
   releaseContainers,
+  removeProject,
   staleProjects,
   twinLane,
   VALID_LANES,
@@ -1016,5 +1017,63 @@ describe("databaseOfUrl", () => {
   it("reads the database name", () => {
     expect(databaseOfUrl("postgres://rabaed_app:x@localhost:5832/rabaed_rp322")).toBe("rabaed_rp322");
     expect(databaseOfUrl("postgres://u:p@h:5432/rabaed?sslmode=disable")).toBe("rabaed");
+  });
+});
+
+describe("removeProject (RP-1170: a kill that got no exit event is retried; volumes stay while a verify runs)", () => {
+  const stale = { project: "rabaed-lane41", reason: "merged", containers: ["db", "files"], volumes: ["rabaed-lane41_db-data"] };
+  const noExit = () => Object.assign(new Error("exit 1"), { stderr: "Error response from daemon: cannot remove container db: could not kill: tried to kill container, but did not receive an exit event\n" });
+  const runner = (fail: (args: string[], n: number) => Error | undefined) => {
+    const calls: string[][] = [];
+    const run = (args: string[]) => {
+      calls.push(args);
+      const error = fail(args, calls.filter((c) => c.join(" ") === args.join(" ")).length);
+      if (error) throw error;
+      return args[0] === "network" && args[1] === "ls" ? "net1\n" : "";
+    };
+    return { calls, run };
+  };
+
+  it("removes each container with its anonymous volumes, then the volumes and the network", () => {
+    const { calls, run } = runner(() => undefined);
+    expect(removeProject(stale, { run, wait: () => {} })).toEqual({ volumesKept: false });
+    expect(calls).toEqual([
+      ["rm", "-f", "-v", "db"],
+      ["rm", "-f", "-v", "files"],
+      ["volume", "rm", "rabaed-lane41_db-data"],
+      ["network", "ls", "-q", "--filter", "label=com.docker.compose.project=rabaed-lane41"],
+      ["network", "rm", "net1"],
+    ]);
+  });
+
+  it("retries a container whose kill got no exit event, pausing between tries", () => {
+    const waits: number[] = [];
+    const { calls, run } = runner((args, n) => (args[3] === "db" && n < 3 ? noExit() : undefined));
+    removeProject(stale, { run, wait: (ms) => waits.push(ms) });
+    expect(calls.filter((c) => c[3] === "db")).toHaveLength(3);
+    expect(waits).toEqual([5000, 5000]);
+  });
+
+  it("gives up after three tries, naming what was removed and what was not", () => {
+    const { run } = runner((args) => (args[3] === "db" ? noExit() : undefined));
+    expect(() => removeProject(stale, { run, wait: () => {} })).toThrow(/^Could not remove container db after 3 tries \(.*did not receive an exit event\)\. Removed: none\. Not removed: db, files\./);
+  });
+
+  it("does not retry another failure, and counts a container already gone as removed", () => {
+    const { calls, run } = runner((args) =>
+      args[3] === "db" ? Object.assign(new Error("x"), { stderr: "Error: No such container: db" }) : args[3] === "files" ? Object.assign(new Error("x"), { stderr: "Error: removal in progress" }) : undefined,
+    );
+    expect(() => removeProject(stale, { run, wait: () => {} })).toThrow("Could not remove container files (Error: removal in progress). Removed: db. Not removed: files.");
+    expect(calls.filter((c) => c[3] === "files")).toHaveLength(1);
+  });
+
+  it("keeps every volume with keepVolumes: no -v, no volume rm", () => {
+    const { calls, run } = runner(() => undefined);
+    expect(removeProject(stale, { keepVolumes: true, run, wait: () => {} })).toEqual({ volumesKept: true });
+    expect(calls.slice(0, 3)).toEqual([
+      ["rm", "-f", "db"],
+      ["rm", "-f", "files"],
+      ["network", "ls", "-q", "--filter", "label=com.docker.compose.project=rabaed-lane41"],
+    ]);
   });
 });

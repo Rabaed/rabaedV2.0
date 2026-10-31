@@ -9,8 +9,12 @@
 // the stories script hashes the path as Node resolved it). A volume a container uses, running
 // or stopped, is skipped and named, and `docker volume rm` is never forced: Docker refuses a
 // volume in use, and that refusal is named too.
+//
+// RP-1170: none is removed while a verify runs anywhere on the machine (verifies-running.ts), and the
+// sets go one at a time with a pause between, stopping at the first Docker does not answer in time.
 import { execFileSync } from "node:child_process";
 import { STORIES_VOLUME_PREFIX, worktreeHash } from "./test-stories-linux.ts";
+import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 
 const HASH = new RegExp(`^${STORIES_VOLUME_PREFIX}([0-9a-f]{8})-.`);
 
@@ -107,7 +111,8 @@ export function parseVolumeMounts(out: string): Map<string, string[]> {
   return mountedBy;
 }
 
-export type VolumeRemoval = { removed: string[]; refused: { volume: string; reason: string }[] };
+/** notTried: the volumes left once Docker stopped answering (RP-1170), never asked. */
+export type VolumeRemoval = { removed: string[]; refused: { volume: string; reason: string }[]; notTried?: string[] };
 
 /** Splits `docker volume rm` output: the names it printed went; the rest stay, with Docker's reason. */
 export function parseRemoval(asked: string[], stdout: string, stderr: string): VolumeRemoval {
@@ -159,9 +164,16 @@ export interface StoriesDocker {
   list(): string[] | undefined;
   mountedBy(): Map<string, string[]> | undefined;
   remove(volumes: string[]): VolumeRemoval;
+  /** Why no volume may be removed now (RP-1170: a verify runs anywhere on the machine), or undefined; none when absent. */
+  busy?(): string | undefined;
 }
 
-const realDocker: StoriesDocker = { list: listStoriesVolumes, mountedBy: listVolumeMounts, remove: removeStoriesVolumes };
+const realDocker: StoriesDocker = {
+  list: listStoriesVolumes,
+  mountedBy: listVolumeMounts,
+  remove: (volumes) => removeStoriesVolumes(volumes),
+  busy: () => volumesKeptReason(verifiesRunningNow()),
+};
 
 /**
  * Removes the stories volumes in scope, judged on what Docker lists now and `existing` (the worktrees
@@ -174,29 +186,52 @@ export function removeStoriesVolumesNow(
   docker: StoriesDocker = realDocker,
   platform: NodeJS.Platform = process.platform,
 ): { removed: string[]; kept: string[]; errors: string[] } {
+  // RP-1170: never while a verify runs; asked first, before Docker is.
+  const busy = docker.busy?.();
+  if (busy !== undefined) return { removed: [], kept: [`Stories volumes not removed: ${busy}; run \`pnpm worktrees:prune\` again once no verify runs.`], errors: [] };
   const volumes = docker.list();
   const mountedBy = volumes && docker.mountedBy();
   if (!volumes || !mountedBy) return { removed: [], kept: [DOCKER_SILENT], errors: [] };
   const { remove, inUse } = chooseStoriesVolumes({ ...scope, volumes, existing, mountedBy, platform });
   const kept = inUse.map((v) => `Kept stories volume ${v.volume}: used by ${v.containers.join(", ")}.`);
   if (remove.length === 0) return { removed: [], kept, errors: [] };
-  const { removed, refused } = docker.remove(remove);
+  const { removed, refused, notTried = [] } = docker.remove(remove);
   const errors: string[] = [];
   for (const r of refused) {
     if (/in use/i.test(r.reason)) kept.push(`Kept stories volume ${r.volume}: ${r.reason}.`);
     else errors.push(`Could not remove stories volume ${r.volume}: ${r.reason}`);
   }
+  if (notTried.length > 0) errors.push(`${notTried.length} stories volume${notTried.length === 1 ? "" : "s"} not tried: Docker stopped answering, so they wait for the next \`pnpm worktrees:prune\`.`);
   return { removed, kept, errors };
 }
 
-/** Removes the volumes, one `docker volume rm` per set (never -f), and says which went and which Docker refused. */
-export function removeStoriesVolumes(volumes: string[]): VolumeRemoval {
-  const result: VolumeRemoval = { removed: [], refused: [] };
-  for (const set of storiesSets(volumes)) {
+const pause = new Int32Array(new SharedArrayBuffer(4));
+/** RP-1170: the pause between two sets, so Docker's volume API is never asked back to back. */
+const SET_PAUSE_MS = 2000;
+const timedOut = (error: unknown) => (error as { code?: string }).code === "ETIMEDOUT" || /ETIMEDOUT/.test((error as Error).message ?? "");
+
+/**
+ * Removes the volumes, one `docker volume rm` per set (never -f), and says which went and which Docker
+ * refused. RP-1170: it pauses between sets, and stops at the first one Docker does not answer in time,
+ * leaving the rest untried (notTried) instead of firing them at a jammed daemon.
+ */
+export function removeStoriesVolumes(
+  volumes: string[],
+  { run = (args) => docker(args, 2 * LIST_TIMEOUT_MS), wait = (ms) => void Atomics.wait(pause, 0, 0, ms) }: { run?: (args: string[]) => string; wait?: (ms: number) => void } = {},
+): VolumeRemoval {
+  const result: VolumeRemoval = { removed: [], refused: [], notTried: [] };
+  const sets = storiesSets(volumes);
+  for (const [i, set] of sets.entries()) {
+    if (i > 0) wait(SET_PAUSE_MS);
     let removal: VolumeRemoval;
     try {
-      removal = parseRemoval(set.volumes, docker(["volume", "rm", ...set.volumes], 2 * LIST_TIMEOUT_MS), "");
+      removal = parseRemoval(set.volumes, run(["volume", "rm", ...set.volumes]), "");
     } catch (error) {
+      if (timedOut(error)) {
+        result.refused.push(...set.volumes.map((volume) => ({ volume, reason: `Docker did not answer (${(error as Error).message})` })));
+        result.notTried!.push(...sets.slice(i + 1).flatMap((s) => s.volumes));
+        break;
+      }
       const e = error as { stdout?: string; stderr?: string; message?: string };
       removal = parseRemoval(set.volumes, e.stdout ?? "", e.stderr || e.message || "");
     }

@@ -36,6 +36,10 @@
 // matches no worktree git lists with its folder present. A set whose worktree still exists, the
 // main checkout's included, stays; a volume a container uses is skipped and named, never forced.
 //
+// RP-1170: while a verify runs anywhere on the machine (verifies-running.ts) no volume is removed:
+// the compose projects lose their containers and networks only, and the stories volumes stay; the
+// stories sets go one at a time with a pause, stopping at the first that times out.
+//
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
@@ -48,6 +52,7 @@ import { samePath } from "./paths.ts";
 import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { chooseStoriesVolumes, describeCount, inUseLine, listVolumeMounts, removeStoriesVolumesNow, storiesSets, storiesVolumesIn } from "./stories-volumes.ts";
 import { STORIES_VOLUME_PREFIX } from "./test-stories-linux.ts";
+import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
@@ -179,7 +184,14 @@ if (dryRun) {
   process.exit(0);
 }
 
-await confirmOrExit(stories.remove.length > 0 ? "Remove them, the stories volumes included? Their databases are lost." : "Remove them? Their databases are lost.", { yes, verb: "remove", done: "removed" });
+// RP-1170, rule 4: no volume is removed while a verify runs anywhere on the machine (bulk removal during
+// verifies hung Docker's volume API twice): the projects' containers go, their volumes and the stories volumes stay.
+const volumesStay = chosen.projects.length + stories.remove.length > 0 ? volumesKeptReason(verifiesRunningNow()) : undefined;
+if (volumesStay !== undefined) console.log(`Volumes kept: ${volumesStay}. Run \`pnpm worktrees:prune\` again once no verify runs to remove them.`);
+await confirmOrExit(
+  volumesStay !== undefined ? "Remove them, keeping every volume?" : stories.remove.length > 0 ? "Remove them, the stories volumes included? Their databases are lost." : "Remove them? Their databases are lost.",
+  { yes, verb: "remove", done: "removed" },
+);
 
 let failed = 0;
 const attempt = (what: string, action: () => void) => {
@@ -214,8 +226,10 @@ removeProjectsNow({
   exists: existsSync,
   remove: (p) =>
     attempt(p.project, () => {
-      removeProject(p);
-      console.log(`Removed compose project ${p.project}.`);
+      // Read again just before: a verify may have started since the prompt.
+      const keepVolumes = volumesStay !== undefined || volumesKeptReason(verifiesRunningNow()) !== undefined;
+      removeProject(p, { keepVolumes });
+      console.log(keepVolumes ? `Removed compose project ${p.project}'s containers; its volumes stay (a verify runs).` : `Removed compose project ${p.project}.`);
     }),
   log: (line) => logged.push(line),
 });
