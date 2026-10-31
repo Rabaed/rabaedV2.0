@@ -4,7 +4,7 @@ import { exitCodeOf, lineAndColumn, runChecks, type DoctorEnv } from "./doctor.t
 
 // RP-1173: on 2026-10-31 the owner's ~/.claude/settings.json was invalid JSON (a missing comma) for
 // days. Claude Code ignored the whole file, so every allow rule and enabledPlugins was lost, and the
-// mattpocock skills went missing. `pnpm doctor` names the file and the place instead.
+// mattpocock skills went missing. `pnpm check:doctor` names the file and the place instead.
 
 const HOME = join("C:", "owner");
 const PROJECT = join("C:", "repo");
