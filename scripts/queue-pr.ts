@@ -4,6 +4,7 @@ import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResu
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { realStopInput, stopQueuedStack } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
 import { needsVerify, packageJsonVersionsVia, VERIFY_CHECK, verifiedOrGreen, verifyFix } from "./verify-gate.ts";
@@ -35,6 +36,9 @@ import { isAncestor } from "./worktrees.ts";
 // Or, instead of the line, CI green on the exact head (RP-1190, `verifiedOrGreen`, scripts/ci-green.ts), for a
 // PR that changes none of CI's own files. While CI runs it refuses with "CI still running on <sha>: N jobs
 // left"; --wait waits for CI instead, and for the verify-gate check that re-runs once CI is green.
+// Once the PR is queued (RP-1170), it stops the lane's stack: the containers of the worktree on the PR's branch,
+// with `docker stop`, so its volumes stay (queue-stack-stop.ts says when it leaves one running). --keep-stack
+// skips that; a stop Docker refuses is a warning, never a failed queue.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -625,7 +629,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   const wait = args.includes("--wait");
   const pr = Number(args.find((arg) => !arg.startsWith("--")));
   if (!Number.isInteger(pr) || pr <= 0) {
-    console.error("Usage: pnpm queue <pr number> [--wait] [--no-review]");
+    console.error("Usage: pnpm queue <pr number> [--wait] [--no-review] [--keep-stack]");
     process.exit(2);
   }
   try {
@@ -633,6 +637,14 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     const started = new Date();
     const noReview = args.includes("--no-review");
     let result = print(wait ? await queuePrWhenChecksPass(pr, seam, { noReview, log: (line) => console.log(line) }) : queuePr(pr, seam, { noReview }));
+    // RP-1170: queued, so the lane's stack is idle; stopping it frees a Docker slot (its volumes stay). Never fails the queue.
+    if (result.ok && !args.includes("--keep-stack")) {
+      try {
+        for (const line of stopQueuedStack(realStopInput(pr, seam.pullRequest(pr).headRefName))) console.log(line);
+      } catch (error) {
+        console.log(`Warning: the lane's stack was not checked (${error instanceof Error ? error.message.split("\n")[0] : String(error)}); the PR is queued all the same.`);
+      }
+    }
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
       result = print(await waitForMerge(pr, seam, started));

@@ -1,7 +1,6 @@
 // `pnpm lanes [--main N]` (RP-1170): every rabaed-* stack with its lane, Main, worktrees, PR and its
 // state, whether a verify runs, and how long it has been idle (lane-rows.ts), under a line with the
 // running stacks against the cap. It only reads: Docker, git, gh and the verify locks.
-// Until its package.json line lands: node scripts/lanes-status.ts [--main N].
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { formatRows, laneRows, parseLanesArgs } from "./lane-rows.ts";
