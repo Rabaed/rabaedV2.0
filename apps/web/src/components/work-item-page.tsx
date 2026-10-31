@@ -57,8 +57,8 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
-import { DownloadRecordButton } from "@/components/download-record-button";
-import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
+import { useRecordDownload } from "@/components/download-record-button";
+import { useWorkingCopyDownload } from "@/components/download-working-copy-button";
 import { CreateRevisionButton } from "@/components/submittal-panel-host";
 import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
@@ -153,6 +153,10 @@ export function WorkItemPage(props: WorkItemPageProps) {
     };
   });
   const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale);
+  // Download PDF: the Documental Record once closed, the Working Copy while open (V7).
+  const record = useRecordDownload(item.id, item.documentalRecord);
+  const workingCopy = useWorkingCopyDownload(item.id);
+  const pdf = item.outcome ? record : workingCopy;
   // Internal Communication, the panel's own (V5): its banner and entries, and no composer (gap table row 42).
   const log = useSubmittalPanelLog({ item, locale, outcomes: typeOutcomes.map((o) => ({ ...o, type: item.type.code })) });
   const chat = useSubmittalPanelChatTab({ item, locale, refreshKey: null });
@@ -351,10 +355,14 @@ export function WorkItemPage(props: WorkItemPageProps) {
 
             )}
             <WorkItemTopBarButton icon="route" label={tMap("view")} onClick={openMap} />
-            {/* Its Documental Record once closed, its Working Copy while open (V7). */}
-            {item.outcome ? <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} /> : <DownloadWorkingCopyButton workItemId={item.id} />}
+            {/* Its Documental Record once closed, its Working Copy while open (V7): by its icon only under 560px (row 6). */}
+            {(item.outcome ? record.canDownload : true) && (
+              <WorkItemTopBarButton icon="download" label={pdf.label} onClick={() => void pdf.download()} disabled={!item.outcome && workingCopy.pending} />
+            )}
           </>
         }
+        // Its message under the top bar, which keeps its 52px (row 6).
+        topBarStatus={pdf.message}
         identity={
           <SubmittalPanelIdentity
             locale={locale}

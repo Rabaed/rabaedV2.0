@@ -14,10 +14,12 @@ const copy = {
   rail: b("Transitions and History", "الانتقالات والسجل"),
   bar: b("Transitions", "الانتقالات"),
   approve: b("Approve – Code A", "اعتماد – الرمز A"),
+  download: b("Download PDF", "تنزيل PDF"),
+  preparing: b("Preparing the Working Copy…", "جارٍ تجهيز نسخة العمل…"),
   subject: b("LED light fixtures — Tower 2 typical floors", "وحدات إنارة LED — الطوابق النموذجية للبرج 2"),
 };
 
-function Frame({ context, width }: { context: StoryContext; width: number }) {
+function Frame({ context, width, status = false }: { context: StoryContext; width: number; status?: boolean }) {
   const t = (text: { en: string; ar: string }) => storyText(context, text);
   return (
     <div style={{ width, height: 640 }} className="flex flex-col overflow-hidden border border-border">
@@ -29,8 +31,10 @@ function Frame({ context, width }: { context: StoryContext; width: number }) {
           <>
             <WorkItemTopBarButton icon="eye" label={t(copy.watch)} />
             <WorkItemTopBarButton icon="route" label={t(copy.workflow)} />
+            <WorkItemTopBarButton icon="download" label={t(copy.download)} />
           </>
         }
+        {...(status ? { topBarStatus: t(copy.preparing) } : {})}
         identity={<h1 className="px-5 pt-5 text-[20px] font-bold">{t(copy.subject)}</h1>}
         railLabel={t(copy.rail)}
         rail={<p>{t(copy.rail)}</p>}
@@ -79,5 +83,22 @@ export const Phone: Story = {
     const watch = context.canvas.getByRole("button", { name: storyText(context, copy.watch) });
     await expect(watch.getBoundingClientRect().width).toBeLessThan(60);
     await expect(bar(context)).not.toBeNull();
+  },
+};
+
+/**
+ * Phone (402) while the Working Copy is prepared (RP-1188, gap table row 6): Download by its icon only, and
+ * its message under the 52px top bar, never squeezed into it.
+ */
+export const PhoneDownloadStatus: Story = {
+  render: (_args, context) => <Frame context={context} width={402} status />,
+  play: async (context) => {
+    const download = context.canvas.getByRole("button", { name: storyText(context, copy.download) });
+    await expect(download.getBoundingClientRect().width).toBeLessThan(60);
+    const status = context.canvas.getByRole("status");
+    await expect(status).toHaveTextContent(storyText(context, copy.preparing));
+    const top = context.canvasElement.querySelector<HTMLElement>(".sdp-top")!;
+    await expect(top.contains(status)).toBe(false);
+    await expect(top.getBoundingClientRect().height).toBe(52);
   },
 };
