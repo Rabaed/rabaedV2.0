@@ -9,11 +9,14 @@ name: Reviewed required
 # GITHUB_TOKEN, which starts no `unlabeled` run here.
 # A draft PR passes with a note (RP-1018: a check red until the final review woke
 # Auto-fix about 15 times on one draft). Marking it ready runs the check again, and
-# a draft cannot enter the merge queue.
+# a draft cannot be queued (one turned back to draft while queued is dropped in the queue).
+# Since RP-1167 `reviewed` counts only when CI's reviewed-add added it, read from the PR's
+# issue events, and the check fails while GitHub auto-merge is on; turning auto-merge on
+# or off re-runs it.
 # The label must exist in the repository: gh label create docs-only.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, auto_merge_enabled, auto_merge_disabled]
   merge_group:
 permissions: {}
 concurrency:
@@ -25,9 +28,12 @@ jobs:
     name: reviewed-required
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # issues: the PR's issue events (who added `reviewed`, how it entered the queue). Its
+    # pull-requests read already answers that endpoint (run 41187917270); this says so.
     permissions:
       contents: read
       pull-requests: read
+      issues: read
       actions: read
     steps:
       - uses: actions/checkout@v7
