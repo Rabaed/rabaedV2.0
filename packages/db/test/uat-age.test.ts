@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ageChanges, ageItems, AgeRefused, findAgeCandidates, ITEM_TIMES, runJob } from "../dev-tools/index.ts";
 import { createDb, stepAgeReportHandler, type Db } from "../src/index.ts";
 import { buildSeamTwoTower, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addSubmittalType, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
 import { hiddenColumns } from "../../../scripts/hidden-columns.ts";
 
 const urls = testDatabaseUrls();
@@ -16,30 +17,9 @@ let migrator: pg.Client;
 let app: Db;
 let tool: Db;
 let tower: SeamTwoTower;
+/** The Submittals Type the weekly report reads (uat-tool-support.ts). */
+let submittalType = "";
 let serial = 0;
-
-/** A test-only Position with View and Assign on Submittals (as apps/api/test/step-age-report.test.ts makes its own): the report goes to whoever holds Assign. */
-const REPORT_LEAD = "uat_report_lead";
-async function giveAssign(t: SeamTwoTower): Promise<void> {
-  await migrator.query(
-    `insert into position (owner_kind, base_role, key, name, sort)
-     select 'rabaed', r, $1, '{"en": "Report lead (test)", "ar": "Report lead (test)"}', 99
-     from unnest(array['contractor', 'consultant', 'owner', 'owner_representative']) r
-     on conflict (base_role, key) do nothing`,
-    [REPORT_LEAD],
-  );
-  await migrator.query(
-    `insert into position_permission (position_id, module_key, permission)
-     select p.id, 'submittals', x from position p cross join unnest(array['view', 'assign']) x where p.key = $1
-     on conflict do nothing`,
-    [REPORT_LEAD],
-  );
-  // C1's Project Manager and K1's Engineer hold Assign; C1's Engineer does not.
-  for (const [company, member, position] of [[t.c1, t.c1.members.project_manager, "project_manager"], [t.k1, t.k1.members.engineer, "engineer"]] as const) {
-    const outcome = await t.outcome(company.ap, sql`select app.set_project_member_positions(${company.participantId}::uuid, ${member}::uuid, ${[position, REPORT_LEAD]}::text[]) as outcome`);
-    if (outcome !== "set") throw new Error(`giveAssign: ${outcome}`);
-  }
-}
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -47,7 +27,8 @@ beforeAll(async () => {
   app = createDb(urls.app, { max: 2 });
   tool = createDb(urls.migrator, { max: 1 });
   tower = await buildSeamTwoTower(app, migrator, { projectCode: "RUA" });
-  await giveAssign(tower);
+  await giveAssign(migrator, tower);
+  submittalType = await addSubmittalType(migrator);
 });
 afterAll(async () => {
   await migrator?.end();
@@ -171,7 +152,9 @@ describe("what uat:age leaves alone", () => {
 
 describe("the weekly report after uat:age", () => {
   it("reads the item at Step Age 4", async () => {
-    const { id, number } = await heldByK1();
+    // A Submittal: the report covers Submittals only.
+    const id = await submittalAtK1(tower, submittalType, `Report trays ${++serial} ${Date.now()}`);
+    const number = (await migrator.query<{ document_number: string }>("select document_number from work_item where id = $1", [id])).rows[0]!.document_number;
     await age([number], 4);
     const { rows } = await migrator.query<{ email: string }>(
       `select m.email from project_member pm join member m on m.id = pm.member_id

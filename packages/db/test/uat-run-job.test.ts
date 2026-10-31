@@ -6,12 +6,12 @@
 // what the worker's would (Main 4, 2026-10-31: visibility first).
 import { randomUUID } from "node:crypto";
 import type { NotificationDigest, StepAgeReport } from "@rabaed/domain";
-import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runJob, type JobConnections } from "../dev-tools/index.ts";
 import { createDb, notificationDigestHandler, runScheduledJobs, stepAgeReportHandler, weeklyStepAgeReportJob, type Db } from "../src/index.ts";
 import { buildSeamTwoTower, drainOutbox, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addSubmittalType, giveAssign, submittalAtK1 } from "./uat-tool-support.ts";
 import { statementRoles } from "../test-support/statement-roles.ts";
 
 const urls = testDatabaseUrls();
@@ -19,6 +19,8 @@ let migrator: pg.Client;
 let app: Db;
 let tool: Db;
 let tower: SeamTwoTower;
+/** The Submittals Type the weekly report reads (uat-tool-support.ts). */
+let submittalType = "";
 /** The tool's two connections: it queues as the migrator, and sends on the worker's. */
 const jobDbs = (worker: Db = app): JobConnections => ({ migrator: tool, worker });
 
@@ -56,38 +58,18 @@ async function towerMembers(): Promise<string[]> {
   return rows.map((r) => r.email);
 }
 
-/** A test-only Position with View and Assign on Submittals (as apps/api/test/step-age-report.test.ts makes its own): the report goes to whoever holds Assign. */
-const REPORT_LEAD = "uat_report_lead";
-async function giveAssign(t: SeamTwoTower): Promise<void> {
-  await migrator.query(
-    `insert into position (owner_kind, base_role, key, name, sort)
-     select 'rabaed', r, $1, '{"en": "Report lead (test)", "ar": "Report lead (test)"}', 99
-     from unnest(array['contractor', 'consultant', 'owner', 'owner_representative']) r
-     on conflict (base_role, key) do nothing`,
-    [REPORT_LEAD],
-  );
-  await migrator.query(
-    `insert into position_permission (position_id, module_key, permission)
-     select p.id, 'submittals', x from position p cross join unnest(array['view', 'assign']) x where p.key = $1
-     on conflict do nothing`,
-    [REPORT_LEAD],
-  );
-  // C1's Project Manager and K1's Engineer hold Assign; C1's Engineer does not.
-  for (const [company, member, position] of [[t.c1, t.c1.members.project_manager, "project_manager"], [t.k1, t.k1.members.engineer, "engineer"]] as const) {
-    const outcome = await t.outcome(company.ap, sql`select app.set_project_member_positions(${company.participantId}::uuid, ${member}::uuid, ${[position, REPORT_LEAD]}::text[]) as outcome`);
-    if (outcome !== "set") throw new Error(`giveAssign: ${outcome}`);
-  }
-}
-
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
   tool = createDb(urls.migrator, { max: 1 });
   tower = await buildSeamTwoTower(app, migrator, { projectCode: "RUJ" });
-  await giveAssign(tower);
+  await giveAssign(migrator, tower);
+  submittalType = await addSubmittalType(migrator);
   // C1's Engineer raised it, so watches it: its moves wait for the Engineer's digest (the default).
   await wirAtConsultant(tower, { type: "WIR", title: `Job pour ${Date.now()}` });
+  // A Submittal at K1: what the weekly report lists (it covers Submittals only).
+  await submittalAtK1(tower, submittalType, `Report trays ${Date.now()}`);
   await drainOutbox(app);
 });
 afterAll(async () => {
