@@ -1,0 +1,134 @@
+// Seam 2 for the UAT tool's `uat:run-job` (RP-922, test 6): the daily digest or the weekly Step Age
+// report, run now. It queues what the scheduled job would, sends with the worker's own handlers (a fake
+// mailer here), and never claims the scheduled run, so the real schedule still runs. `--member` sends
+// only that Member's: nobody else's row is queued. `--dry-run` lists who would get one and sends nothing.
+import type { NotificationDigest, StepAgeReport } from "@rabaed/domain";
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { runJob } from "../dev-tools/index.ts";
+import { createDb, notificationDigestHandler, stepAgeReportHandler, type Db } from "../src/index.ts";
+import { buildSeamTwoTower, drainOutbox, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+
+const urls = testDatabaseUrls();
+let migrator: pg.Client;
+let app: Db;
+let tool: Db;
+let tower: SeamTwoTower;
+
+let digests: NotificationDigest[] = [];
+let reports: StepAgeReport[] = [];
+const handlers = {
+  digest: notificationDigestHandler(async (digest) => void digests.push(digest)),
+  step_age_report: stepAgeReportHandler(async (report) => void reports.push(report)),
+};
+
+/** Member `id`'s email. */
+const emailOf = async (id: string) => (await migrator.query<{ email: string }>("select email from member where id = $1", [id])).rows[0]!.email;
+/** How many scheduled runs `job` has recorded. */
+const runsOf = async (job: string) => Number((await migrator.query<{ n: string }>("select count(*) as n from scheduled_job_run where job = $1", [job])).rows[0]!.n);
+/** Unprocessed outbox rows of `kind` for Member `id`. */
+const queuedFor = async (kind: string, id: string) =>
+  Number(
+    (await migrator.query<{ n: string }>("select count(*) as n from outbox where kind = $1 and processed_at is null and payload ->> 'member_id' = $2", [kind, id])).rows[0]!.n,
+  );
+/** The tower's Members holding Assign on its Project, by email. */
+async function assignHolders(): Promise<string[]> {
+  const { rows } = await migrator.query<{ email: string }>(
+    `select m.email from project_member pm join member m on m.id = pm.member_id
+     where pm.project_id = $1 and pm.status = 'active' and app.project_member_holds_assign(pm.id) order by m.email`,
+    [tower.projectId],
+  );
+  return rows.map((r) => r.email);
+}
+/** Every Member of the tower's Project, by email. */
+async function towerMembers(): Promise<string[]> {
+  const { rows } = await migrator.query<{ email: string }>(
+    "select m.email from project_member pm join member m on m.id = pm.member_id where pm.project_id = $1 order by m.email",
+    [tower.projectId],
+  );
+  return rows.map((r) => r.email);
+}
+
+beforeAll(async () => {
+  migrator = new pg.Client({ connectionString: urls.migrator });
+  await migrator.connect();
+  app = createDb(urls.app, { max: 2 });
+  tool = createDb(urls.migrator, { max: 1 });
+  tower = await buildSeamTwoTower(app, migrator, { projectCode: "RUJ" });
+  // C1's Engineer raised it, so watches it: its moves wait for the Engineer's digest (the default).
+  await wirAtConsultant(tower, { type: "WIR", title: `Job pour ${Date.now()}` });
+  await drainOutbox(app);
+});
+afterAll(async () => {
+  await migrator?.end();
+  await app?.destroy();
+  await tool?.destroy();
+});
+
+describe("uat:run-job digest", () => {
+  it("--dry-run lists who would get one, and queues and sends nothing", async () => {
+    const engineer = await emailOf(tower.c1.members.engineer);
+    digests = [];
+    const run = await runJob(tool, "digest", { handlers, memberEmail: engineer, dryRun: true });
+    expect(run.queued.map((r) => r.email)).toEqual([engineer]);
+    expect(run.processed).toEqual([]);
+    expect(digests).toEqual([]);
+    expect(await queuedFor("digest", tower.c1.members.engineer)).toBe(0);
+  });
+
+  it("queues and sends one digest through the worker's handler, and does not claim the scheduled run", async () => {
+    const engineer = await emailOf(tower.c1.members.engineer);
+    const claimed = await runsOf("daily_digest");
+    digests = [];
+    const run = await runJob(tool, "digest", { handlers, memberEmail: engineer, dryRun: false });
+    expect(run.processed.map((r) => r.email)).toEqual([engineer]);
+    expect(digests.map((d) => d.to)).toEqual([engineer]);
+    expect(digests[0]!.projects.map((p) => p.projectId)).toEqual([tower.projectId]);
+    expect(await runsOf("daily_digest")).toBe(claimed);
+    expect(await queuedFor("digest", tower.c1.members.engineer)).toBe(0);
+  });
+});
+
+describe("uat:run-job weekly-report", () => {
+  it("sends only to the Members holding Assign", async () => {
+    const holders = await assignHolders();
+    expect(holders.length).toBeGreaterThan(0);
+    const members = await towerMembers();
+    expect(members.length).toBeGreaterThan(holders.length);
+    reports = [];
+    const claimed = await runsOf("weekly_step_age_report");
+    await runJob(tool, "weekly-report", { handlers, dryRun: false });
+    const ours = reports.filter((r) => r.projectId === tower.projectId).map((r) => r.to);
+    expect(ours.sort()).toEqual(holders);
+    expect(await runsOf("weekly_step_age_report")).toBe(claimed);
+  });
+
+  it("--member sends only that Member's, and queues nobody else's", async () => {
+    const [holder, other] = await assignHolders();
+    const holderId = (await migrator.query<{ id: string }>("select id from member where email = $1", [holder])).rows[0]!.id;
+    reports = [];
+    const run = await runJob(tool, "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+    expect(new Set(reports.map((r) => r.to))).toEqual(new Set([holder]));
+    expect(run.leftOut).toBeGreaterThan(0);
+    expect(await queuedFor("step_age_report", holderId)).toBe(0);
+    if (other) {
+      const otherId = (await migrator.query<{ id: string }>("select id from member where email = $1", [other])).rows[0]!.id;
+      expect(await queuedFor("step_age_report", otherId)).toBe(0);
+    }
+  });
+
+  it("refuses a --member no Member has", async () => {
+    await expect(runJob(tool, "weekly-report", { handlers, memberEmail: "nobody-at-all@rabaed.test", dryRun: true })).rejects.toThrow(
+      "no Member has the email nobody-at-all@rabaed.test",
+    );
+  });
+
+  it("sends nothing for a closed Project", async () => {
+    const [holder] = await assignHolders();
+    await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [tower.projectId]);
+    reports = [];
+    const run = await runJob(tool, "weekly-report", { handlers, memberEmail: holder!, dryRun: false });
+    expect(reports.filter((r) => r.projectId === tower.projectId)).toEqual([]);
+    expect(run.processed.filter((r) => r.projectId === tower.projectId)).toEqual([]);
+  });
+});
