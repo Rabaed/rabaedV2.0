@@ -10,7 +10,8 @@
 import { randomUUID } from "node:crypto";
 import type { LinkSearchResults } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -36,14 +37,23 @@ async function search(by: Caller, q: string, extra: Record<string, string> = {},
 }
 
 const ids = (r: LinkSearchResults) => r.links.map((l) => l.id);
+/** A Project's Link search as a read for expectHiddenFrom: the Project, once its search answers 200. */
+const searchIn = (projectId: string) => ({
+  read: readById<LinkSearchResults>(searchUrl(projectId, { q: "cable" })),
+  target: projectId,
+  idOf: () => projectId,
+});
+/** A caller as a failure names them. */
+const named = (by: Caller) =>
+  by === tower.c1Engineer ? "C1 engineer" : by === elsewhere.c1Engineer ? "C1 engineer of the other Project" : by === c1Outsider ? "C1 outsider" : by === c2Engineer ? "C2 engineer" : "someone";
 
 const item = { c1Draft: "", c1Internal: "", c1Submitted: "", c1Approved: "", c1Mechanical: "", c2Submitted: "", elsewhere: "" };
 let c1SubmittedNumber = "";
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  const onboard = async (legalName: string): Promise<Company> => {
-    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  const onboard = async (legalName: string): Promise<Company> => { // not hidden-from: names a Company to onboard
+    const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) }); // not hidden-from: names a Company to onboard
     return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
   };
   k1 = await onboard("Design Consultants LLC");
@@ -89,12 +99,12 @@ describe("Link search (scenario 79)", () => {
   it("matches part of a Document Number or Subject, whatever the case", async () => {
     expect(ids(await search(tower.c1Engineer, c1SubmittedNumber.slice(-6).toLowerCase()))).toEqual([item.c1Submitted]);
     expect(ids(await search(tower.c1Engineer, "APPROVED"))).toEqual([item.c1Approved]);
-    expect(ids(await search(tower.c1Engineer, "nothing like this"))).toEqual([]);
+    expect(ids(await search(tower.c1Engineer, "nothing like this"))).toEqual([]); // not hidden-from: nothing matches
   });
 
   it("treats % and _ as plain text, not wildcards", async () => {
-    expect(ids(await search(tower.c1Engineer, "%"))).toEqual([]);
-    expect(ids(await search(tower.c1Engineer, "_"))).toEqual([]);
+    expect(ids(await search(tower.c1Engineer, "%"))).toEqual([]); // not hidden-from: nothing matches
+    expect(ids(await search(tower.c1Engineer, "_"))).toEqual([]); // not hidden-from: nothing matches
   });
 
   it("offers K1 every Submitted item it sees, C2's too, but never C1's Draft or internal review", async () => {
@@ -125,16 +135,18 @@ describe("Link search (scenario 79)", () => {
   });
 
   it("pages with a fixed maximum, and never counts hidden matches", async () => {
+    // K1's four, in the search's own order, then cut into pages.
+    const k1Sees = ids(await search(tower.k1Manager, "cable trays"));
+    expect(k1Sees.toSorted()).toEqual([item.c1Submitted, item.c1Approved, item.c1Mechanical, item.c2Submitted].toSorted());
     const first = await search(tower.k1Manager, "cable trays", { limit: "3" });
-    expect(first.links).toHaveLength(3);
+    expect(ids(first)).toEqual(k1Sees.slice(0, 3));
     expect(first.nextPage).toBe(2);
     const second = await search(tower.k1Manager, "cable trays", { limit: "3", page: "2" });
-    expect(second.links).toHaveLength(1);
+    expect(ids(second)).toEqual(k1Sees.slice(3));
     expect(second.nextPage).toBeNull();
-    expect(new Set([...ids(first), ...ids(second)]).size).toBe(4);
     // C1 matches fewer items than K1 and pages as if the others didn't exist.
     const c1Only = await search(tower.c1Engineer, "cable trays", { limit: "3" });
-    expect(c1Only.links).toHaveLength(3);
+    expect(ids(c1Only).toSorted()).toEqual([item.c1Submitted, item.c1Approved, item.c1Mechanical].toSorted());
     expect(c1Only.nextPage).toBeNull();
     expect(Object.keys(c1Only).toSorted()).toEqual(["links", "nextPage"]);
   });
@@ -145,10 +157,10 @@ describe("Link search (scenario 79)", () => {
   });
 
   it("answers a Project the caller isn't on exactly like one that doesn't exist (404)", async () => {
-    await expectHidden(c1Outsider.get(searchUrl(tower.projectId, { q: "cable" })));
-    await expectHidden(c2Engineer.get(searchUrl(elsewhere.projectId, { q: "cable" })));
-    await expectHidden(tower.c1Engineer.get(searchUrl(randomUUID(), { q: "cable" })));
-    await expectHidden(tower.c1Engineer.get(searchUrl("not-an-id", { q: "cable" })));
+    await expectHiddenFrom({ ...searchIn(tower.projectId), seenBy: tower.c1Engineer, hiddenFrom: c1Outsider, name: named, label: "Tower" });
+    await expectHiddenFrom({ ...searchIn(elsewhere.projectId), seenBy: elsewhere.c1Engineer, hiddenFrom: c2Engineer, name: named, label: "the other Project" });
+    await expectHidden(tower.c1Engineer.get(searchUrl(randomUUID(), { q: "cable" }))); // not hidden-from: a made-up id
+    await expectHidden(tower.c1Engineer.get(searchUrl("not-an-id", { q: "cable" }))); // not hidden-from: a made-up id
   });
 
   it("is for signed-in Members only", async () => {
