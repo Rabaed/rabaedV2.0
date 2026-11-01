@@ -355,7 +355,7 @@ describe("rule 7: a job that reads string inputs refuses a carriage return or ne
 describe("rule 8: a tee to the step summary under environment uat goes through masked", () => {
   const maskedFunction = "masked() { sed -E 's/[^[:space:]]+@[^[:space:]]+/<email>/g'; }\n";
   const uat = (run: string, { define = true, environment = "environment: uat\n    " } = {}) =>
-    `on: push\npermissions: { contents: read }\njobs:\n  a:\n    ${environment}runs-on: ubuntu-latest\n    steps:\n      - run: |\n${indent((define ? maskedFunction : "") + run)}\n`;
+    `on: push\npermissions: { contents: read }\njobs:\n  a:\n    ${environment}runs-on: ubuntu-latest\n    steps:\n      - shell: bash\n        run: |\n${indent((define ? maskedFunction : "") + run)}\n`;
   const missingStage = `without a masked stage right before it`;
   const piped = `write '... | masked | tee -a "$GITHUB_STEP_SUMMARY"'`;
 
@@ -514,6 +514,121 @@ describe("rule 9: ::add-mask:: is never given a value shorter than 8 characters"
   it("says so once for a value masked twice, and once for each different one", () => {
     expect(mask('echo "::add-mask::$v"\necho "::add-mask::$v"')).toHaveLength(1);
     expect(mask('echo "::add-mask::$a"\necho "::add-mask::$b"')).toHaveLength(2);
+  });
+});
+
+// Rule 10 (RP-1208): GitHub's default shell is `bash -e {0}`, with no pipefail, so `tool | tee` ends with tee's exit
+// status and a failed tool shows green. An explicit `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}`.
+describe("rule 10: a run: script with a pipe sets shell: bash", () => {
+  const pipefail = "pipefail";
+  const advice = "shell: bash";
+  const wf = (step: string, { jobExtra = "", top = "" } = {}) => `on: push\npermissions: { contents: read }\n${top}jobs:\n  a:\n    runs-on: ubuntu-latest\n${jobExtra}    steps:\n${step}`;
+  const runOf = (script: string, stepExtra = "") => `      - ${stepExtra}run: |\n${indent(script)}\n`;
+  const piped = "node tool.ts | tee out.log";
+
+  it("flags a pipe with no shell at all, and names the step and the fix", () => {
+    const found = messages(wf(runOf(piped)));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("job a, step 1");
+    expect(found[0]).toContain(pipefail);
+    expect(found[0]).toContain(advice);
+    expect(found[0]).toContain("defaults: run: shell: bash");
+  });
+
+  it("flags a one-line run: and a pipe on a later line, once per step", () => {
+    expect(messages(wf("      - run: node tool.ts | tee out.log\n"))).toHaveLength(1);
+    expect(messages(wf(runOf("echo hi\nnode tool.ts | sort | tee out.log\necho done")))).toHaveLength(1);
+  });
+
+  it("flags every piped step, not only the first", () => {
+    expect(messages(wf(runOf(piped) + runOf("echo hi") + runOf("a | b")))).toHaveLength(2);
+  });
+
+  it("flags a pipe written over several lines, a pipe after a heredoc marker, and |&", () => {
+    expect(messages(wf(runOf("node tool.ts 2>&1 \\\n  | tee out.log")))).toHaveLength(1);
+    expect(messages(wf(runOf("node tool.ts |\n  tee out.log")))).toHaveLength(1);
+    expect(messages(wf(runOf("cat <<EOF | tee out.log\nbody\nEOF")))).toHaveLength(1);
+    expect(messages(wf(runOf("node tool.ts |& tee out.log")))).toHaveLength(1);
+  });
+
+  it("flags a pipe inside a command substitution, in quotes or not", () => {
+    expect(messages(wf(runOf('v="$(node tool.ts | head -n 1)"')))).toHaveLength(1);
+    expect(messages(wf(runOf("v=$(node tool.ts | head -n 1)")))).toHaveLength(1);
+    expect(messages(wf(runOf("v=`node tool.ts | head -n 1`")))).toHaveLength(1);
+    expect(messages(wf(runOf('v="${x:-$(node tool.ts | head -n 1)}"')))).toHaveLength(1);
+  });
+
+  it("passes shell: bash on the step, the job or the workflow", () => {
+    expect(messages(wf(runOf(piped, "shell: bash\n        ")))).toEqual([]);
+    expect(messages(wf(runOf(piped), { jobExtra: "    defaults:\n      run:\n        shell: bash\n" }))).toEqual([]);
+    expect(messages(wf(runOf(piped), { top: "defaults:\n  run:\n    shell: bash\n" }))).toEqual([]);
+  });
+
+  it("lets the step's shell win over the defaults, and the job's over the workflow's", () => {
+    const defaults = { top: "defaults: { run: { shell: bash } }\n" };
+    expect(messages(wf(runOf(piped, "shell: sh\n        "), defaults))).toHaveLength(1);
+    expect(messages(wf(runOf(piped), { ...defaults, jobExtra: "    defaults: { run: { shell: sh } }\n" }))).toHaveLength(1);
+    expect(messages(wf(runOf(piped, "shell: bash\n        "), { top: "defaults: { run: { shell: sh } }\n" }))).toEqual([]);
+    expect(messages(wf(runOf(piped), { top: "defaults: { run: { shell: sh } }\n", jobExtra: "    defaults: { run: { shell: bash } }\n" }))).toEqual([]);
+  });
+
+  it("flags a shell that has no pipefail: sh, or bash with its own template", () => {
+    for (const shell of ["sh", "bash -e {0}", "bash {0}", "Bash", "/bin/bash"]) {
+      expect(messages(wf(runOf(piped, `shell: ${JSON.stringify(shell)}\n        `))), shell).toHaveLength(1);
+    }
+  });
+
+  it("leaves a PowerShell, cmd or Python step alone: its pipe is not bash's", () => {
+    for (const shell of ["pwsh", "powershell", "python", "cmd"]) {
+      expect(messages(wf(runOf("Get-ChildItem | Select-Object -First 1", `shell: ${shell}\n        `))), shell).toEqual([]);
+    }
+  });
+
+  it("passes a script with no pipe", () => {
+    expect(messages(wf(runOf("echo hi\nnode tool.ts > out.log\nnode a.ts && node b.ts")))).toEqual([]);
+    expect(messages(wf("      - uses: actions/checkout@v7\n        with: { persist-credentials: false }\n"))).toEqual([]);
+  });
+
+  it("takes || for or, not a pipe", () => {
+    expect(messages(wf(runOf("node tool.ts || exit 1")))).toEqual([]);
+    expect(messages(wf(runOf("[ -n \"$a\" ] || [ -n \"$b\" ] || exit 1")))).toEqual([]);
+    expect(messages(wf(runOf('node tool.ts || true | cat')))).toHaveLength(1);
+  });
+
+  it("takes a | inside quotes, a comment, an escape, a heredoc body or a parameter expansion for text", () => {
+    for (const script of [
+      "echo 'a | b'",
+      'echo "a | b"',
+      "echo a \\| b",
+      "# node tool.ts | tee out.log\necho hi",
+      "echo hi # a | b",
+      "cat <<EOF\n| a | b |\nEOF",
+      "cat <<-'EOF'\n\t| a | b |\n\tEOF",
+      'cat > out.md <<"END"\n| a | b |\nEND\necho done',
+      'echo "${x//a|b/c}"',
+      'v="${v#"${v%%[![:space:]]*}"}"',
+      "grep -E 'a|b' file",
+      'echo "$(echo \'a | b\')"',
+    ]) {
+      expect(messages(wf(runOf(script))), script).toEqual([]);
+    }
+  });
+
+  it("goes on reading after a heredoc, a quote and a substitution", () => {
+    expect(messages(wf(runOf("cat <<EOF\n| a |\nEOF\nnode tool.ts | tee out.log")))).toHaveLength(1);
+    expect(messages(wf(runOf("echo 'it'\"'\"'s' | tee out.log")))).toHaveLength(1);
+    expect(messages(wf(runOf('echo "$(date)" | tee out.log')))).toHaveLength(1);
+  });
+
+  it("checks a composite action's steps, where shell is required anyway", () => {
+    const composite = (shell: string) => `name: x\nruns:\n  using: composite\n  steps:\n    - shell: ${shell}\n      run: ${piped}\n`;
+    expect(messages(composite("sh"))).toHaveLength(1);
+    expect(messages(composite("bash"))).toEqual([]);
+  });
+
+  it("takes a workflow with no steps and a job with a non-mapping defaults for nothing", () => {
+    expect(messages("on: push\njobs: {}\n")).toEqual([]);
+    expect(messages(wf(runOf(piped), { jobExtra: "    defaults: bash\n" }))).toHaveLength(1);
   });
 });
 

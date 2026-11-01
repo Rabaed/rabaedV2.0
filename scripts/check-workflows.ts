@@ -39,6 +39,13 @@ import { parseDocument } from "yaml";
 //  9. ::add-mask:: never gets a value shorter than 8 characters: a literal needs 8, a
 //     variable a ${#v} test on the same line or the if/[ line right before it.
 //
+// Exit status (RP-1208):
+//
+// 10. A run: script with a pipe sets shell: bash on the step, or defaults: run: shell: bash on the job
+//     or the workflow. GitHub's default shell is `bash -e {0}`, with no pipefail, so `tool | tee` ends
+//     with tee's status and a failed tool shows green; `shell: bash` adds -o pipefail. A `|` inside
+//     quotes, a comment, a heredoc body or `||` is not a pipe; PowerShell, cmd and Python steps are left alone.
+//
 // Out of scope for rules 6 to 9: string inputs in a step name:, container or services env, and a
 // reusable workflow's with:; a `>> "$GITHUB_STEP_SUMMARY"` redirect of tool output; tee through a variable.
 //
@@ -138,7 +145,126 @@ function teesToSummary(script: string): { target: string; previous: string }[] {
   return out;
 }
 
+type ShellContext = { kind: "dq" | "backtick" } | { kind: "sub" | "param"; depth: number };
+/** A heredoc marker at the start of the text (`<<EOF`, `<<-'EOF'`, `<<"EOF"`), not a here-string (`<<<`). */
+const heredocMarker = /^<<(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|\\?([\w.-]+))/;
+
+/**
+ * True when a shell script has a pipe: a `|` that is not half of `||`, outside single and double quotes, comments, escapes,
+ * heredoc bodies and ${...} expansions (`${v//a|b/c}`). A pipe inside $(...), backticks or "$(...)" counts. `|&` is a
+ * pipe. A `case` pattern (`a|b)`) and an alternation in `[[ x =~ a|b ]]` count as pipes too: the fix, shell: bash, is harmless there.
+ */
+function hasPipe(script: string): boolean {
+  const stack: ShellContext[] = [];
+  const heredocs: { delimiter: string; stripTabs: boolean }[] = [];
+  let i = 0;
+  while (i < script.length) {
+    const ch = script[i] ?? "";
+    const top = stack[stack.length - 1];
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (ch === "\n" && heredocs.length > 0) {
+      // The bodies start on the next line and end on a line holding only the delimiter.
+      let at = i + 1;
+      for (const { delimiter, stripTabs } of heredocs) {
+        while (at < script.length) {
+          const end = script.indexOf("\n", at);
+          const line = script.slice(at, end === -1 ? script.length : end);
+          at = end === -1 ? script.length : end + 1;
+          if ((stripTabs ? line.replace(/^\t+/, "") : line) === delimiter) break;
+        }
+      }
+      heredocs.length = 0;
+      i = at;
+      continue;
+    }
+    if (ch === "$" && script[i + 1] === "(") {
+      stack.push({ kind: "sub", depth: 1 });
+      i += 2;
+      continue;
+    }
+    if (ch === "$" && script[i + 1] === "{") {
+      stack.push({ kind: "param", depth: 1 });
+      i += 2;
+      continue;
+    }
+    if (ch === "`") {
+      if (top?.kind === "backtick") stack.pop();
+      else stack.push({ kind: "backtick" });
+      i++;
+      continue;
+    }
+    if (top?.kind === "dq") {
+      if (ch === '"') stack.pop();
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      stack.push({ kind: "dq" });
+      i++;
+      continue;
+    }
+    if (ch === "'") {
+      const close = script.indexOf("'", i + 1);
+      i = close === -1 ? script.length : close + 1;
+      continue;
+    }
+    if (top?.kind === "param") {
+      if (ch === "{") top.depth++;
+      else if (ch === "}" && --top.depth === 0) stack.pop();
+      i++;
+      continue;
+    }
+    if (top?.kind === "sub") {
+      if (ch === "(") top.depth++;
+      else if (ch === ")" && --top.depth === 0) {
+        stack.pop();
+        i++;
+        continue;
+      }
+    }
+    if (ch === "#" && (i === 0 || /[\s;|&(]/.test(script[i - 1] ?? ""))) {
+      const end = script.indexOf("\n", i);
+      i = end === -1 ? script.length : end;
+      continue;
+    }
+    if (ch === "<" && script[i + 1] === "<") {
+      if (script[i + 2] === "<") {
+        i += 3;
+        continue;
+      }
+      const marker = heredocMarker.exec(script.slice(i));
+      if (marker) {
+        heredocs.push({ delimiter: marker[2] ?? marker[3] ?? marker[4] ?? "", stripTabs: marker[1] === "-" });
+        i += marker[0].length;
+        continue;
+      }
+    }
+    if (ch === "|") {
+      if (script[i + 1] === "|") {
+        i += 2;
+        continue;
+      }
+      return true;
+    }
+    i++;
+  }
+  return false;
+}
+
+/** The shell a `defaults: run: shell:` block names, if any. */
+function defaultShell(holder: unknown): string | undefined {
+  const defaults = isObj(holder) ? holder.defaults : undefined;
+  const run = isObj(defaults) ? defaults.run : undefined;
+  return isObj(run) && typeof run.shell === "string" ? run.shell : undefined;
+}
+
 const definesMasked = (script: string) => /(?:^|[\s;{(&|])(?:function\s+masked\b|masked\s*\(\s*\))/m.test(script);
+
+/** Shells whose `|` is not bash's: they have no pipefail to ask for. */
+const nonBashShell = /^(?:pwsh|powershell|python|cmd)\b/;
 
 const MIN_MASK = 8;
 // The parts of an ::add-mask:: value: ${{ }}, $(...), ${...}, $name, $1 or $@, or a plain character.
@@ -375,6 +501,20 @@ export function lintWorkflow(file: string, source: string): Finding[] {
     steps.forEach((step, index) => {
       if (!isObj(step) || typeof step.run !== "string") return;
       for (const problem of addMaskProblems(step.run)) add(stepLabel(where, step, index), problem);
+    });
+  }
+
+  // 10. A run: script with a pipe runs under an explicit shell: bash (pipefail)
+  for (const { where, steps, job } of stepGroups) {
+    steps.forEach((step, index) => {
+      if (!isObj(step) || typeof step.run !== "string") return;
+      const shell = typeof step.shell === "string" ? step.shell : (defaultShell(job) ?? defaultShell(root));
+      if (shell === "bash" || (shell !== undefined && nonBashShell.test(shell))) return;
+      if (!hasPipe(step.run)) return;
+      add(
+        stepLabel(where, step, index),
+        `has a pipe in a run: script but ${shell === undefined ? "no shell:" : `shell: ${shell}`}, so it runs without pipefail (GitHub's default is bash -e, and sh has none either): a failing tool before the pipe shows green because the step ends with the last command's status; set shell: bash on the step, or defaults: run: shell: bash on the job or the workflow (GitHub then adds -o pipefail)`,
+      );
     });
   }
 
