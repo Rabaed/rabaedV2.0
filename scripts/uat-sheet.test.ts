@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { caseFromIssue, casesFromScenarios, numberedSteps, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
+import { caseFromIssue, casesFromScenarios, numberedSteps, orderCases, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
@@ -180,11 +180,36 @@ describe("renderSheet", () => {
     expect(html).toContain("يصل البريد إلى صندوق البريد الحقيقي");
   });
 
+  it("opens with a How to start guide for the tester, in English and Arabic, with the UAT address (RP-1201)", () => {
+    const html = renderSheet({ round: "R", cases, built: "x", uatUrl: "https://uat.example" });
+    expect(html).toContain('"uatUrl":"https://uat.example"');
+    for (const text of ["How to start", "كيف تبدأ", "private window", "نافذة خاصة", "Owner runs", "يشغّلها مسؤول الاختبار"]) expect(html).toContain(text);
+  });
+
+  it("gives the Excel export who runs each case and what it needs", () => {
+    const html = renderSheet({ round: "R", cases, built: "x" });
+    expect(html).toContain('"Needs", "Runs it"');
+  });
+
   it("is a page whose script still parses", () => {
     const html = renderSheet({ round: "R", cases, built: "x" });
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
     expect(scripts.length).toBeGreaterThan(0);
     for (const code of scripts) expect(() => new vm.Script(code)).not.toThrow();
+  });
+});
+
+describe("orderCases", () => {
+  const ids = (list: SheetCase[]) => list.map((c) => c.id);
+  const make = (id: string) => ({ ...caseFromIssue(issue(markdown), "https://uat.example"), id });
+  const list = ["SUB-10", "SUB-2", "PAR-01"].map(make);
+
+  it("keeps the scenarios file's order, the strategy's suggested order to run them in", () => {
+    expect(ids(orderCases(list, true))).toEqual(["SUB-10", "SUB-2", "PAR-01"]);
+  });
+
+  it("sorts cases read from Jira by ID, numbers as numbers", () => {
+    expect(ids(orderCases(list, false))).toEqual(["PAR-01", "SUB-2", "SUB-10"]);
   });
 });
 

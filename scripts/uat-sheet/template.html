@@ -59,6 +59,10 @@
   #lightbox img { max-width:94vw; max-height:88vh; background:#fff; }
   #lightbox p { position:absolute; bottom:10px; color:#fff; font-size:13px; }
   .empty { padding:30px; text-align:center; color:var(--muted); }
+  .guide summary { cursor:pointer; font-weight:700; font-size:15px; }
+  .guide ol { margin:8px 0 2px; padding-inline-start:22px; }
+  .guide li { margin:4px 0; }
+  .case.by-owner { opacity:.82; }
   @media (max-width: 900px) { .case { grid-template-columns:1fr; } .case .rec { border-inline-start:0; border-top:1px solid var(--line); } }
 </style>
 </head>
@@ -69,6 +73,10 @@
   <p><span data-t="intro"></span> <span id="built"></span></p>
 </header>
 <main>
+  <details class="panel guide" id="guide" open>
+    <summary data-t="startTitle"></summary>
+    <ol id="guideList"></ol>
+  </details>
   <section class="panel">
     <div class="row">
       <label><span data-t="tester"></span><input type="text" id="tester" dir="auto"></label>
@@ -78,12 +86,12 @@
       <input type="file" id="importFile" accept=".json" hidden>
       <span id="msg" class="help" role="status"></span>
     </div>
-    <p class="help" data-t="howto"></p>
   </section>
   <section class="panel">
     <div class="row">
       <label><span data-t="part"></span><select id="fPart"></select></label>
       <label><span data-t="round"></span><select id="fRound"></select></label>
+      <label><span data-t="runs"></span><select id="fWho"></select></label>
       <label><span data-t="status"></span><select id="fStatus"></select></label>
       <label style="flex:1 1 220px"><span data-t="search"></span><input type="search" id="fText" dir="auto" style="width:100%"></label>
     </div>
@@ -109,7 +117,19 @@ const T = {
         badJson: "That file is not a work file from this sheet.",
         needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run",
         mailNote: "On the UAT the email goes to the real mailbox of the address, not to a catcher: you can read it only if the address is yours; otherwise ask the UAT owner.",
-        howto: "Pick a status for each Test Case, write what you saw, and add screenshots (paste with Ctrl+V into the case you are on, drag them in, or pick files). Everything is kept in this browser as you go, so closing the tab loses nothing. When you finish, press Export to Excel and send the .xlsx back. To move to another computer, Save work (.json) there and Load it here. Demo data only: never type real names or documents." },
+        howto: "Pick a status for each Test Case, write what you saw, and add screenshots (paste with Ctrl+V into the case you are on, drag them in, or pick files). Everything is kept in this browser as you go, so closing the tab loses nothing. When you finish, press Export to Excel and send the .xlsx back. To move to another computer, Save work (.json) there and Load it here. Demo data only: never type real names or documents.",
+        startTitle: "How to start", runs: "Who runs it", runsTester: "You", runsOwner: "Owner runs", yourCases: "Your cases",
+        ownerNote: "The UAT owner runs this case (it needs their machine, Rabaed Admin or a mailbox you can't read). Skip it unless they ask you to; leave its status Not set.",
+        guide: [
+          "Open the UAT: {url} (English) or {urlAr} (Arabic). Rabaed works in both; switch with /en and /ar in the address.",
+          "Sign in with the account the owner prepared for you. When a case says Sign in as someone else (Hafiz, Ali, Mohammed…), the owner gives you that demo person's sign-in. Use one private window per person, so each sees only their own Company's work.",
+          "Work down the list in order: it follows the test plan. The list starts on Your cases; the Who runs it filter also shows the cases the UAT owner runs.",
+          "For each case: read Steps, do them, compare with Expected result, then press Pass, Fail, Blocked (you could not test it) or Not run.",
+          "On Fail or Blocked, write what you saw in Comment (English or Arabic) and add a screenshot: click into the case and press Ctrl+V, drag the image in, or click the box to pick a file. Add as many as you need.",
+          "Your work saves in this browser as you go (Saved hh:mm under each case). Use the same browser each time. To change computer, Save work (.json) and Load it on the other one.",
+          "When you finish, or at the end of each day, write your name at the top, press Export to Excel and send the .xlsx to the owner. It holds every status, comment and screenshot.",
+          "Demo data only: never type real names, phone numbers or documents. If something looks broken or the data looks wrong, mark Blocked, say so in Comment and tell the owner.",
+        ] },
   ar: { title: "ورقة اختبار قبول رابض", intro: "أُنشئت في", tester: "اسمك", export: "تصدير إلى Excel", saveJson: "حفظ العمل (.json)",
         importJson: "تحميل العمل (.json)", part: "الجزء", round: "الجولة", status: "الحالة", search: "بحث", all: "الكل",
         pass: "ناجح", fail: "فاشل", blocked: "متعذّر", notrun: "لم يُنفَّذ", unset: "لم تُحدَّد", who: "سجّل الدخول باسم", steps: "الخطوات", expected: "النتيجة المتوقعة",
@@ -119,7 +139,19 @@ const T = {
         badJson: "هذا الملف ليس ملف عمل من هذه الورقة.",
         needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة",
         mailNote: "في بيئة الاختبار يصل البريد إلى صندوق البريد الحقيقي لصاحب العنوان لا إلى أداة التقاط: لا تقرأه إلا إذا كان العنوان لك، وإلا فاطلب ذلك من مسؤول الاختبار.",
-        howto: "اختر حالة لكل حالة اختبار، واكتب ما رأيت، وأضف لقطات الشاشة (الصقها بـ Ctrl+V في الحالة التي تعمل عليها، أو اسحبها، أو اختر ملفات). يُحفظ كل شيء في هذا المتصفح أولًا بأول، فإغلاق التبويب لا يُضيّع شيئًا. عند الانتهاء اضغط تصدير إلى Excel وأرسل ملف .xlsx. للانتقال إلى جهاز آخر احفظ العمل (.json) هناك وحمّله هنا. بيانات تجريبية فقط: لا تكتب أسماء أو مستندات حقيقية." },
+        howto: "اختر حالة لكل حالة اختبار، واكتب ما رأيت، وأضف لقطات الشاشة (الصقها بـ Ctrl+V في الحالة التي تعمل عليها، أو اسحبها، أو اختر ملفات). يُحفظ كل شيء في هذا المتصفح أولًا بأول، فإغلاق التبويب لا يُضيّع شيئًا. عند الانتهاء اضغط تصدير إلى Excel وأرسل ملف .xlsx. للانتقال إلى جهاز آخر احفظ العمل (.json) هناك وحمّله هنا. بيانات تجريبية فقط: لا تكتب أسماء أو مستندات حقيقية.",
+        startTitle: "كيف تبدأ", runs: "من يشغّلها", runsTester: "أنت", runsOwner: "يشغّلها مسؤول الاختبار", yourCases: "حالاتك",
+        ownerNote: "يشغّل مسؤول الاختبار هذه الحالة (تحتاج إلى جهازه أو إلى Rabaed Admin أو إلى بريد لا تستطيع قراءته). تخطّها إلا إذا طلب منك ذلك، واترك حالتها لم تُحدَّد.",
+        guide: [
+          "افتح بيئة الاختبار: {urlAr} (العربية) أو {url} (الإنجليزية). يعمل رابض باللغتين؛ بدّل بينهما بـ /ar و/en في العنوان.",
+          "سجّل الدخول بالحساب الذي أعدّه لك المسؤول. وإذا قالت الحالة سجّل الدخول باسم شخص آخر (حافظ، علي، محمد…) فسيعطيك المسؤول بيانات دخول ذلك الشخص التجريبي. استخدم نافذة خاصة لكل شخص، حتى لا يرى كل منهم إلا عمل شركته.",
+          "اعمل على القائمة بالترتيب: فهي تتبع خطة الاختبار. تبدأ القائمة بحالاتك، ويُظهر مرشّح من يشغّلها أيضًا الحالات التي يشغّلها مسؤول الاختبار.",
+          "في كل حالة: اقرأ الخطوات ونفّذها، وقارن بالنتيجة المتوقعة، ثم اضغط ناجح أو فاشل أو متعذّر (لم تستطع اختبارها) أو لم يُنفَّذ.",
+          "عند فاشل أو متعذّر اكتب ما رأيت في الملاحظة (بالعربية أو الإنجليزية) وأضف لقطة شاشة: انقر داخل الحالة واضغط Ctrl+V، أو اسحب الصورة، أو انقر المربع لاختيار ملف. أضف ما تحتاج من لقطات.",
+          "يُحفظ عملك في هذا المتصفح أولًا بأول (حُفظ hh:mm تحت كل حالة). استخدم المتصفح نفسه كل مرة. للانتقال إلى جهاز آخر احفظ العمل (.json) وحمّله هناك.",
+          "عند الانتهاء، أو في نهاية كل يوم، اكتب اسمك في الأعلى واضغط تصدير إلى Excel وأرسل ملف .xlsx إلى المسؤول. فيه كل حالة وملاحظة ولقطة شاشة.",
+          "بيانات تجريبية فقط: لا تكتب أسماء أو أرقام هواتف أو مستندات حقيقية. إذا بدا شيء معطّلًا أو البيانات خاطئة فاختر متعذّر واذكر ذلك في الملاحظة وأخبر المسؤول.",
+        ] },
 };
 let lang = "en";
 const t = (k) => T[lang][k] ?? T.en[k] ?? k;
@@ -210,7 +242,7 @@ function applyLang() {
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   $("lang").textContent = lang === "ar" ? "English" : "العربية";
-  fillFilters(); render();
+  fillFilters(); drawGuide(); render();
 }
 function fillFilters() {
   const opt = (sel, values, label) => {
@@ -221,23 +253,36 @@ function fillFilters() {
   opt($("fPart"), [...new Set(cases.map((c) => c.part))].sort());
   opt($("fRound"), [...new Set(cases.map((c) => c.round).filter(Boolean))].sort());
   opt($("fStatus"), [...STATUSES, "unset"], (s) => t(s));
+  // Who runs it: the tester's cases first (the default), or the ones the UAT owner runs (needs: owner, RP-1199).
+  const who = $("fWho"), cur = who.options.length ? who.value : "tester";
+  who.innerHTML = [["tester", t("runsTester")], ["owner", t("runsOwner")], ["", t("all")]].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
+  who.value = cur;
+}
+const runsBy = (c) => (c.needs.includes("owner") ? "owner" : "tester");
+function drawGuide() {
+  const url = DATA.uatUrl + "/en", urlAr = DATA.uatUrl + "/ar";
+  const link = (u) => `<a href="${esc(u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}</a>`;
+  $("guideList").innerHTML = t("guide").map((line) => `<li>${esc(line).replace("{url}", link(url)).replace("{urlAr}", link(urlAr))}</li>`).join("");
 }
 function visible() {
-  const p = $("fPart").value, r = $("fRound").value, s = $("fStatus").value, q = $("fText").value.trim().toLowerCase();
+  const p = $("fPart").value, r = $("fRound").value, s = $("fStatus").value, w = $("fWho").value, q = $("fText").value.trim().toLowerCase();
   return cases.filter((c) => {
     const st = entry(c.key).status || "unset";
-    return (!p || c.part === p) && (!r || c.round === r) && (!s || st === s) &&
+    return (!p || c.part === p) && (!r || c.round === r) && (!s || st === s) && (!w || runsBy(c) === w) &&
       (!q || [c.key, c.id, c.title, c.who, c.expected, ...c.steps, entry(c.key).comment].join(" ").toLowerCase().includes(q));
   });
 }
 function counts() {
-  const n = (s) => cases.filter((c) => (entry(c.key).status || "unset") === s).length;
-  $("counts").innerHTML = [...STATUSES, "unset"].map((s) => `<span class="count"><b>${n(s)}</b>${esc(t(s))}</span>`).join("") +
-    `<span class="count"><b>${cases.length}</b>${esc(t("all"))}</span>`;
+  // The counts are the tester's part: the cases the UAT owner runs are counted apart.
+  const mine = cases.filter((c) => runsBy(c) === "tester");
+  const n = (s) => mine.filter((c) => (entry(c.key).status || "unset") === s).length;
+  $("counts").innerHTML = `<span class="count"><b>${mine.length}</b>${esc(t("yourCases"))}</span>` +
+    [...STATUSES, "unset"].map((s) => `<span class="count"><b>${n(s)}</b>${esc(t(s))}</span>`).join("") +
+    `<span class="count"><b>${cases.length - mine.length}</b>${esc(t("runsOwner"))}</span>`;
 }
 function caseHtml(c) {
   const e = entry(c.key);
-  return `<article class="case st-${e.status || "unset"}" data-key="${esc(c.key)}">
+  return `<article class="case st-${e.status || "unset"}${runsBy(c) === "owner" ? " by-owner" : ""}" data-key="${esc(c.key)}">
     <div class="body">
       <h3 dir="auto"><code>${esc(c.id)}</code> ${esc(c.title)}</h3>
       <div class="meta"><span><code>${esc(c.key)}</code></span><span>${esc(t("part"))} ${esc(c.part)}</span>${c.round ? `<span>${esc(t("round"))} ${esc(c.round)}</span>` : ""}
@@ -247,6 +292,7 @@ function caseHtml(c) {
       ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
       ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}
       ${c.needs.includes("mail") ? `<p class="note" dir="auto">${esc(t("mailNote"))}</p>` : ""}
+      ${runsBy(c) === "owner" ? `<p class="note" dir="auto">${esc(t("ownerNote"))}</p>` : ""}
     </div>
     <div class="rec">
       <div class="status" role="group">${STATUSES.map((s) => `<button type="button" class="${s}" data-s="${s}" aria-pressed="${e.status === s}">${esc(t(s))}</button>`).join("")}</div>
@@ -316,7 +362,7 @@ document.addEventListener("paste", async (ev) => {
   ev.preventDefault(); await addShots(key, files);
 });
 $("lightbox").addEventListener("click", () => ($("lightbox").style.display = "none"));
-["fPart", "fRound", "fStatus"].forEach((id) => $(id).addEventListener("change", render));
+["fPart", "fRound", "fStatus", "fWho"].forEach((id) => $(id).addEventListener("change", render));
 $("fText").addEventListener("input", render);
 $("lang").addEventListener("click", () => { lang = lang === "en" ? "ar" : "en"; try { localStorage.setItem("rabaed-uat-sheet-lang", lang); } catch {} applyLang(); });
 $("tester").addEventListener("input", () => { if (db) tx("meta", "readwrite", (s) => s.put($("tester").value, "tester")).catch(() => {}); });
@@ -334,11 +380,12 @@ const roundTag = DATA.round.replace(/[^\p{L}\p{N}]+/gu, "-");
 const EN = (s) => T.en[s || "unset"];
 $("export").addEventListener("click", async () => {
   const tester = $("tester").value.trim(), when = now();
-  const head = ["Key", "ID", "Part", "Round", "Title", "Sign in as", "Steps", "Expected result", "UAT link", "Status", "Comment", "Screenshots", "Tester", "Updated"];
+  const head = ["Key", "ID", "Part", "Round", "Title", "Sign in as", "Steps", "Expected result", "Needs", "Runs it", "UAT link", "Status", "Comment", "Screenshots", "Tester", "Updated"];
   const table = [head, ...cases.map((c) => {
     const e = entry(c.key);
     const names = e.shots.map((id) => shots.get(id)?.name).filter(Boolean);
-    return [c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected, c.url,
+    return [c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected,
+      c.needs.join(", "), runsBy(c) === "owner" ? "UAT owner" : "Tester", c.url,
       EN(e.status), e.comment, names.length ? `${names.length} on the Screenshots sheet: ${names.join(", ")}` : "", e.status || e.comment || names.length ? tester : "", e.at];
   })];
   const shotRows = [["Key", "ID", "File", "Screenshot"]], images = [], heights = {};
@@ -354,7 +401,7 @@ $("export").addEventListener("click", async () => {
   const summary = [["Item", "Value"], ["Round", DATA.round], ["Tester", tester], ["Exported", when], ["Sheet built", DATA.built], ["Test Cases", cases.length],
     ["Pass", n("pass")], ["Fail", n("fail")], ["Blocked", n("blocked")], ["Not run", n("notrun")], ["Not set", n("")], ["Screenshots", images.length]];
   const bytes = buildXlsx([
-    { name: "Test Cases", table, widths: [9, 9, 6, 7, 40, 24, 60, 50, 28, 9, 50, 30, 14, 18] },
+    { name: "Test Cases", table, widths: [9, 9, 6, 7, 40, 24, 60, 50, 16, 11, 28, 9, 50, 30, 14, 18] },
     { name: "Screenshots", table: shotRows, widths: [9, 9, 26, 70], rowHeights: heights, images },
     { name: "Summary", table: summary, widths: [16, 40] },
   ], fflate);
