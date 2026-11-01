@@ -66,8 +66,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               hrefFor={(query) => workItemListHref(project.id, query)}
             />
           </section>
-          {/* The Activity Feed beside the cards: the Project's events as the Member may see them (RP-353). */}
-          {activity && <ActivityFeedView projectId={project.id} initial={activity} locale={locale} />}
+          {/* The Activity Feed beside the cards: the Project's events as the Member may see them (RP-353). Its own height
+              (RP-1176, UX-03): the card is h-full, and as a grid item it filled the whole row (a grid area is a height its
+              percentage resolves against), ~1000px empty under 4 entries. This wrapper is the grid item instead. */}
+          {activity && (
+            <div className="min-w-0">
+              <ActivityFeedView projectId={project.id} initial={activity} locale={locale} />
+            </div>
+          )}
         </div>
       )}
       {/* The Project's facts, as the kit's "Project details" card. */}

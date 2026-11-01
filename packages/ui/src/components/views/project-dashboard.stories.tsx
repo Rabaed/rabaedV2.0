@@ -20,6 +20,7 @@ const copy = {
   // 10 of the 19 chains the raiser's Company sees, its 3 In preparation among them.
   approvedAB: b("Approved (A+B) 10 · ", "المعتمد (A+B) 10 · "),
   mar: b("Material Submittal", "اعتماد مواد"),
+  sar: b("Supplier Approval", "اعتماد مورد"),
   wir: b("Work Inspection", "فحص الأعمال"),
   dsr: b("Daily Site Report", "تقرير الموقع اليومي"),
   cmt: b("Comments", "الملاحظات"),
@@ -50,24 +51,21 @@ const marCard = (viewer: "raiser" | "other") =>
     ),
   });
 
-/** As a Contractor sees it: its own MARs In preparation too. */
+/** A Submittals card with no Code C line, so it is shorter than the MAR card beside it (RP-1176). */
+const sarCard = dashboardCard({
+  type: { code: "SAR", name: copy.sar },
+  moduleKey: "submittals",
+  outcomeKind: "review_code",
+  outcomes: defaultOutcomeSets.review_code,
+  counts: counts([["A", 12]]),
+});
+
+/** As a Contractor sees it: its own MARs In preparation too. The Modules in the Project's tab order, as the API sends them (RP-1176). */
 const contractor: Dashboard = {
   modules: [
     {
-      key: "snag_list",
-      cards: [
-        dashboardCard({
-          type: { code: "CMT", name: copy.cmt },
-          moduleKey: "snag_list",
-          outcomeKind: "none",
-          outcomes: defaultOutcomeSets.none,
-          counts: counts([["pending", 6], ["approved", 11], ["cancelled", 1]]),
-        }),
-      ],
-    },
-    {
       key: "submittals",
-      cards: [marCard("raiser")],
+      cards: [marCard("raiser"), sarCard],
     },
     {
       key: "inspections",
@@ -78,6 +76,18 @@ const contractor: Dashboard = {
           outcomeKind: "inspection_result",
           outcomes: defaultOutcomeSets.inspection_result,
           counts: counts([["pending", 2], ["passed", 7], ["passed_with_comments", 2], ["failed", 1]]),
+        }),
+      ],
+    },
+    {
+      key: "snag_list",
+      cards: [
+        dashboardCard({
+          type: { code: "CMT", name: copy.cmt },
+          moduleKey: "snag_list",
+          outcomeKind: "none",
+          outcomes: defaultOutcomeSets.none,
+          counts: counts([["pending", 6], ["approved", 11], ["cancelled", 1]]),
         }),
       ],
     },
@@ -146,13 +156,14 @@ const cardOf = (context: PlayContext, name: { en: string; ar: string }) =>
   context.canvas.getByRole("article", { name: new RegExp(storyText(context, name)) });
 
 /**
- * The raiser's Company: every card kind, under its Module, the Snag List first;
- * In preparation on its own MAR card; every number links to its List.
+ * The raiser's Company: every card kind, under its Module, in the order the API
+ * sends them (Submittals first, RP-1176); In preparation on its own MAR card;
+ * every number links to its List.
  */
 export const WithInPreparation: Story = {
   play: async (context) => {
     const headings = context.canvas.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    await expect(headings).toEqual([copy.snagList, copy.submittals, copy.inspections, copy.siteReports].map((t) => storyText(context, t)));
+    await expect(headings).toEqual([copy.submittals, copy.inspections, copy.snagList, copy.siteReports].map((t) => storyText(context, t)));
     const mar = within(cardOf(context, copy.mar));
     await expect(mar.getByRole("link", { name: new RegExp(storyText(context, copy.inPreparation)) })).toHaveAttribute(
       "href",
@@ -169,6 +180,22 @@ export const WithInPreparation: Story = {
       "href",
       "?module=snag_list&type=CMT&bucket=pending%2Cin_preparation",
     );
+  },
+};
+
+/**
+ * RP-1176 (UX-03): each card keeps its own height. The SAR card, with no Code C line, is not stretched to the MAR
+ * card beside it, and nothing is left empty inside it.
+ */
+export const CardsKeepTheirHeight: Story = {
+  play: async (context) => {
+    const mar = cardOf(context, copy.mar);
+    const sar = cardOf(context, copy.sar);
+    const sarBody = sar.lastElementChild as HTMLElement;
+    await expect(sar.getBoundingClientRect().height).toBeLessThan(mar.getBoundingClientRect().height - 40);
+    // The body is as tall as what it holds (its bottom padding included): no stretched space below the last row.
+    const lastRow = sarBody.lastElementChild as HTMLElement;
+    await expect(sarBody.getBoundingClientRect().bottom - lastRow.getBoundingClientRect().bottom).toBeLessThan(24);
   },
 };
 
