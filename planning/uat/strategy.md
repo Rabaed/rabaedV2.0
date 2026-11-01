@@ -194,7 +194,7 @@ Each role below is played by the seeded person shown. The journeys are the end-t
 |---|---|---|---|
 | Contractor engineer | Hafiz (TMC); Omar (TMC, Tower 2 only); Yousef (Beta Build, the rival) | Raises Drafts (MAR, SAR, DAR, WIR, Snag), fills the Form, sends for review, answers Returns, creates Revisions and replacements, imports registers, builds Packages | J1, J3, J4, J10, J11, J12, J14 |
 | Contractor PM | Ali (TMC) | Holds internal review, Returns, Submits with a Cover Note, resolves Comments and Snags, watches, reads Home and the weekly report | J1, J2, J3, J6 |
-| Consultant engineer | Ahmed, Sara (DCL) | Picks up from the Step Pool, reads the Form, replies with the verification and a Recommended Code, fills the WIR checklist on site | J1, J9, J14 |
+| Consultant engineer | Ahmed, Sara (DCL; Sara covers Mechanical only, so an Electrical item is Ahmed's at once) | Picks up from the Step Pool, reads the Form, replies with the verification and a Recommended Code, fills the WIR checklist on site | J1, J9, J14 |
 | Consultant manager | Mohammed (DCL) | Issues Review Codes A to D with Remarks, Comments and the final verification; raises Snags; recommends Code to the Owner | J1 to J6, J9, J10 |
 | Owner Representative / Owner | Faisal, Noura (Al Waha); Sami UAT (UAT Owner Co) | Oversees Submitted items; Noura holds the Owner review and confirms the Code | J6; all oversight checks in Part VIS |
 | Project Admin | Saeed (TMC) | Configures the Project: Trades, Locations, Scopes, Participants and their Visibility, numbering, Workflows, Screens, Stages, Checklist Templates, Approved Supplier List | J7, J8 |

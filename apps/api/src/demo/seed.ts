@@ -15,7 +15,9 @@ import { jpegWithExif } from "./exif-jpeg.ts";
 // their Members, Positions and Visibility, and a second Project no other demo
 // Company is on (RP-213), built through the API itself (the
 // same routes, validation and app.* functions a person would use), never raw
-// SQL. A Rabaed Engineer onboards each Company through Rabaed Admin's domain
+// SQL, except where no route exists: the Signature and Company image rows when
+// there is no file store, and the Rabaed Default Position that holds Assign
+// (RP-1186; Positions are Rabaed's, not a Project Admin's to add). A Rabaed Engineer onboards each Company through Rabaed Admin's domain
 // service (apps/admin), which writes admin_action with the reason
 // (visibility.md V9), as the admin service's own screen does.
 //
