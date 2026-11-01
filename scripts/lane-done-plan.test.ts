@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { Container, EnvClaim } from "./lanes.ts";
 import {
+  claimIdsFor,
   laneLabel,
+  mergedLeftovers,
   notMergedRefusal,
   parseLaneDoneArgs,
   decideLaneDone,
   releaseLines,
+  restLine,
   type Candidate,
   type Decision,
   type DecisionInput,
   type PullRequest,
 } from "./lane-done-plan.ts";
 
-// RP-1170: `pnpm lane:done <pr>` decides here, on facts gathered by lane-done.ts, which of the lane's
+// RP-1170: `pnpm lane:done 580` decides here, on facts gathered by lane-done.ts, which of the lane's
 // worktrees go and what happens to its stack. The safety rules are the point of the ticket.
 
 const pr: PullRequest = {
@@ -93,8 +96,17 @@ describe("parseLaneDoneArgs", () => {
     expect(parseLaneDoneArgs(["#580", "--lane", "41", "--force", "--yes", "--dry-run"])).toEqual({ pr: 580, lane: 41, force: true, yes: true, dryRun: true });
   });
 
-  it("refuses no PR, two PRs, an unknown flag, or a lane that is not one", () => {
-    for (const args of [[], ["580", "581"], ["580", "--merged"], ["580", "--lane", "15"], ["580", "--lane"], ["abc"]]) expect(parseLaneDoneArgs(args)).toHaveProperty("error");
+  it("takes no PR number (RP-1198: it is found from the current branch)", () => {
+    expect(parseLaneDoneArgs([])).toEqual({ pr: undefined, lane: undefined, force: false, yes: false, dryRun: false });
+    expect(parseLaneDoneArgs(["--dry-run"])).toEqual({ pr: undefined, lane: undefined, force: false, yes: false, dryRun: true });
+  });
+
+  it("writes its usage with no angle brackets, which PowerShell reads as a redirect (RP-1198)", () => {
+    expect((parseLaneDoneArgs(["abc"]) as { error: string }).error).not.toMatch(/[<>]/);
+  });
+
+  it("refuses two PRs, an unknown flag, or a lane that is not one", () => {
+    for (const args of [["580", "581"], ["580", "--merged"], ["580", "--lane", "15"], ["580", "--lane"], ["abc"]]) expect(parseLaneDoneArgs(args)).toHaveProperty("error");
   });
 
   it("refuses --lane 7: Main 7's harness data is never freed (rule 1)", () => {
@@ -141,7 +153,7 @@ describe("decideLaneDone: the lane's own worktree", () => {
   it("lists uncommitted or untracked files and commits origin/main lacks, and keeps them unless --force (rule 6)", () => {
     const dirty = laneWt({ changes: ["M a.ts", "?? notes.md"], ahead: 1 });
     expect(reasons(decideLaneDone(input({ candidates: [dirty] })))).toEqual([
-      "G:/rabaed/.claude/worktrees/rp-1170 (RP-1170-lane-done): uncommitted changes: M a.ts, ?? notes.md; 1 commit origin/main does not have; `--force` removes it anyway",
+      "G:/rabaed/.claude/worktrees/rp-1170 (RP-1170-lane-done): uncommitted changes: M a.ts, ?? notes.md; 1 commit origin/main does not have; `pnpm lane:done 580 --force` removes it anyway",
     ]);
     expect(decideLaneDone(input({ candidates: [dirty], force: true })).remove).toHaveLength(1);
   });
@@ -153,7 +165,9 @@ describe("decideLaneDone: the lane's own worktree", () => {
   });
 
   it("keeps a folder a running process holds, such as a dev server, and says how to stop it", () => {
-    expect(reasons(decideLaneDone(input({ candidates: [laneWt({ heldByProcess: true })], force: true })))[0]).toMatch(/a running process holds its folder.*pnpm servers:stop --yes --worktree/);
+    expect(reasons(decideLaneDone(input({ candidates: [laneWt({ heldByProcess: true })], force: true })))[0]).toMatch(
+      /a running process holds its folder.*`pnpm servers:stop --yes --worktree "G:\/rabaed\/\.claude\/worktrees\/rp-1170"`/,
+    );
   });
 
   it("never removes the main checkout or the worktree it runs in", () => {
@@ -161,7 +175,7 @@ describe("decideLaneDone: the lane's own worktree", () => {
     expect(decision.remove).toEqual([]);
     expect(reasons(decision)).toEqual([
       "G:/rabaed/.claude/worktrees/rp-1170 (RP-1170-lane-done): the main checkout",
-      "G:/x/here (RP-1170-lane-done): the current worktree: run pnpm lane:done from another worktree (the Main's or the Orchestrator's)",
+      "G:/x/here (RP-1170-lane-done): the current worktree: run `pnpm lane:done 580 --yes` from another worktree (the Main's or the Orchestrator's)",
     ]);
   });
 });
@@ -216,7 +230,7 @@ describe("decideLaneDone: the subagent worktrees (rule 3)", () => {
   it("keeps a dirty subagent worktree unless --force, listing its files", () => {
     const dirty = agentWt("a", { changes: ["?? out.txt"] });
     expect(reasons(decideLaneDone(input({ candidates: [laneWt(), dirty] })))).toEqual([
-      "G:/rabaed/.claude/worktrees/agent-a (RP-11a-part): uncommitted changes: ?? out.txt; `--force` removes it anyway",
+      "G:/rabaed/.claude/worktrees/agent-a (RP-11a-part): uncommitted changes: ?? out.txt; `pnpm lane:done 580 --force` removes it anyway",
     ]);
     expect(decideLaneDone(input({ candidates: [laneWt(), dirty], force: true })).remove).toHaveLength(2);
   });
@@ -239,7 +253,7 @@ describe("decideLaneDone: the stack", () => {
   });
 
   it("keeps it when this worktree's own .env names it", () => {
-    expect(decideLaneDone(input({ currentProject: "rabaed-lane41" })).stack?.why).toEqual(["this worktree's .env has it: run pnpm lane:done from another worktree"]);
+    expect(decideLaneDone(input({ currentProject: "rabaed-lane41" })).stack?.why).toEqual(["this worktree's .env has it: run `pnpm lane:done 580 --yes` from another worktree"]);
   });
 
   it("keeps it while a container of it comes from a folder that stays", () => {
@@ -265,10 +279,19 @@ describe("decideLaneDone: the stack", () => {
     expect(decision.stack?.action).toBe("remove");
   });
 
-  it("says how to free a stack when it cannot tell the lane", () => {
-    const decision = decideLaneDone(input({ candidates: [laneWt({ project: undefined })] }));
+  it("names the lane whose containers come from the folder when its .env has none (RP-1198: no `--lane N` placeholder)", () => {
+    const decision = decideLaneDone(input({ candidates: [laneWt({ project: undefined })], containers: [db(), db({ name: "rabaed-lane42-db-1", project: "rabaed-lane42" })] }));
     expect(decision.stack).toBeUndefined();
-    expect(decision.remarks).toEqual(["G:/rabaed/.claude/worktrees/rp-1170's .env has no lane stack: pass `--lane N` to free one."]);
+    expect(decision.remarks).toEqual([
+      "G:/rabaed/.claude/worktrees/rp-1170's .env has no lane stack, but containers of lane 41, lane 42 come from its folder: `pnpm lane:done 580 --lane 41`, `pnpm lane:done 580 --lane 42` frees one.",
+    ]);
+  });
+
+  it("says no stack is known when its .env has none and no container comes from its folder", () => {
+    const decision = decideLaneDone(input({ candidates: [laneWt({ project: undefined })], containers: [db({ workingDir: "G:/elsewhere" })] }));
+    expect(decision.remarks).toEqual([
+      "G:/rabaed/.claude/worktrees/rp-1170's .env has no lane stack and no container comes from its folder, so lane:done frees none; `pnpm lanes:prune --stale` lists the stacks.",
+    ]);
   });
 
   it("has nothing to do when the lane has no containers or volumes left", () => {
@@ -300,10 +323,88 @@ describe("releaseLines (rule 8: the last line is the RP-603 RELEASE text to past
     expect(lines[1]).toMatch(/^RELEASE all RP-1170 claims/);
   });
 
-  it("asks for the claim's comment id when the branch names no key", () => {
-    expect(releaseLines({ pr: { ...pr, headRefName: "claude/x" }, lane: undefined, openSiblings: [] })).toEqual([
-      "RELEASE <claim comment id> — PR #580 (branch claude/x has no RP key; merged 2026-10-31 16:54 UTC as 254b6aa0e). lane unknown.",
+  it("names the claims' comment ids when the branch names no key and RP-603 could be read (RP-1198)", () => {
+    expect(releaseLines({ pr: { ...pr, headRefName: "claude/x" }, lane: undefined, openSiblings: [], claimIds: [14324, 14333] })).toEqual([
+      "RELEASE 14324, 14333 — PR #580 (branch claude/x has no RP key; merged 2026-10-31 16:54 UTC as 254b6aa0e). lane unknown.",
     ]);
+  });
+
+  it("drops the placeholder when the claims could not be read, and says where to find the ids (RP-1198)", () => {
+    const lines = releaseLines({ pr: { ...pr, headRefName: "claude/x" }, lane: undefined, openSiblings: [], claimIds: undefined });
+    expect(lines).toEqual([
+      "RP-603's claims could not be read (JIRA_EMAIL and JIRA_API_TOKEN not set, or Jira did not answer): after RELEASE, add the number of each claim comment this PR made; `pnpm claims --open` lists them.",
+      "RELEASE — PR #580 (branch claude/x has no RP key; merged 2026-10-31 16:54 UTC as 254b6aa0e). lane unknown.",
+    ]);
+    expect(lines.join("\n")).not.toMatch(/[<>]/);
+  });
+
+  it("says so when no open claim names the PR or its branch", () => {
+    expect(releaseLines({ pr: { ...pr, headRefName: "claude/x" }, lane: undefined, openSiblings: [], claimIds: [] })[0]).toBe(
+      "No open RP-603 claim mentions PR #580 or branch claude/x: after RELEASE, add the number of each claim comment this PR made; `pnpm claims --open` lists them.",
+    );
+  });
+});
+
+describe("restLine (RP-1198: run inside the lane, lane:done ends with the exact command for the rest)", () => {
+  it("names the PR and the flags to run from the Main's worktree", () => {
+    expect(restLine(pr)).toBe("This worktree and its stack stay: for the rest, run `pnpm lane:done 580 --yes` from the Main's worktree, then post the RELEASE it prints.");
+  });
+});
+
+describe("mergedLeftovers (RP-1198:`pnpm lane:done` with no number, outside a lane, lists and removes nothing)", () => {
+  const wt = (path: string, branch: string | undefined, head = "0".repeat(40), project?: string) => ({ path, branch, head, project });
+  const merged = [
+    { number: 590, headRefName: "RP-1190-x", headRefOid: "a".repeat(40) },
+    { number: 588, headRefName: "RP-1188-y", headRefOid: "b".repeat(40) },
+    { number: 585, headRefName: "RP-1185-z", headRefOid: "c".repeat(40) },
+    { number: 570, headRefName: "main", headRefOid: "d".repeat(40) },
+  ];
+  const base = { mainRoot: "G:/rabaed", currentBranch: "main-4-work" as string | undefined, merged, limit: 200, platform: "linux" as const };
+
+  it("lists each merged PR that still has a worktree here, oldest first, each with its command, and the lane stack its .env names", () => {
+    const lines = mergedLeftovers({
+      ...base,
+      worktrees: [
+        wt("G:/rabaed", "main"),
+        wt("G:/rabaed/.claude/worktrees/main-4", "main-4-work"),
+        wt("G:/rabaed/.claude/worktrees/rp-1190 a", "RP-1190-x", "e".repeat(40), "rabaed-lane41"),
+        wt("D:/review/rp-1190", undefined, "a".repeat(40)),
+        wt("G:/rabaed/.claude/worktrees/rp-1188", "RP-1188-y"),
+        wt("G:/rabaed/.claude/worktrees/rp-1200", "RP-1200-open"),
+      ],
+    });
+    expect(lines).toEqual([
+      "The current branch main-4-work has no merged PR, so lane:done removes nothing here. Merged PRs (of the last 200) that still have a worktree in this clone:",
+      '  PR #588 (RP-1188-y): "G:/rabaed/.claude/worktrees/rp-1188": pnpm lane:done 588',
+      '  PR #590 (RP-1190-x): "G:/rabaed/.claude/worktrees/rp-1190 a" with stack rabaed-lane41, "D:/review/rp-1190": pnpm lane:done 590',
+      "Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.",
+    ]);
+  });
+
+  it("names lane 7's PR as never lane:done's (rule 1)", () => {
+    const lines = mergedLeftovers({ ...base, worktrees: [wt("D:/uat", "RP-1185-z", "c".repeat(40), "rabaed-lane7")] });
+    expect(lines[1]).toMatch(/^ {2}PR #585 \(RP-1185-z\): "D:\/uat" with stack rabaed-lane7: not lane:done's: lane 7 holds Main 7's UAT harness data/);
+    expect(lines[1]).not.toContain("pnpm lane:done");
+  });
+
+  it("says so when no merged PR has anything left here, on a detached HEAD too", () => {
+    expect(mergedLeftovers({ ...base, currentBranch: undefined, worktrees: [wt("G:/rabaed/.claude/worktrees/main-4", undefined)] })).toEqual([
+      "The current worktree is on a detached HEAD with no merged PR, so lane:done removes nothing here. No merged PR (of the last 200) still has a worktree in this clone.",
+    ]);
+  });
+});
+
+describe("claimIdsFor (RP-1198:the RELEASE of a branch with no key names its claims)", () => {
+  const claim = (id: number, text: string, releasedBy?: number) => ({ id, text, releasedBy });
+  it("finds the open claims that name the PR or its branch", () => {
+    const claims = [
+      claim(14300, "CLAIM scripts/a.ts — Main 4, lane-4a, PR #580"),
+      claim(14301, "CLAIM scripts/b.ts — Main 4, lane-4a, branch claude/x"),
+      claim(14302, "CLAIM scripts/c.ts — Main 4, PR #5801"),
+      claim(14303, "CLAIM scripts/d.ts — Main 4, PR #580", 14310),
+      claim(14304, "CLAIM scripts/e.ts — Main 4, branch claude/xy"),
+    ];
+    expect(claimIdsFor(claims, { number: 580, headRefName: "claude/x" })).toEqual([14300, 14301]);
   });
 });
 
@@ -329,7 +430,7 @@ describe("only the app's worktrees are removed (Main 6's review of #583)", () =>
     const outside = laneWt({ path: "D:/review/rp-1170", appWorktree: false });
     const decision = decideLaneDone(input({ candidates: [outside], force: true }));
     expect(decision.remove).toEqual([]);
-    expect(reasons(decision)).toEqual(["D:/review/rp-1170 (RP-1170-lane-done): not under .claude/worktrees: remove it by hand with `pnpm worktree:remove D:/review/rp-1170`"]);
+    expect(reasons(decision)).toEqual(['D:/review/rp-1170 (RP-1170-lane-done): not under .claude/worktrees: remove it by hand with `pnpm worktree:remove "D:/review/rp-1170"`']);
     expect(decision.stack?.action).toBe("keep");
   });
 
