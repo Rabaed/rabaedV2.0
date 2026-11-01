@@ -115,7 +115,7 @@ beforeAll(async () => {
   // The Type's Form has the placeholder as Version 1, as every Default Form had before RP-985.
   await addSendBackType(migrator, TYPE, { en: "Disclaimer record", ar: "سجل إخلاء المسؤولية" }, { sections, pdf: { disclaimer: PLACEHOLDER, show_review_duration: false } });
   const c1 = await api.projectCreator();
-  const k1Onboarded = await api.onboardCompany({ legalName: bilingual("Disclaimer Consultants") });
+  const k1Onboarded = await api.onboardCompany({ legalName: bilingual("Disclaimer Consultants") }); // not hidden-from: a Company's name in the setup
   const k1 = { company: k1Onboarded, caller: await api.acceptInvitation(k1Onboarded.invitationToken) };
   at = await buildTower(api, { c1, k1 }, "DSC");
   const participants = (await at.admin!.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
@@ -171,20 +171,20 @@ describe("the Disclaimer of a record", () => {
       expect(OWNER.ar).toContain(word);
       expect(page, word).toContain([...word].reverse().join(""));
     }
-    expect(made.after.xml).not.toContain("‹");
+    expect(made.after.xml).not.toContain("‹"); // not hidden-from: the placeholder's marker is not in the text printed
   });
 
   it("made before it still prints the placeholder, in both languages", () => {
     expect(made.before.xml).toContain(`<text lang="en">${PLACEHOLDER.en}</text>`);
     expect(made.before.xml).toContain(`<text lang="ar">${PLACEHOLDER.ar}</text>`);
     expect(made.before.lastPage).toContain(squeeze(PLACEHOLDER.en));
-    expect(made.before.xml).not.toContain(OWNER.en);
-    expect(made.before.lastPage).not.toContain(squeeze(OWNER.en));
+    expect(made.before.xml).not.toContain(OWNER.en); // not hidden-from: which Version's text the record prints
+    expect(made.before.lastPage).not.toContain(squeeze(OWNER.en)); // not hidden-from: which Version's text the record prints
   });
 
   it("of an item raised before the new Version and closed after it is its own Version's: the placeholder", () => {
     expect(made.pinned.xml).toContain(`<text lang="en">${PLACEHOLDER.en}</text>`);
-    expect(made.pinned.xml).not.toContain(OWNER.en);
+    expect(made.pinned.xml).not.toContain(OWNER.en); // not hidden-from: which Version's text the record prints
   });
 
   it("leaves the Form's Version 1 as it was when Version 2 is published", async () => {
