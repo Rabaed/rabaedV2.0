@@ -105,6 +105,11 @@ export type RowMenuProps = {
   subject: string;
   /** Asked when the menu opens: what the viewer may do with the row now (null when it can't be read). */
   load: () => Promise<RowPermissions | null>;
+  /**
+   * What the row alone already says the viewer may do (RP-1175): offered at once, while `load` is asked,
+   * so a slow answer never hides it; the API's answer replaces it once it comes.
+   */
+  known?: Partial<RowPermissions>;
   onAction: (action: RowAction) => void;
   labels: RowMenuLabels;
 };
@@ -116,9 +121,10 @@ const rowIcons: Record<RowAction, IconName> = { open: "eye", edit: "edit", dupli
  * Delete apart. Each but Open only where the viewer may take it, as the API answers when the menu
  * opens; the API checks again when it is taken.
  */
-export function RowMenu({ subject, load, onAction, labels }: RowMenuProps) {
+export function RowMenu({ subject, load, known, onAction, labels }: RowMenuProps) {
   const [permitted, setPermitted] = useState<RowPermissions | null | "loading">(null);
-  const allowed = permitted !== null && permitted !== "loading" ? permitted : null;
+  // The API's answer once it came; until then, and when it can't be read, only what the row says.
+  const allowed: Partial<RowPermissions> | null = permitted !== null && permitted !== "loading" ? permitted : permitted === "loading" ? (known ?? null) : null;
   const item = (action: RowAction): RowActionsItem => ({
     key: action,
     label: labels[action],

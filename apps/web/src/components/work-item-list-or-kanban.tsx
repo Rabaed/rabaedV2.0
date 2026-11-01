@@ -71,6 +71,15 @@ async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> 
   };
 }
 
+/**
+ * What the row alone says, offered while the item is read (RP-1175, UAT SUB-18): a row the viewer reads
+ * that isn't closed offers its Working Copy, the same shared content for every viewer, another Company's
+ * Submitted item included. A closed one waits for the item to say its Documental Record is published.
+ */
+function rowKnown(row: WorkItemRow): Partial<RowPermissions> {
+  return { download: row.outcome === null };
+}
+
 /** The List's and the Kanban's words, from the app's messages. */
 function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
   const t = useTranslations("workItemViews");
@@ -301,7 +310,7 @@ export function WorkItemListOrKanban(
 
       // Each row's ⋯ menu (RP-409): what the viewer may do, from the item as the API gives it (the same
       // actions as the item page); every command is checked again by the API when it is taken.
-      rowActions={props.view === "list" ? { load: rowPermissions, run: (row, action) => runRowAction(row, action) } : undefined}
+      rowActions={props.view === "list" ? { load: rowPermissions, known: rowKnown, run: (row, action) => runRowAction(row, action) } : undefined}
       // The Member's own columns of the Module, kept by the API (RP-409).
       onSaveColumns={
         props.view === "list"

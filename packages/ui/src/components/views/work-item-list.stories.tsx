@@ -477,6 +477,34 @@ export const RowMenuOpen: Story = {
   },
 };
 
+/**
+ * Download is offered the moment the menu opens, for an item that isn't closed, before the API has
+ * answered what else the viewer may do (RP-1175, UAT SUB-18: another Company's Submitted item showed
+ * only "Open" while its permissions were still loading). The rest follows when the API answers.
+ */
+export const RowMenuDownloadWhileLoading: Story = {
+  parameters: overlay,
+  args: {
+    rowActions: {
+      load: () => new Promise(() => undefined),
+      known: (r: WorkItemRow) => ({ download: r.outcome === null }),
+      run: fn(async () => null),
+    },
+  },
+  play: async (context) => {
+    const name = storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised"));
+    await userEvent.click(context.canvas.getByRole("button", { name }));
+    const menu = await screen.findByRole("menu", { name });
+    // The API has not answered, and never does here.
+    await expect(menu).toHaveAttribute("aria-busy", "true");
+    await waitFor(() =>
+      expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual([b("Open", "فتح"), b("Download", "تنزيل")].map((c) => storyText(context, c))),
+    );
+    await userEvent.click(within(menu).getByRole("menuitem", { name: storyText(context, b("Download", "تنزيل")) }));
+    await expect(context.args.rowActions!.run).toHaveBeenCalledWith(items.find((r) => r.title === "Earthing rods, galvanised"), "download");
+  },
+};
+
 /** The row menu by keyboard: Enter opens it on its first command; the arrows, Home and End move; Escape returns to the button. */
 export const RowMenuByKeyboard: Story = {
   parameters: overlay,
