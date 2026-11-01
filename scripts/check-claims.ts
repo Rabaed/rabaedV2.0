@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { claimCovers, fetchComments, globRegex, readClaims, type Claim, type Comment } from "./claims.ts";
 import type { OverlapSeam } from "./pr-overlap.ts";
+import { isDoc } from "./reviewed-required.ts";
 
 /** What a check says: refused (`ok` false), a warning, or "" when there is nothing to say. */
 export interface ClaimsVerdict {
@@ -18,6 +19,10 @@ export interface ClaimsVerdict {
 //
 // It reads RP-603 only when the branch changes a shared module, with JIRA_EMAIL and JIRA_API_TOKEN
 // (as `pnpm claims`). With no credentials or no network it warns and passes.
+//
+// It also warns (RP-1199, never refuses) when the branch changes `.github/workflows/**` and any non-doc
+// file, naming rule 3's split: workflows in their own PR, after the script PR. That reads only the changed
+// files, so it is printed with no credentials, no network and no shared module changed.
 
 export interface ClaimsInput {
   /** The branch's issue key (`RP-1008`), undefined when its name has none. */
@@ -118,8 +123,39 @@ function namesKey(claim: Claim, key: string): boolean {
   return new RegExp(`\\b${key}\\b(?!-\\d)`).test(header);
 }
 
-/** Whether the push may go: every shared module the branch changes has an open CLAIM naming its key. */
+const WORKFLOWS = ".github/workflows/";
+
+/**
+ * Rule 3 (RP-1199): a branch changing `.github/workflows/**` together with any other file that is not a doc
+ * (a doc: `isDoc` of reviewed-required.ts) goes up as two PRs, the workflow files in their own, after the
+ * script PR they rely on. Returns the warning naming both lists, "" when the branch has no such mix. A pure
+ * function of the changed files: no Jira, no network. It warns and never refuses.
+ */
+export function workflowMixWarning(files: string[]): string {
+  const workflows = files.filter((file) => file.startsWith(WORKFLOWS));
+  const others = files.filter((file) => !file.startsWith(WORKFLOWS) && !isDoc(file));
+  if (workflows.length === 0 || others.length === 0) return "";
+  const list = (items: string[]) => items.map((item) => `  ${item}`);
+  /* eslint-disable rabaed/no-avoid-terms -- source files and git paths, by their own names. */
+  return [
+    "Warning: check:claims (rule 3): this branch changes workflow files together with other non-doc files. Split it in two (planning/parallel-sessions.md rule 3): the workflow files go in their own PR, opened after the script PR they rely on has merged.",
+    "Workflow PR (second), the files under .github/workflows/:",
+    ...list(workflows),
+    "Script PR (first), the other non-doc files:",
+    ...list(others),
+    "(Docs may go with either PR.)",
+  ].join("\n");
+  /* eslint-enable rabaed/no-avoid-terms */
+}
+
+/** Whether the push may go: every shared module the branch changes has an open CLAIM naming its key. The rule-3 workflow warning, when the branch has the mix, rides in `message` beside any claims message. */
 export async function checkClaims(input: ClaimsInput): Promise<ClaimsVerdict> {
+  const verdict = await claimsVerdict(input);
+  const mix = workflowMixWarning(input.files);
+  return mix === "" ? verdict : { ok: verdict.ok, message: verdict.message === "" ? mix : `${verdict.message}\n\n${mix}` };
+}
+
+async function claimsVerdict(input: ClaimsInput): Promise<ClaimsVerdict> {
   const patterns = sharedPatterns(input.sharedList);
   const shared = [...input.files.filter((file) => patterns.some((pattern) => isShared(file, pattern))), ...input.redefined];
   if (shared.length === 0) return { ok: true, message: "" };

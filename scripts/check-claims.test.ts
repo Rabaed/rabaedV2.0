@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Comment } from "./claims.ts";
-import { branchChanges, branchKey, branchOverlaps, checkClaims, laneOwner, type ClaimsInput } from "./check-claims.ts";
+import { branchChanges, branchKey, branchOverlaps, checkClaims, laneOwner, workflowMixWarning, type ClaimsInput } from "./check-claims.ts";
 
 // RP-603's comments are stubbed; the shared-files list is the real one in docs/agents/issue-tracker.md.
 const sharedList = readFileSync(join(import.meta.dirname, "..", "docs", "agents", "issue-tracker.md"), "utf8");
@@ -83,6 +83,66 @@ describe("checkClaims", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("the branch has no issue key in front");
     expect(result.message).toContain("  package.json");
+  });
+});
+
+describe("workflowMixWarning (rule 3, RP-1199)", () => {
+  const mixed = [".github/workflows/ci.yml", "scripts/ci-helper.ts", "scripts/ci-helper.test.ts", "docs/ci.md"];
+
+  it("warns on workflows beside a non-doc file, naming the two-PR split and both lists of files", () => {
+    const warning = workflowMixWarning(mixed);
+    expect(warning).toContain("Warning: check:claims (rule 3)");
+    expect(warning).toContain("the workflow files go in their own PR");
+    expect(warning).toContain("after the script PR they rely on");
+    expect(warning).toContain("  .github/workflows/ci.yml");
+    expect(warning).toContain("  scripts/ci-helper.ts");
+    expect(warning).toContain("  scripts/ci-helper.test.ts");
+    // A doc goes with either PR; it is neither list.
+    expect(warning).not.toContain("docs/ci.md");
+    // The workflow file is not listed among the files it must wait for.
+    expect(warning.indexOf("  .github/workflows/ci.yml")).toBe(warning.lastIndexOf("  .github/workflows/ci.yml"));
+  });
+
+  it("says nothing for workflows only, scripts only, or workflows with docs only", () => {
+    expect(workflowMixWarning([".github/workflows/ci.yml", ".github/workflows/queue.yml"])).toBe("");
+    expect(workflowMixWarning(["scripts/ci-helper.ts", "apps/api/src/x.ts"])).toBe("");
+    expect(workflowMixWarning([".github/workflows/ci.yml", "docs/ci.md", "README.md"])).toBe("");
+    expect(workflowMixWarning([])).toBe("");
+  });
+
+  it("checkClaims carries it when nothing is shared (the early return), without reading RP-603 or needing credentials", async () => {
+    let read = false;
+    const comments = async () => ((read = true), []);
+    // The real list makes every workflow file a shared module; a list without them reaches the early return.
+    const result = await checkClaims(input({ files: mixed, comments, sharedList: "- **Ticket: shared files.**\n  - `package.json`\n" }));
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe(workflowMixWarning(mixed));
+    expect(read).toBe(false);
+  });
+
+  it("checkClaims says it beside a claims refusal, which still refuses", async () => {
+    const result = await checkClaims(input({ files: [...mixed, "package.json"] }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("RP-1100 has no open CLAIM on RP-603 for:");
+    expect(result.message).toContain("Warning: check:claims (rule 3)");
+  });
+
+  it("checkClaims says it beside the could-not-read-RP-603 warning, and beside the no-issue-key refusal", async () => {
+    const comments = async (): Promise<Comment[]> => {
+      throw new Error("fetch failed");
+    };
+    const unread = await checkClaims(input({ files: [...mixed, "package.json"], comments }));
+    expect(unread.ok).toBe(true);
+    expect(unread.message).toContain("could not read RP-603");
+    expect(unread.message).toContain("Warning: check:claims (rule 3)");
+    const keyless = await checkClaims(input({ key: undefined, files: [...mixed, "package.json"] }));
+    expect(keyless.ok).toBe(false);
+    expect(keyless.message).toContain("Warning: check:claims (rule 3)");
+  });
+
+  it("does not warn when the branch is clean of the mix, and the claims message is unchanged", async () => {
+    const result = await checkClaims(input({ files: ["package.json"] }));
+    expect(result.message).not.toContain("rule 3");
   });
 });
 
