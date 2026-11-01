@@ -29,6 +29,8 @@ export interface ClaimsInput {
   key: string | undefined;
   /** The files the branch changes against origin/main. */
   files: string[];
+  /** Every path the branch touches, deleted ones included (`files` leaves them out); the workflow mix reads it. Defaults to `files`. */
+  touched?: string[] | undefined;
   /** The `app.*` functions a branch migration redefines. */
   redefined: string[];
   /** docs/agents/issue-tracker.md, which holds the shared-files list. */
@@ -63,7 +65,7 @@ const namesIn = (sql: string, pattern: RegExp): string[] => [...sql.matchAll(pat
  * changed migration defines that origin/main's migrations define too; a new function is not shared yet.
  * Throws when git fails.
  */
-export function branchChanges(repo: string, commit?: string): { files: string[]; redefined: string[] } {
+export function branchChanges(repo: string, commit?: string): { files: string[]; touched: string[]; redefined: string[] } {
   const git = (...args: string[]) => spawnSync("git", ["-c", "core.quotePath=false", ...args], { cwd: repo, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   const must = (...args: string[]) => {
     const done = git(...args);
@@ -75,15 +77,17 @@ export function branchChanges(repo: string, commit?: string): { files: string[];
   if (mergeBase.status !== 0) throw new Error(`git merge-base origin/main failed: ${mergeBase.stderr.trim()}. Run \`git fetch origin main\` and try again.`);
   const base = mergeBase.stdout.trim();
   const files = [...new Set([...lines(must("diff", "--name-only", "--no-renames", "--diff-filter=d", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))])].sort();
+  // `touched`: the same without --diff-filter=d, so a deleted path counts for rule 3's workflow mix as in shared-files.ts.
+  const touched = [...new Set([...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))])].sort();
   const migrations = files.filter((file) => file.startsWith(MIGRATIONS) && file.endsWith(".sql"));
-  if (migrations.length === 0) return { files, redefined: [] };
+  if (migrations.length === 0) return { files, touched, redefined: [] };
   const text = (file: string) => (commit ? must("show", `${commit}:${file}`) : existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : "");
   // One git grep over origin/main's migrations (exit 1: no match), not a `git show` per migration.
   const grep = git("grep", "-h", "-i", "-E", 'function[[:space:]]+"?app"?\\.', base, "--", MIGRATIONS);
   if (grep.status !== 0 && grep.status !== 1) throw new Error(`git grep on origin/main's migrations failed: ${grep.stderr.trim()}`);
   const onMain = new Set(namesIn(grep.stdout, NAMED));
   const redefined = [...new Set(migrations.flatMap((file) => namesIn(text(file), DEFINED)))].filter((fn) => onMain.has(fn)).sort();
-  return { files, redefined };
+  return { files, touched, redefined };
 }
 
 /** The paths, directories (`dir/`) and globs (`scripts/lanes*.ts`) the "Ticket: shared files" list names. */
@@ -128,30 +132,37 @@ const WORKFLOWS = ".github/workflows/";
 /**
  * Rule 3 (RP-1199): a branch changing `.github/workflows/**` together with any other file that is not a doc
  * (a doc: `isDoc` of reviewed-required.ts) goes up as two PRs, the workflow files in their own, after the
- * script PR they rely on. Returns the warning naming both lists, "" when the branch has no such mix. A pure
- * function of the changed files: no Jira, no network. It warns and never refuses.
+ * PR with the other non-doc files (scripts, app code, anything the workflows rely on). A Markdown file under
+ * `.github/workflows/` is a doc, not a workflow file; `.github/actions/**` counts as a non-doc. Returns the
+ * warning naming both lists, "" when the branch has no such mix. A pure function of the changed files: no
+ * Jira, no network. It warns and never refuses. `branchMix` (shared-files.ts), which the pre-push hook and
+ * `pnpm verify` print, leaves workflow files out, so a workflow mix gets this one message.
  */
 export function workflowMixWarning(files: string[]): string {
-  const workflows = files.filter((file) => file.startsWith(WORKFLOWS));
-  const others = files.filter((file) => !file.startsWith(WORKFLOWS) && !isDoc(file));
-  if (workflows.length === 0 || others.length === 0) return "";
+  const workflows = files.filter((file) => file.startsWith(WORKFLOWS) && !isDoc(file));
+  const nonDocs = files.filter((file) => !file.startsWith(WORKFLOWS) && !isDoc(file));
+  if (workflows.length === 0 || nonDocs.length === 0) return "";
   const list = (items: string[]) => items.map((item) => `  ${item}`);
-  /* eslint-disable rabaed/no-avoid-terms -- source files and git paths, by their own names. */
+  /* eslint-disable rabaed/no-avoid-terms -- source files, git paths and GitHub's merge queue, by their own names. */
   return [
-    "Warning: check:claims (rule 3): this branch changes workflow files together with other non-doc files. Split it in two (planning/parallel-sessions.md rule 3): the workflow files go in their own PR, opened after the script PR they rely on has merged.",
+    "Warning: check:claims (rule 3): this branch changes workflow files together with other non-doc files, so `pnpm queue` will refuse it. Split it in two (planning/parallel-sessions.md rule 3): the workflow files go in their own PR, opened after the PR with the other non-doc files has merged.",
     "Workflow PR (second), the files under .github/workflows/:",
     ...list(workflows),
-    "Script PR (first), the other non-doc files:",
-    ...list(others),
+    "First PR, the other non-doc files:",
+    ...list(nonDocs),
     "(Docs may go with either PR.)",
   ].join("\n");
   /* eslint-enable rabaed/no-avoid-terms */
 }
 
-/** Whether the push may go: every shared module the branch changes has an open CLAIM naming its key. The rule-3 workflow warning, when the branch has the mix, rides in `message` beside any claims message. */
+/**
+ * Whether the push may go: every shared module the branch changes has an open CLAIM naming its key. The
+ * rule-3 workflow warning, when the branch has the mix, rides in `message` beside any claims message. It
+ * reads `touched` (deleted paths too), the claims check only `files`.
+ */
 export async function checkClaims(input: ClaimsInput): Promise<ClaimsVerdict> {
   const verdict = await claimsVerdict(input);
-  const mix = workflowMixWarning(input.files);
+  const mix = workflowMixWarning(input.touched ?? input.files);
   return mix === "" ? verdict : { ok: verdict.ok, message: verdict.message === "" ? mix : `${verdict.message}\n\n${mix}` };
 }
 
@@ -200,12 +211,13 @@ const JIRA_TIMEOUT_MS = 20_000;
  * the checked-out branch (`pnpm verify`, `pnpm check:claims`). Throws when git fails.
  */
 export async function branchClaims(repo: string, push?: { commit: string; branch: string }): Promise<ClaimsVerdict> {
-  const { files, redefined } = branchChanges(repo, push?.commit);
+  const { files, touched, redefined } = branchChanges(repo, push?.commit);
   const branch = push?.branch ?? spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
   const envFile = join(repo, ".env");
   return checkClaims({
     key: branchKey(branch),
     files,
+    touched,
     redefined,
     sharedList: readFileSync(join(repo, "docs", "agents", "issue-tracker.md"), "utf8"),
     comments: rp603Comments,
