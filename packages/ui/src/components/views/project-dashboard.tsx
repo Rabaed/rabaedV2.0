@@ -61,11 +61,12 @@ export type ProjectDashboardProps = {
 
 /**
  * A Project's Dashboard (spec RP-344, design §5): one card per Work Item Type
- * under its Module's heading, the Snag List's open/closed cards first. Counts
- * are Revision chains the viewer sees, as the API sends them; every number is a
- * link to the List of exactly those chains. Nothing is measured against time.
- * Laid out as the design kit's grid of cards (RP-411): a card is never narrower
- * than its longest label needs, so a row that can't fit another card wraps it.
+ * under its Module's heading, the Modules in the order the API sends them (the
+ * Project's tab order, RP-1176). Counts are Revision chains the viewer sees, as
+ * the API sends them; every number is a link to the List of exactly those
+ * chains. Nothing is measured against time. Laid out as the design kit's cards
+ * (RP-411) in columns (RP-1176): a card is never narrower than its longest label
+ * needs, and each keeps its own height.
  */
 export function ProjectDashboard({ dashboard, locale, labels, hrefFor, linkAs: Link = "a" }: ProjectDashboardProps) {
   if (dashboard.modules.length === 0) return <p className="text-muted">{labels.empty}</p>;
@@ -77,10 +78,13 @@ export function ProjectDashboard({ dashboard, locale, labels, hrefFor, linkAs: L
           <h2 id={`dashboard-${m.key}`} className="font-display text-h6 leading-tight font-bold ltr:font-extrabold">
             {moduleName(m.key, locale)}
           </h2>
-          {/* 20rem fits the longest bar and figure in English and Arabic beside a 3rem bar (the FiguresWhole stories check it). */}
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-[18px]">
+          {/* Columns at least 20rem wide: 20rem fits the longest bar and figure in English and Arabic beside a 3rem bar (the
+              FiguresWhole stories check it). Each card keeps its own height and goes under the shorter column (RP-1176, UX-03:
+              a row stretched its cards to the tallest, and left a hole beside a lone card). Its bottom padding is the gap,
+              taken back off the list's end. */}
+          <ul className="-mb-[18px] columns-[20rem] gap-[18px]">
             {m.cards.map((card) => (
-              <li key={card.type.code} className="flex min-w-0">
+              <li key={card.type.code} className="min-w-0 break-inside-avoid pb-[18px]">
                 <TypeCard card={card} {...ctx} />
               </li>
             ))}

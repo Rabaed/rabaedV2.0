@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import { samePath } from "./paths.ts";
+import { isMainCheckout, samePath } from "./paths.ts";
+import type { Refused } from "./removal-guard.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
@@ -66,6 +67,19 @@ const PROTECTED: Record<string, string> = {
 
 /** Why nothing frees, takes over or removes this compose project, or undefined. */
 export const protectedLaneReason = (project: string | undefined): string | undefined => (project === undefined ? undefined : PROTECTED[project]);
+
+/** The main checkout's stacks: .env.example's own project, and lane 0's (the main folder's lane). */
+const MAIN_CHECKOUT_PROJECTS = ["rabaed", "rabaed-lane0"];
+
+/**
+ * RP-1198: why no helper removes this compose project or any of its containers: lane 7's (protectedLaneReason)
+ * or the main checkout's; undefined otherwise. The Docker helpers below ask it themselves, whatever their caller checked.
+ */
+export const keptStackReason = (project: string): string | undefined =>
+  protectedLaneReason(project) ?? (MAIN_CHECKOUT_PROJECTS.includes(project) ? "it is the main checkout's stack (lane 0), which no clean-up removes" : undefined);
+
+/** Whether n is a lane a clean-up may free: a real lane number, never lane 7's (Main 7's harness data). */
+export const freeableLane = (n: number | undefined): n is number => n !== undefined && isValidLane(n) && protectedLaneReason(laneProject(n)) === undefined;
 
 /** The compose projects that can hold lane n's ports: its own, and its twin's (legacy m and m0, RP-605). */
 export function laneProjects(n: number): string[] {
@@ -257,6 +271,9 @@ export const envValue = (env: string, key: string): string | undefined =>
 
 /** COMPOSE_PROJECT_NAME in an .env file's text; the value may be quoted. */
 export const composeProjectOfEnv = (env: string): string | undefined => envValue(env, "COMPOSE_PROJECT_NAME");
+
+/** A folder's compose project, by its own .env; undefined when it has none, or the folder is gone. */
+export const projectOfFolder = (path: string): string | undefined => composeProjectOfEnv(readWorktreeEnv(path) ?? "");
 
 /** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
 export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
@@ -620,9 +637,15 @@ export function clashesAfterRemoval(n: number, input: ClashInput, removed: Conta
 /**
  * Removes containers but not their volumes (docker rm -f, without -v), one at a time:
  * lane:env --force's takeover. When one fails it stops and throws, naming which
- * containers are removed and which are not.
+ * containers are removed and which are not. RP-1198: refuses them all, removing none, when one is lane 7's
+ * or the main checkout's (keptStackReason, or a container the main checkout's folder started: its .git is a directory).
  */
-export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): void {
+export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): Refused | undefined {
+  const kept = containers.flatMap((c) => {
+    const why = keptStackReason(c.project) ?? (c.workingDir !== "" && isMainCheckout(c.workingDir) ? `the main checkout (${c.workingDir}) started it` : undefined);
+    return why === undefined ? [] : [`${c.name}: ${why}`];
+  });
+  if (kept.length > 0) return { refused: `No container removed: ${kept.join("; ")}.` };
   const ids = containers.map((c) => c.name);
   for (const [i, id] of ids.entries()) {
     try {
@@ -632,6 +655,7 @@ export function releaseContainers(containers: Container[], run: (args: string[])
       throw new Error(`Could not remove container ${id} (${reason}). Removed: ${ids.slice(0, i).join(", ") || "none"}. Not removed: ${ids.slice(i).join(", ")}.`, { cause: error });
     }
   }
+  return undefined;
 }
 
 /** lanes:prune's options, or undefined for an unknown argument. --dry-run only lists. */
@@ -793,14 +817,16 @@ const KILL_PAUSE_MS = 5000;
  * failure stops it, naming which containers went. keepVolumes, or a verify running anywhere on the
  * machine (volumesKeptBecause, asked just before; bulk volume removal during verifies hung Docker
  * twice), leaves every volume, anonymous ones too; volumesKept then says why.
+ * RP-1198: lane 7's and the main checkout's stacks (keptStackReason) are refused before any Docker call,
+ * whatever the caller checked.
  */
 export function removeProject(
   stale: StaleProject,
   { keepVolumes = false, volumesKeptBecause, run = docker, wait = sleepSync }: RemoveProjectOptions,
-): { volumesKept: string | undefined } {
+): { volumesKept: string | undefined } | Refused {
   // Every caller already keeps lane 7 (RP-1101); refused here too, so no future one can reach it.
-  const harness = protectedLaneReason(stale.project);
-  if (harness !== undefined) throw new Error(`${stale.project} not removed: ${harness}.`);
+  const keptStack = keptStackReason(stale.project);
+  if (keptStack !== undefined) return { refused: `${stale.project} not removed: ${keptStack}.` };
   const kept = keepVolumes ? "asked to keep them" : volumesKeptBecause();
   keepVolumes = kept !== undefined;
   const removed: string[] = [];
@@ -869,6 +895,21 @@ export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): st
     .sort();
 }
 
+/**
+ * Drops one per-worktree database in a lane's Postgres (lanes:drop-dbs), without force: a connection that
+ * opens meanwhile makes it fail. RP-1198: refuses, running nothing, any database of lane 7's Postgres, and
+ * any name that is not a per-worktree one (rabaed_<suffix>, its _test and _test_reset), such as the main
+ * checkout's rabaed and rabaed_test.
+ */
+export function dropDatabase(db: Container, name: string, run: (container: string, sql: string) => string[] = psql): Refused | undefined {
+  const harness = protectedLaneReason(db.project);
+  if (harness !== undefined) return { refused: `${name} in ${db.name} not dropped: ${harness}.` };
+  const m = SUFFIXED_DB.exec(name);
+  if (m === null || m[1] === "test") return { refused: `${name} in ${db.name} not dropped: it is not a per-worktree database name (lane:env --db makes those), and the main checkout's rabaed and rabaed_test are never dropped.` };
+  run(db.name, `drop database "${name}"`);
+  return undefined;
+}
+
 /** The database name in a Postgres URL, e.g. rabaed_rp322 for postgres://u:p@localhost:5832/rabaed_rp322. */
 export const databaseOfUrl = (url: string): string | undefined => /\/([^/?]+)(?:\?.*)?$/.exec(url)?.[1];
 
@@ -915,6 +956,21 @@ export function parseConnections(lines: string[]): Map<string, number> {
 /** The `db` service containers of the running rabaed-* compose projects; with lane, only that lane's project (lanes:drop-dbs --lane N, RP-535). */
 export const dbContainers = (containers: Container[], lane?: number): Container[] =>
   containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name) && (lane === undefined || c.project === laneProject(lane)));
+
+/**
+ * lanes:drop-dbs's Postgres containers (dbContainers, with lane for --lane N) without lane 7's (RP-1198: its databases
+ * are Main 7's harness data), each kept one named with why; refused for `--lane 7` itself.
+ */
+export function dropDbsPostgres(containers: Container[], lane?: number): { postgres: Container[]; kept: string[]; refused?: string } {
+  const candidates = dbContainers(containers, lane);
+  const kept = candidates.flatMap((c) => {
+    const why = protectedLaneReason(c.project);
+    return why === undefined ? [] : [`${c.name}: ${why}`];
+  });
+  const postgres = candidates.filter((c) => protectedLaneReason(c.project) === undefined);
+  const harness = lane === undefined ? undefined : protectedLaneReason(laneProject(lane));
+  return harness === undefined ? { postgres, kept } : { postgres: [], kept, refused: `lanes:drop-dbs refused: ${harness}.` };
+}
 
 /** Runs SQL as the superuser inside a db container and returns one value per line; with timeout, waits that many ms at most. */
 export function psql(container: string, sql: string, timeout?: number): string[] {
