@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
-import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { cleanWalk, isMergeOfMain, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
@@ -17,6 +17,7 @@ import {
   needsVerify,
   packageJsonVersionsVia,
   VERIFY_CHECK,
+  verifiedCommits,
   verifiedOrGreen,
   verifyFix,
   type Permission,
@@ -143,7 +144,7 @@ export function conflictedFiles(output: string): string[] {
  */
 type Prepared =
   | { kind: "refused"; result: QueueResult }
-  | { kind: "ready"; id: string; head: string; warnings: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
+  | { kind: "ready"; id: string; head: string; warnings: string[]; first: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
 
 /** What the verify gate read in `prepare`, kept for --wait to read CI again: undefined when no verify is needed or the stamped line passed. */
 interface VerifyInputs {
@@ -241,11 +242,38 @@ const ciEvidence = (seam: QueueSeam, head: string) => ciEvidenceOf(() => ({ requ
 
 /** The refusals, in order; on success, what to enqueue. `waitForLabelRun` (--wait) lets a reviewed-label run and a CI run still going through. */
 function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): Prepared {
-  const prepared = refusals(pr, seam, options);
-  return "lines" in prepared ? refused(prepared) : prepared;
+  // Lines that go before anything else `pnpm queue` prints, a refusal included (RP-1113).
+  const first: string[] = [];
+  const prepared = refusals(pr, seam, options, first);
+  return "lines" in prepared ? refused({ ...prepared, lines: [...first, ...prepared.lines] }) : prepared;
 }
 
-function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): QueueResult | Prepared {
+/**
+ * RP-1113: the merge of main that voids the body's stamped verify lines, which until now showed only as the verify
+ * refusal, often hours after the conflict merge. The verify gate's own walk (`cleanWalk`, the one
+ * `onlyCleanCommitsSince` takes) from `head` back to each stamped commit (`verifiedCommits`) stops at it, because its
+ * tree is not git's clean merge of its parents. Undefined when a line still counts, when there is none, or when the
+ * walk stops at anything but a merge of main (an ordinary commit after the run, or past the walk's limit: the verify
+ * refusal says that).
+ */
+export function uncleanMergeSince(body: string, head: string, git: ReviewedGit): { merge: string; verified: string[] } | undefined {
+  const verified = verifiedCommits(body);
+  const walks = verified.map((commit) => cleanWalk(commit, head, git));
+  if (walks.length === 0 || walks.some((walk) => walk.clean)) return undefined;
+  // Every walk starts at the head along the same first parents, so each stops at the same commit.
+  const [walk] = walks;
+  const merge = walk && !walk.clean ? walk.stoppedAt : undefined;
+  return merge !== undefined && isMergeOfMain(merge, git) ? { merge, verified } : undefined;
+}
+
+function uncleanMergeLine(pr: number, head: string, body: string, git: ReviewedGit): string | undefined {
+  const found = uncleanMergeSince(body, head, git);
+  if (!found) return undefined;
+  const lines = found.verified.length === 1 ? `the stamped verify line (on ${found.verified[0]}) no longer counts` : `no stamped verify line (on ${found.verified.join(", ")}) counts any more`;
+  return `Warning: ${found.merge} is a merge of main that is not clean (its tree is not git's own merge of its parents: a conflict resolution or an edit), so ${lines} for the head ${head}. Run \`pnpm verify --pr ${pr}\` again on the head.`;
+}
+
+function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }, first: string[]): QueueResult | Prepared {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -257,10 +285,15 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
       "Fix: wait a moment for GitHub to settle, then run `pnpm queue` again.",
     );
   }
-  const warnings: string[] = [];
   let labelRunPending = false;
   const changed = seam.changedFiles(head);
   const labels = seam.labels(pr);
+  // Read once: the warning, the baseline exception and the verify gate all judge the same body.
+  const body = seam.body(pr);
+  // A docs-only PR needs no verify run, so a merge that voids its line is no news (RP-1113).
+  const unclean = needsVerify(labels, changed) ? uncleanMergeLine(pr, head, body, seam) : undefined;
+  if (unclean) first.push(unclean);
+  const warnings: string[] = [...first];
   // The ratchet lists only shrink against main, whatever the labels or the verify (RP-1194): the verify-gate check's rule.
   const versions = (file: string) => seam.packageJsonVersions(head, file);
   const gains = readOrRefuse(pr, head, () => ratchetGains(changed, versions));
@@ -268,7 +301,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   if (gains.value.length > 0) {
     const comments = seam.comments(pr);
     const writers = markerWriters(comments, hasBaselineMarker, (login) => seam.permission(login));
-    const baseline = baselineRefusals(gains.value, seam.body(pr), comments, writers, head, seam);
+    const baseline = baselineRefusals(gains.value, body, comments, writers, head, seam);
     if (baseline.length > 0) return fail(`PR #${pr}: ${baseline.join("; ")}.`, `${baselineFix(pr)}, then run \`pnpm queue ${pr}\` again.`);
   }
   // The same rule as the main ruleset's reviewed-required check (RP-606), so what this queues the queue keeps.
@@ -312,7 +345,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   if (!own.ok) return own.result;
   // A docs-only PR that drops a scenario row or grows a list still needs one (RP-1196), as in the verify-gate check.
   if (needsVerify(labels, changed) || own.value.length > 0) {
-    const inputs = { body: seam.body(pr), ownChanges: own.value };
+    const inputs = { body, ownChanges: own.value };
     const state = verifyState(pr, head, seam, inputs, ciEvidence(seam, head));
     if (state.state === "refused") return state.result;
     if (state.state === "running" && !options.waitForLabelRun) return state.result;
@@ -382,7 +415,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   }
   if (onMerge.skipped.length > 0) warnings.push(`Warning: not run on the merge (the file is not there yet): ${onMerge.skipped.join(", ")}.`);
 
-  return { kind: "ready", id: pull.id, head, warnings, labelRunPending, verify, ciPending };
+  return { kind: "ready", id: pull.id, head, warnings, first: [...first], labelRunPending, verify, ciPending };
 }
 
 const POLL_MS = 60_000;
@@ -472,9 +505,16 @@ const realSleep = (ms: number) => new Promise<void>((resolveSleep) => setTimeout
  * Fails only when a required check fails (naming it) or never reports on the head.
  */
 export async function queuePrWhenChecksPass(pr: number, seam: QueueSeam, options: WaitOptions = {}): Promise<QueueResult> {
-  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const prepared = prepare(pr, seam, { ...options, waitForLabelRun: true });
   if (prepared.kind === "refused") return prepared.result;
+  // RP-1113: the lines that go first are logged before the wait's progress lines, and lead any refusal while waiting.
+  for (const line of prepared.first) options.log?.(line);
+  const result = await waitThenEnqueue(pr, seam, { ...prepared, warnings: prepared.warnings.filter((line) => !prepared.first.includes(line)) }, options);
+  return result.ok || prepared.first.length === 0 ? result : { ...result, lines: [...prepared.first, ...result.lines] };
+}
+
+async function waitThenEnqueue(pr: number, seam: QueueSeam, prepared: Extract<Prepared, { kind: "ready" }>, options: WaitOptions): Promise<QueueResult> {
+  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const { head } = prepared;
   const required = seam.requiredChecks();
   const started = now();

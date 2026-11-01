@@ -333,6 +333,72 @@ describe("queuePr", () => {
       expect(enqueued).toEqual([]);
     });
 
+    // RP-1113: a merge of main that is not git's own clean merge breaks the walk, so a verify line from before it no
+    // longer counts. Say so first, naming the merge, instead of leaving it to the verify refusal hours later.
+    describe("a merge of main that is not clean (RP-1113)", () => {
+      const UNCLEAN = "is a merge of main that is not clean";
+      // `tree` answers treeX for the commits in `edited`: their tree differs from the clean merge (tree1).
+      const history = (graph: Record<string, string[]>, edited: string[], verified: string) =>
+        fakeSeam({
+          body: verifiedOn(verified),
+          parents: (commit) => graph[commit] ?? [],
+          onMain: (commit) => commit.startsWith("m"),
+          tree: (commit) => (edited.includes(commit) ? "treeX" : "tree1"),
+          mergedTree: () => "tree1",
+        });
+
+      it("gives no warning when the merges after the verify line are clean", () => {
+        const { seam } = history({ abc1234: ["beef999", "m2"] }, [], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(true);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("names a conflict-resolved merge after the verify line, first, and says verify must run again on the head", () => {
+        const { seam, enqueued } = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        const [first] = result.lines;
+        expect(first).toContain(`abc1234 ${UNCLEAN}`);
+        expect(first).toContain("beef999");
+        expect(first).toContain("no longer counts");
+        expect(first).toContain("`pnpm verify --pr 149`");
+        expect(enqueued).toEqual([]);
+      });
+
+      it("names the newest such merge, under a clean one on top of it", () => {
+        // abc1234 cleanly merges m3 into cafe001; cafe001 merged m2 into the verified beef999 with an edit.
+        const { seam } = history({ abc1234: ["cafe001", "m3"], cafe001: ["beef999", "m2"] }, ["cafe001"], "beef999");
+        const [first] = queuePr(149, seam).lines;
+        expect(first).toContain(`cafe001 ${UNCLEAN}`);
+        expect(first).not.toContain("abc1234 is a merge");
+      });
+
+      it("gives no warning for a verify line on that merge, or after it", () => {
+        const on = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "abc1234");
+        expect(queuePr(149, on.seam).lines.join("\n")).not.toContain(UNCLEAN);
+        // Verified on cafe001, the merge with an edit; abc1234 merges m3 in cleanly after it.
+        const after = history({ abc1234: ["cafe001", "m3"], cafe001: ["beef999", "m2"] }, ["cafe001"], "cafe001");
+        const result = queuePr(149, after.seam);
+        expect(result.ok).toBe(true);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("gives no warning on a docs-only PR, which needs no verify", () => {
+        const { seam } = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "beef999");
+        const docs = { ...seam, labels: () => ["docs-only"], changedFiles: () => ["docs/adr/0001-x.md"] };
+        expect(queuePr(149, docs).lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("gives no warning when the walk stops at a commit of the branch's own, not a merge", () => {
+        // n1 is an ordinary commit after the verified one: the verify refusal says enough.
+        const { seam } = history({ abc1234: ["n1", "m2"], n1: ["beef999"] }, [], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+    });
+
     it("queues when any of several verify lines names the head (a later run after fixes)", () => {
       const { seam } = fakeSeam({ body: () => `${stampLine("pnpm verify passed on 5356b95: lint.")}\n\n\`${stampLine("pnpm verify passed on abc1234: lint, typecheck.")}\`` });
       expect(queuePr(149, seam).ok).toBe(true);
@@ -766,6 +832,50 @@ describe("queuePrWhenChecksPass", () => {
   }
   const done = (name: string, conclusion = "success"): Run => ({ name, status: "completed", conclusion });
   const going = (name: string): Run => ({ name, status: "in_progress", conclusion: "" });
+
+  // RP-1113: the stamped line on beef999 is voided by abc1234, a merge of main with an edit; CI green on the head lets it wait.
+  describe("a merge of main that is not clean (RP-1113)", () => {
+    const UNCLEAN = "abc1234 is a merge of main that is not clean";
+    const greenCi: CiRun = {
+      id: 7,
+      headSha: "abc1234",
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      status: "completed",
+      conclusion: "success",
+      repo: "Rabaed/rabaedV2.0",
+      headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 149, baseRef: "main" }],
+      jobs: [{ name: "ci", status: "completed", conclusion: "success" }],
+    };
+    const unclean = (polls: Run[][]) =>
+      checking(polls, {
+        body: () => stampLine("pnpm verify passed on beef999: lint, typecheck, unit."),
+        parents: (commit) => (commit === "abc1234" ? ["beef999", "m2"] : []),
+        onMain: (commit) => commit.startsWith("m"),
+        tree: (commit) => (commit === "abc1234" ? "treeX" : "tree1"),
+        mergedTree: () => "tree1",
+        ciRuns: () => [greenCi],
+      });
+
+    it("logs the warning before any wait line, and does not repeat it in the summary", async () => {
+      const c = unclean([[going("ci")], [done("ci"), done("reviewed-required")]]);
+      const logged: string[] = [];
+      const result = await queuePrWhenChecksPass(149, c.seam, { ...c.options, log: (line) => logged.push(line) });
+      expect(result.ok).toBe(true);
+      expect(logged[0]).toContain(UNCLEAN);
+      expect(logged.slice(1).join("\n")).not.toContain(UNCLEAN);
+      expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+    });
+
+    it("puts it first on a refusal while waiting", async () => {
+      const c = unclean([[done("ci", "failure"), done("reviewed-required")]]);
+      const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+      expect(result.ok).toBe(false);
+      expect(result.lines[0]).toContain(UNCLEAN);
+      expect(result.lines.join("\n")).toContain("required check(s) failed");
+    });
+  });
 
   it("waits while a required check is pending or not reported yet, then queues the PR's head", async () => {
     const c = checking([[], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required", "skipped"), going("unrequired")]]);
