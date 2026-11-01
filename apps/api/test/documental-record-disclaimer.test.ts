@@ -66,6 +66,9 @@ const sections = [
 
 const squeeze = (s: string) => s.replace(/[\s\u200E\u200F\u2066-\u2069]+/g, "");
 
+/** Arabic as plain letters: presentation forms folded, diacritics (ً-ْ) and spaces dropped. */
+const plainArabic = (s: string) => s.normalize("NFKC").replace(/[\sً-ْ]+/g, "");
+
 interface Made {
   readonly xml: string;
   readonly lastPage: string;
@@ -160,6 +163,14 @@ describe("the Disclaimer of a record", () => {
     expect(made.after.xml).toContain(`<text lang="en">${OWNER.en}</text>`);
     expect(made.after.xml).toContain(`<text lang="ar">${OWNER.ar}</text>`);
     expect(made.after.lastPage).toContain(squeeze(OWNER.en));
+    // The Arabic is on the page too. pdfjs gives it back in visual order (right to left): a word is there with its
+    // letters reversed, and it reorders a ligature's or an alef-dal pair's letters, so four words that read back
+    // plainly stand for it. The layout sets it right-to-left (golden.test.ts).
+    const page = plainArabic(made.after.lastPage);
+    for (const word of ["المذكور", "المقاول", "مسؤوليته", "المطابقة"]) {
+      expect(OWNER.ar).toContain(word);
+      expect(page, word).toContain([...word].reverse().join(""));
+    }
     expect(made.after.xml).not.toContain("‹");
   });
 
