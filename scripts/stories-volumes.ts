@@ -14,7 +14,7 @@
 // sets go one at a time with a pause between, stopping at the first Docker does not answer in time.
 import { execFileSync } from "node:child_process";
 import { sleepSync } from "./lanes.ts";
-import { STORIES_VOLUME_PREFIX, worktreeHash } from "./test-stories-linux.ts";
+import { STORIES_VOLUME_PREFIX, worktreeHash } from "./stories-hash.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 
 const HASH = new RegExp(`^${STORIES_VOLUME_PREFIX}([0-9a-f]{8})-.`);

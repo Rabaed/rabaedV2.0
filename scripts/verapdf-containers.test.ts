@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { veraPdfSessionArgs, veraPdfWorktreeHash } from "../apps/worker/src/record/verapdf.ts";
 import { chooseVeraPdfContainers, parseVeraPdfContainers, protectedHashes } from "./verapdf-containers.ts";
-import { worktreeHash } from "./test-stories-linux.ts";
+import { worktreeHash } from "./stories-hash.ts";
 
 describe("the worker's session containers (RP-1122)", () => {
   it("carry the hash and pid the sweep reads back, the stories script's hash of this worktree", () => {
