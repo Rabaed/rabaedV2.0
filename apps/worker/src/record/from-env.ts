@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 import { filesUnder, projectFilesFromEnv, s3Client, s3RecordFiles } from "./files.ts";
 import { fallbackFonts, thmanyahFonts, type RecordFonts } from "./fonts.ts";
@@ -37,19 +38,16 @@ export const SEALING_CERTIFICATE_KEY = "sealing/pdf-sealing.pem";
 /** Where the licensed Thmanyah fonts are kept in the build assets bucket (packages/infra FONTS_PREFIX). */
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
 
-/** A secret that may be absent or empty: either is unset. */
-const optionalSecret = z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional());
-
 const env = z.object({
   RECORD_SEALING: z.enum(["local", "kms", "uat"]).optional(),
   // Set by ECS in every task: the worker runs in AWS.
-  ECS_CONTAINER_METADATA_URI_V4: z.string().min(1).optional(),
-  AWS_REGION: z.string().min(1).optional(),
+  ECS_CONTAINER_METADATA_URI_V4: optionalSecret,
+  AWS_REGION: optionalSecret,
   BUILD_ASSETS_BUCKET: z.string().min(3).optional(),
-  PDF_SEALING_KEY_ID: z.string().min(1).optional(),
+  PDF_SEALING_KEY_ID: optionalSecret,
   TIMESTAMP_AUTHORITY_URL: z.url().optional(),
-  CHROMIUM_PATH: z.string().min(1).optional(),
-  RECORD_FONTS_DIR: z.string().min(1).optional(),
+  CHROMIUM_PATH: optionalSecret,
+  RECORD_FONTS_DIR: optionalSecret,
   // Empty counts as unset (a .env may hold them as ""), so the worker still starts in local mode.
   UAT_SEALING_AUTHORITY_KEY: optionalSecret,
   UAT_SEALING_AUTHORITY_CERTIFICATE: optionalSecret,
