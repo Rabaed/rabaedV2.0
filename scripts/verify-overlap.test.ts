@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { verifyOverlap } from "./verify-overlap.ts";
 
-describe("verifyOverlap (the open-PR overlap look at the top of pnpm verify, RP-1191)", () => {
-  it("is what the overlap look says for this checkout", async () => {
+// The open-PR overlap look before pnpm verify's first step (RP-1191).
+describe("verifyOverlap", () => {
+  it("returns the look's text for the checked-out repo", async () => {
     const asked: string[] = [];
     const text = await verifyOverlap("/work", async (repo) => {
       asked.push(repo);

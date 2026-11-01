@@ -142,10 +142,6 @@ if (options.pr !== undefined && prBody) {
     stopEarly(`pnpm verify --pr ${options.pr}: could not read the PR's head: ${error instanceof Error ? error.message.trim() : String(error)}`);
   }
 }
-// Open PRs that change this branch's files (RP-1191, scripts/verify-overlap.ts): a warning, here and again above the last
-// line, never a stop. A conflict with a PR that merges first voids the verify line this run is about to write.
-const overlapWarning = await verifyOverlap(root);
-if (overlapWarning) out.error(`${overlapWarning}\n`);
 // And the working tree (RP-1169): HEAD stays put under a merge --no-commit or the app's base-branch sync half-done.
 const git = systemGit(root);
 const fileHash = systemFileHash(root);
@@ -244,6 +240,13 @@ if (turn.waitedMs > 0) {
   if (waitedMove !== undefined) stopEarly(`${runCommand(from)} stopped before its first step: ${waitedMove}`);
 }
 
+// Open PRs that change this branch's files (RP-1191, scripts/verify-overlap.ts): a warning, here and again above the last
+// line, never a stop. A conflict with a PR that merges first voids the verify line this run is about to write. After the
+// refusals and the wait for the slot, so a run that stops early or waited hours does not print a stale one; the working
+// tree is already watched (startedTree), so an edit made during the look still stops the run after the first step.
+const overlaps = await verifyOverlap(root);
+if (overlaps) out.error(`${overlaps}\n`);
+
 /** Kills a step's whole process tree: pnpm starts vitest and the like, so the child alone is not enough. */
 function killTree(child: ReturnType<typeof spawn>): void {
   if (child.pid === undefined) return;
@@ -334,7 +337,7 @@ const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", st
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
-if (overlapWarning) out.error(`\n${overlapWarning}`);
+if (overlaps) out.error(`\n${overlaps}`);
 const last = finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
 if (options.pr !== undefined && prBody) {
   // A full, clean run on the PR's head only (writeVerifyLine checks the stamp and the head again, the PR may have been pushed to meanwhile).
