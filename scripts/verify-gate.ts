@@ -10,7 +10,8 @@ import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEve
 // The verify gate (RP-1094): a PR merges only when its body shows `pnpm verify` passed on its head,
 // or on a commit only clean merges of main followed (`onlyCleanCommitsSince`, RP-1017), or the screenshot
 // bot's baseline-only commits (`isBaselineBotCommit`, RP-1103: they voided #458, #459, #476). One rule for
-// `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request and merge_group,
+// `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request_target (pull_request until
+// RP-1148 part A's workflow PR; `requiredEvent` reads both) and merge_group,
 // so a merge started from GitHub's button cannot skip it (14 PRs merged without a valid line, retro
 // 2026-10-29).
 //

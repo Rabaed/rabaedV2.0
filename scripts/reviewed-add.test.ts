@@ -100,6 +100,8 @@ describe("reviewAt", () => {
 describe("addEvent", () => {
   it("reads the PR from a pull_request event", () => {
     expect(addEvent("pull_request", { pull_request: { number: 7 } })).toEqual({ pr: 7 });
+    // RP-1148: the workflow moves to pull_request_target, whose payload is the same.
+    expect(addEvent("pull_request_target", { pull_request: { number: 7 } })).toEqual({ pr: 7 });
   });
 
   it("reads the PR from a comment on a PR, and skips a comment on a plain issue", () => {
@@ -108,7 +110,7 @@ describe("addEvent", () => {
   });
 
   it("refuses any other event", () => {
-    expect(() => addEvent("push", {})).toThrow(/pull_request, issue_comment and workflow_run/);
+    expect(() => addEvent("push", {})).toThrow(/pull_request_target \(or pull_request\), issue_comment and workflow_run/);
   });
 
   it("reads the PR from a finished CI run on its head (RP-1190), and nothing from a fork's, a push's or another workflow's run", () => {
@@ -406,5 +408,36 @@ describe("overHttp", () => {
 
   it("fails on any other error rather than guessing", async () => {
     await expect(answering(403, { message: "Resource not accessible by integration" }).http.permission("mmhaleess90")).rejects.toThrow(/403/);
+  });
+});
+
+// RP-1148: the gate workflows move from pull_request to pull_request_target, whose runs the API files under that event.
+// Both count, so the label's re-runs find the head's run before and after the workflow PR.
+describe("overHttp's gate run lookups", () => {
+  const byEvent = (answers: Record<string, { id: number; status: string; conclusion: string | null }[]>) => {
+    const urls: string[] = [];
+    const fetcher = (async (url: string) => {
+      urls.push(url);
+      const event = new URL(url).searchParams.get("event") ?? "";
+      return new Response(JSON.stringify({ workflow_runs: answers[event] ?? [] }), { status: 200 });
+    }) as typeof fetch;
+    return { http: overHttp("Rabaed/rabaedV2.0", "token", fetcher), urls };
+  };
+
+  it("finds the head's reviewed-required and verify-gate runs of either event, newest first", async () => {
+    const { http, urls } = byEvent({
+      pull_request: [{ id: 40, status: "completed", conclusion: "failure" }],
+      pull_request_target: [{ id: 45, status: "completed", conclusion: "failure" }],
+    });
+    expect((await http.requiredRuns("abc")).map((run) => run.id)).toEqual([45, 40]);
+    expect((await http.verifyRuns("abc")).map((run) => run.id)).toEqual([45, 40]);
+    expect(urls).toContain("https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/reviewed-required.yml/runs?head_sha=abc&event=pull_request_target");
+    expect(urls).toContain("https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/verify-gate.yml/runs?head_sha=abc&event=pull_request");
+  });
+
+  it("finds the reviewed-label runs, which stay on pull_request, by that event", async () => {
+    const { http, urls } = byEvent({ pull_request: [{ id: 30, status: "completed", conclusion: "success" }] });
+    expect(await http.labelRuns("abc")).toEqual([{ status: "completed" }]);
+    expect(urls).toEqual(["https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request"]);
   });
 });

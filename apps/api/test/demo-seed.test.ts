@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { ChecklistTemplates, DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
+import type { ChecklistTemplates, DimensionValues, DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
@@ -48,6 +48,7 @@ let ahmed: Caller; // Design Consultants LLC Engineer
 let mohammed: Caller; // Design Consultants LLC Manager
 let faisal: Caller; // Al Waha PMC (Owner Representative)
 let omar: Caller; // TMC Contractor Engineer who covers Tower 2 only
+let sara: Caller; // Design Consultants LLC Engineer who covers Mechanical only (RP-1207)
 let projectId = "";
 let electrical = "";
 let tower1Floor2 = "";
@@ -61,6 +62,7 @@ beforeAll(async () => {
   mohammed = await signIn("mohammed");
   faisal = await signIn("faisal");
   omar = await signIn("omar");
+  sara = await signIn("sara");
   const projects = (await hafiz.get("/v1/projects")).json().projects as { id: string; code: string; name: { en: string } }[];
   projectId = projects.find((p) => p.code === "TWR" && p.name.en === "Riyadh Gate Tower – Phase 2")!.id; // not hidden-from: finds the seeded Project Hafiz is on
   const dimensions = (await hafiz.get(`/v1/projects/${projectId}/dimensions`)).json();
@@ -249,7 +251,7 @@ const linkedFrom = async (who: Caller, id: string): Promise<LinkedFrom> => {
 // Reads for expectHiddenFrom (RP-1095): each gives the row as `{ id }`, so a reader who may see
 // it reads it first and one who may not never does.
 /** Who a demo person is, in a failure. */
-const whoIs = (c: Caller) => Object.entries({ hafiz, ali, yousef, ahmed, mohammed, faisal, omar }).find(([, v]) => v === c)?.[0] ?? "a demo person";
+const whoIs = (c: Caller) => Object.entries({ hafiz, ali, yousef, ahmed, sara, mohammed, faisal, omar }).find(([, v]) => v === c)?.[0] ?? "a demo person";
 /** `path` read by id, as row `id`: `[{ id }]` on the 200, `[]` on the plain 404, a failure otherwise. */
 const opens = (path: string, id: string) => async (who: Caller) => (await readById<unknown>(path)(who)).map(() => ({ id }));
 /** What `who` reads at `path` (a 200), as `[{ id: target }]` when it holds `target`, an id or a note's words, else `[]`. */
@@ -332,6 +334,67 @@ describe("the seeded Links", () => {
     for (const id of [approved, linking]) {
       await expectHiddenFrom({ read: opens(`/v1/work-items/${id}/links`, id), target: id, seenBy: hafiz, hiddenFrom: yousef, name: whoIs, label: "Links" });
     }
+  });
+});
+
+// Sara (RP-1207) works one Trade only: Layla, Design Consultants' Authorized Person, narrowed her to
+// Mechanical Works at every Location. The seed's MARs are all Electrical, so she reads none of them;
+// Ahmed and Mohammed still cover both Trades. Narrowing is inside her own Company: she sees nothing
+// of another Company either way (V3).
+describe("Sara, the Consultant Engineer who covers Mechanical only", () => {
+  const covered = async (who: Caller) => {
+    const mine = (await who.get(`/v1/projects/${projectId}/visibility`)).json() as DimensionValues;
+    return { trades: mine.trade.map((t) => t.code).sort(), locations: mine.location.length }; // not hidden-from: what the Member covers, read as the Member
+  };
+
+  it("covers Mechanical Works at every Location, where Ahmed and Mohammed cover Electrical too", async () => {
+    const everywhere = (await covered(ahmed)).locations;
+    expect(everywhere).toBeGreaterThan(0);
+    expect(await covered(sara)).toEqual({ trades: ["ME"], locations: everywhere });
+    expect(await covered(ahmed)).toEqual({ trades: ["EL", "ME"], locations: everywhere });
+    expect(await covered(mohammed)).toEqual({ trades: ["EL", "ME"], locations: everywhere });
+  });
+
+  it("reads none of the seeded Electrical MARs, in the List or by its page, while Ahmed and Mohammed read them", async () => {
+    for (const title of [APPROVED_TITLE, LINKING_TITLE, CODE_C_TITLE]) {
+      const id = (await titled(ahmed, title))!;
+      await expectHiddenFrom({ read: listed, target: id, seenBy: [ahmed, mohammed], hiddenFrom: sara, name: whoIs, label: `${title}, the List` });
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: [ahmed, mohammed], hiddenFrom: sara, name: whoIs, label: `${title}, its page` });
+    }
+  });
+});
+
+// RP-1186: the weekly Step Age report goes to the Members holding Assign on Submittals. No default
+// Position holds it, so the seed gives Ali and Yousef a Position that does, and nobody else on the demo Project.
+describe("the weekly Step Age report's recipients", () => {
+  it("are Ali and Yousef: the Members of the demo Project who hold Assign", async () => {
+    const { rows } = await sql<{ email: string }>`
+      select m.email from project_member pm join member m on m.id = pm.member_id
+      where pm.project_id = ${projectId}::uuid and pm.status = 'active' and app.project_member_holds_assign(pm.id)
+      order by m.email
+    `.execute(migrator);
+    expect(rows.map((r) => r.email)).toEqual([demo.ali, demo.yousef].sort()); // not hidden-from: who the report is for, read as the migrator
+  });
+
+  it("are queued by the scheduled job, one report each for the demo Project", async () => {
+    // As `uat:run-job weekly-report --dry-run` does: queued as the migrator, read back, rolled back.
+    let queued: string[] = [];
+    await migrator
+      .transaction()
+      .execute(async (trx) => {
+        await sql`select app.enqueue_step_age_reports()`.execute(trx);
+        const { rows } = await sql<{ email: string }>`
+          select m.email from outbox o join member m on m.id = (o.payload ->> 'member_id')::uuid
+          where o.kind = 'step_age_report' and o.created_at = now() and o.project_id = ${projectId}::uuid
+          order by m.email
+        `.execute(trx);
+        queued = rows.map((r) => r.email);
+        throw new Error("rolled back: a dry run");
+      })
+      .catch((error: Error) => {
+        if (error.message !== "rolled back: a dry run") throw error;
+      });
+    expect(queued).toEqual([demo.ali, demo.yousef].sort()); // not hidden-from: who the report is queued for, read as the migrator
   });
 });
 
@@ -435,10 +498,12 @@ describe("the README walkthrough", () => {
       memberName: null,
       pool: null,
     });
-    // Its Consultant Engineers may pick it up, never its Manager (RP-511 decision 1): nobody holds it yet.
-    expect((await detail(ahmed, mar)).actions.pickUp).toBe(true);
-    expect((await detail(mohammed, mar)).heldBy?.pool?.names.map((n) => n.en).sort()).toEqual(["Ahmed bin Said", "Sara"]);
+    // Its Consultant Engineers may pick it up, never its Manager (RP-511 decision 1). Sara covers Mechanical
+    // only (RP-1207), so this Electrical MAR's pool is Ahmed alone and he holds it at once: no Pick up.
+    expect((await detail(ahmed, mar)).actions.pickUp).toBe(false);
+    expect((await detail(mohammed, mar)).heldBy).toMatchObject({ memberName: { en: "Ahmed bin Said" }, pool: null });
     expect((await detail(mohammed, mar)).actions.pickUp).toBe(false);
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${mar}`), target: mar, seenBy: [ahmed, mohammed], hiddenFrom: sara, name: whoIs, label: "the item, Electrical" });
     expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, faisal]) {
@@ -455,7 +520,6 @@ describe("the README walkthrough", () => {
   });
 
   it("7. The Consultant reads the Form's answers and the replaced, frozen Datasheet; the other Contractor still sees nothing", async () => {
-    await pickUp(ahmed);
     expect((await detail(ahmed, mar)).answers).toMatchObject(filled());
     const seen = await documents(ahmed);
     expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet-rev-B.pdf", frozen: true }] });
@@ -497,7 +561,6 @@ describe("the README walkthrough", () => {
     await take(hafiz, mar, "send_for_review");
     await pickUp(ali);
     await take(ali, mar, "submit");
-    await pickUp(ahmed);
     const verification = { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" };
     await take(ahmed, mar, "send_to_manager", { answers: verification, recommendedCode: "C" });
     await take(mohammed, mar, "revise_c", { answers: verification, remarks: "Submit the 2020 revision of the datasheet" });
@@ -558,7 +621,6 @@ describe("the README walkthrough", () => {
     await take(ali, mar, "submit");
     const contractorSaw = { hafiz: (await hafiz.get(`/v1/work-items/${mar}/history`)).body, faisal: (await faisal.get(`/v1/work-items/${mar}/history`)).body };
     // Ahmed answers in his reply: Matches specification No needs the Verification note.
-    await pickUp(ahmed);
     const noNote = await ahmed.post(`/v1/work-items/${mar}/transitions`, {
       transition: "send_to_manager",
       answers: { sample_checked: true, matches_specification: false },
