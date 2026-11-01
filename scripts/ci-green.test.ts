@@ -255,7 +255,7 @@ describe("a PR that weakens expectHiddenFrom", () => {
 const CODE_UNDER_TEST = ["packages/db/dev-tools/", "apps/web/next.config.ts", "scripts/screens-examples/", "scripts/uat-sheet/", "apps/admin/web/"];
 
 /** Tests whose code samples hold import lines that name no real file (lint rules' tests). */
-const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/uat-imports.test.ts"];
+const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/import-graph.test.ts", "scripts/uat-imports.test.ts"];
 
 /** A view of the repo's files: the real checkout, or a planted one in a test. `paths` are the tracked files. */
 type Files = { paths: readonly string[]; isFile: (path: string) => boolean; read: (path: string) => string; packages: readonly Workspace[] };
@@ -476,6 +476,20 @@ describe("ciOwnChanges", () => {
     // A second copy lets a second assert through (RP-1194); a comment or spacing added to a gap line is no new gap.
     expect(ciOwnChanges([hidden], at(list("empty a :: x"), list("empty a :: x", "empty a :: x")))).toEqual([`${hidden} (gains an entry)`]);
     expect(ciOwnChanges([gaps], at(list("RP-412-1 api"), list("RP-412-1  api # since RP-1134")))).toEqual([]);
+  });
+
+  // RP-1198 review P4: the docs-placeholder baseline may only shrink, as the visibility lists.
+  it("counts a docs-placeholder baseline that gains an entry, a second copy of one, or that it cannot parse; leaves one that shrinks alone", () => {
+    const baseline = "scripts/doc-placeholders-baseline.json";
+    const at = (before: unknown, after: unknown) => () => ({ before: before === undefined ? undefined : JSON.stringify(before), after: after === undefined ? undefined : JSON.stringify(after) });
+    const was = { "docs/a.md": ["pnpm x <n>", "pnpm y <n>"], "docs/b.md": ["gh pr view <pr>"] };
+    const gains = [`${baseline} (gains an entry)`];
+    expect(ciOwnChanges([baseline], at(was, { ...was, "docs/c.md": ["pnpm z <n>"] }))).toEqual(gains);
+    expect(ciOwnChanges([baseline], at(was, { ...was, "docs/b.md": ["gh pr view <pr>", "gh pr view <pr>"] }))).toEqual(gains);
+    expect(ciOwnChanges([baseline], () => ({ before: JSON.stringify(was), after: "{" }))).toEqual(gains);
+    expect(ciOwnChanges([baseline], at(undefined, was))).toEqual(gains);
+    expect(ciOwnChanges([baseline], at(was, { "docs/a.md": ["pnpm y <n>"] }))).toEqual([]);
+    expect(ciOwnChanges([baseline], at(was, undefined))).toEqual([]);
   });
 
   it("leaves a list that only shrinks or is deleted alone, and its README", () => {

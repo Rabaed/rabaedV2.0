@@ -1,0 +1,68 @@
+{
+  "docs/agents/ci-logs.md": [
+    "gh run view <run> --log-failed",
+    "gh pr checks <pr>",
+    "gh api repos/Rabaed/rabaedV2.0/actions/jobs/<job id>/logs --allow-escape-sequences > job.log",
+    "pnpm test:stories:linux --update -t <story>"
+  ],
+  "docs/agents/issue-tracker.md": [
+    "node scripts/jira-upload.ts RP-nnn <file>...",
+    "pnpm <name>",
+    "node scripts/check-gap-table.ts <table> --refs <folder>"
+  ],
+  "docs/data-model.md": [
+    "pnpm db:fn <name>",
+    "pnpm db:fn <name>"
+  ],
+  "docs/tech-stack.md": [
+    "pnpm --filter @rabaed/api r2:cors --origin <url>"
+  ],
+  "docs/workflow-engine.md": [
+    "pnpm defaults:publish --engineer <email> --reason <why>",
+    "pnpm workflow:publish --type <code> --definition <file.json> --reason <why> --engineer <email>"
+  ],
+  "planning/migration-days.md": [
+    "pnpm migration:new <name> --issue RP-nnn"
+  ],
+  "planning/parallel-sessions.md": [
+    "pnpm queue <number> --no-review --wait",
+    "pnpm lane:done <pr>",
+    "pnpm demo:session --uat <person>",
+    "git show origin/main:<path>",
+    "pnpm queue <number> --no-review",
+    "pnpm screens <route>... --as <person>",
+    "pnpm queue <number> --wait",
+    "node scripts/review-post.ts <pr> <summary-file>",
+    "pnpm queue <number>",
+    "pnpm worktree:remove <path>",
+    "/mattpocock-skills:implement-spec RP-nnn. Main m, lane X: first run `pnpm lane:env mL --force`. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.",
+    "git reset --hard <sha>",
+    "pnpm lane:env N --force --db rp<n>",
+    "pnpm migration:new <name> --issue RP-nnn",
+    "node scripts/review-post.ts <number> <summary-file>",
+    "pnpm queue <number> --wait",
+    "pnpm worktrees:clean --into RP-nnn-<spec-name> --yes",
+    "pnpm worktrees:clean --only agent-<id> --yes",
+    "git show <ref>:<path>",
+    "pnpm verify --pr <n>",
+    "pnpm queue <n>",
+    "pnpm queue <n> --wait",
+    "pnpm verify passed on <sha>: <steps>.",
+    "pnpm verify --from <step>",
+    "pnpm verify --from <step> passed",
+    "node scripts/check-gap-table.ts <table> --refs <folder>",
+    "pnpm queue <number>",
+    "pnpm db:fn <name>",
+    "git branch -m RP-nnn-<slug>",
+    "gh pr edit <number> --add-label docs-only",
+    "pnpm queue <number>"
+  ],
+  "planning/uat/strategy.md": [
+    "pnpm demo:session <name>",
+    "pnpm uat:age --lane 7 --item <Document Number> --weeks N",
+    "pnpm demo:session <name>",
+    "pnpm screens <route> --as <person>",
+    "**Part X: <Part name>** · Scenario `<id>` · Covers: Visibility | Journey | Regression | Design | Arabic",
+    "**Who:** <people>"
+  ]
+}

@@ -25,8 +25,8 @@ import { commentsOverHttp, errorText, markerWriters, realGateGit, VERIFY_CHECK, 
 // added with GITHUB_TOKEN starts no `labeled` run, so it then re-runs the head's failed `reviewed-required` run,
 // which reads the labels live. Docs-only PRs are unchanged: `docs-only` still passes without `reviewed`.
 //
-// Run by .github/workflows/reviewed-add.yml (PR 2) from the default branch's copy, on pull_request (the body's
-// verify line, a push, ready for review) and issue_comment (the review comment), and, once the workflow PR of RP-1190
+// Run by .github/workflows/reviewed-add.yml (PR 2) from the default branch's copy, on pull_request_target
+// (pull_request until RP-1148 part A's workflow PR; the body's verify line, a push, ready for review) and issue_comment (the review comment), and, once the workflow PR of RP-1190
 // lands, on workflow_run (CI finished on the head), in a checkout with main's full history; it fetches the PR's
 // head itself and runs none of its code. On workflow_run it needs `actions: write` for the verify-gate re-run, and
 // `actions: read` to read CI.
@@ -80,7 +80,8 @@ export function addEvent(eventName: string, payload: unknown): AddEvent | undefi
     issue?: { number: number; pull_request?: unknown };
     workflow_run?: { event: string; path: string; head_sha: string; pull_requests?: { number: number; head: { sha: string } }[] };
   };
-  if (eventName === "pull_request" && event.pull_request) return { pr: event.pull_request.number };
+  // pull_request_target has the same payload; GitHub runs main's copy of the workflow for it (RP-1148).
+  if ((eventName === "pull_request" || eventName === "pull_request_target") && event.pull_request) return { pr: event.pull_request.number };
   if (eventName === "issue_comment" && event.issue) return event.issue.pull_request ? { pr: event.issue.number } : undefined;
   if (eventName === "workflow_run" && event.workflow_run) {
     const run = event.workflow_run;
@@ -88,7 +89,7 @@ export function addEvent(eventName: string, payload: unknown): AddEvent | undefi
     const pull = (run.pull_requests ?? []).find((candidate) => candidate.head.sha === run.head_sha);
     return pull ? { pr: pull.number } : undefined;
   }
-  throw new Error(`reviewed-add runs on pull_request, issue_comment and workflow_run, not ${eventName}`);
+  throw new Error(`reviewed-add runs on pull_request_target (or pull_request), issue_comment and workflow_run, not ${eventName}`);
 }
 
 export interface AddSeam extends ReviewedGit, CiReads, CommentReads {
@@ -98,9 +99,9 @@ export interface AddSeam extends ReviewedGit, CiReads, CommentReads {
   fetchPull(pr: number): void;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
-  /** The `reviewed-required` workflow's pull_request runs for `headSha`, newest first. */
+  /** The `reviewed-required` workflow's pull_request_target and pull_request runs for `headSha`, newest first. */
   requiredRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
-  /** The `verify-gate` workflow's pull_request runs for `headSha`, newest first. */
+  /** The `verify-gate` workflow's pull_request_target and pull_request runs for `headSha`, newest first. */
   verifyRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
   /** Paths `head` changes against main (`git diff --name-only origin/main...<head>`). */
   changedFiles(head: string): string[];
@@ -218,10 +219,16 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     if (!response.ok) throw new Error(`GitHub ${method} ${path} answered ${response.status}`);
     return response.status === 204 || response.status === 201 ? undefined : response.json();
   };
-  const runs = async (workflow: string, headSha: string) =>
-    (await call("GET", `actions/workflows/${workflow}/runs?head_sha=${headSha}&event=pull_request`, undefined, true)) as
-      | { workflow_runs: { id: number; status: string; conclusion: string | null }[] }
-      | undefined;
+  type Runs = { workflow_runs: { id: number; status: string; conclusion: string | null }[] };
+  const runs = async (workflow: string, headSha: string, event = "pull_request") =>
+    (await call("GET", `actions/workflows/${workflow}/runs?head_sha=${headSha}&event=${event}`, undefined, true)) as Runs | undefined;
+  // The gate workflows run on pull_request_target from RP-1148 part A's workflow PR, on pull_request before it:
+  // both count, newest first (a run's id grows with time).
+  const gateRuns = async (workflow: string, headSha: string) =>
+    (await Promise.all(["pull_request_target", "pull_request"].map(async (event) => (await runs(workflow, headSha, event))?.workflow_runs ?? [])))
+      .flat()
+      .sort((a, b) => b.id - a.id)
+      .map(({ id, status, conclusion }) => ({ id, status, conclusion }));
   return {
     async pull(pr) {
       const pull = (await call("GET", `pulls/${pr}`)) as {
@@ -244,13 +251,8 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     async labelRuns(headSha) {
       return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));
     },
-    async requiredRuns(headSha) {
-      // The API lists runs newest first.
-      return ((await runs("reviewed-required.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
-    },
-    async verifyRuns(headSha) {
-      return ((await runs("verify-gate.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
-    },
+    requiredRuns: (headSha) => gateRuns("reviewed-required.yml", headSha),
+    verifyRuns: (headSha) => gateRuns("verify-gate.yml", headSha),
     addLabel: async (pr) => void (await call("POST", `issues/${pr}/labels`, { labels: [REVIEWED_LABEL] })),
     async removeLabel(pr) {
       // 404: the label is already gone, which is the goal.

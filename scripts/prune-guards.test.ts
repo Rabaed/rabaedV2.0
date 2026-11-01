@@ -38,11 +38,25 @@ describe("lane 7 (Main 7's harness data; lanes.test.ts tests which lane is prote
 
 describe("bareMergedYesRefusal (RP-1007)", () => {
   it("refuses --merged --yes without --lane, and nothing else", () => {
-    expect(bareMergedYesRefusal({ merged: true, yes: true, dryRun: false })).toContain("--lane N");
+    expect(bareMergedYesRefusal({ merged: true, yes: true, dryRun: false })).toMatch(/^lanes:prune refused: `--merged --yes` needs `--lane`/);
     expect(bareMergedYesRefusal({ merged: true, yes: true, dryRun: false, lane: 42 })).toBeUndefined();
     expect(bareMergedYesRefusal({ merged: true, yes: false, dryRun: false })).toBeUndefined();
     expect(bareMergedYesRefusal({ merged: true, yes: true, dryRun: true })).toBeUndefined();
     expect(bareMergedYesRefusal({ merged: false, yes: true, dryRun: false })).toBeUndefined();
+  });
+
+  it("names the current worktree's lane in the command to run instead (RP-1198: no `--lane N` placeholder)", () => {
+    expect(bareMergedYesRefusal({ merged: true, yes: true, dryRun: false, ownLane: 41 })).toBe(
+      "lanes:prune refused: `--merged --yes` needs `--lane` (RP-1007: a bare one removed other Mains' live stacks). Prune this worktree's lane with `pnpm lanes:prune --merged --yes --lane 41`, or drop `--yes` to see the list and confirm.",
+    );
+  });
+
+  it("names no lane when the worktree has none, or has lane 7's, and never offers a placeholder", () => {
+    for (const ownLane of [undefined, 7]) {
+      const refusal = bareMergedYesRefusal({ merged: true, yes: true, dryRun: false, ownLane });
+      expect(refusal).toContain("Add `--lane` with your lane's number (`pnpm lanes:prune --stale` lists the stacks), or drop `--yes` to see the list and confirm.");
+      expect(refusal).not.toMatch(/--lane N|--lane 7|<|>/);
+    }
   });
 });
 
