@@ -16,6 +16,7 @@ import { join, relative, resolve } from "node:path";
 //     Rule cell must be in the file it names, word for word (spacing, emphasis and curly quotes aside).
 // With --refs (the folder holding the owner's pages, e.g. D:\Artifacts), each cited file must be there,
 // a selector must be in it and a line must exist. Without it, citations are checked for shape only.
+// A selector is found in a `<style>` block and in CSS packed into a script string (RP-1209).
 
 export interface GapTableOptions {
   /** The repository root, where the ADRs, docs/visibility.md, GLOSSARY.md and CLAUDE.md are read. */
@@ -118,6 +119,27 @@ function ruleErrors(cell: string, ruleForced: boolean, repo: string): string[] {
   return errors;
 }
 
+const JS_ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", v: "\v", "0": "\0" };
+
+/**
+ * What a script's JavaScript strings say once their escapes are read (RP-1209). Some owner pages pack their CSS
+ * into a string, each rule after a literal `\n`, so `.chip.on` follows an `n` there, not a line break. One
+ * pass over each escape, so `\\n` stays a backslash and an `n`; a `\` before a line break joins the lines.
+ */
+function unescapeScript(script: string): string {
+  return script.replace(/\\(?:(\r?\n)|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([\s\S]))/g, (_all, lineBreak, unicode, hex, other) => {
+    if (lineBreak !== undefined) return "";
+    if (unicode !== undefined || hex !== undefined) return String.fromCharCode(parseInt(unicode ?? hex, 16));
+    return JS_ESCAPES[other as string] ?? (other as string);
+  });
+}
+
+/** The page's text as a CSS rule's selector is looked for in it: as written, then each script's strings unescaped. */
+function searchableCss(content: string): string {
+  const scripts = [...content.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => unescapeScript(match[1]!));
+  return [content, ...scripts].join("\n");
+}
+
 /** The problems with one `<file> › <part>` citation. */
 function citationErrors(citation: string, refs: string | undefined): string[] {
   const match = /^([^`›]+?\.[A-Za-z0-9]+)\s*(?:›|>)\s*(.+)$/.exec(citation);
@@ -136,7 +158,8 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
   // The whole selector of a CSS rule: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
-  if (selector && !new RegExp(`(?:^|[\\s{},;>])${escapeRegExp(selector)}\\s*[{,]`, "m").test(content)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
+  // A page may pack its CSS into a script string (RP-1209); lines are still counted in the file as written.
+  if (selector && !new RegExp(`(?:^|[\\s{},;>])${escapeRegExp(selector)}\\s*[{,]`, "m").test(searchableCss(content))) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
     if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];

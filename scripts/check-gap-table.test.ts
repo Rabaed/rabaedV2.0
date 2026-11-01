@@ -142,6 +142,56 @@ describe("checkGapTable", () => {
     expect(errors).toEqual([expect.stringMatching(/row 1.*`\.wl` is not in/)]);
   });
 
+  // RP-1209: some owner pages keep their CSS in a script string, each rule after a literal `\n`.
+  // This page is made up for the test; an owner page never goes into the repo.
+  const PACKED_PAGE = [
+    "<!doctype html>",
+    "<style>.card{padding:8px}</style>",
+    "<script>",
+    'const css = ".chip{color:red}\\n.chip.on{background:blue}\\n.note::before{content:\\"a\\\\\\"b\\"}\\n\\t.late{margin:0}\\n.last{top:0}";',
+    "document.head.append(Object.assign(document.createElement('style'), { textContent: css }));",
+    "</script>",
+    "",
+  ].join("\n");
+
+  it("matches a selector in CSS packed into a script string, each rule after a literal \\n", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table(
+      "| 1 | On chip | packed.html › `.chip.on` | filled | match | | |",
+      "| 2 | Last rule | packed.html › `.last` | top | match | | |",
+      "| 3 | Tab-indented rule | packed.html › `.late` | margin | match | | |",
+    );
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("still matches a selector in a <style> block of a page that also packs CSS", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    expect(check(table("| 1 | Card | packed.html › `.card` | padded | match | | |"))).toEqual([]);
+  });
+
+  it("refuses a selector in neither the <style> block nor the packed string", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const errors = check(table("| 1 | Missing | packed.html › `.nowhere` | x | match | | |", "| 2 | Prefix | packed.html › `.chip.o` | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.nowhere` is not in packed\.html/), expect.stringMatching(/row 2.*`\.chip\.o` is not in packed\.html/)]);
+  });
+
+  it("scans past an escaped quote inside the string", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    expect(check(table("| 1 | Note | packed.html › `.note::before`; packed.html › `.late` | x | match | | |"))).toEqual([]);
+  });
+
+  it("does not take an escaped backslash before an n for a newline", () => {
+    write(refs, "packed.html", '<script>const css = ".a{b:c}\\\\n.hidden{d:e}";</script>\n');
+    const errors = check(table("| 1 | Hidden | packed.html › `.hidden` | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.hidden` is not in packed\.html/)]);
+  });
+
+  it("counts a line of a packed page in the file's real lines, not the string's rules", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table("| 1 | The string | packed.html › line 4 | x | match | | |", "| 2 | Past the end | packed.html › line 8 | x | match | | |");
+    expect(check(markdown)).toEqual([expect.stringMatching(/row 2.*line 8.*6 lines/)]);
+  });
+
   it("refuses line 0 and a range whose first line is after its last", () => {
     const errors = check(table("| 1 | A | Rabaed Settings Workflows.html › line 0 | x | match | | |", "| 2 | B | Rabaed Settings Workflows.html › lines 400–2 | x | match | | |"));
     expect(errors).toEqual([expect.stringMatching(/row 1.*count from 1/), expect.stringMatching(/row 2.*count from 1/)]);
