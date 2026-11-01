@@ -121,7 +121,7 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
     d.error(parsed.error);
     return 2;
   }
-  const { lane, yes } = parsed;
+  const { lane } = parsed;
   const project = laneProject(lane);
   const harness = protectedLaneReason(project);
   if (harness !== undefined) {
