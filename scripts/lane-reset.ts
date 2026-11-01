@@ -88,7 +88,8 @@ export type ResetDeps = {
   exists: (dir: string) => boolean;
   holders: () => Holders;
   verifies: () => VerifyCheck;
-  remove: (stale: StaleProject, options: RemoveProjectOptions) => { volumesKept: string | undefined };
+  /** `{ refused }` is RP-1198's refusal inside removeProject (lane 7, the main checkout's stacks). */
+  remove: (stale: StaleProject, options: RemoveProjectOptions) => { volumesKept: string | undefined } | { refused: string | undefined };
   /** Resolves true to go on; false to stop (the real one exits itself on no). */
   confirm: (question: string) => Promise<boolean>;
   log: (line: string) => void;
@@ -149,6 +150,14 @@ const isTimeout = (error: unknown): boolean => {
   return e?.code === "ETIMEDOUT" || /ETIMEDOUT|timed out/i.test(e?.message ?? "") || (e?.cause !== undefined && isTimeout(e.cause));
 };
 
+/**
+ * Lane 0 is the main checkout's stack: run from the main folder, its own folder is left out of the
+ * claim checks, so nothing else would stop it. RP-1198 (#610) adds keptStackReason; swap to it then.
+ */
+export function mainCheckoutReason(project: string): string | undefined {
+  return project === laneProject(0) ? `${project} is the main checkout's stack; lane:reset never removes it` : undefined;
+}
+
 /** Runs lane:reset; returns the exit code. */
 export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
   const parsed = parseLaneResetArgs(args);
@@ -158,9 +167,9 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
   }
   const { lane } = parsed;
   const project = laneProject(lane);
-  const harness = protectedLaneReason(project);
+  const harness = protectedLaneReason(project) ?? mainCheckoutReason(project);
   if (harness !== undefined) {
-    d.error(`lane:reset refused: ${harness}.`);
+    d.error(`lane:reset refused: ${harness}. Nothing was removed.`);
     return 1;
   }
   const refuse = (refusals: string[]): number => {
@@ -213,7 +222,12 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
     return output;
   };
   try {
-    const { volumesKept } = d.remove(second.parts, { volumesKeptBecause: () => volumesKeptReason(d.verifies()), run });
+    const result = d.remove(second.parts, { volumesKeptBecause: () => volumesKeptReason(d.verifies()), run });
+    if ("refused" in result && result.refused !== undefined) {
+      d.error(`lane:reset refused: ${result.refused}. Nothing was removed.`);
+      return 1;
+    }
+    const volumesKept = "volumesKept" in result ? result.volumesKept : undefined;
     if (volumesKept !== undefined) {
       d.error(`${project}: containers removed, volumes kept because ${volumesKept}. Run lane:reset again when it is over.`);
       return 1;

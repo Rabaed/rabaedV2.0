@@ -328,4 +328,22 @@ describe("resetLane", () => {
     expect(await resetLane(["33"], kept.deps)).toBe(1);
     expect(kept.out.join("\n")).not.toContain("Removed");
   });
+
+  it("refuses lane 0, the main checkout's stack, before reading Docker", async () => {
+    let read = false;
+    const f = fake({ listContainers: () => ((read = true), []) });
+    expect(await resetLane(["0"], f.deps)).toBe(1);
+    expect(f.err.join("\n")).toContain("main checkout's stack");
+    expect(f.err.join("\n")).toContain("Nothing was removed.");
+    expect(read).toBe(false);
+    expect(f.asked).toEqual([]);
+    expect(f.removed).toEqual([]);
+  });
+
+  it("a refusal from removeProject exits 1 and never says Removed", async () => {
+    const f = fake({ remove: () => ({ refused: "rabaed-lane33 is kept" }) });
+    expect(await resetLane(["33"], f.deps)).toBe(1);
+    expect(f.err.join("\n")).toContain("rabaed-lane33 is kept. Nothing was removed.");
+    expect(f.out.join("\n")).not.toContain("Removed");
+  });
 });
