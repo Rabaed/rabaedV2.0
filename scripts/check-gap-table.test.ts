@@ -143,12 +143,13 @@ describe("checkGapTable", () => {
   });
 
   // RP-1209: some owner pages keep their CSS in a script string, each rule after a literal `\n`.
-  // This page is made up for the test; an owner page never goes into the repo.
+  // This page is made up for the test; an owner page never goes into the repo. Its string holds the rules
+  // `.chip`, `.chip.on`, `.note::before` (content "a\"b"), `.opt[data-k="1"]`, `.late` (tab-indented) and `.last`.
   const PACKED_PAGE = [
     "<!doctype html>",
     "<style>.card{padding:8px}</style>",
     "<script>",
-    'const css = ".chip{color:red}\\n.chip.on{background:blue}\\n.note::before{content:\\"a\\\\\\"b\\"}\\n\\t.late{margin:0}\\n.last{top:0}";',
+    'const css = ".chip{color:red}\\n.chip.on{background:blue}\\n.note::before{content:\\"a\\\\\\"b\\"}\\n.opt[data-k=\\"1\\"]{x:y}\\n\\t.late{margin:0}\\n.last{top:0}";',
     "document.head.append(Object.assign(document.createElement('style'), { textContent: css }));",
     "</script>",
     "",
@@ -175,9 +176,27 @@ describe("checkGapTable", () => {
     expect(errors).toEqual([expect.stringMatching(/row 1.*`\.nowhere` is not in packed\.html/), expect.stringMatching(/row 2.*`\.chip\.o` is not in packed\.html/)]);
   });
 
-  it("scans past an escaped quote inside the string", () => {
+  it("matches the first rule of the string, which follows its opening quote", () => {
     write(refs, "packed.html", PACKED_PAGE);
-    expect(check(table("| 1 | Note | packed.html › `.note::before`; packed.html › `.late` | x | match | | |"))).toEqual([]);
+    write(refs, "single.html", "<script>const css = '.one{a:b}\\n.two{c:d}';\nconst more = [`.three{e:f}`];</script>\n");
+    const markdown = table(
+      "| 1 | First rule | packed.html › `.chip` | red | match | | |",
+      "| 2 | Single quotes | single.html › `.one`; single.html › `.two` | x | match | | |",
+      "| 3 | Backticks | single.html › `.three` | x | match | | |",
+    );
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("matches a selector holding an escaped quote, and scans past one inside a rule", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table("| 1 | Option | packed.html › `.opt[data-k=\"1\"]`; packed.html › `.note::before`; packed.html › `.late` | x | match | | |");
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("reads \\u and \\x escapes and a backslash before a line break", () => {
+    write(refs, "escaped.html", '<script>const css = ".u{a:b}\\u000a.x{c:d}\\x0a.\\\njoined{e:f}";</script>\n');
+    const markdown = table("| 1 | U | escaped.html › `.x`; escaped.html › `.joined` | x | match | | |");
+    expect(check(markdown)).toEqual([]);
   });
 
   it("does not take an escaped backslash before an n for a newline", () => {

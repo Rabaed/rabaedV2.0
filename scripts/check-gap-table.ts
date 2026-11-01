@@ -119,25 +119,24 @@ function ruleErrors(cell: string, ruleForced: boolean, repo: string): string[] {
   return errors;
 }
 
-const JS_ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", v: "\v", "0": "\0" };
+const JS_ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r" };
 
 /**
- * What a script's JavaScript strings say once their escapes are read (RP-1209). Some owner pages pack their CSS
- * into a string, each rule after a literal `\n`, so `.chip.on` follows an `n` there, not a line break. One
- * pass over each escape, so `\\n` stays a backslash and an `n`; a `\` before a line break joins the lines.
+ * A script with its escapes read (RP-1209): some owner pages pack CSS into a string, each rule after a literal `\n`.
+ * One pass, so `\\n` stays a backslash and an `n`; a `\` before a line break joins the lines.
  */
 function unescapeScript(script: string): string {
-  return script.replace(/\\(?:(\r?\n)|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([\s\S]))/g, (_all, lineBreak, unicode, hex, other) => {
+  return script.replace(/\\(?:(\r?\n)|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([\s\S]))/g, (_escape, lineBreak, unicode, hex, char) => {
     if (lineBreak !== undefined) return "";
     if (unicode !== undefined || hex !== undefined) return String.fromCharCode(parseInt(unicode ?? hex, 16));
-    return JS_ESCAPES[other as string] ?? (other as string);
+    return JS_ESCAPES[char as string] ?? (char as string);
   });
 }
 
-/** The page's text as a CSS rule's selector is looked for in it: as written, then each script's strings unescaped. */
-function searchableCss(content: string): string {
-  const scripts = [...content.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => unescapeScript(match[1]!));
-  return [content, ...scripts].join("\n");
+/** The page as written, then each of its scripts unescaped: the text a CSS rule's selector is looked for in. */
+function searchableText(page: string): string {
+  const scripts = [...page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => unescapeScript(match[1]!));
+  return [page, ...scripts].join("\n");
 }
 
 /** The problems with one `<file> › <part>` citation. */
@@ -158,8 +157,8 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
   // The whole selector of a CSS rule: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
-  // A page may pack its CSS into a script string (RP-1209); lines are still counted in the file as written.
-  if (selector && !new RegExp(`(?:^|[\\s{},;>])${escapeRegExp(selector)}\\s*[{,]`, "m").test(searchableCss(content))) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
+  // A quote opens the first rule of a packed string; lines are still counted in the file as written.
+  if (selector && !new RegExp(`(?:^|[\\s{},;>"'\`])${escapeRegExp(selector)}\\s*[{,]`, "m").test(searchableText(content))) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
     if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];
