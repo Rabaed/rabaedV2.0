@@ -3,10 +3,11 @@
 # Changed baselines: the "update-screenshots" label is the only way to ask for
 # them from a PR (or, once this file is on main, run
 #   gh workflow run update-screenshots.yml --ref <your-branch>
-# by hand). A push never starts a render (RP-1199). Before, a push started one
-# and the label another, and runs on the same PR cancelled each other; a baseline
-# commit could also land while the PR was being verified (#577). Now there is one
-# run per PR at a time (the concurrency group below), asked for on purpose.
+# by hand; that has no PR number, so it is keyed by the branch). A push never
+# starts a render (RP-1199). Before, a push started one and the label another,
+# and runs on the same PR cancelled each other; a baseline commit could also land
+# while the PR was being verified (#577). Now there is one label run per PR at a
+# time (the concurrency group below), asked for on purpose.
 # The render job re-renders every baseline and the commit job commits them.
 # The render job renders every story twice: a story whose two renders differ
 # keeps its old baseline, and the unstable job fails naming it (RP-569).
@@ -19,7 +20,7 @@
 # token: an ordinary push, which starts every pull_request workflow on the new
 # head. The reviewed label and the verify line carry over that one baseline
 # commit (scripts/reviewed-label.ts: `baselineBotPush`, which needs the push's
-# sender to be a bot, and `onlyCleanCommitsSince`). The push starts no render, so
+# sender to be a bot, and `onlyCleanCommitsSince`). A push starts no render, so
 # the bot's own commit never renders again.
 # The App: repository variable SCREENSHOTS_APP_CLIENT_ID and secret
 # SCREENSHOTS_APP_PRIVATE_KEY; the App has Contents read and write on this
@@ -36,6 +37,10 @@
 # changed look still fails CI until the label is added, and any other failure
 # uploads nothing. (CI runs on push only for main, so a PR branch's one CI run
 # per push is its pull_request run; RP-395.)
+# This path stays (RP-296), so a bot commit can still follow a push, in that one
+# case: after a failed CI run it adds baselines for NEW stories only. That does not
+# recreate #577: it never changes an existing baseline, so nothing a verify or a
+# review looked at moves under it.
 # A fork PR's run never reaches this path: find-new, which runs from main's
 # copy of this file, requires the run's head repository to be this repository
 # (a fork's pull_request run has the fork as its head repository). That is the
@@ -58,25 +63,38 @@ on:
     workflows: [CI]
     types: [completed]
 permissions: {}
-# One group per PR, shared by the label and the workflow_run path (RP-1199): the
-# PR's number, or the branch name where there is none (workflow_dispatch, a fork's
-# CI run, a CI run of main). A missing field is empty, not an error, so an empty
-# pull_requests array falls through to the branch.
+# Concurrency (RP-1199). The label and workflow_dispatch share the group
+# update-screenshots-<PR number, or the branch where there is none>; the
+# workflow_run path (new baselines) has its own, update-screenshots-new-<same key>.
 # cancel-in-progress stays false: the commit job may be mid-push, and cancelling it
 # would leave a baseline commit half done or never made. A second trigger waits
 # instead, and replaces any other waiting run: at most one running and one waiting.
-# A run that would do nothing (any label but update-screenshots; a CI run that did
-# not fail) gets a group of its own, so it can never replace a waiting run that
-# matters; the jobs below skip it.
+# That replacing is why there are two groups. A label run that is replaced never
+# reaches its unlabel job, so the label would stay on and the request for all
+# baselines would be lost. In the label's group only another label run can replace
+# a waiting one, and the last of those removes the label. The two groups are safe
+# together: the new-baselines run only adds PNGs that are missing (MODE new refuses
+# to overwrite one, so after a label run has committed them it just fails with
+# "already exist"), and a push to a branch that has moved is rejected, not forced.
+# A run that would do nothing (any label but update-screenshots; a CI run find-new
+# would skip, so the test below repeats find-new's conditions) gets a group of its
+# own, so it can never replace a waiting run that matters; the jobs below skip it.
+# A missing field is empty, not an error, so an empty pull_requests array falls
+# through to the branch.
 concurrency:
   group: >-
     update-screenshots-${{
     ((github.event_name == 'pull_request' && github.event.label.name != 'update-screenshots') ||
-    (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'failure'))
+    (github.event_name == 'workflow_run' && !(
+    github.event.workflow_run.conclusion == 'failure' &&
+    github.event.workflow_run.event == 'pull_request' &&
+    github.event.workflow_run.head_branch != 'main' &&
+    !startsWith(github.event.workflow_run.head_branch, 'gh-readonly-queue/') &&
+    github.event.workflow_run.head_repository.full_name == github.repository)))
     && format('skipped-{0}', github.run_id)
+    || github.event_name == 'workflow_run' && format('new-{0}',
+    github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_branch)
     || github.event.pull_request.number
-    || github.event.workflow_run.pull_requests[0].number
-    || github.event.workflow_run.head_branch
     || github.head_ref
     || github.ref_name }}
   cancel-in-progress: false
@@ -355,7 +373,7 @@ jobs:
           jq -r '.[]' <<< "$REFUSAL" | while IFS= read -r line; do
             echo "::error::${line//::/: :}"
           done
-          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then add the update-screenshots label again (a push starts no run)."
+          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then add the update-screenshots label again (a push starts no render)."
           exit 1
 
   unlabel:

@@ -27,7 +27,7 @@ interface Job {
 }
 interface Workflow {
   on: Record<string, { branches?: string[] } | null>;
-  concurrency: { group: string };
+  concurrency: { group: string; "cancel-in-progress"?: boolean };
   jobs: Record<string, Job>;
 }
 const repo = join(dirname(import.meta.filename), "..");
@@ -126,5 +126,36 @@ describe("update-screenshots.yml", () => {
   it("never commits to a queue branch", () => {
     expect(job(wf, "commit").if).toMatch(notQueueBranch);
     expect(step(job(wf, "commit"), "Commit changed baselines").run).toMatch(/gh-readonly-queue\/\*\)/);
+  });
+
+  // RP-1199: one run per PR, and a run that is mid-push is never cancelled.
+  describe("concurrency", () => {
+    const group = wf.concurrency.group;
+
+    it("never cancels a run in progress", () => {
+      expect(wf.concurrency["cancel-in-progress"]).toBe(false);
+    });
+
+    it("starts a render from a PR only on the label, never on a push", () => {
+      expect(wf.on.pull_request).toEqual({ types: ["labeled"] });
+      expect(wf.jobs["ui-changed"]).toBeUndefined();
+    });
+
+    it("gives a run that find-new would skip a group of its own, so it cannot replace a waiting run", () => {
+      expect(group).toContain("format('skipped-{0}', github.run_id)");
+      const findNew = job(wf, "find-new").if ?? "";
+      for (const condition of findNew.split(/\s*&&\s*/)) expect(group, condition).toContain(condition);
+      expect(group).toContain("github.event.label.name != 'update-screenshots'");
+    });
+
+    it("keeps the new-baselines run out of the label's group, so it can never replace a waiting label run", () => {
+      expect(group).toMatch(/github\.event_name == 'workflow_run' && format\('new-\{0\}', /);
+    });
+
+    it("keys the label and the new-baselines run by the PR number, else the branch", () => {
+      expect(group).toContain("github.event.pull_request.number");
+      expect(group).toContain("github.event.workflow_run.pull_requests[0].number");
+      expect(group).toContain("github.event.workflow_run.head_branch");
+    });
   });
 });
