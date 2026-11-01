@@ -12,6 +12,7 @@ import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
 import { acquireLock, liveHolder, lockFile, mainSlot, releaseLock, waitForLock, type LockHolder, type Processes } from "./verify-lock.ts";
 import { verifyOptions } from "./verify-options.ts";
+import { verifyOverlap } from "./verify-overlap.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
@@ -27,6 +28,7 @@ import { listWorktrees } from "./worktrees.ts";
 // first step when its Postgres doesn't answer; a seam step whose Postgres was
 // terminated mid-run ends on one line saying so (RP-994). A branch that mixes root
 // shared files with code gets a warning first and again above the last line (RP-993).
+// Open PRs that change the same files get a warning before the first step and above the last line (RP-1191); it never stops the run.
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
@@ -140,8 +142,10 @@ if (options.pr !== undefined && prBody) {
     stopEarly(`pnpm verify --pr ${options.pr}: could not read the PR's head: ${error instanceof Error ? error.message.trim() : String(error)}`);
   }
 }
-// Extension point (RP-1172): the open-PR overlap finder (scripts/check-claims.ts) can be called here, before the first
-// step, to print a warning with `out.error`; a warning only, it must not stop the run.
+// Open PRs that change this branch's files (RP-1191, scripts/verify-overlap.ts): a warning, here and again above the last
+// line, never a stop. A conflict with a PR that merges first voids the verify line this run is about to write.
+const overlapWarning = await verifyOverlap(root);
+if (overlapWarning) out.error(`${overlapWarning}\n`);
 // And the working tree (RP-1169): HEAD stays put under a merge --no-commit or the app's base-branch sync half-done.
 const git = systemGit(root);
 const fileHash = systemFileHash(root);
@@ -330,6 +334,7 @@ const sha = startedOn === "" ? "" : spawnSync("git", ["rev-parse", "--short", st
 const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
+if (overlapWarning) out.error(`\n${overlapWarning}`);
 const last = finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
 if (options.pr !== undefined && prBody) {
   // A full, clean run on the PR's head only (writeVerifyLine checks the stamp and the head again, the PR may have been pushed to meanwhile).
