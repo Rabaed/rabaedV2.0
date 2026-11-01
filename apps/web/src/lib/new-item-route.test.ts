@@ -1,20 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { newItemHref, projectTabOf } from "./new-item-route.ts";
+import { newItemHref, newPageWords, projectTabOf } from "./new-item-route.ts";
+
+describe("newPageWords", () => {
+  it("heads the Inspections' New page with New Inspection, never New Submittal, even for one who can't raise one (RP-1179)", () => {
+    expect(newPageWords("inspections")).toEqual({ heading: "newInspection", noType: "noRaisableInspection" });
+  });
+
+  it("keeps the Submittals' words for the Submittals and the Modules that have none of their own yet", () => {
+    expect(newPageWords("submittals")).toEqual({ heading: "newItem", noType: "noRaisableType" });
+    expect(newPageWords("snag_list")).toEqual({ heading: "newItem", noType: "noRaisableType" });
+  });
+});
 
 describe("projectTabOf", () => {
+  // The Project's Modules with a tab of their own.
+  const tabs = ["submittals", "inspections", "snag_list"] as const;
+
   it("is the tab whose page is open", () => {
-    expect(projectTabOf("p1", "/projects/p1", null)).toBe("dashboard");
-    expect(projectTabOf("p1", "/projects/p1/work-items", null)).toBe("submittals");
-    expect(projectTabOf("p1", "/projects/p1/inspections", null)).toBe("inspections");
-    expect(projectTabOf("p1", "/projects/p1/snag-list/new", null)).toBe("snag_list");
-    expect(projectTabOf("p1", "/projects/p1/settings/modules", null)).toBe("settings");
-    expect(projectTabOf("p1", "/projects", null)).toBeUndefined();
+    expect(projectTabOf("p1", "/projects/p1", null, tabs)).toBe("dashboard");
+    expect(projectTabOf("p1", "/projects/p1/work-items", null, tabs)).toBe("submittals");
+    expect(projectTabOf("p1", "/projects/p1/inspections", null, tabs)).toBe("inspections");
+    expect(projectTabOf("p1", "/projects/p1/snag-list/new", null, tabs)).toBe("snag_list");
+    expect(projectTabOf("p1", "/projects/p1/settings/modules", null, tabs)).toBe("settings");
+    expect(projectTabOf("p1", "/projects", null, tabs)).toBeUndefined();
   });
 
   it("is the Module the New page raises in: Inspections on New WIR, not Submittals (RP-1179)", () => {
-    expect(projectTabOf("p1", "/projects/p1/work-items/new", "inspections")).toBe("inspections");
-    expect(projectTabOf("p1", "/projects/p1/work-items/new", "snag_list")).toBe("snag_list");
-    expect(projectTabOf("p1", "/projects/p1/work-items/new", null)).toBe("submittals");
+    expect(projectTabOf("p1", "/projects/p1/work-items/new", "inspections", tabs)).toBe("inspections");
+    expect(projectTabOf("p1", "/projects/p1/work-items/new", "snag_list", tabs)).toBe("snag_list");
+    expect(projectTabOf("p1", "/projects/p1/work-items/new", null, tabs)).toBe("submittals");
   });
 
   it("is Submittals on New WIR when the Project shows Inspections in the Submittals tab (RP-652)", () => {
@@ -23,8 +37,8 @@ describe("projectTabOf", () => {
   });
 
   it("keeps Submittals for a Module the URL names wrongly, or on a page other than New", () => {
-    expect(projectTabOf("p1", "/projects/p1/work-items/new", "nonsense")).toBe("submittals");
-    expect(projectTabOf("p1", "/projects/p1/work-items/import", "inspections")).toBe("submittals");
+    expect(projectTabOf("p1", "/projects/p1/work-items/new", "nonsense", tabs)).toBe("submittals");
+    expect(projectTabOf("p1", "/projects/p1/work-items/import", "inspections", tabs)).toBe("submittals");
   });
 });
 

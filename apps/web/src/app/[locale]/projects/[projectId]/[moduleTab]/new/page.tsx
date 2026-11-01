@@ -14,7 +14,7 @@ import { getMe, getMyVisibility, getNewWorkItemForm, getRaisableTypes, getWorkIt
  * a reload reopens the same step; once the Draft is raised, its page. Another Module's tab
  * (`/inspections/new`) opens that Module's usual New page.
  */
-export default async function SnagPhoneNewPage({
+export default async function ModuleTabNewPage({
   params,
   searchParams,
 }: {

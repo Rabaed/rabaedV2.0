@@ -14,6 +14,11 @@ export function newItemHref(projectId: string, module: ModuleKey, type?: string)
   return `/projects/${projectId}/work-items/new${search ? `?${search}` : ""}`;
 }
 
+/** The New page's words (`workItems` message keys) for `module`: its heading, and why nothing can be raised. */
+export function newPageWords(module: ModuleKey): { heading: "newItem" | "newInspection"; noType: "noRaisableType" | "noRaisableInspection" } {
+  return module === "inspections" ? { heading: "newInspection", noType: "noRaisableInspection" } : { heading: "newItem", noType: "noRaisableType" };
+}
+
 /** Where each Project tab leads: a Module's tab at its Module's path (`moduleTabPaths`). */
 export function projectTabHref(projectId: string, key: ProjectTabKey): string {
   const base = `/projects/${projectId}`;
@@ -29,9 +34,9 @@ export function projectTabHref(projectId: string, key: ProjectTabKey): string {
  * A Module without a tab of its own (`modules`, the Modules with tabs: Inspections shown in the
  * Submittals tab, RP-652) raises under Submittals.
  */
-export function projectTabOf(projectId: string, pathname: string, moduleParam: string | null, modules?: readonly ModuleKey[]): ProjectTabKey | undefined {
+export function projectTabOf(projectId: string, pathname: string, moduleParam: string | null, modules: readonly ModuleKey[]): ProjectTabKey | undefined {
   const raisesIn = moduleKeySchema.safeParse(moduleParam).data;
-  if (raisesIn && pathname === newItemHref(projectId, "submittals")) return !modules || modules.includes(raisesIn) ? raisesIn : "submittals";
+  if (raisesIn && pathname === newItemHref(projectId, "submittals")) return modules.includes(raisesIn) ? raisesIn : "submittals";
   return [...projectTabKeys]
     .reverse()
     .find((key) => (key === "dashboard" ? pathname === projectTabHref(projectId, key) : pathname.startsWith(projectTabHref(projectId, key))));

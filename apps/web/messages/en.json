@@ -890,6 +890,7 @@
     "newItem": "New Submittal",
     "typePicker": "Type",
     "noRaisableType": "You can't raise a Submittal on this Project: no Submittal Type has a Workflow for your Participant.",
+    "noRaisableInspection": "You can't raise an Inspection on this Project: no Inspection Type has a Workflow for your Participant.",
     "addSubmittal": "Add Submittal",
     "newInspection": "New Inspection",
     "noNumber": "No number yet",
