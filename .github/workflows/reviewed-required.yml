@@ -4,7 +4,7 @@ name: Reviewed required
 # applies the same rule as `pnpm queue` (scripts/reviewed-required.ts), so a merge
 # started from GitHub cannot skip the /code-review either.
 # One job name, `reviewed-required`, on both events, so the merge queue runs it too.
-# The code it runs is the default branch's, never the pull request's. On a PR it
+# The code it runs is the default branch's, never the pull request's, and on a PR so is this file. On a PR it
 # first waits for the head's reviewed-label run: that run removes a stale label with
 # GITHUB_TOKEN, which starts no `unlabeled` run here.
 # A draft PR passes with a note (RP-1018: a check red until the final review woke
@@ -14,8 +14,14 @@ name: Reviewed required
 # issue events, and the check fails while GitHub auto-merge is on; turning auto-merge on
 # or off re-runs it.
 # The label must exist in the repository: gh label create docs-only.
+# pull_request_target: GitHub runs main's copy of this file for it (RP-1148 part A). On pull_request a PR ran
+# its own copy, so it could rewrite its own required check. Nothing of the PR is checked out or run here:
+# the job checks out the default branch and reads the PR through the API, with read-only permissions. A
+# fork's PR runs too, and the script judges it (only docs-only can pass it). Under merge_group GitHub runs
+# the merge commit's copy, which includes the PR's change; the script names the gate files a PR changes
+# on both events (a warning until GATE_PATHS_BLOCK in scripts/reviewed-required.ts is turned on).
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, auto_merge_enabled, auto_merge_disabled]
   merge_group:
 permissions: {}
