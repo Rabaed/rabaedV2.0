@@ -184,8 +184,9 @@ jobs:
       # The Engineer it acts as is the demo's, a fixed public address (DEMO_ENGINEER_EMAIL in
       # apps/api/src/demo/seed.ts, so not a secret); a real Engineer would need a new secret, as
       # a variable's value shows in this step's log header. The repository's logs and summaries
-      # are public: the tool prints counts and keys only, and masked() takes any URL or email
-      # out of what it prints as well. A refusal (such as projects_lack_entries), an Engineer who
+      # are public: the tool prints counts and keys only (its restraint is the main guard: it
+      # never prints an error's text), and masked() takes any URL or email out of what it prints
+      # as well. A refusal (such as projects_lack_entries), an Engineer who
       # is not active or any error fails the deploy here, before anything goes live; what was
       # published before it stays (each publish is its own transaction). `shell: bash` makes a
       # failure of the tool fail the pipe.
@@ -200,8 +201,12 @@ jobs:
         run: |
           masked() { sed -E -e 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#<url>#g' -e 's/[^[:space:]",:<>@]+@[^[:space:]",:<>@]+\.[^[:space:]",:<>@]+/<email>/g'; }
           echo "### Rabaed Defaults on UAT (\`${VERSION:0:7}\`)" >> "$GITHUB_STEP_SUMMARY"
-          if ! node scripts/uat-deploy.ts defaults 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"; then
-            echo "::error::The Rabaed Defaults were not all published (a refusal, a demo Engineer who is not active, or an error): UAT keeps its earlier Versions and nothing goes live. See the lines above."
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          node scripts/uat-deploy.ts defaults 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The Rabaed Defaults were not all published (a refusal, a demo Engineer who is not active, or an error). Versions published before it stay; nothing goes live. The tool's lines are above and in the step summary."
             exit 1
           fi
 
