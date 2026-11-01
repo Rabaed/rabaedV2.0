@@ -10,6 +10,8 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 //
 //   node scripts/uat-deploy.ts migrate            bootstrap and migrate UAT's database (session pooler)
 //   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
+//   node scripts/uat-deploy.ts defaults           publish the Rabaed Default Versions that differ, as the Engineer in
+//                                                 DEFAULTS_ENGINEER_EMAIL, with a reason naming VERSION; counts and keys only (RP-1205)
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
 //                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
 //   node scripts/uat-deploy.ts records-env        the Records container's secrets (APP_VERSION from VERSION), as NAME=VALUE lines (RP-1042)
@@ -130,6 +132,23 @@ export function commandEnv(env: NodeJS.ProcessEnv, { fileStore = false }: { file
     DATABASE_ADMIN_URL: session.admin,
     [ROLE_PASSWORDS_FLAG]: ROLE_PASSWORDS_ON_CREATE,
     [DEMO_FLAG]: DEMO_ON,
+  };
+}
+
+/**
+ * The environment of `defaults` (RP-1205): UAT's session-pooler connections as `commandEnv`
+ * gives them, without the demo's password, plus the Rabaed Engineer the publish acts as
+ * (`DEFAULTS_ENGINEER_EMAIL`, from the workflow) and a reason naming the deployed commit. The
+ * publish reads both from here, so neither is an argument or a line of the log.
+ */
+export function defaultsEnv(env: NodeJS.ProcessEnv, version: string): NodeJS.ProcessEnv {
+  if (!/^[0-9a-f]{7,64}$/.test(version)) throw new Error("VERSION must be a commit");
+  const child = commandEnv(env);
+  delete child.DEMO_PASSWORD;
+  return {
+    ...child,
+    DEFAULTS_ENGINEER_EMAIL: required(env, "DEFAULTS_ENGINEER_EMAIL"),
+    DEFAULTS_REASON: `Deploy ${version.slice(0, 7)}: the Rabaed Default Workflows, Forms and Screens (RP-1205)`,
   };
 }
 
@@ -349,6 +368,7 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
 export function pnpmCommand(command: string | undefined, argument?: string): string[] | undefined {
   if (command === "migrate") return ["--filter", "@rabaed/db", "run", "setup"];
   if (command === "app-role-check") return ["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"];
+  if (command === "defaults") return ["--filter", "@rabaed/admin", "run", "defaults:publish", "--ci"];
   if (command === "demo") {
     if (argument !== "ensure" && argument !== "reset") throw new Error("demo ensure|reset");
     return ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument];
@@ -359,7 +379,10 @@ export function pnpmCommand(command: string | undefined, argument?: string): str
 async function main([command, argument]: string[]): Promise<void> {
   const env = process.env;
   const pnpmArgs = pnpmCommand(command, argument);
-  if (pnpmArgs) return run("pnpm", pnpmArgs, commandEnv(env, { fileStore: command === "demo" }));
+  if (pnpmArgs) {
+    const childEnv = command === "defaults" ? defaultsEnv(env, required(env, "VERSION")) : commandEnv(env, { fileStore: command === "demo" });
+    return run("pnpm", pnpmArgs, childEnv);
+  }
   if (command === "project") {
     await applyProject(project(argument), env, required(env, "VERSION"));
     // A GitHub Actions notice: Admin is not behind Password Protection from this deploy.
@@ -369,7 +392,7 @@ async function main([command, argument]: string[]): Promise<void> {
   if (command === "bypass") return void process.stdout.write(`${await automationBypass(project(argument), env)}\n`);
   // Secrets on stdout, for `| flyctl secrets import` only: never into a log (RP-1042).
   if (command === "records-env") return void process.stdout.write(recordsSecretsImport(recordsContainerEnv(env, required(env, "VERSION"))));
-  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | demo ensure|reset | project <web|api|admin> | bypass admin | records-env");
+  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | defaults | demo ensure|reset | project <web|api|admin> | bypass admin | records-env");
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
