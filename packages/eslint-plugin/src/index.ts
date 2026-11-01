@@ -16,12 +16,13 @@ import {
 import { jsonNoDeadlineWords, jsonNoPluralPound } from "./json-rules.ts";
 import { noBufferSlice } from "./buffer-rules.ts";
 import { orderByTiebreaker } from "./order-rules.ts";
+import { noDisabledTests, noFocusedTests } from "./test-rules.ts";
 
 /**
  * Rabaed design guard rails (RP-199): design tokens only, logical (RTL-safe)
  * CSS only, and Step Age only (no deadline words), and no raw error messages in logs (RP-287).
  * Also "use client" on every component file that needs it, and no translations in @rabaed/ui (RP-362), and
- * Rabaed Admin runs the api's code only as the app role (RP-987), and no .slice() on a Buffer (RP-1025), and no sort ending on a timestamp, in Kysely or in SQL text (RP-1105). Wired up in eslint.config.js.
+ * Rabaed Admin runs the api's code only as the app role (RP-987), and no .slice() on a Buffer (RP-1025), and no sort ending on a timestamp, in Kysely or in SQL text (RP-1105), and no disabled or focused test (RP-1196). Wired up in eslint.config.js.
  */
 const plugin = {
   meta: { name: "@rabaed/eslint-plugin" },
@@ -46,6 +47,8 @@ const plugin = {
     "json-no-plural-pound": jsonNoPluralPound,
     "no-buffer-slice": noBufferSlice,
     "order-by-tiebreaker": orderByTiebreaker,
+    "no-disabled-tests": noDisabledTests,
+    "no-focused-tests": noFocusedTests,
   },
 };
 
