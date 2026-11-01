@@ -19,6 +19,9 @@ export const DOCKER_PROBE_TIMEOUT_MS = 12_000;
 /** What to tell whoever finds Docker not answering. Lanes never restart Docker Desktop (RP-1099). */
 export const DOCKER_NOT_ANSWERING = "Docker not answering: wait, don't restart it (RP-1099)";
 
+/** What to tell whoever finds Docker missing or not running: the fix is to start it, not to wait. */
+export const DOCKER_NOT_RUNNING = "Docker is not running: start Docker Desktop, then run this again";
+
 /** One docker call: its output, or why it failed. "timeout" is a hang; "missing" is no docker on PATH. */
 export type DockerRun = (args: string[], timeoutMs: number) => { ok: true; output: string } | { ok: false; reason: "timeout" | "missing" | "failed"; detail: string };
 
@@ -39,15 +42,25 @@ export const realDockerRun: DockerRun = (args, timeoutMs) => {
 
 /**
  * Runs `docker version` then `docker volume ls`, each with `timeoutMs`, and stops at the first that
- * fails. A hang, a timeout or any error gives the same message, DOCKER_NOT_ANSWERING; `kind` tells a
- * hang ("hang": no answer in time) from a Docker that answered with an error or is not installed ("down").
+ * fails. A hang (no answer in time, kind "hang") gets DOCKER_NOT_ANSWERING: wait, never restart. A Docker
+ * that answered with an error or is not installed (kind "down") gets DOCKER_NOT_RUNNING: start it.
  */
 export function probeDocker(run: DockerRun = realDockerRun, timeoutMs: number = DOCKER_PROBE_TIMEOUT_MS): DockerProbe {
   for (const args of [["version"], ["volume", "ls", "-q"]]) {
     const result = run(args, timeoutMs);
-    if (!result.ok) return { ok: false, kind: result.reason === "timeout" ? "hang" : "down", message: DOCKER_NOT_ANSWERING };
+    if (!result.ok) const hang = result.reason === "timeout";
+    return { ok: false, kind: hang ? "hang" : "down", message: hang ? DOCKER_NOT_ANSWERING : DOCKER_NOT_RUNNING };
   }
   return { ok: true };
+}
+
+/**
+ * The message to stop with, or undefined to go on. "hang" mode stops only on a hang (a down Docker is
+ * handled by the caller, as before the probe); "any" mode stops on both.
+ */
+export function dockerStop(probe: DockerProbe, mode: "hang" | "any"): string | undefined {
+  if (probe.ok) return undefined;
+  return probe.kind === "hang" || mode === "any" ? probe.message : undefined;
 }
 
 if (import.meta.main) {

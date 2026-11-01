@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOCKER_NOT_ANSWERING, DOCKER_PROBE_TIMEOUT_MS, probeDocker, realDockerRun, type DockerRun } from "./docker-probe.ts";
+import { DOCKER_NOT_ANSWERING, DOCKER_NOT_RUNNING, DOCKER_PROBE_TIMEOUT_MS, dockerStop, probeDocker, realDockerRun, type DockerRun } from "./docker-probe.ts";
 
 /** A runner that answers per command line, and records every call. */
 const answering = (answers: Record<string, ReturnType<DockerRun>>) => {
@@ -35,11 +35,30 @@ describe("probeDocker", () => {
     expect(probeDocker(run)).toEqual({ ok: false, kind: "hang", message: DOCKER_NOT_ANSWERING });
   });
 
-  it("gives the same message for an error or a missing docker, as kind down", () => {
+  it("gives a missing or erroring docker its own message, as kind down, not the wait-don't-restart one", () => {
     for (const reason of ["failed", "missing"] as const) {
       const { run } = answering({ version: { ok: false, reason, detail: "Cannot connect to the Docker daemon" } });
-      expect(probeDocker(run)).toEqual({ ok: false, kind: "down", message: DOCKER_NOT_ANSWERING });
+      expect(probeDocker(run)).toEqual({ ok: false, kind: "down", message: DOCKER_NOT_RUNNING });
     }
+    expect(DOCKER_NOT_RUNNING).toBe("Docker is not running: start Docker Desktop, then run this again");
+    expect(DOCKER_NOT_RUNNING).not.toContain("don't restart");
+  });
+});
+
+describe("dockerStop", () => {
+  const hang = { ok: false, kind: "hang", message: DOCKER_NOT_ANSWERING } as const;
+  const down = { ok: false, kind: "down", message: DOCKER_NOT_RUNNING } as const;
+  it("never stops a healthy probe", () => {
+    expect(dockerStop({ ok: true }, "hang")).toBeUndefined();
+    expect(dockerStop({ ok: true }, "any")).toBeUndefined();
+  });
+  it("stops a hang in both modes, with the wait message", () => {
+    expect(dockerStop(hang, "hang")).toBe(DOCKER_NOT_ANSWERING);
+    expect(dockerStop(hang, "any")).toBe(DOCKER_NOT_ANSWERING);
+  });
+  it("stops a Docker that is down only in 'any' mode, with the start message", () => {
+    expect(dockerStop(down, "hang")).toBeUndefined();
+    expect(dockerStop(down, "any")).toBe(DOCKER_NOT_RUNNING);
   });
 });
 

@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
-import { probeDocker } from "./docker-probe.ts";
+import { dockerStop, probeDocker } from "./docker-probe.ts";
 import { composeProjectOfEnv, envValue, readWorktreeEnv } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { samePath } from "./paths.ts";
@@ -64,7 +64,8 @@ function stopEarly(message: string, code = 1): never {
 
 // RP-1197: Docker not answering stops the run here, before it queues for the lock, so a jammed Docker never holds a place in line (RP-1099).
 const dockerProbe = probeDocker();
-if (!dockerProbe.ok) stopEarly(dockerProbe.message);
+const dockerStopped = dockerStop(dockerProbe, "any");
+if (dockerStopped !== undefined) stopEarly(dockerStopped);
 
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
@@ -99,7 +100,7 @@ const merging = mergeRefusal(readMergeState(root), "pnpm verify");
 if (merging !== undefined) stopEarly(merging);
 
 // Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
-// showed only at `pnpm line`, by the same rule, after the whole branch was built. A warning,
+// showed only at `pnpm queue`, by the same rule, after the whole branch was built. A warning,
 // said again above the last line, not a stop: a feature branch may build on a dependencies-only
 // PR that has not merged yet.
 let mix: string[] | undefined;
@@ -109,8 +110,8 @@ try {
   stopEarly(error instanceof Error ? error.message : String(error));
 }
 const mixWarning = mix && [
-  // eslint-disable-next-line rabaed/no-avoid-terms -- git's changed files and `pnpm line` (GitHub's merge line), by their own names.
-  "Warning: this branch changes root shared file(s) together with other files against origin/main, so `pnpm line` will refuse it (planning/parallel-sessions.md rule 3):",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- git's changed files and `pnpm queue` (GitHub's merge queue), by their own names.
+  "Warning: this branch changes root shared file(s) together with other files against origin/main, so `pnpm queue` will refuse it (planning/parallel-sessions.md rule 3):",
   ...mix,
   "(Against an old origin/main, main's own changes count too: `git fetch origin main` first.)",
 ].join("\n");

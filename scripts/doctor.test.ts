@@ -173,6 +173,12 @@ describe("runChecks docker daemon (RP-1197)", () => {
     expect(check).toMatchObject({ ok: false, message: "Docker not answering: wait, don't restart it (RP-1099)" });
     expect(exitCodeOf(checks)).toBe(1);
   });
+
+  it("fails with the start-Docker message when Docker is not running", () => {
+    const checks = withProbe(() => ({ ok: false, kind: "down", message: "Docker is not running: start Docker Desktop, then run this again" }));
+    expect(checks.find((c) => c.name === "docker daemon")).toMatchObject({ ok: false, message: "Docker is not running: start Docker Desktop, then run this again" });
+    expect(exitCodeOf(checks)).toBe(1);
+  });
 });
 
 describe("lineAndColumn", () => {
