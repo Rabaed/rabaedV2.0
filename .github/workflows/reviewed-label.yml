@@ -9,8 +9,11 @@ name: Reviewed label
 # The label itself must exist in the repository: gh label create reviewed.
 # It also runs when a PR opens or reopens (RP-604), so every head has a run for
 # `pnpm queue` to wait for, even a PR that was never pushed to after opening.
+# pull_request_target: GitHub runs main's copy of this file for it (RP-1148 part A). On pull_request a PR
+# ran its own copy, so it could keep a stale `reviewed` after pushing unreviewed code. The job checks out
+# only the default branch and fetches the PR's commits as data; its write token never meets a fork's PR.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
 permissions: {}
 jobs:
