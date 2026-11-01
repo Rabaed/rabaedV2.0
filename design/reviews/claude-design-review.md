@@ -139,7 +139,7 @@ Allowed and correct: "Missing" day and "Add it late / إضافته متأخرً�
 10. **Thmanyah licence** (`assets/fonts/thmanyah/LICENSE.pdf`, read in full):
     - It allows commercial use in websites and apps. It allows embedding "only as part of a compiled, packaged, or obfuscated product".
     - It **prohibits** uploading, hosting or making the fonts available on any server. It also prohibits making them extractable by end users "including through web embedding". Modification is prohibited.
-    - Governed by KSA law; contact ask@thmanyah.test.
+    - Governed by KSA law; the foundry's contact address is in the licence.
     - Plain `@font-face` `.woff2` files served by a web app (`tokens/thmanyah.css`) are downloadable. Storing them in Claude Design or the repo may also count as "upload/host".
     - Before shipping, get written permission from Thmanyah, or fall back to IBM Plex Sans Arabic.
 11. **Components.** The React primitives in `components/` (15) aren't used by the ui-kit screens, which are vanilla string templates. Table, Drawer, Modal, Popover, StagePill, CodeBadge, AgeDots, Pin, EmptyState, FilterPanel and ViewAs are missing as components.
