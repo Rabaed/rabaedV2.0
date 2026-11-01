@@ -78,9 +78,9 @@ let failed = 0;
 for (const o of toDrop) {
   for (const name of o.drop) {
     try {
-      const no = dropDatabase(o.db, name);
-      if (no !== undefined) {
-        console.log(no.refused);
+      const refusal = dropDatabase(o.db, name);
+      if (refusal !== undefined) {
+        console.log(refusal.refused);
         continue;
       }
       console.log(`Dropped ${name} in ${o.container}.`);

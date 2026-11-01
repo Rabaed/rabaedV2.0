@@ -13,7 +13,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { holdReason, systemHolders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, laneOfProject, protectedLaneReason, readWorktreeEnv } from "./lanes.ts";
+import { freeableLane, laneOfProject, projectOfFolder } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
 import { currentRoot, gitChanges, listWorktrees, unlessMergesOnly, unpushedCount } from "./worktrees.ts";
@@ -51,7 +51,7 @@ const target: RemoveTarget = {
   changes: readable ? attempt(() => gitChanges(path)) : undefined,
   // RP-1198: merges of origin/main only are not unpushed work, so a branch that only merged main in needs no --force.
   unpushed: readable && registered ? attempt(() => unlessMergesOnly(unpushedCount(registered.head, mainRoot), registered.head, mainRoot)) : undefined,
-  project: exists ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined,
+  project: exists ? projectOfFolder(path) : undefined,
   held: holdReason(path, systemHolders()),
 };
 const refused = removalRefusal(target, { force });
@@ -74,7 +74,7 @@ if (registered?.branch) console.log(`Branch ${registered.branch} kept: \`git bra
 if (target.project) {
   // RP-1198: the real lane, never a placeholder; lane 7's (never freed) and a non-lane project get no command.
   const lane = laneOfProject(target.project);
-  const free = lane === undefined || protectedLaneReason(target.project) !== undefined ? "`pnpm lanes:prune --stale` lists it" : `\`pnpm lanes:prune --lane ${lane}\` frees it`;
+  const free = freeableLane(lane) ? `\`pnpm lanes:prune --lane ${lane}\` frees it` : "`pnpm lanes:prune --stale` lists it";
   console.log(`Compose project ${target.project} kept: ${free}.`);
 }
 if (!removed) {

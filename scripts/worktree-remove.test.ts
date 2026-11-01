@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // `pnpm worktree:remove` itself, on a clone of a throwaway origin (RP-1198): main-2-signing-days was refused
-// for 2 "unpushed" commits that were only merges of main, so the owner needed --force.
+// for 2 "unpushed" commits that were only merges of main, so it took --force.
 const script = resolve(import.meta.dirname, "worktree-remove.ts");
 const slow = 120_000;
 

@@ -752,7 +752,7 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     });
   });
 
-  // RP-1198, owner's answer 1: outside .claude/worktrees only git's own remove, without --force, of a worktree git lists.
+  // RP-1198 comment 15382, point 1: outside .claude/worktrees only git's own remove, without --force, of a worktree git lists.
   it("removes a clean worktree outside .claude/worktrees with git's remove (no --force), and its merged branch; refuses the main checkout", () => {
     const dir = join(tmp, "RP 5 done");
     run(["worktree", "add", "-b", "RP-5-done", dir]);

@@ -55,7 +55,7 @@ import { existsSync } from "node:fs";
 import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
+import { listContainers, listVolumes, projectOfFolder, readProjectNow, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { chooseStoriesVolumes, describeCount, inUseLine, listVolumeMounts, removeStoriesVolumesNow, storiesSets, storiesVolumesIn } from "./stories-volumes.ts";
@@ -132,11 +132,11 @@ const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
     // RP-1198: merges of origin/main only are not unpushed work (gatherFacts' ahead leaves them out too).
     unpushed: unlessMergesOnly(unpushedCount(w.head, mainRoot), w.head, mainRoot, TARGET),
-    project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
+    project: projectOfFolder(w.path),
   }));
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
-const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readWorktreeEnv(here) ?? "") };
+const docker = containers && { containers, volumes: listVolumes(), currentProject: projectOfFolder(here) };
 const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, holders: live.holders });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;

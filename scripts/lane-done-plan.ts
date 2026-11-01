@@ -192,7 +192,7 @@ export function decideLaneDone({ pr, lane, candidates, claims, containers, volum
     for (const c of own) {
       // RP-1198: the lanes whose containers come from its folder, so the command has a real number (never 7's).
       const lanes = [...new Set(containers.filter((x) => samePath(x.workingDir, c.path, platform)).map((x) => laneOfProject(x.project)))]
-        .filter((n): n is number => n !== undefined && protectedLaneReason(laneProject(n)) === undefined)
+        .filter(freeableLane)
         .sort((a, b) => a - b);
       remarks.push(
         lanes.length === 0

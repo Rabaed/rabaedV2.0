@@ -111,8 +111,8 @@ export function removeWorktreeFolder(t: RemoveTarget, { run, rd = rdLongPath, ex
     if (exists(t.path)) {
       if (platform === "win32")
         step("rd /s /q", () => {
-          const no = rd(t.path);
-          if (no) throw Object.assign(new Error(no.refused), { stderr: no.refused });
+          const rdRefusal = rd(t.path);
+          if (rdRefusal) throw Object.assign(new Error(rdRefusal.refused), { stderr: rdRefusal.refused });
         });
       else step("rm -rf", () => run("rm", ["-rf", t.path]));
     }

@@ -5,8 +5,8 @@ import { findNonPlainImports, formatChain } from "./import-graph.ts";
 
 // The clean-up tools must run with plain `node` and no installed packages (RP-1198, item 6).
 // A Main's recovery worktree had no node_modules, so it cleaned up by hand with `rd` and
-// skipped the tools' safety checks. No CI job runs them without an install (the owner's
-// decision): this walks their import graph instead, and fails on any import that is not a
+// skipped the tools' safety checks. No CI job runs them without an install (RP-1198
+// comment 15382, point 4): this walks their import graph instead, and fails on any import that is not a
 // Node builtin or a relative .ts script.
 //
 // The first three are the tools named in the ticket. The next three reach a package the same

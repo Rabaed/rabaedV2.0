@@ -1,5 +1,5 @@
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import { laneProject, protectedLaneReason, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
+import { freeableLane, laneProject, protectedLaneReason, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
 
 // RP-1101: the guards worktrees:prune and lanes:prune share, after 2026-10-29's prunes removed
 // live work. A session working in a stale project's folder keeps it; lane 7 (Main 7's harness
@@ -32,7 +32,7 @@ export const laneRefusal = (lane: number | undefined): string | undefined => {
  */
 export const bareMergedYesRefusal = (options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number; ownLane?: number | undefined }): string | undefined => {
   if (!(options.merged && options.yes && !options.dryRun && options.lane === undefined)) return undefined;
-  const own = options.ownLane !== undefined && protectedLaneReason(laneProject(options.ownLane)) === undefined ? options.ownLane : undefined;
+  const own = freeableLane(options.ownLane) ? options.ownLane : undefined;
   const instead =
     own === undefined
       ? "Add `--lane` with your lane's number (`pnpm lanes:prune --stale` lists the stacks), or drop `--yes` to see the list and confirm."

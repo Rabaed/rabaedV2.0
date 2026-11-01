@@ -1,7 +1,8 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { veraPdfSessionArgs, veraPdfWorktreeHash } from "../apps/worker/src/record/verapdf.ts";
-import { chooseVeraPdfContainers, parseVeraPdfContainers, protectedHashes } from "./verapdf-containers.ts";
+import { protectedHashes } from "./stories-volumes.ts";
+import { chooseVeraPdfContainers, parseVeraPdfContainers } from "./verapdf-containers.ts";
 import { worktreeHash } from "./stories-hash.ts";
 
 describe("the worker's session containers (RP-1122)", () => {
@@ -42,7 +43,7 @@ describe("chooseVeraPdfContainers", () => {
     expect(remove.map((c) => c.name)).toEqual(["rabaed-verapdf-0a1b2c3d-4312-0", "rabaed-verapdf-9f8e7d6c-77-0"]);
     expect(kept).toEqual([
       { what: "rabaed-verapdf-0a1b2c3d-5100-1", reason: "its test process (pid 5100) still runs" },
-      { what: "someone-renamed-it", reason: "no pid after rabaed-verapdf-<hash>- (renamed?), so whether its test still runs is not known" },
+      { what: "someone-renamed-it", reason: "no pid after its worktree hash (renamed?), so whether its test still runs is not known" },
     ]);
   });
 

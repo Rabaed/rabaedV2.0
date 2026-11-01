@@ -53,7 +53,6 @@ import {
 } from "./lane-done-plan.ts";
 import {
   claimOf,
-  composeProjectOfEnv,
   envClaims,
   laneOfProject,
   laneProject,
@@ -61,6 +60,7 @@ import {
   listVolumes,
   projectInUseNow,
   readProjectNow,
+  projectOfFolder,
   readWorktreeEnv,
   removeProject,
   type Volume,
@@ -98,7 +98,6 @@ if ("error" in parsed) {
 const { force, yes, dryRun } = parsed;
 stopIfBehindOrigin("pnpm lane:done");
 const here = currentRoot();
-const projectOf = (path: string) => (existsSync(path) ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined);
 
 // RP-1198: no number. The current branch's merged PR, or else a list of the merged PRs left here (lane-done-plan.ts startWithoutNumber).
 const listed = listWorktrees();
@@ -108,7 +107,7 @@ const start =
     : startWithoutNumber({
         currentBranch: listed.find((w) => samePath(w.path, here))?.branch,
         gh: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
-        worktrees: () => listed.map((w) => ({ path: w.path, branch: w.branch, head: w.head, project: projectOf(w.path) })),
+        worktrees: () => listed.map((w) => ({ path: w.path, branch: w.branch, head: w.head, project: projectOfFolder(w.path) })),
         mainRoot: listed[0]!.path,
         stacks: () => {
           try {
@@ -159,10 +158,10 @@ const live = systemLiveness();
 const worktrees = listWorktrees(mainRoot);
 const onPrBranch = (w: Worktree) => w.branch === pr.headRefName || (w.branch === undefined && w.head === pr.headRefOid);
 const lanes = worktrees.filter(onPrBranch);
-const laneNumber = parsed.lane ?? lanes.map((w) => laneOfProject(projectOf(w.path) ?? "")).find((n) => n !== undefined);
-const agents = laneNumber === undefined ? [] : worktrees.filter((w) => !onPrBranch(w) && isAgentWorktree(w.path, mainRoot) && projectOf(w.path) === laneProject(laneNumber));
+const laneNumber = parsed.lane ?? lanes.map((w) => laneOfProject(projectOfFolder(w.path) ?? "")).find((n) => n !== undefined);
+const agents = laneNumber === undefined ? [] : worktrees.filter((w) => !onPrBranch(w) && isAgentWorktree(w.path, mainRoot) && projectOfFolder(w.path) === laneProject(laneNumber));
 // A subagent worktree whose .env names no lane cannot be told apart from another lane's: named, left to worktrees:clean.
-const unattributed = worktrees.filter((w) => isAgentWorktree(w.path, mainRoot) && existsSync(w.path) && projectOf(w.path) === undefined).length;
+const unattributed = worktrees.filter((w) => isAgentWorktree(w.path, mainRoot) && existsSync(w.path) && projectOfFolder(w.path) === undefined).length;
 const candidates: Candidate[] = [...lanes.map((w) => facts(w, "lane")), ...agents.map((w) => facts(w, "agent"))];
 const isCandidate = (path: string) => candidates.some((c) => samePath(c.path, path));
 const claims = envClaims(
@@ -186,7 +185,7 @@ const decision = decideLaneDone({
   claims,
   containers: containers ?? [],
   volumes: volumes ?? [],
-  currentProject: projectOf(here),
+  currentProject: projectOfFolder(here),
   volumesKeptBecause,
   force,
   exists: existsSync,
@@ -256,7 +255,7 @@ for (const c of decision.remove) {
     // Rule 3 found every change of a subagent's branch in origin/main, so its commits, never pushed, lose nothing.
     // RP-1198: a lane's merges of origin/main only are not unpushed work.
     unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unlessMergesOnly(unpushedCount(registered.head, mainRoot), registered.head, mainRoot, TARGET)) : undefined,
-    project: exists ? projectOf(c.path) : c.project,
+    project: exists ? projectOfFolder(c.path) : c.project,
     held: holdReason(c.path, systemHolders(), { sinceListed: true }),
   };
   // `pnpm worktree:remove`'s own refusals, last: never the main checkout, the current worktree, a held one,
@@ -349,7 +348,7 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
     locked: w.locked,
     ownChanges: paths?.changed.length,
     changes: !exists ? [] : readable ? attempt(() => gitChanges(w.path)) : undefined,
-    project: projectOf(w.path),
+    project: projectOfFolder(w.path),
     onPr: pr.commits.includes(w.head) || isAncestor(pr.headRefOid, w.head, mainRoot),
     ahead: Number.isInteger(ahead) ? ahead : undefined,
     filesNotInMain: paths?.notInTarget,

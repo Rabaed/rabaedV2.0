@@ -17,7 +17,7 @@
 // the main checkout (guardedHashes, read from git and the disk here).
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { composeProjectOfEnv, protectedLaneReason, readWorktreeEnv, sleepSync } from "./lanes.ts";
+import { projectOfFolder, protectedLaneReason, sleepSync } from "./lanes.ts";
 import { isRefused, type Refused } from "./removal-guard.ts";
 import { STORIES_VOLUME_PREFIX, worktreeHash } from "./stories-hash.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
@@ -61,21 +61,27 @@ export function protectedHashes(worktrees: { path: string; project: string | und
 export function guardedHashes(clone: string = process.cwd(), platform: NodeJS.Platform = process.platform): Map<string, string> {
   const listed = listWorktrees(clone);
   const hashes = protectedHashes(
-    listed.filter((w) => existsSync(w.path)).map((w) => ({ path: w.path, project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") })),
+    listed.filter((w) => existsSync(w.path)).map((w) => ({ path: w.path, project: projectOfFolder(w.path) })),
     platform,
   );
   for (const spelling of pathSpellings(listed[0]?.path ?? "", platform)) if (spelling !== "") hashes.set(worktreeHash(spelling), "it is the main checkout's");
   return hashes;
 }
 
-/** Why none of the volumes may go (one is of a guarded worktree), or undefined; a clone git cannot list refuses them all. */
-function guardedRefusal(volumes: string[], guarded: () => Map<string, string>): string | undefined {
-  let hashes: Map<string, string>;
+/**
+ * The guarded hashes (guardedHashes), or why nothing may be removed: the worktrees could not be listed. The one
+ * refusal the stories and veraPDF removers share (review T3); `notRemoved` opens it ("No stories volume removed").
+ */
+export function readGuarded(guarded: () => Map<string, string>, notRemoved: string): Map<string, string> | Refused {
   try {
-    hashes = guarded();
+    return guarded();
   } catch (error) {
-    return `No stories volume removed: the worktrees could not be listed (${(error as Error).message}), so lane 7's and the main checkout's are not known.`;
+    return { refused: `${notRemoved}: the worktrees could not be listed (${(error as Error).message}), so lane 7's and the main checkout's are not known.` };
   }
+}
+
+/** Why none of the volumes may go (one is of a guarded worktree), or undefined. */
+function guardedRefusal(volumes: string[], hashes: Map<string, string>): string | undefined {
   const kept = volumes.flatMap((v) => {
     const why = hashes.get(storiesHashOf(v) ?? "");
     return why === undefined ? [] : [`${v}: ${why}`];
@@ -159,20 +165,20 @@ export function parseVolumeMounts(out: string): Map<string, string[]> {
 }
 
 /** notTried: the volumes left once Docker stopped answering (RP-1170), never asked. */
-export type VolumeRemoval = { removed: string[]; refused: { volume: string; reason: string }[]; notTried?: string[] };
+export type VolumeRemoval = { removed: string[]; refusedVolumes: { volume: string; reason: string }[]; notTried?: string[] };
 
 /** Splits `docker volume rm` output: the names it printed went; the rest stay, with Docker's reason. */
 export function parseRemoval(asked: string[], stdout: string, stderr: string): VolumeRemoval {
   const printed = new Set(stdout.split(/\r?\n/).map((l) => l.trim()));
   const errors = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
   const removed = asked.filter((v) => printed.has(v));
-  const refused = asked
+  const refusedVolumes = asked
     .filter((v) => !printed.has(v))
     .map((volume) => {
       const named = errors.map((l) => new RegExp(`remove ${volume}: (.+)$`).exec(l)?.[1]).find((r) => r !== undefined);
       return { volume, reason: named ?? errors[0] ?? "not removed" };
     });
-  return { removed, refused };
+  return { removed, refusedVolumes };
 }
 
 /** A stuck Docker must not hang a clean-up: a listing waits this long at most, a removal of one set twice that. */
@@ -210,7 +216,8 @@ export function listVolumeMounts(): Map<string, string[]> | undefined {
 export interface StoriesDocker {
   list(): string[] | undefined;
   mountedBy(): Map<string, string[]> | undefined;
-  remove(volumes: string[]): VolumeRemoval;
+  /** Removes them; guarded: the hashes removeStoriesVolumesNow read, so they are not read again. */
+  remove(volumes: string[], guarded: Map<string, string>): VolumeRemoval;
   /** Why no volume may be removed now (RP-1170: a verify runs anywhere on the machine), or undefined; none when absent. */
   busy?(): string | undefined;
   /** The worktree hashes never removed (guardedHashes of this clone, RP-1198). */
@@ -220,10 +227,9 @@ export interface StoriesDocker {
 const realDocker: StoriesDocker = {
   list: listStoriesVolumes,
   mountedBy: listVolumeMounts,
-  remove: (volumes) => {
-    const removal = removeStoriesVolumes(volumes);
-    // A VolumeRemoval has a `refused` list too: isRefused tells the helper's own refusal (a string) apart.
-    return isRefused(removal) ? { removed: [], refused: volumes.map((volume) => ({ volume, reason: removal.refused })) } : removal;
+  remove: (volumes, guarded) => {
+    const removal = removeStoriesVolumes(volumes, { guarded });
+    return isRefused(removal) ? { removed: [], refusedVolumes: volumes.map((volume) => ({ volume, reason: removal.refused })) } : removal;
   },
   busy: () => volumesKeptReason(verifiesRunningNow()),
   guarded: () => guardedHashes(),
@@ -251,11 +257,15 @@ export function removeStoriesVolumesNow(
   const { remove, inUse } = chooseStoriesVolumes({ ...scope, volumes, existing, mountedBy, platform });
   const kept = inUse.map((v) => `Kept stories volume ${v.volume}: used by ${v.containers.join(", ")}.`);
   if (remove.length === 0) return { removed: [], kept, errors: [] };
-  const never = guardedRefusal(remove, () => docker.guarded());
-  if (never !== undefined) return { removed: [], kept: [...kept, never], errors: [], refused: never };
-  const { removed, refused, notTried = [] } = docker.remove(remove);
+  // Read once (review T3): the removal below is handed the same hashes.
+  const hashes = readGuarded(() => docker.guarded(), "No stories volume removed");
+  const refusal = (why: string) => ({ removed: [], kept: [...kept, why], errors: [], refused: why });
+  if (isRefused(hashes)) return refusal(hashes.refused);
+  const guardedWhy = guardedRefusal(remove, hashes);
+  if (guardedWhy !== undefined) return refusal(guardedWhy);
+  const { removed, refusedVolumes, notTried = [] } = docker.remove(remove, hashes);
   const errors: string[] = [];
-  for (const r of refused) {
+  for (const r of refusedVolumes) {
     if (/in use/i.test(r.reason)) kept.push(`Kept stories volume ${r.volume}: ${r.reason}.`);
     else errors.push(`Could not remove stories volume ${r.volume}: ${r.reason}`);
   }
@@ -278,9 +288,11 @@ export function removeStoriesVolumes(
   volumes: string[],
   { run = (args) => docker(args, 2 * LIST_TIMEOUT_MS), wait = sleepSync, guarded }: { run?: (args: string[]) => string; wait?: (ms: number) => void; guarded?: Map<string, string> } = {},
 ): VolumeRemoval | Refused {
-  const refused = guardedRefusal(volumes, () => guarded ?? guardedHashes());
+  const hashes = readGuarded(() => guarded ?? guardedHashes(), "No stories volume removed");
+  if (isRefused(hashes)) return hashes;
+  const refused = guardedRefusal(volumes, hashes);
   if (refused !== undefined) return { refused };
-  const result: VolumeRemoval = { removed: [], refused: [], notTried: [] };
+  const result: VolumeRemoval = { removed: [], refusedVolumes: [], notTried: [] };
   const sets = storiesSets(volumes);
   for (const [i, set] of sets.entries()) {
     if (i > 0) wait(SET_PAUSE_MS);
@@ -289,7 +301,7 @@ export function removeStoriesVolumes(
       removal = parseRemoval(set.volumes, run(["volume", "rm", ...set.volumes]), "");
     } catch (error) {
       if (timedOut(error)) {
-        result.refused.push(...set.volumes.map((volume) => ({ volume, reason: `Docker did not answer (${(error as Error).message})` })));
+        result.refusedVolumes.push(...set.volumes.map((volume) => ({ volume, reason: `Docker did not answer (${(error as Error).message})` })));
         result.notTried!.push(...sets.slice(i + 1).flatMap((s) => s.volumes));
         break;
       }
@@ -297,7 +309,7 @@ export function removeStoriesVolumes(
       removal = parseRemoval(set.volumes, e.stdout ?? "", e.stderr || e.message || "");
     }
     result.removed.push(...removal.removed);
-    result.refused.push(...removal.refused);
+    result.refusedVolumes.push(...removal.refusedVolumes);
   }
   return result;
 }

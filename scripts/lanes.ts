@@ -4,6 +4,7 @@ import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import { holdReason, type Holders } from "./claude-sessions.ts";
 import { isMainCheckout, samePath } from "./paths.ts";
+import type { Refused } from "./removal-guard.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
@@ -270,6 +271,9 @@ export const envValue = (env: string, key: string): string | undefined =>
 
 /** COMPOSE_PROJECT_NAME in an .env file's text; the value may be quoted. */
 export const composeProjectOfEnv = (env: string): string | undefined => envValue(env, "COMPOSE_PROJECT_NAME");
+
+/** A folder's compose project, by its own .env; undefined when it has none, or the folder is gone. */
+export const projectOfFolder = (path: string): string | undefined => composeProjectOfEnv(readWorktreeEnv(path) ?? "");
 
 /** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
 export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
@@ -636,7 +640,7 @@ export function clashesAfterRemoval(n: number, input: ClashInput, removed: Conta
  * containers are removed and which are not. RP-1198: refuses them all, removing none, when one is lane 7's
  * or the main checkout's (keptStackReason, or a container the main checkout's folder started: its .git is a directory).
  */
-export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): { refused: string } | undefined {
+export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): Refused | undefined {
   const kept = containers.flatMap((c) => {
     const why = keptStackReason(c.project) ?? (c.workingDir !== "" && isMainCheckout(c.workingDir) ? `the main checkout (${c.workingDir}) started it` : undefined);
     return why === undefined ? [] : [`${c.name}: ${why}`];
@@ -819,10 +823,10 @@ const KILL_PAUSE_MS = 5000;
 export function removeProject(
   stale: StaleProject,
   { keepVolumes = false, volumesKeptBecause, run = docker, wait = sleepSync }: RemoveProjectOptions,
-): { volumesKept: string | undefined } | { refused: string } {
+): { volumesKept: string | undefined } | Refused {
   // Every caller already keeps lane 7 (RP-1101); refused here too, so no future one can reach it.
-  const never = keptStackReason(stale.project);
-  if (never !== undefined) return { refused: `${stale.project} not removed: ${never}.` };
+  const keptStack = keptStackReason(stale.project);
+  if (keptStack !== undefined) return { refused: `${stale.project} not removed: ${keptStack}.` };
   const kept = keepVolumes ? "asked to keep them" : volumesKeptBecause();
   keepVolumes = kept !== undefined;
   const removed: string[] = [];
@@ -897,11 +901,11 @@ export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): st
  * any name that is not a per-worktree one (rabaed_<suffix>, its _test and _test_reset), such as the main
  * checkout's rabaed and rabaed_test.
  */
-export function dropDatabase(db: Container, name: string, run: (container: string, sql: string) => string[] = psql): { refused: string } | undefined {
+export function dropDatabase(db: Container, name: string, run: (container: string, sql: string) => string[] = psql): Refused | undefined {
   const harness = protectedLaneReason(db.project);
   if (harness !== undefined) return { refused: `${name} in ${db.name} not dropped: ${harness}.` };
   const m = SUFFIXED_DB.exec(name);
-  if (m === null || m[1] === "test") return { refused: `${name} in ${db.name} not dropped: only a worktree's own rabaed_<suffix> databases are, never the main checkout's rabaed or rabaed_test.` };
+  if (m === null || m[1] === "test") return { refused: `${name} in ${db.name} not dropped: it is not a per-worktree database name (lane:env --db makes those), and the main checkout's rabaed and rabaed_test are never dropped.` };
   run(db.name, `drop database "${name}"`);
   return undefined;
 }

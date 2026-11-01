@@ -14,10 +14,8 @@
 // RP-1198: removeVeraPdfContainer refuses on its own, before any Docker call, a container of lane 7's worktree
 // or of the main checkout (stories-volumes.ts guardedHashes), and any name that is not a veraPDF container's.
 import { execFileSync } from "node:child_process";
-import type { Refused } from "./removal-guard.ts";
-import { guardedHashes, protectedHashes } from "./stories-volumes.ts";
-
-export { protectedHashes };
+import { isRefused, type Refused } from "./removal-guard.ts";
+import { guardedHashes, readGuarded } from "./stories-volumes.ts";
 
 export const VERAPDF_LABEL = "rabaed.verapdf";
 
@@ -56,7 +54,7 @@ export function chooseVeraPdfContainers({
   for (const c of containers) {
     const guarded = protectedHashes.get(c.hash);
     if (guarded !== undefined) kept.push({ what: c.name, reason: guarded });
-    else if (c.pid === undefined) kept.push({ what: c.name, reason: "no pid after rabaed-verapdf-<hash>- (renamed?), so whether its test still runs is not known" });
+    else if (c.pid === undefined) kept.push({ what: c.name, reason: "no pid after its worktree hash (renamed?), so whether its test still runs is not known" });
     else if (alive(c.pid)) kept.push({ what: c.name, reason: `its test process (pid ${c.pid}) still runs` });
     else remove.push({ ...c, pid: c.pid });
   }
@@ -81,13 +79,9 @@ const docker = (args: string[]) => execFileSync("docker", args, { encoding: "utf
  */
 export function removeVeraPdfContainer(name: string, { run = docker, guarded }: { run?: (args: string[]) => string; guarded?: Map<string, string> } = {}): Refused | undefined {
   const hash = /^rabaed-verapdf-([0-9a-f]{8})-/.exec(name)?.[1];
-  if (hash === undefined) return { refused: `${name} not removed: it is not a veraPDF container (rabaed-verapdf-<hash>-<pid>-<n>).` };
-  let hashes: Map<string, string>;
-  try {
-    hashes = guarded ?? guardedHashes();
-  } catch (error) {
-    return { refused: `${name} not removed: the worktrees could not be listed (${(error as Error).message}), so lane 7's and the main checkout's are not known.` };
-  }
+  if (hash === undefined) return { refused: `${name} not removed: it is not a veraPDF container.` };
+  const hashes = readGuarded(() => guarded ?? guardedHashes(), `${name} not removed`);
+  if (isRefused(hashes)) return hashes;
   const why = hashes.get(hash);
   if (why !== undefined) return { refused: `${name} not removed: ${why}.` };
   run(["rm", "-f", name]);

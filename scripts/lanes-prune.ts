@@ -39,7 +39,6 @@ import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import {
   chooseMerged,
-  composeProjectOfEnv,
   envClaims,
   keptByClaims,
   laneKeptByClaim,
@@ -51,6 +50,7 @@ import {
   listVolumes,
   onlyLane,
   parsePruneArgs,
+  projectOfFolder,
   projectInUseNow,
   readProjectNow,
   readWorktreeEnv,
@@ -106,7 +106,7 @@ if (!options) {
   process.exit(1);
 }
 // RP-1198: the refusal offers this worktree's own lane by its number.
-const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal({ ...options, ownLane: laneOfProject(composeProjectOfEnv(readWorktreeEnv(".") ?? "") ?? "") });
+const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal({ ...options, ownLane: laneOfProject(projectOfFolder(".") ?? "") });
 if (refused !== undefined) {
   console.error(refused);
   process.exit(1);
@@ -120,7 +120,7 @@ if (!containers) {
   console.error("Docker is not running (or not installed); start it and re-run.");
   process.exit(1);
 }
-const currentProject = composeProjectOfEnv(readWorktreeEnv(".") ?? "");
+const currentProject = projectOfFolder(".");
 const volumes = listVolumes();
 const inScope = (project: string) => lane === undefined || project === laneProject(lane);
 /** What was kept, with why: printed last (RP-1101), so it is not cut off. */
@@ -167,7 +167,7 @@ if (withMerged) {
     .filter((w) => existsSync(w.path))
     .map((w, i) => {
       const finished = i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished;
-      return { path: w.path, branch: w.branch, finished, changes: finished ? changesOf(w.path) : [], project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") };
+      return { path: w.path, branch: w.branch, finished, changes: finished ? changesOf(w.path) : [], project: projectOfFolder(w.path) };
     });
   const { worktrees, kept: dirty } = mergedLanes(judged);
   const known = new Set(stale.map((s) => s.project));

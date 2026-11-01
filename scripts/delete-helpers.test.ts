@@ -226,16 +226,18 @@ const drop = (db: Pick<lanes.Container, "name" | "project">, name: string): Outc
 
 const projectsNow = (name: string): Outcome => {
   const ran: string[] = [];
-  const result = worktreesPruning.removeProjectsNow({
+  const logged: string[] = [];
+  worktreesPruning.removeProjectsNow({
     projects: [{ project: name, reason: "worktree gone", containers: [], volumes: [], waitsFor: [] }],
     removedPaths: [],
     listed: { worktrees: [], containers: [] },
     readNow: () => ({ claims: [], containers: [], postgres: undefined }),
     exists: () => false,
     remove: (p) => void ran.push(`remove ${p.project}`),
-    log: () => {},
+    log: (line) => logged.push(line),
   });
-  return { result, ran };
+  // It logs its refusals, as worktrees:prune prints them (review T5: no return value only tests read).
+  return { result: { refused: logged.find((line) => line.startsWith(`Kept compose project ${name}:`)) }, ran };
 };
 
 /** A stories volume of the worktree at path, as test-stories-linux.ts names them. */
@@ -252,7 +254,7 @@ const volumesNow = (f: Fixture, path: string): Outcome => {
   const fake: storiesVolumes.StoriesDocker = {
     list: () => [storiesVolume(path)],
     mountedBy: () => new Map(),
-    remove: (list) => (ran.push(`remove ${list.join(" ")}`), { removed: list, refused: [] }),
+    remove: (list) => (ran.push(`remove ${list.join(" ")}`), { removed: list, refusedVolumes: [] }),
     busy: () => undefined,
     guarded: () => storiesVolumes.guardedHashes(f.main),
   };
@@ -266,8 +268,8 @@ const veraPdfContainer = (f: Fixture, path: string): Outcome => {
   return { result, ran: d.ran };
 };
 
-/** A branch helper deletes no folder: the outside rule is for the helpers that do (owner, RP-1198 comment 15382). */
-const NO_FOLDER = { notApplicable: "it deletes no folder; the .claude/worktrees rule is for those that do (owner's answer 1, RP-1198)" };
+/** A branch helper deletes no folder: the outside rule is for the helpers that do (RP-1198 comment 15382, point 1). */
+const NO_FOLDER = { notApplicable: "it deletes no folder; the .claude/worktrees rule is for those that do (RP-1198 comment 15382, point 1)" };
 
 const HELPERS: Record<string, { module: Record<string, unknown>; cases: Cases }> = {
   "worktree-removal.ts:removeWorktreeFolder": {
@@ -463,9 +465,8 @@ describe("delete helpers refuse on their own (RP-1198)", () => {
       }
       it(`${key} refuses ${what} itself, running nothing`, () => {
         const { result, ran } = call(f);
-        // A helper that takes many (removeProjectsNow) returns each refusal.
         const why = (result as { refused?: unknown } | undefined)?.refused;
-        expect(Array.isArray(why) ? why : [why], "returns { refused: <why> }").toEqual([expect.stringMatching(/\S/)]);
+        expect(why, "returns { refused: <why> }").toEqual(expect.stringMatching(/\S/));
         expect(ran).toEqual([]);
         expect(intact(f)).toBe(true);
       });

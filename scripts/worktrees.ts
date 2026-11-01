@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
-import { composeProjectOfEnv, protectedLaneReason, readWorktreeEnv } from "./lanes.ts";
+import { projectOfFolder, protectedLaneReason } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
 import { folderDeletionRefusal, neverRemovedReason, outsideLockedRefusal, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
@@ -144,9 +144,6 @@ type ChooseInput = {
   platform?: NodeJS.Platform;
 };
 
-/** A folder's compose project, by its own .env. */
-const envProjectOf = (path: string): string | undefined => composeProjectOfEnv(readWorktreeEnv(path) ?? "");
-
 /** The last segment of a worktree path. */
 export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
 
@@ -162,7 +159,7 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
  * have uncommitted changes. Everything else is skipped with its reason.
  * The caller passes agent worktrees only. RP-1198: never one whose .env names lane 7, even with only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, holders, projectOf = envProjectOf, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, holders, projectOf = projectOfFolder, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
@@ -400,8 +397,8 @@ export type Removal = { branchesKept?: { branch: string; reason: string }[]; fol
  * worktree with changes, which is refused with git's reason; a locked one there is refused and never unlocked.
  */
 export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Refused | Removal {
-  const never = worktreeRemovalRefusal(w.path) ?? (samePath(w.path, mainRoot) ? `Not removed: ${w.path} is the main checkout.` : undefined);
-  if (never !== undefined) return { refused: never };
+  const neverRemoved = worktreeRemovalRefusal(w.path) ?? (samePath(w.path, mainRoot) ? `Not removed: ${w.path} is the main checkout.` : undefined);
+  if (neverRemoved !== undefined) return { refused: neverRemoved };
   const listed = listWorktrees(mainRoot);
   const entry = listed.find((x) => samePath(x.path, w.path));
   if (entry === undefined) return { refused: `Not removed: ${w.path} is not a worktree git lists.` };
