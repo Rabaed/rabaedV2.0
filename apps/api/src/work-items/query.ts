@@ -129,8 +129,9 @@ type Row = {
   /** "Owner review", read in place of the holder by those app.with_owner_review gives it; else null. */
   owner_review_name: BilingualText | null;
   held_by_own: boolean;
-  step_key: string;
-  step_name: BilingualText;
+  /** The Step: only where the viewer's own Participant holds the item, or it has closed (app.work_items_seen, V14). */
+  step_key: string | null;
+  step_name: BilingualText | null;
   holder_name: BilingualText | null;
   holder_member_name: BilingualText | null;
   held_by_me: boolean;
@@ -216,7 +217,8 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
     -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
     -- count, cursor or card carries the time. numbered_at is set with the Document Number.
     cross join lateral (select case when w.document_number is null then null else w.entered_at end as step_entered_at) e
-    join workflow_step s on s.id = w.step_id
+    -- No Step while another Company holds it (db-mask: app.work_items_seen; RP-1192).
+    left join workflow_step s on s.id = w.step_id
     join work_item_type t on t.id = w.work_item_type_id
     -- Its outcome in the Project's copy of its Type's set (RP-429); none while open or cancelled.
     left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = t.id and oc.code = w.outcome
@@ -632,7 +634,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
         ? { kind: "company", companyName: r.owner_review_name }
         : r.holder_name === null
           ? null
-        : r.held_by_own
+        : r.held_by_own && r.step_key !== null && r.step_name !== null
           ? {
               kind: "own",
               companyName: r.holder_name,
@@ -1103,8 +1105,8 @@ async function holderChoices(
 ): Promise<Pick<WorkItemList["filters"], "with" | "owners">> {
   const { rows } = await sql<{
     held_by_own: boolean;
-    step_key: string;
-    step_name: BilingualText;
+    step_key: string | null;
+    step_name: BilingualText | null;
     participant_id: string;
     name: BilingualText;
     member_id: string | null;
@@ -1122,7 +1124,7 @@ async function holderChoices(
   const owners = new Map<string, BilingualText>();
   for (const r of rows) {
     if (r.held_by_own) {
-      steps.set(r.step_key, r.step_name);
+      if (r.step_key !== null && r.step_name !== null) steps.set(r.step_key, r.step_name);
       if (r.member_id && r.member_name) owners.set(r.member_id, r.member_name);
     } else companies.set(r.participant_id, r.name);
   }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Comment } from "./claims.ts";
-import { branchChanges, branchKey, branchOverlaps, checkClaims, laneOwner, type ClaimsInput } from "./check-claims.ts";
+import { branchChanges, branchClaims, branchKey, branchOverlaps, checkClaims, laneOwner, workflowMixWarning, type ClaimsInput } from "./check-claims.ts";
 
 // RP-603's comments are stubbed; the shared-files list is the real one in docs/agents/issue-tracker.md.
 const sharedList = readFileSync(join(import.meta.dirname, "..", "docs", "agents", "issue-tracker.md"), "utf8");
@@ -86,6 +86,96 @@ describe("checkClaims", () => {
   });
 });
 
+describe("workflowMixWarning (rule 3, RP-1199)", () => {
+  const heading = "Warning: check:claims (rule 3)";
+  const mixed = [".github/workflows/ci.yml", "scripts/ci-helper.ts", "scripts/ci-helper.test.ts", "docs/ci.md"];
+  // The real shared list makes every workflow file a shared module; a list without them reaches the early return.
+  const nothingShared = "- **Ticket: shared files.**\n  - `package.json`\n";
+
+  it("warns on workflows beside a non-doc file, naming the two-PR split and both lists of files", () => {
+    const warning = workflowMixWarning(mixed);
+    expect(warning).toContain(heading);
+    expect(warning).toContain("the workflow files go in their own PR");
+    expect(warning).toContain("opened after the PR with the other non-doc files has merged");
+    expect(warning).toContain("  .github/workflows/ci.yml");
+    expect(warning).toContain("  scripts/ci-helper.ts");
+    expect(warning).toContain("  scripts/ci-helper.test.ts");
+    // A doc goes with either PR; it is neither list.
+    expect(warning).not.toContain("docs/ci.md");
+    // The workflow file is not listed among the files it must wait for.
+    expect(warning.indexOf("  .github/workflows/ci.yml")).toBe(warning.lastIndexOf("  .github/workflows/ci.yml"));
+  });
+
+  it("says nothing for workflows only, other files only, or workflows with docs only", () => {
+    expect(workflowMixWarning([".github/workflows/ci.yml", ".github/workflows/queue.yml"])).toBe("");
+    expect(workflowMixWarning(["scripts/ci-helper.ts", "apps/api/src/x.ts"])).toBe("");
+    expect(workflowMixWarning([".github/workflows/ci.yml", "docs/ci.md", "README.md"])).toBe("");
+    expect(workflowMixWarning([])).toBe("");
+  });
+
+  it("counts a Markdown file under .github/workflows/ as a doc: it is not a workflow file, nor a non-doc", () => {
+    expect(workflowMixWarning([".github/workflows/README.md", "scripts/ci-helper.ts"])).toBe("");
+    expect(workflowMixWarning([".github/workflows/README.md", ".github/workflows/ci.yml"])).toBe("");
+    const warning = workflowMixWarning([".github/workflows/README.md", ".github/workflows/ci.yml", "scripts/ci-helper.ts"]);
+    expect(warning).toContain("  .github/workflows/ci.yml");
+    expect(warning).not.toContain("README.md");
+  });
+
+  it("counts .github/actions/** as a non-doc, so a workflow with a composite action warns", () => {
+    expect(workflowMixWarning([".github/workflows/ci.yml", ".github/actions/setup/action.yml"])).toContain("  .github/actions/setup/action.yml");
+  });
+
+  it("checkClaims carries it when nothing is shared (the early return), without reading RP-603 or needing credentials", async () => {
+    let read = false;
+    const comments = async (): Promise<Comment[]> => {
+      read = true;
+      return [];
+    };
+    const result = await checkClaims(input({ files: mixed, comments, sharedList: nothingShared }));
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe(workflowMixWarning(mixed));
+    expect(read).toBe(false);
+  });
+
+  it("checkClaims says it beside a claims refusal, which still refuses", async () => {
+    const result = await checkClaims(input({ files: [...mixed, "package.json"] }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("RP-1100 has no open CLAIM on RP-603 for:");
+    expect(result.message).toContain(heading);
+  });
+
+  it("checkClaims says it beside the could-not-read-RP-603 warning, and beside the no-issue-key refusal", async () => {
+    const comments = async (): Promise<Comment[]> => {
+      throw new Error("fetch failed");
+    };
+    const unread = await checkClaims(input({ files: [...mixed, "package.json"], comments }));
+    expect(unread.ok).toBe(true);
+    expect(unread.message).toContain("could not read RP-603");
+    expect(unread.message).toContain(heading);
+    const keyless = await checkClaims(input({ key: undefined, files: [...mixed, "package.json"] }));
+    expect(keyless.ok).toBe(false);
+    expect(keyless.message).toContain(heading);
+  });
+
+  it("checkClaims adds no rule-3 text to a claims refusal when the branch has no workflow mix", async () => {
+    const result = await checkClaims(input({ files: ["package.json"] }));
+    expect(result.ok).toBe(false);
+    expect(result.message).not.toContain("rule 3");
+  });
+
+  it("judges the mix on every path the branch touches, deletions included, without changing what the claims check sees", async () => {
+    // A workflow deleted beside an edited script, and a script deleted beside an edited workflow: `files` leaves the deleted one out.
+    const workflowDeleted = await checkClaims(input({ files: ["scripts/ci-helper.ts"], touched: [".github/workflows/ci.yml", "scripts/ci-helper.ts"], sharedList: nothingShared }));
+    expect(workflowDeleted.message).toContain(heading);
+    expect(workflowDeleted.message).toContain("  .github/workflows/ci.yml");
+    const scriptDeleted = await checkClaims(input({ files: [".github/workflows/ci.yml"], touched: [".github/workflows/ci.yml", "scripts/ci-helper.ts"], sharedList: nothingShared }));
+    expect(scriptDeleted.message).toContain("  scripts/ci-helper.ts");
+    // The claims check still reads `files`: a deleted shared module is not one it asks a claim for.
+    const claimsSee = await checkClaims(input({ files: ["scripts/ci-helper.ts"], touched: ["package.json", "scripts/ci-helper.ts"] }));
+    expect(claimsSee.ok).toBe(true);
+  });
+});
+
 describe("branchKey", () => {
   it("reads the key a branch name starts with, upper-cased", () => {
     expect(branchKey("RP-1008-check-claims")).toBe("RP-1008");
@@ -121,7 +211,35 @@ describe("branchChanges", () => {
     write("packages/db/migrations/20271101000000_x.sql", "Create Or Replace Function app.sync_work_item_checklists() returns void as $$ $$;\ncreate or replace function app.brand_new() returns void as $$ $$;\n");
     write("apps/api/src/work-items/query.ts", "export {};\n");
     const pushed = commit();
-    expect(branchChanges(repo, pushed)).toEqual({ files: ["apps/api/src/work-items/query.ts", "packages/db/migrations/20271101000000_x.sql"], redefined: ["app.sync_work_item_checklists"] });
+    const files = ["apps/api/src/work-items/query.ts", "packages/db/migrations/20271101000000_x.sql"];
+    expect(branchChanges(repo, pushed)).toEqual({ files, touched: files, redefined: ["app.sync_work_item_checklists"] });
+  });
+
+  it("lists in `touched` every path the branch changes, deleted ones too, while `files` leaves the deleted out", () => {
+    write("scripts/old.ts", "export {};\n");
+    write(".github/workflows/ci.yml", "name: ci\n");
+    git("update-ref", "refs/remotes/origin/main", commit());
+    rmSync(join(repo, ".github/workflows/ci.yml"));
+    rmSync(join(repo, "scripts/old.ts"));
+    write("scripts/new.ts", "export {};\n");
+    const changes = branchChanges(repo, commit());
+    expect(changes.files).toEqual(["scripts/new.ts"]);
+    expect(changes.touched).toEqual([".github/workflows/ci.yml", "scripts/new.ts", "scripts/old.ts"]);
+  });
+
+  it("branchClaims (what `pnpm verify` and `pnpm check:claims` call) warns on a workflow deleted beside a changed script, with no credentials", async () => {
+    write("scripts/a.ts", "export {};\n");
+    write(".github/workflows/ci.yml", "name: ci\n");
+    write("docs/agents/issue-tracker.md", "- **Ticket: shared files.**\n  - `package.json`\n");
+    git("update-ref", "refs/remotes/origin/main", commit());
+    rmSync(join(repo, ".github/workflows/ci.yml"));
+    write("scripts/a.ts", "export const a = 1;\n");
+    commit();
+    const result = await branchClaims(repo);
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Warning: check:claims (rule 3)");
+    expect(result.message).toContain("  .github/workflows/ci.yml");
+    expect(result.message).toContain("  scripts/a.ts");
   });
 
   it("reads a quoted name and a head across lines as the same function", () => {
@@ -144,6 +262,7 @@ describe("branchChanges", () => {
 
   it("without a commit, reads the working tree, untracked files included", () => {
     write("packages/db/migrations/20271101000000_x.sql", "create or replace function app.take_transition(p uuid) returns void as $$ $$;\n");
-    expect(branchChanges(repo)).toEqual({ files: ["packages/db/migrations/20271101000000_x.sql"], redefined: ["app.take_transition"] });
+    const files = ["packages/db/migrations/20271101000000_x.sql"];
+    expect(branchChanges(repo)).toEqual({ files, touched: files, redefined: ["app.take_transition"] });
   });
 });

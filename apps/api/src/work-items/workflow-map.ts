@@ -1,11 +1,11 @@
 import { latestPublishedVersionNo, readModuleStages, readPositions, readPublishedVersionDefinition, withMember, type Db } from "@rabaed/db";
 import {
   closedStepKey,
-  holderRole,
   withRaiserRole,
   type BaseRole,
   type BilingualText,
   type ModuleKey,
+  type WorkflowDefinition,
   type WorkItemMapPosition,
   type WorkItemWorkflowMap,
 } from "@rabaed/domain";
@@ -15,9 +15,8 @@ import { sql } from "kysely";
 // Version the item is pinned to, whole, read through row-level security as every
 // Project Member reads it (V20), and where the item is on it as the item read
 // knows it (V14): app.step_as_seen gives the viewer's own Participant its current
-// Step and anyone else only the Step the item arrived at, which leaves here as that
-// Participant's role and never as a Step. A closed item is at the terminal Step its
-// outcome reached, which everyone who sees the item may know.
+// Step and anyone else no Step, only the role holding it (RP-1192). A closed item is
+// at the terminal Step its outcome reached, which everyone who sees the item may know.
 
 /** The map of item `workItemId` for the Member; null when they don't see the item or can't read its Workflow. */
 export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: string): Promise<WorkItemWorkflowMap | null> {
@@ -30,13 +29,14 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       closed_at: Date | null;
       name: BilingualText;
       version_no: number;
-      seen_step_key: string;
+      seen_step_key: string | null;
+      holder_role: BaseRole | null;
       holder_mine: boolean | null;
       holder_name: BilingualText | null;
       raiser_role: BaseRole | null;
     }>`
       select w.project_id, t.module_key, w.workflow_version_id, w.outcome, w.closed_at, wf.name, wf.version_no,
-        s.key as seen_step_key, app.work_item_raiser_role(w.id) as raiser_role,
+        s.key as seen_step_key, seen.holder_role, app.work_item_raiser_role(w.id) as raiser_role,
         -- At the Owner's review, "Owner review" to all but its holder and the recommending Consultant (ADR 0022):
         -- no holder reaches them (RP-1138), and the item is held outside their Participant.
         case when r.label is not null then false else a.participant_id in (select app.current_participant_ids()) end as holder_mine,
@@ -45,7 +45,8 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       join work_item_type t on t.id = w.work_item_type_id
       join app.work_item_workflow(w.id) wf on true
       cross join lateral app.step_as_seen(w.id) seen
-      join workflow_step s on s.id = seen.step_id
+      -- No Step while another Company holds it: app.step_as_seen gives none (RP-1192).
+      left join workflow_step s on s.id = seen.step_id
       -- db-mask: app.work_item_holder_unchecked (app.work_item_holder gives no holder where this label is read).
       cross join lateral (select app.with_owner_review(w.id) as label) r
       left join app.work_item_holder(w.id) a on true
@@ -85,14 +86,20 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
 }
 
 function position(
-  item: { closed_at: Date | null; outcome: string | null; seen_step_key: string; holder_mine: boolean | null; holder_name: BilingualText | null },
-  definition: Parameters<typeof holderRole>[0],
+  item: {
+    closed_at: Date | null;
+    outcome: string | null;
+    seen_step_key: string | null;
+    holder_role: BaseRole | null;
+    holder_mine: boolean | null;
+    holder_name: BilingualText | null;
+  },
+  definition: WorkflowDefinition,
 ): WorkItemMapPosition | null {
   if (item.closed_at) return { kind: "closed", stepKey: item.outcome ? closedStepKey(definition, item.outcome) : null };
   if (item.holder_mine === null) return null;
   // Inside the viewer's own Participant, step_as_seen gave the current Step.
-  if (item.holder_mine) return { kind: "own", stepKey: item.seen_step_key };
-  // Anyone else: the Step it arrived at, sent only as its role (V14).
-  const role = holderRole(definition, item.seen_step_key);
-  return role && item.holder_name ? { kind: "company", role, companyName: item.holder_name } : null;
+  if (item.holder_mine) return item.seen_step_key ? { kind: "own", stepKey: item.seen_step_key } : null;
+  // Anyone else: the role holding it, never a Step (V14).
+  return item.holder_role && item.holder_name ? { kind: "company", role: item.holder_role, companyName: item.holder_name } : null;
 }

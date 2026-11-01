@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkClaims } from "./check-claims.ts";
 import type { MergeState } from "./merge-in-progress.ts";
 import { changedFiles, prePush, type PrePushSeam } from "./pre-push.ts";
 
@@ -109,6 +110,27 @@ describe("prePush", () => {
     const result = await prePush(branchPush, seam({}, undefined, undefined, undefined, warned).fake);
     expect(result.ok).toBe(true);
     expect(result.message).toContain("Warning: check:claims could not read RP-603 (fetch failed)");
+  });
+
+  it("shows rule 3's workflow warning on a push that changes a workflow beside a script, and still lets it go (RP-1199)", async () => {
+    const files = [".github/workflows/ci.yml", "scripts/ci-helper.ts"];
+    // The claims seam is the real check, with RP-603 unreadable as it is with no Jira credentials.
+    const claims = await checkClaims({
+      key: "RP-989",
+      files,
+      redefined: [],
+      sharedList: readFileSync(join(import.meta.dirname, "..", "docs", "agents", "issue-tracker.md"), "utf8"),
+      comments: async () => {
+        throw new Error("no credentials");
+      },
+    });
+    const { fake, ran } = seam({}, files, undefined, undefined, claims);
+    const result = await prePush(branchPush, fake);
+    expect(result.ok).toBe(true);
+    expect(ran.sort()).toEqual(["lint", "typecheck"]);
+    expect(result.message).toContain("Warning: check:claims (rule 3)");
+    expect(result.message).toContain("  .github/workflows/ci.yml");
+    expect(result.message).toContain("  scripts/ci-helper.ts");
   });
 
   it("refuses a branch push while a merge is in progress, naming the conflicted files, before anything else runs (RP-1101)", async () => {

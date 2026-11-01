@@ -129,11 +129,8 @@ describe("scenario RP-410-1: the filter panel's Owner, Role and Created date, an
     // K1's manager holds it at Consultant approval, where K1's own move took it.
     await expectHiddenFrom({ read: steps, target: await stepOf(withK1), seenBy: [k1Engineer, k1Manager], hiddenFrom: [c1Engineer, c1Pm], name: named, label: "K1's Consultant approval" });
     await expectHiddenFrom({ read: steps, target: await stepOf(inReview), seenBy: [c1Engineer, c1Pm], hiddenFrom: [k1Engineer, k1Manager], name: named, label: "C1's internal review Step" });
-    // C1 reads it at the Step C1's shared Submit brought it to, K1's one lane: nothing of what K1 did inside.
-    const arrival = (
-      await migrator.query("select s.id from work_item w join workflow_step s on s.workflow_version_id = w.workflow_version_id and s.key = 'consultant_review' where w.id = $1", [withK1])
-    ).rows[0].id as string;
-    expect((await seen(c1Engineer)).find((r) => r.id === withK1)?.step_id).toBe(arrival);
+    // C1 reads it at no K1 Step, not even the one C1's shared Submit brought it to (RP-1192-1): K1 is one lane.
+    expect((await seen(c1Engineer)).find((r) => r.id === withK1)?.step_id).toBeNull();
   });
 
   it("Lanes: project_member_position gives each viewer their own Company's Positions only, so another Company is one lane", async () => {

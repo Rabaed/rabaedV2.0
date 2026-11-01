@@ -189,7 +189,8 @@ describe("Submit", () => {
     const d = await detail(pm, id);
     expect(d).toMatchObject({
       stage: { key: "pending_approval" },
-      step: { key: "consultant_review" },
+      // The Consultant's Step is the Consultant's: C1's PM reads none (V14, RP-1192).
+      step: null,
       outcome: null,
       closedAt: null,
       stepAgeWeeks: 1,
