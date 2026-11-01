@@ -187,6 +187,13 @@ describe("checkGapTable", () => {
     expect(check(markdown)).toEqual([]);
   });
 
+  it("does not take a selector in a quoted script argument or in a comment for a CSS rule", () => {
+    write(refs, "calls.html", '<script>\nconst rows = document.querySelectorAll(".ghost, .row");\n/* .boxed{a:b} */\nconst css = ".real{a:b}\\n.also,\\n.pair{c:d}";\n</script>\n<style>\n/* .styled{a:b} */\n.shown{a:b}\n</style>\n');
+    const refused = check(table("| 1 | Call | calls.html › `.ghost` | x | match | | |", "| 2 | Comment | calls.html › `.boxed` | x | match | | |", "| 3 | Comment | calls.html › `.styled` | x | match | | |"));
+    expect(refused).toEqual([expect.stringMatching(/row 1.*`\.ghost`/), expect.stringMatching(/row 2.*`\.boxed`/), expect.stringMatching(/row 3.*`\.styled`/)]);
+    expect(check(table("| 1 | Real | calls.html › `.real`; calls.html › `.also`; calls.html › `.pair`; calls.html › `.shown` | x | match | | |"))).toEqual([]);
+  });
+
   it("matches a selector holding an escaped quote, and scans past one inside a rule", () => {
     write(refs, "packed.html", PACKED_PAGE);
     const markdown = table("| 1 | Option | packed.html › `.opt[data-k=\"1\"]`; packed.html › `.note::before`; packed.html › `.late` | x | match | | |");

@@ -133,10 +133,18 @@ function unescapeScript(script: string): string {
   });
 }
 
-/** The page as written, then each of its scripts unescaped: the text a CSS rule's selector is looked for in. */
+/** The page as written, then each of its scripts unescaped, without block comments: the text a CSS rule's selector is looked for in. */
 function searchableText(page: string): string {
   const scripts = [...page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => unescapeScript(match[1]!));
-  return [page, ...scripts].join("\n");
+  return [page, ...scripts].join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+/** Whether a CSS rule has the whole selector: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`. */
+function hasRule(text: string, selector: string): boolean {
+  const wanted = escapeRegExp(selector);
+  // The first rule of a packed string follows its quote; there a rule must show its `{`, so `querySelectorAll(".a, .b")` is no rule.
+  const inString = `["'\`]${wanted}(?:\\s*,[^"'\`{}]*)*\\s*\\{`;
+  return new RegExp(`(?:(?:^|[\\s{},;>])${wanted}\\s*[{,])|(?:${inString})`, "m").test(text);
 }
 
 /** The problems with one `<file> › <part>` citation. */
@@ -156,9 +164,8 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   if (relative(resolve(refs), path).startsWith("..")) return [`cites ${file}, outside ${refs}`];
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
-  // The whole selector of a CSS rule: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
-  // A quote opens the first rule of a packed string; lines are still counted in the file as written.
-  if (selector && !new RegExp(`(?:^|[\\s{},;>"'\`])${escapeRegExp(selector)}\\s*[{,]`, "m").test(searchableText(content))) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
+  // Lines are counted in the file as written, selectors looked for in its packed scripts too (RP-1209).
+  if (selector && !hasRule(searchableText(content), selector)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
     if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];
