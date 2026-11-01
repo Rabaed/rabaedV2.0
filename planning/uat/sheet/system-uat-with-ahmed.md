@@ -1524,14 +1524,16 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
   1. Open a MAR Form in /ar; leave Description empty and Send for Review.
 - **Expected result:** Field labels, section titles, Action Form words and the missing-fields message are Arabic; values typed in English are not translated.
 
-### I18N-05 Arabic-first users sign in to Arabic
+### I18N-05 Rabaed opens in Arabic; a switch to English is remembered
 
 - **Key:** `RP-686` · **Part:** I18N · **Round:** 0
 - **Sign in as:** Faisal; Noura
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Sign in as each.
-- **Expected result:** Their language is Arabic from sign-in (locale set at onboarding); names show in Arabic; they can switch.
+  1. In a browser set to English, sign in as each.
+  2. Switch to English.
+  3. Sign out and sign in again.
+- **Expected result:** Opens in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.
 
 ### I18N-06 Phone width 375: nothing breaks
 
