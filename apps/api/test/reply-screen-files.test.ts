@@ -342,7 +342,7 @@ describe("files no Transition took are discarded when the item leaves the Partic
     await move(id, "start_work");
     const added = await addAfterPhoto(at.c1Pm, id, "half-done.jpg");
     await take(at.c1Pm, id, "ask_raiser");
-    expect((await detail(at.k1Manager, id)).step.key).toBe("draft");
+    expect((await detail(at.k1Manager, id)).step?.key).toBe("draft");
 
     // Discarded, so gone for C1 too: nobody reads it.
     expect(await afterPhotos(at.k1Manager, id)).toEqual([]); // not hidden-from: discarded

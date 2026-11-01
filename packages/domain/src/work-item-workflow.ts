@@ -2,7 +2,7 @@ import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { baseRoles, type BaseRole } from "./project.ts";
 import { stageCategories } from "./work-item.ts";
-import { actorRole, workflowDefinition, type WorkflowDefinition } from "./workflow-definition.ts";
+import { workflowDefinition, type WorkflowDefinition } from "./workflow-definition.ts";
 
 // The map of a Work Item's Workflow (RP-438, WF-15; workflow-engine.md §11): the
 // Version the item is pinned to, whole, as every Project Member reads it (V20), and
@@ -51,14 +51,6 @@ export function closedStepKey(definition: WorkflowDefinition, outcome: string): 
       .map((t) => t.to),
   );
   return reached.size === 1 ? [...reached][0]! : null;
-}
-
-/**
- * The Participant role holding Step `stepKey` (of a definition `withRaiserRole` resolved, for a Step held by the raiser);
- * null for a terminal Step or a key the definition doesn't have.
- */
-export function holderRole(definition: WorkflowDefinition, stepKey: string): BaseRole | null {
-  return actorRole(definition.steps.find((s) => s.key === stepKey)?.actor);
 }
 
 /**

@@ -30,7 +30,8 @@ type Row = {
   subject: string;
   stage_name: BilingualText;
   held_by_own: boolean;
-  step_name: BilingualText;
+  /** Null unless the recipient's own Participant holds it: another Company's Step is never named (RP-1192). */
+  step_name: BilingualText | null;
   holder_name: BilingualText | null;
   entered_at: Date;
 };
@@ -58,7 +59,8 @@ export function stepAgeReportHandler(send: SendStepAgeReport, now: () => Date = 
         documentNumber: r.document_number,
         subject: r.subject,
         stage: r.stage_name,
-        with: r.held_by_own ? { kind: "own", step: r.step_name } : r.holder_name ? { kind: "company", companyName: r.holder_name } : null,
+        with:
+          r.held_by_own && r.step_name ? { kind: "own", step: r.step_name } : r.holder_name ? { kind: "company", companyName: r.holder_name } : null,
         stepAgeWeeks: stepAgeWeeks(r.entered_at, at),
       })),
     });

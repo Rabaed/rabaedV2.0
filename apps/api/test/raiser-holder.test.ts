@@ -65,10 +65,10 @@ beforeAll(async () => {
 describe("a Contractor's Snag on itself (seam 1)", () => {
   it("C1 raises it, moves it In Progress, resolves it, verifies and closes it: C1 holds every Step", async () => {
     const id = await draftSnag(at.c1Pm, "Missing fire stopping");
-    expect((await detail(at.c1Pm, id)).step.key).toBe("draft");
+    expect((await detail(at.c1Pm, id)).step?.key).toBe("draft");
     await move(at.c1Pm, id, "raise");
     const open = await detail(at.c1Pm, id);
-    expect(open.step.key).toBe("open");
+    expect(open.step?.key).toBe("open");
     expect(open.documentNumber).toMatch(/-SNG-/);
     expect(open.workflow.versionNo).toBe(1);
 
@@ -76,7 +76,7 @@ describe("a Contractor's Snag on itself (seam 1)", () => {
     expect((await detail(at.c1Pm, id)).stage.key).toBe("in_progress");
     await move(at.c1Pm, id, "resolve_in_progress", { answers: { resolution_note: "Sealed with intumescent mastic" } });
     const verify = await detail(at.c1Pm, id);
-    expect(verify.step.key).toBe("verify");
+    expect(verify.step?.key).toBe("verify");
     expect(verify.stage.key).toBe("resolved");
     // The raiser verifies: Close, or Return to Open (to C1 itself).
     expect(verify.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["close", "return_to_open"]));
@@ -93,7 +93,7 @@ describe("a Contractor's Snag on itself (seam 1)", () => {
     await move(at.c1Engineer, id, "resolve", { answers: { resolution_note: "Tied" } });
     await move(at.c1Engineer, id, "return_to_open", { reason: "Two are still loose" });
     const back = await detail(at.c1Engineer, id);
-    expect(back.step.key).toBe("open");
+    expect(back.step?.key).toBe("open");
     expect(back.actions.transitions.map((t) => t.key)).toContain("resolve");
   });
 
@@ -139,7 +139,7 @@ describe("a Consultant's Snag on the Contractor, on the same Version (seam 1)", 
     const id = await draftSnag(at.k1Manager, "Cable tray not bonded");
     await take(at.k1Manager, id, "raise");
     const open = await detail(at.c1Pm, id);
-    expect(open.step.key).toBe("open");
+    expect(open.step?.key).toBe("open");
     expect(open.workflow.versionNo).toBe(1);
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Bonded" } });
@@ -255,7 +255,7 @@ describe("a Snag started on a Version whose Steps name roles (seam 1)", () => {
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "ask_raiser");
     const back = await detail(at.k1Manager, id);
-    expect(back.step.key).toBe("draft");
+    expect(back.step?.key).toBe("draft");
     expect(back.workflow.versionNo).toBe(3);
     expect(back.actions.transitions.map((t) => t.key)).toContain("raise");
     expect(await offered(at.c1Pm, id)).toEqual([]); // not hidden-from: C1 reads the Snag sent back to K1's Draft, with no Transition offered

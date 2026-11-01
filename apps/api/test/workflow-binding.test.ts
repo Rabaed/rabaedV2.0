@@ -106,7 +106,8 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     expect(await moves(k1Engineer)).toContain("Send to Manager");
     expect(await moves(at.c1Pm)).not.toContain("Send to Manager");
     const asC1 = await detail(at.c1Pm, id);
-    expect(asC1.step.key).toBe("consultant_review");
+    // No K1 Step for C1, not even the one its Submit reached (RP-1192).
+    expect(asC1.step).toBeNull();
     // The same Workflow and Version for both, K1's internal Steps and all (V20).
     expect(asC1.workflow).toEqual({ name: TOWER_ROUTE, versionNo: 2 });
     expect((await detail(k1Engineer, id)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 2 });

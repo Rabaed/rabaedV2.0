@@ -211,7 +211,7 @@ describe("RP-430-2: has been through C1's Contractor review (seam 1)", () => {
       name: who,
       label: "the Step C1's Submit left",
     });
-    expect((await detail(k1Manager.caller, id)).step.key).toBe("consultant_review");
+    expect((await detail(k1Manager.caller, id)).step?.key).toBe("consultant_review");
   });
 
   it("a C1 rule on its own Contractor review holds once the item has been there", async () => {
@@ -243,6 +243,6 @@ describe("RP-430-3: all Comments closed (seam 1)", () => {
     expect(await offered(k1Manager, id)).not.toContain("reject_d"); // not hidden-from: a Transition not offered, a button and not a row
     // Refused like a Transition that isn't there: the same body as a made-up key, naming no item.
     await expectRefusedLikeNone(k1Manager, id, "reject_d");
-    expect((await detail(k1Manager.caller, id)).step.key).toBe("consultant_approval");
+    expect((await detail(k1Manager.caller, id)).step?.key).toBe("consultant_approval");
   });
 });
