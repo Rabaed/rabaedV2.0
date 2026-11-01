@@ -123,8 +123,8 @@ const rowIcons: Record<RowAction, IconName> = { open: "eye", edit: "edit", dupli
  */
 export function RowMenu({ subject, load, known, onAction, labels }: RowMenuProps) {
   const [permitted, setPermitted] = useState<RowPermissions | null | "loading">(null);
-  // The API's answer once it came; until then, and when it can't be read, only what the row says.
-  const allowed: Partial<RowPermissions> | null = permitted !== null && permitted !== "loading" ? permitted : permitted === "loading" ? (known ?? null) : null;
+  // While the API is asked, only what the row says; once it answered, its answer; when the row can't be read, Open alone.
+  const allowed: Partial<RowPermissions> | null = permitted === "loading" ? (known ?? null) : permitted;
   const item = (action: RowAction): RowActionsItem => ({
     key: action,
     label: labels[action],

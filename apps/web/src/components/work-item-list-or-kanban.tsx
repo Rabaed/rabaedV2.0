@@ -66,7 +66,7 @@ async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> 
     edit: item.stage.category === "draft" && item.actions.saveAnswers,
     duplicate: item.actions.duplicate,
     resubmit: item.actions.createRevision,
-    download: item.outcome === null || item.documentalRecord === "published",
+    download: rowKnown(item).download === true || item.documentalRecord === "published",
     delete: item.actions.discardDraft,
   };
 }
@@ -76,7 +76,7 @@ async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> 
  * that isn't closed offers its Working Copy, the same shared content for every viewer, another Company's
  * Submitted item included. A closed one waits for the item to say its Documental Record is published.
  */
-function rowKnown(row: WorkItemRow): Partial<RowPermissions> {
+function rowKnown(row: Pick<WorkItemRow, "outcome">): Partial<RowPermissions> {
   return { download: row.outcome === null };
 }
 
