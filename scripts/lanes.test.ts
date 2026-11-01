@@ -1,5 +1,7 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   chooseMerged,
@@ -9,6 +11,7 @@ import {
   databasesOfEnv,
   dropOrKeep,
   firstFreeLane,
+  freeableLane,
   freeLaneClashes,
   freeLaneOrder,
   holderAdvice,
@@ -25,6 +28,7 @@ import {
   parseContainers,
   parseLaneEnvArgs,
   dbContainers,
+  dropDbsPostgres,
   parseDropDbsArgs,
   parsePruneArgs,
   parseVolumes,
@@ -33,8 +37,10 @@ import {
   holdsLaneProject,
   postgresConnections,
   projectInUseNow,
+  projectOfFolder,
   protectedLaneReason,
   pruneCommand,
+  dropDatabase,
   releaseContainers,
   removeProject,
   staleProjects,
@@ -53,6 +59,27 @@ const none: Holders = { runningSession: () => undefined, desktopSession: () => u
 const psLine = (name: string, state: string, project: string, dir: string, ports: string) => [name, state, project, dir, ports].join("\t");
 
 const container = (c: Partial<Container> & Pick<Container, "name">): Container => ({ state: "running", project: "", workingDir: "", ports: [], ...c });
+
+describe("freeableLane (RP-1198 review T2)", () => {
+  it("is a real lane number, never lane 7's", () => {
+    expect([41, 30, 1].map(freeableLane)).toEqual([true, true, true]);
+    expect([7, 15, 99, -1, 4.5, undefined].map(freeableLane)).toEqual([false, false, false, false, false, false]);
+  });
+});
+
+describe("projectOfFolder (RP-1198 review T1)", () => {
+  it("reads COMPOSE_PROJECT_NAME from the folder's own .env; none for a folder without one, or gone", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rabaed-project-of-"));
+    try {
+      expect(projectOfFolder(dir)).toBeUndefined();
+      writeFileSync(join(dir, ".env"), "A=1\nCOMPOSE_PROJECT_NAME=rabaed-lane41\n");
+      expect(projectOfFolder(dir)).toBe("rabaed-lane41");
+      expect(projectOfFolder(join(dir, "no-such-folder"))).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("lanePorts", () => {
   it.each([
@@ -954,6 +981,16 @@ describe("releaseContainers", () => {
       "Could not remove container b (Error: removal in progress). Removed: a. Not removed: b, c.",
     );
   });
+
+  it("removes none when one of them is lane 7's or the main checkout's (RP-1198)", () => {
+    const calls: string[][] = [];
+    const run = (args: string[]) => (calls.push(args), "");
+    expect(releaseContainers([container({ name: "a", project: "rabaed-lane30" }), container({ name: "rabaed-lane7-db-1", project: "rabaed-lane7" })], run)).toEqual({
+      refused: expect.stringMatching(/^No container removed: rabaed-lane7-db-1: lane 7 holds/),
+    });
+    expect(releaseContainers([container({ name: "rabaed-db-1", project: "rabaed" })], run)).toEqual({ refused: expect.stringContaining("the main checkout's stack") });
+    expect(calls).toEqual([]);
+  });
 });
 
 describe("parsePruneArgs", () => {
@@ -1002,6 +1039,19 @@ describe("dbContainers", () => {
   it("with a lane, takes only that lane's: --lane 5 leaves lane 7's databases alone (RP-535)", () => {
     expect(dbContainers(all, 5).map((c) => c.name)).toEqual(["rabaed-lane5-db-1"]);
     expect(dbContainers(all, 9)).toEqual([]);
+  });
+});
+
+describe("dropDbsPostgres (RP-1198: lanes:drop-dbs never drops lane 7's databases)", () => {
+  const all = [container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5" }), container({ name: "rabaed-lane7-db-1", project: "rabaed-lane7" })];
+
+  it("leaves lane 7's Postgres out, and names it", () => {
+    expect(dropDbsPostgres(all)).toEqual({ postgres: [all[0]], kept: [`rabaed-lane7-db-1: ${protectedLaneReason("rabaed-lane7")}`] });
+  });
+
+  it("refuses --lane 7 outright", () => {
+    expect(dropDbsPostgres(all, 7)).toEqual({ postgres: [], kept: [`rabaed-lane7-db-1: ${protectedLaneReason("rabaed-lane7")}`], refused: `lanes:drop-dbs refused: ${protectedLaneReason("rabaed-lane7")}.` });
+    expect(dropDbsPostgres(all, 5)).toEqual({ postgres: [all[0]], kept: [] });
   });
 });
 
@@ -1091,13 +1141,35 @@ describe("removeProject checks for a running verify itself (RP-1170, rule 4)", (
   });
 });
 
-describe("removeProject never removes lane 7 (Main 6's review of #583)", () => {
-  it("throws before any Docker call for the harness's stack", () => {
+describe("removeProject never removes lane 7 (Main 6's review of #583) nor the main checkout's stack (RP-1198)", () => {
+  it("refuses before any Docker call for the harness's stack and the main checkout's", () => {
     const calls: string[][] = [];
     const run = (args: string[]) => (calls.push(args), "");
-    expect(() => removeProject({ project: "rabaed-lane7", reason: "x", containers: ["db"], volumes: ["v"] }, { run, wait: () => {}, volumesKeptBecause: () => undefined })).toThrow(
-      /^rabaed-lane7 not removed: lane 7 holds Main 7's UAT harness data/,
-    );
+    const options = { run, wait: () => {}, volumesKeptBecause: () => undefined };
+    expect(removeProject({ project: "rabaed-lane7", reason: "x", containers: ["db"], volumes: ["v"] }, options)).toEqual({
+      refused: expect.stringMatching(/^rabaed-lane7 not removed: lane 7 holds Main 7's UAT harness data/),
+    });
+    for (const project of ["rabaed", "rabaed-lane0"]) {
+      expect(removeProject({ project, reason: "x", containers: ["db"], volumes: ["v"] }, options)).toEqual({ refused: `${project} not removed: it is the main checkout's stack (lane 0), which no clean-up removes.` });
+    }
     expect(calls).toEqual([]);
+  });
+});
+
+describe("dropDatabase (RP-1198)", () => {
+  const sql: string[] = [];
+  const run = (container: string, query: string) => (sql.push(`${container}: ${query}`), []);
+  const db = (project: string) => container({ name: `${project}-db-1`, project });
+
+  it("drops a worktree's own database, without force", () => {
+    expect(dropDatabase(db("rabaed-lane41"), "rabaed_rp41_test", run)).toBeUndefined();
+    expect(sql).toEqual(['rabaed-lane41-db-1: drop database "rabaed_rp41_test"']);
+  });
+
+  it("refuses lane 7's databases and the main checkout's rabaed and rabaed_test, running nothing", () => {
+    sql.length = 0;
+    expect(dropDatabase(db("rabaed-lane7"), "rabaed_rp7", run)).toMatchObject({ refused: expect.stringContaining("lane 7 holds Main 7's UAT harness data") });
+    for (const name of ["rabaed", "rabaed_test", "postgres"]) expect(dropDatabase(db("rabaed-lane41"), name, run)).toMatchObject({ refused: expect.stringContaining("not a per-worktree database name") });
+    expect(sql).toEqual([]);
   });
 });

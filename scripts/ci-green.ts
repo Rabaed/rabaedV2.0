@@ -95,6 +95,7 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/paths.ts",
   "scripts/pnpm.ts",
   "scripts/pr-overlap.ts",
+  "scripts/removal-guard.ts",
   "scripts/reviewed-label.ts",
   "scripts/reviewed-required.ts",
   "scripts/session-lock.ts",
@@ -160,6 +161,22 @@ export type Versions = (file: string) => { before: string | undefined; after: st
 
 /** True for a ratchet list: a `.txt` under one of the two folders. */
 const isRatchetList = (path: string) => (path.startsWith(HIDDEN_ASSERTS) || path.startsWith(UNTESTED_SEAMS)) && path.endsWith(".txt");
+
+/** RP-1198: doc-placeholders.test.ts's baseline, `{ "<doc>": ["<snippet>", …] }`, a ratchet too; a second copy of a snippet is an entry. */
+const PLACEHOLDER_BASELINE = "scripts/doc-placeholders-baseline.json";
+const baselineEntries = (text: string) =>
+  Object.entries(JSON.parse(text) as Record<string, string[]>).flatMap(([doc, snippets]) => snippets.map((s, i) => `${doc}\t${s}\t${snippets.slice(0, i).filter((t) => t === s).length}`));
+
+/** True when the placeholder baseline gains an entry between the merge base and the head; a side it cannot parse, or neither side, counts. */
+const placeholderBaselineGains = ({ before, after }: { before: string | undefined; after: string | undefined }): boolean => {
+  if (after === undefined) return before === undefined;
+  try {
+    const was = new Set(before === undefined ? [] : baselineEntries(before));
+    return baselineEntries(after).some((entry) => !was.has(entry));
+  } catch {
+    return true;
+  }
+};
 
 /**
  * A ratchet list's entries as its check reads them: one a line, blank lines and `#` lines left out; in an untested-seams
@@ -236,7 +253,8 @@ export function removedTests(changed: string[], versions: Versions): string[] {
 }
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`ratchetGains`); each
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`ratchetGains`, and
+ * RP-1198's placeholder baseline, `placeholderBaselineGains`); each
  * scenario file that loses a scenario ID (`lostScenarios`); each test file deleted (`removedTests`); and each package.json that differs between the merge base
  * and the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot
  * parse, or read on either side, counts.
@@ -249,6 +267,7 @@ export function ciOwnChanges(changed: string[], versions: Versions): string[] {
     if (isCiOwnFile(path)) return [path];
     // eslint-disable-next-line rabaed/no-avoid-terms -- a source file, git's word, not the domain's
     if (removed.has(path)) return [`${path} (deletes a test file)`];
+    if (path === PLACEHOLDER_BASELINE) return placeholderBaselineGains(versions(path)) ? [`${path} (gains an entry)`] : [];
     if (isRatchetList(path)) return gained.has(path) ? [`${path} (gains an entry)`] : [];
     if (isScenarioFile(path)) {
       const ids = lost.get(path);
