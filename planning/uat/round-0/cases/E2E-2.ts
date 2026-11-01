@@ -796,7 +796,7 @@ defineCase("J14", async (t) => {
   await settle(hp, 800);
   const formText = await mainText(hp);
   t.check("[FRM-06] The photo added on the phone shows when and where it was taken (time and place read from it)", /Taken\s+\w{3} \d{1,2}, 2026/.test(formText) && /24\.7136\d*° N, 46\.6753\d*° E/.test(formText), formText.match(/Taken.{0,80}/)?.[0] ?? "no Taken line");
-  t.check("[FRM-06] The Form has a Take a photo control for the phone's camera, and the page does not scroll sideways", (await hp.getByLabel(/^Take a photo/).count()) > 0 && (await noSideScroll(hp)));
+  t.check("[FRM-06] The Form has a Take a photo control for the phone's camera, and the page does not scroll sideways", (await hp.getByLabel(/^Take (a )?photo/).count()) > 0 && (await noSideScroll(hp)));
   t.check("[FRM-06] The photo is saved on the Draft (the api holds it)", (await docsOf(hafiz, mar)).some((d) => d.fieldKey === "sample_photo"));
   await t.shot(hp, "2-hafiz-phone-form-photo");
   t.note("The phone's own camera (Take a photo opening the device camera, and its GPS) is a person's: the script gives the picker a photo with EXIF time and place.");
@@ -820,7 +820,8 @@ defineCase("J14", async (t) => {
   await main.getByRole("radio", { name: /^Fail$/ }).first().click();
   await settle(ap, 700);
   await main.locator("textarea").first().fill("Spacing too wide on the far run.");
-  const cam = main.getByLabel(/^Take a photo/).first();
+  // "Take photo" since RP-1179, "Take a photo" before.
+  const cam = main.getByLabel(/^Take (a )?photo/).first();
   await cam.setInputFiles({ name: "far-run.jpg", mimeType: "image/jpeg", buffer: testPhoto() });
   await settle(ap, 2500);
   await main.getByRole("radio", { name: /^Pass$/ }).nth(1).click();

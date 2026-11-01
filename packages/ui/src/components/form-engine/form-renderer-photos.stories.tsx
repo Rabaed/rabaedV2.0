@@ -165,6 +165,8 @@ export const Annotated: Story = {
     await expect(canvas.getAllByText(text.annotatedMark)).toHaveLength(1);
     const thumbnail = canvas.getByRole("button", { name: storyText(context, copy.openFacade) });
     await expect(thumbnail.querySelector("img")).toHaveAttribute("src", imageUrls[facadeAnnotated.id]);
+    // Loaded with CORS, as the viewer and the annotate view load it: a cached copy without CORS left both blank (RP-1179).
+    await expect(thumbnail.querySelector("img")).toHaveAttribute("crossorigin", "anonymous");
     await expect(canvas.getByLabelText(storyText(context, copy.takePhoto))).toBeInTheDocument();
 
     await userEvent.click(thumbnail);
