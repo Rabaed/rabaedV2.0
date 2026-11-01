@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import { judgeBehindOrigin, MAX_BEHIND_ORIGIN, type BehindFacts } from "./behind-origin.ts";
 
 const here = "G:/Rabaed Contech";
-const facts = (over: Partial<BehindFacts>): BehindFacts => ({ command: "pnpm lane:done 512", here, mainRoot: here, behind: 0, branch: "main", clean: true, worktrees: [], ...over });
+const facts = (over: Partial<BehindFacts>): BehindFacts => ({
+  command: "pnpm lane:done 512",
+  here,
+  mainRoot: here,
+  freshPath: "G:/Rabaed Contech/.claude/worktrees/origin-main-20261101",
+  behind: 0,
+  branch: "main",
+  clean: true,
+  worktrees: [],
+  ...over,
+});
 
 describe("judgeBehindOrigin", () => {
   it("says nothing when HEAD has all of origin/main", () => {
@@ -45,11 +55,39 @@ describe("judgeBehindOrigin", () => {
     });
   });
 
+  it("never names a subagent's agent-* worktree, and names the main checkout first when it is within 50", () => {
+    const lane = "G:/Rabaed Contech/.claude/worktrees/lane-x";
+    const verdict = judgeBehindOrigin(
+      facts({
+        behind: 973,
+        here: lane,
+        worktrees: [
+          { path: "G:/Rabaed Contech/.claude/worktrees/agent-a62ae01e2f1123762", behind: 0 },
+          { path: "G:/Rabaed Contech/.claude/worktrees/lane-b", behind: 12 },
+          { path: "G:/Rabaed Contech", behind: 40 },
+          { path: "G:/Rabaed Contech/.claude/worktrees/lane-a", behind: 0 },
+          { path: "G:/Rabaed Contech/.claude/worktrees/agent-b1", behind: 3 },
+        ],
+      }),
+    );
+    expect(verdict.lines.slice(1, 5)).toEqual([
+      "Run it from a worktree of this clone closer to origin/main:",
+      '  cd "G:/Rabaed Contech"   (40 commits behind)',
+      '  cd "G:/Rabaed Contech/.claude/worktrees/lane-a"   (up to date with origin/main)',
+      '  cd "G:/Rabaed Contech/.claude/worktrees/lane-b"   (12 commits behind)',
+    ]);
+  });
+
+  it("with only agent-* worktrees within 50, it does not send you to them", () => {
+    const verdict = judgeBehindOrigin(facts({ behind: 973, worktrees: [{ path: "G:/Rabaed Contech/.claude/worktrees/agent-a1/", behind: 0 }] }));
+    expect(verdict.lines[1]).toMatch(/^No worktree of this clone is within 50 commits/);
+  });
+
   it("with no worktree within 50, a clean checkout on main fast-forwards", () => {
     const verdict = judgeBehindOrigin(facts({ behind: 973, branch: "main", clean: true, worktrees: [{ path: "G:/Rabaed Contech/.claude/worktrees/old", behind: 51 }] }));
     expect(verdict.stop).toBe(true);
     expect(verdict.lines.slice(1)).toEqual([
-      "No worktree of this clone is within 50 commits of origin/main. This checkout is on main with nothing uncommitted: bring it up to date, then run it again:",
+      "No worktree of this clone is within 50 commits of origin/main. This checkout is on main with no uncommitted tracked changes: bring it up to date, then run it again:",
       "  git merge --ff-only origin/main",
       "  pnpm install --frozen-lockfile",
       "  pnpm lane:done 512",
@@ -59,13 +97,14 @@ describe("judgeBehindOrigin", () => {
   it("with no worktree within 50, a checkout off main or with changes cuts a fresh worktree from origin/main", () => {
     const fresh = [
       "No worktree of this clone is within 50 commits of origin/main. Cut a fresh worktree from origin/main and run it there:",
-      '  git worktree add --detach "G:/Rabaed Contech/.claude/worktrees/origin-main" origin/main',
-      '  cd "G:/Rabaed Contech/.claude/worktrees/origin-main"',
+      '  git worktree add --detach "G:/Rabaed Contech/.claude/worktrees/origin-main-20261101-2" origin/main',
+      '  cd "G:/Rabaed Contech/.claude/worktrees/origin-main-20261101-2"',
       "  pnpm install --frozen-lockfile",
       "  pnpm lane:done 512",
     ];
-    expect(judgeBehindOrigin(facts({ behind: 60, branch: "main", clean: false })).lines.slice(1)).toEqual(fresh);
-    expect(judgeBehindOrigin(facts({ behind: 60, branch: "RP-12-x", clean: true, here: "G:/Rabaed Contech/.claude/worktrees/lane-a" })).lines.slice(1)).toEqual(fresh);
+    const freshPath = "G:/Rabaed Contech/.claude/worktrees/origin-main-20261101-2";
+    expect(judgeBehindOrigin(facts({ behind: 60, branch: "main", clean: false, freshPath })).lines.slice(1)).toEqual(fresh);
+    expect(judgeBehindOrigin(facts({ behind: 60, branch: "RP-12-x", clean: true, here: "G:/Rabaed Contech/.claude/worktrees/lane-a", freshPath })).lines.slice(1)).toEqual(fresh);
   });
 
   it("says in one line when the fetch failed, and judges against the origin/main it has", () => {

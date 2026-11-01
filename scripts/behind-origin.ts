@@ -4,7 +4,7 @@
 // so it runs with plain `node` and no installed packages.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { samePath } from "./paths.ts";
+import { normalPath, samePath } from "./paths.ts";
 
 /** Past this many commits behind origin/main, a script stops. */
 export const MAX_BEHIND_ORIGIN = 50;
@@ -18,11 +18,14 @@ export type BehindFacts = {
   here: string;
   /** The clone's main checkout, the first worktree git lists. */
   mainRoot: string;
+  /** A folder that does not exist yet, for the fresh worktree a stop may suggest. */
+  freshPath: string;
   /** Commits origin/main has that HEAD does not; undefined when there is no origin/main. */
   behind: number | undefined;
   /** Why `git fetch origin main` failed, when it did. */
   fetchError?: string;
   branch: string | undefined;
+  /** No changes to tracked files (untracked files do not stop `git merge --ff-only`). */
   clean: boolean;
   worktrees: { path: string; behind: number }[];
 };
@@ -38,20 +41,22 @@ export function judgeBehindOrigin(facts: BehindFacts, max: number = MAX_BEHIND_O
   if (facts.behind === 0) return { stop: false, lines };
   if (facts.behind <= max) return { stop: false, lines: [...lines, `${facts.command}: HEAD is ${commits(facts.behind)} behind origin/main (it stops past ${max}); carrying on.`] };
   lines.push(`${facts.command} stopped: HEAD is ${commits(facts.behind)} behind origin/main: this checkout's scripts are older than main's.`);
+  // Never a subagent's worktree: its session may still run, and the prunes this guards remove it.
+  const agentDir = `${normalPath(facts.mainRoot)}/.claude/worktrees/agent-`;
+  const isMain = (path: string) => samePath(path, facts.mainRoot);
   const closer = facts.worktrees
-    .filter((w) => w.behind <= max && !samePath(w.path, facts.here))
-    .sort((a, b) => a.behind - b.behind)
+    .filter((w) => w.behind <= max && !samePath(w.path, facts.here) && !normalPath(w.path).startsWith(agentDir))
+    .sort((a, b) => Number(isMain(b.path)) - Number(isMain(a.path)) || a.behind - b.behind)
     .slice(0, CLOSEST);
   if (closer.length > 0) {
     lines.push("Run it from a worktree of this clone closer to origin/main:");
     for (const w of closer) lines.push(`  cd "${w.path}"   (${w.behind === 0 ? "up to date with origin/main" : `${commits(w.behind)} behind`})`);
   } else if (facts.branch === "main" && facts.clean) {
-    lines.push(`No worktree of this clone is within ${max} commits of origin/main. This checkout is on main with nothing uncommitted: bring it up to date, then run it again:`);
+    lines.push(`No worktree of this clone is within ${max} commits of origin/main. This checkout is on main with no uncommitted tracked changes: bring it up to date, then run it again:`);
     lines.push("  git merge --ff-only origin/main", "  pnpm install --frozen-lockfile");
   } else {
-    const fresh = `${facts.mainRoot.replace(/[\\/]+$/, "")}/.claude/worktrees/origin-main`;
     lines.push(`No worktree of this clone is within ${max} commits of origin/main. Cut a fresh worktree from origin/main and run it there:`);
-    lines.push(`  git worktree add --detach "${fresh}" origin/main`, `  cd "${fresh}"`, "  pnpm install --frozen-lockfile");
+    lines.push(`  git worktree add --detach "${facts.freshPath}" origin/main`, `  cd "${facts.freshPath}"`, "  pnpm install --frozen-lockfile");
   }
   lines.push(`  ${facts.command}`);
   return { stop: true, lines };
@@ -78,7 +83,7 @@ export function stopIfBehindOrigin(script: string, options: { cwd?: string; max?
 const FETCH_TIMEOUT_MS = 60_000;
 
 /** Fetches origin main, then judges the checkout at `cwd`; the other worktrees are read only when it stops. */
-export function checkBehindOrigin(command: string, { cwd = process.cwd(), max = MAX_BEHIND_ORIGIN }: { cwd?: string; max?: number } = {}): BehindVerdict {
+export function checkBehindOrigin(command: string, { cwd = process.cwd(), max = MAX_BEHIND_ORIGIN, now = new Date() }: { cwd?: string; max?: number; now?: Date } = {}): BehindVerdict {
   const git = (args: string[], timeout?: number) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout }).trim();
   const attempt = (args: string[]) => {
     try {
@@ -99,12 +104,13 @@ export function checkBehindOrigin(command: string, { cwd = process.cwd(), max = 
   };
   const behind = behindOf("HEAD");
   const here = git(["rev-parse", "--show-toplevel"]);
-  const facts: BehindFacts = { command, here, mainRoot: here, behind, fetchError, branch: undefined, clean: false, worktrees: [] };
+  const facts: BehindFacts = { command, here, mainRoot: here, freshPath: "", behind, fetchError, branch: undefined, clean: false, worktrees: [] };
   if (behind !== undefined && behind > max) {
     const listed = parseWorktreeHeads(git(["worktree", "list", "--porcelain"]));
     facts.mainRoot = listed[0]?.path ?? here;
+    facts.freshPath = freshWorktreePath(facts.mainRoot, now);
     facts.branch = attempt(["symbolic-ref", "--short", "-q", "HEAD"]);
-    facts.clean = attempt(["status", "--porcelain"]) === "";
+    facts.clean = attempt(["status", "--porcelain", "--untracked-files=no"]) === "";
     for (const w of listed) {
       if (samePath(w.path, here) || !existsSync(w.path)) continue;
       const n = behindOf(w.head);
@@ -112,6 +118,15 @@ export function checkBehindOrigin(command: string, { cwd = process.cwd(), max = 
     }
   }
   return judgeBehindOrigin(facts, max);
+}
+
+/** `<mainRoot>/.claude/worktrees/origin-main-YYYYMMDD`, with -2, -3 … when that folder exists. */
+function freshWorktreePath(mainRoot: string, now: Date): string {
+  const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const base = `${mainRoot.replace(/[\\/]+$/, "")}/.claude/worktrees/origin-main-${day}`;
+  let path = base;
+  for (let n = 2; existsSync(path); n++) path = `${base}-${n}`;
+  return path;
 }
 
 /** Each worktree's path and HEAD from `git worktree list --porcelain`; a bare entry has no HEAD and is left out. */

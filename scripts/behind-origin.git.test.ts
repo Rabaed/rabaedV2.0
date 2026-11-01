@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -49,6 +49,21 @@ describe("checkBehindOrigin, on real repositories", () => {
     const verdict = checkBehindOrigin("pnpm lanes", { cwd: stale, max: MAX });
     expect(verdict.stop).toBe(true);
     expect(verdict.lines).toContain("  git merge --ff-only origin/main");
+  });
+
+  it("an untracked file does not stop the fast-forward; a change to a tracked file does", () => {
+    writeFileSync(join(stale, "design-notes.md"), "untracked\n");
+    expect(checkBehindOrigin("pnpm lanes", { cwd: stale, max: MAX }).lines).toContain("  git merge --ff-only origin/main");
+    writeFileSync(join(stale, "a.txt"), "changed\n");
+    expect(checkBehindOrigin("pnpm lanes", { cwd: stale, max: MAX }).lines).not.toContain("  git merge --ff-only origin/main");
+  });
+
+  it("suggests a fresh worktree named for the day, with -2 when that folder already exists", () => {
+    git(stale, "switch", "-q", "-c", "RP-1-x");
+    const now = new Date(2026, 10, 1, 9, 0);
+    expect(checkBehindOrigin("pnpm lanes", { cwd: stale, max: MAX, now }).lines).toContainEqual(expect.stringMatching(/^ {2}git worktree add --detach ".*\/\.claude\/worktrees\/origin-main-20261101" origin\/main$/));
+    mkdirSync(join(stale, ".claude", "worktrees", "origin-main-20261101"), { recursive: true });
+    expect(checkBehindOrigin("pnpm lanes", { cwd: stale, max: MAX, now }).lines).toContainEqual(expect.stringMatching(/^ {2}git worktree add --detach ".*\/\.claude\/worktrees\/origin-main-20261101-2" origin\/main$/));
   });
 
   it("says nothing from a worktree that has origin/main", () => {
