@@ -315,10 +315,13 @@ describe("overHttp", () => {
     expect(reviewGate(["docs-only"], files).ok).toBe(false);
   });
 
-  it("lists the reviewed-label runs of a head, and undefined when the workflow is not there", async () => {
-    const { urls, github } = recorded(() => ({ status: 200, body: { workflow_runs: [{ status: "queued" }] } }));
-    expect(await github.labelRuns("abc")).toEqual([{ status: "queued" }]);
-    expect(urls).toEqual(["https://api.github.com/repos/o/r/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request"]);
+  it("lists the reviewed-label runs of a head under either event (RP-1148), and undefined when the workflow is not there", async () => {
+    const { urls, github } = recorded((url) => ({ status: 200, body: { workflow_runs: url.endsWith("event=pull_request_target") ? [{ status: "queued" }] : [{ status: "completed" }] } }));
+    expect(await github.labelRuns("abc")).toEqual([{ status: "queued" }, { status: "completed" }]);
+    expect(urls).toEqual([
+      "https://api.github.com/repos/o/r/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request_target",
+      "https://api.github.com/repos/o/r/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request",
+    ]);
     expect(await recorded(() => ({ status: 404 })).github.labelRuns("abc")).toBeUndefined();
   });
 

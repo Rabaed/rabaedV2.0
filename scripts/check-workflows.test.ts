@@ -89,6 +89,27 @@ describe("lintWorkflow", () => {
       expect(gate(mainCheckout, { permissions: "" }).join()).toContain("permissions: {}");
     });
 
+    it("takes the reason only from a comment of the file itself, at the left margin, never from inside a run: script", () => {
+      const inRun = "      - run: |\n          # pull_request_target: hidden in a script\n          echo hi\n";
+      expect(gate(inRun, { why: "" }).join()).toContain("# pull_request_target: <reason>");
+    });
+
+    it("refuses a checkout under any spelling of the action's name", () => {
+      const step = `      - uses: Actions/Checkout@${SHA}\n        with:\n          ref: \${{ github.event.pull_request.head.sha }}\n          persist-credentials: false\n`;
+      expect(gate(step).join()).toContain("default branch");
+    });
+
+    it("refuses what could run the PR's code another way: a git or gh checkout in a run: step, a reusable workflow, a container or services", () => {
+      for (const command of ["git checkout FETCH_HEAD", "gh pr checkout 7", "git switch --detach FETCH_HEAD", "git worktree add pr FETCH_HEAD", "git reset --hard FETCH_HEAD"]) {
+        expect(gate(`      - run: ${command}\n`).join(), command).toContain("pull_request_target");
+      }
+      expect(gate("      - run: git fetch --no-tags origin refs/pull/7/head\n")).toEqual([]);
+      const reusable = messages(`${reason}on: pull_request_target\npermissions: {}\njobs:\n  a:\n    uses: ./.github/workflows/other.yml\n`);
+      expect(reusable.join()).toContain("reusable workflow");
+      expect(gate(mainCheckout, { job: "    permissions: { contents: read }\n    container: node:24\n" }).join()).toContain("container");
+      expect(gate(mainCheckout, { job: "    permissions: { contents: read }\n    services:\n      db: { image: postgres }\n" }).join()).toContain("services");
+    });
+
     it("holds a write job to the same-repository guard, as on pull_request", () => {
       const write = "    permissions: { pull-requests: write }\n";
       expect(gate(mainCheckout, { job: write }).join()).toContain("job a");

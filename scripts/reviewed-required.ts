@@ -131,7 +131,7 @@ export interface RequiredSeam {
   files(pr: number): Promise<string[]>;
   /** The PR's issue events, oldest first. */
   events(pr: number): Promise<PrEvent[]>;
-  /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
+  /** The `reviewed-label` workflow's pull_request_target and pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
   sleep(ms: number): Promise<void>;
 }
@@ -376,8 +376,15 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       return files;
     },
     async labelRuns(headSha) {
-      const runs = (await get(`actions/workflows/reviewed-label.yml/runs?head_sha=${headSha}&event=pull_request`, true)) as { workflow_runs: { status: string }[] } | undefined;
-      return runs?.workflow_runs.map((run) => ({ status: run.status }));
+      // reviewed-label runs on pull_request_target from RP-1148 part A's workflow PR (main's copy, so a PR can't make
+      // it keep a stale label), on pull_request before it: both count. Undefined only when the workflow is not there.
+      const answers = await Promise.all(
+        ["pull_request_target", "pull_request"].map(
+          async (event) => (await get(`actions/workflows/reviewed-label.yml/runs?head_sha=${headSha}&event=${event}`, true)) as { workflow_runs: { status: string }[] } | undefined,
+        ),
+      );
+      if (answers.every((answer) => answer === undefined)) return undefined;
+      return answers.flatMap((answer) => answer?.workflow_runs ?? []).map((run) => ({ status: run.status }));
     },
   };
 }

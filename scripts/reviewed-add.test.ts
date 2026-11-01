@@ -435,9 +435,12 @@ describe("overHttp's gate run lookups", () => {
     expect(urls).toContain("https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/verify-gate.yml/runs?head_sha=abc&event=pull_request");
   });
 
-  it("finds the reviewed-label runs, which stay on pull_request, by that event", async () => {
-    const { http, urls } = byEvent({ pull_request: [{ id: 30, status: "completed", conclusion: "success" }] });
-    expect(await http.labelRuns("abc")).toEqual([{ status: "completed" }]);
-    expect(urls).toEqual(["https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request"]);
+  it("finds the reviewed-label runs of either event too: it moves with the gate workflows", async () => {
+    const { http, urls } = byEvent({ pull_request: [{ id: 30, status: "completed", conclusion: "success" }], pull_request_target: [{ id: 31, status: "queued", conclusion: null }] });
+    expect(await http.labelRuns("abc")).toEqual([{ status: "queued" }, { status: "completed" }]);
+    expect(urls).toEqual([
+      "https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request_target",
+      "https://api.github.com/repos/Rabaed/rabaedV2.0/actions/workflows/reviewed-label.yml/runs?head_sha=abc&event=pull_request",
+    ]);
   });
 });
