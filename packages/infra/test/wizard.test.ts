@@ -27,8 +27,9 @@ function wizardDescribe(name: string, body: () => void) {
   describe.skipIf(!bashAvailable)(bashAvailable ? name : `${name} (skipped, ${skipReason})`, body);
 }
 
-it.runIf(inCi)("bash is available, so the wizard tests run and are not skipped", () => {
-  expect(bashAvailable, "CI must have bash: the wizard tests cannot be skipped there").toBe(true);
+// Runs everywhere and asserts only in CI: a condition on CI's environment could keep it from running there (RP-1196).
+it("bash is available in CI, so the wizard tests run and are not skipped", () => {
+  expect(bashAvailable || !inCi, "CI must have bash: the wizard tests cannot be skipped there").toBe(true);
 });
 
 // The input goes in $INPUT: Windows drops a carriage return from arguments.

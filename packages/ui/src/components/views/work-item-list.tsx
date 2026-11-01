@@ -264,6 +264,8 @@ export type WorkItemListProps = {
    */
   rowActions?: {
     load: (row: WorkItemRow) => Promise<RowPermissions | null>;
+    /** What the row alone says the viewer may do, offered while `load` is answering (RP-1175). */
+    known?: (row: WorkItemRow) => Partial<RowPermissions>;
     run: (row: WorkItemRow, action: RowAction) => Promise<string | null | void>;
   };
   /** Opens a row in the Submittal Panel (RP-1061) instead of its page (`WorkItemTable`'s `onOpen`). */
@@ -793,6 +795,7 @@ function WorkItemListBody({
                     <RowMenu
                       subject={row.title}
                       load={() => rowActions.load(row)}
+                      known={rowActions.known?.(row)}
                       onAction={(action) => (action === "delete" ? setDeleting(row) : void runRowAction(row, action))}
                       labels={labels.rowMenu}
                     />

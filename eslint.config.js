@@ -73,6 +73,15 @@ export default tseslint.config(
     rules: { "rabaed/order-by-tiebreaker": "error" },
   },
   {
+    // A test that never runs keeps CI green without it (RP-1196): no .skip, .todo, xit, .skipIf/.runIf on a constant,
+    // and no .only. Inline config is off here, so no eslint-disable comment can switch the rules off (any rule: no test
+    // file had one when this was added); the rules also report such a comment as an error.
+    files: ["**/*.{test,spec}.{ts,tsx,mts,cts,js,mjs,cjs,jsx}"],
+    linterOptions: { noInlineConfig: true },
+    plugins: { rabaed },
+    rules: { "rabaed/no-disabled-tests": "error", "rabaed/no-focused-tests": "error" },
+  },
+  {
     // An ARN or account id in an error or log line reaches CloudWatch and the user (RP-329).
     files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
     ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],
@@ -120,6 +129,15 @@ export default tseslint.config(
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     plugins: { rabaed },
     rules: { "rabaed/no-buffer-slice": "error" },
+  },
+  {
+    // An env schema's optional string is optionalSecret: z.string().min(1).optional() refuses the empty `KEY=` line a .env
+    // holds for an unset value, which would have stopped the worker in every lane (#560, RP-1196). The rule itself finds
+    // the env schema files (process.env, or a *FromEnv reader), so every file is given to it.
+    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],
+    plugins: { rabaed },
+    rules: { "rabaed/env-optional-secret": "error" },
   },
   {
     files: ["apps/web/**/*.{ts,tsx}"],
