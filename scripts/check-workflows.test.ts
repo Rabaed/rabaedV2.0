@@ -100,10 +100,23 @@ describe("lintWorkflow", () => {
     });
 
     it("refuses what could run the PR's code another way: a git or gh checkout in a run: step, a reusable workflow, a container or services", () => {
-      for (const command of ["git checkout FETCH_HEAD", "gh pr checkout 7", "git switch --detach FETCH_HEAD", "git worktree add pr FETCH_HEAD", "git reset --hard FETCH_HEAD"]) {
+      for (const command of [
+        "git checkout FETCH_HEAD",
+        "gh pr checkout 7",
+        "git switch --detach FETCH_HEAD",
+        "git worktree add pr FETCH_HEAD",
+        "git reset --hard FETCH_HEAD",
+        // Git's own options before the verb (Main 6 on #623).
+        "git -C dir checkout FETCH_HEAD",
+        "git -c core.x=y switch --detach FETCH_HEAD",
+        "git --work-tree=w checkout FETCH_HEAD",
+        "git -C . worktree add pr FETCH_HEAD",
+        "git --no-pager -C dir reset --hard FETCH_HEAD",
+      ]) {
         expect(gate(`      - run: ${command}\n`).join(), command).toContain("pull_request_target");
       }
       expect(gate("      - run: git fetch --no-tags origin refs/pull/7/head\n")).toEqual([]);
+      expect(gate("      - run: git -C dir fetch origin refs/pull/7/head && git -C dir log --oneline FETCH_HEAD\n")).toEqual([]);
       const reusable = messages(`${reason}on: pull_request_target\npermissions: {}\njobs:\n  a:\n    uses: ./.github/workflows/other.yml\n`);
       expect(reusable.join()).toContain("reusable workflow");
       expect(gate(mainCheckout, { job: "    permissions: { contents: read }\n    container: node:24\n" }).join()).toContain("container");
