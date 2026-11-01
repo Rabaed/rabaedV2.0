@@ -337,7 +337,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       can_save: boolean;
       submitted: boolean;
       workflow_version_id: string;
-      step_key: string;
+      step_key: string | null;
       work_item_type_id: string;
     }
   >`
@@ -347,9 +347,9 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     from work_item w
     join form_version v on v.id = w.form_version_id
     -- The Step as the Member sees it (V14): the current one whenever they may save,
-    -- since their Participant then holds the item.
+    -- since their Participant then holds the item; none while another Company holds it.
     cross join lateral app.step_as_seen(w.id) seen
-    join workflow_step s on s.id = seen.step_id
+    left join workflow_step s on s.id = seen.step_id
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
@@ -719,8 +719,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       form_version_id: string;
       creation_date: Date | null;
       submitted_at: Date | null;
-      step_key: string;
-      step_name: BilingualText;
+      step_key: string | null;
+      step_name: BilingualText | null;
       raised_by: BilingualText;
       held_by: BilingualText | null;
       holder_name: BilingualText | null;
@@ -757,7 +757,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ${canDuplicate(sql.ref("w"))} as can_duplicate, app.can_discard_draft(w.id) as can_discard_draft
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
-      join workflow_step s on s.id = seen.step_id
+      -- The Step only to the holding Participant's Members, or once closed (db-mask: app.step_as_seen; RP-1192).
+      left join workflow_step s on s.id = seen.step_id
       join work_item_type ty on ty.id = w.work_item_type_id
       left join stage st on st.project_id = w.project_id and st.module_key = ty.module_key and st.key = seen.stage_key
       -- Its Workflow's name and Version, for whoever sees the item, whatever Workflow rows they read (V20).
@@ -839,7 +840,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       autosave: auto[0]!.autosave,
       sentBackForComment: d.sent_back_for_comment,
       scopes,
-      step: { key: d.step_key, name: d.step_name },
+      // Another Company's Step is never named, not even the one the item arrived at (V14).
+      step: d.step_key !== null && d.step_name !== null ? { key: d.step_key, name: d.step_name } : null,
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by
         ? {

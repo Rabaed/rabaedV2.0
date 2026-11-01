@@ -104,7 +104,7 @@ describe("scenario RP-588-4: K1's manager codes three items in bulk", () => {
 /** Where item `id` is for K1's manager: its Step and the Transitions offered them. */
 const whereFor = async (by: Caller, id: string) => {
   const d = await detail(by, id);
-  return { step: d.step.key, offered: d.actions.transitions.map((t) => t.key) };
+  return { step: d.step?.key, offered: d.actions.transitions.map((t) => t.key) };
 };
 
 describe("what a bulk Transition refuses: nothing moves, and the answer names the item that stopped it", () => {
@@ -250,7 +250,7 @@ describe('one Action Form and one "Assign to" for all', () => {
     const refused = await refusal(bulk(k1Engineer, more, { transition: "send_to_manager", assignTo: k1EngineerId }));
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(refused.body.stoppedBy).toMatchObject({ id: more[0], reason: "assignee_not_offered" });
-    for (const id of more) expect((await detail(k1Engineer, id)).step.key).toBe("consultant_review");
+    for (const id of more) expect((await detail(k1Engineer, id)).step?.key).toBe("consultant_review");
   });
 
   it("is refused when an item offers the Transition with another Action Form (Screen Version)", async () => {
@@ -264,7 +264,7 @@ describe('one Action Form and one "Assign to" for all', () => {
     const refused = await refusal(bulk(k1Approver, [acted, ruled], { transition: "approve_a", answers: { remarks: "Fine" } }));
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(refused.body.stoppedBy).toMatchObject({ id: ruled, title: "Ruled Code form", reason: "different_action_form" });
-    expect((await detail(k1Approver, acted)).step.key).toBe("consultant_approval");
+    expect((await detail(k1Approver, acted)).step?.key).toBe("consultant_approval");
   });
 });
 

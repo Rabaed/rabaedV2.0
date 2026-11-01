@@ -18,5 +18,5 @@ Before the first commit, grep the old term (every casing and plural, English and
    pnpm test:stories:linux --update -t "<story file or name>"
    ```
 
-   then review the changed PNGs in the diff. A bare `--update` re-renders every baseline; `--update=new` writes only the missing ones. If you cannot run Docker, a PR that touches a story or `packages/ui/src` gets its changed baselines committed by the **Update screenshots** workflow; any other PR needs the `update-screenshots` label. Either way, run `pnpm test:stories:linux -t "<story>"` (no `--update`) before pushing to see what CI will see.
+   then review the changed PNGs in the diff. A bare `--update` re-renders every baseline; `--update=new` writes only the missing ones. If you cannot run Docker, add the `update-screenshots` label: the **Update screenshots** workflow then commits the changed baselines (a push alone no longer starts it, RP-1199). Either way, run `pnpm test:stories:linux -t "<story>"` (no `--update`) before pushing to see what CI will see.
 10. **Check.** `pnpm lint`, `pnpm typecheck`, and the story and unit tests of what you touched.

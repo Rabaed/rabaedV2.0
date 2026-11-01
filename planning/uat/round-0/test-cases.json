@@ -49,7 +49,7 @@
   "title": "Send for Review numbers the item and Ali holds it at once",
   "who": "Hafiz (TMC engineer); Ali (TMC PM)",
   "steps": "1) Hafiz: Send for Review on the complete Draft. 2) Ali: open it from the bell.",
-  "expected": "The item gets a Document Number (first in a fresh seed: TWR-MAR-01-0004) shown left to right. Ali is TMC's only PM, so it is his at once: \"With Ali Sonour - TMC Constructions\", no Pick up button. Ali's bell shows \"Step reached\" within seconds. Nothing outside TMC.",
+  "expected": "The item gets the next Document Number in its sequence (for example TWR-MAR-01-0004), shown left to right. Ali is TMC's only PM, so it is his at once: \"With Ali Sonour - TMC Constructions\", no Pick up button. Ali's bell shows \"Step reached\" within seconds. Nothing outside TMC.",
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
@@ -403,6 +403,7 @@
   "priority": "High",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: CLAUDE.md, Step Age, V14"
  },
  {
@@ -613,6 +614,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: 35, RP-407-4; Rules: Step Age, V14"
  },
  {
@@ -641,6 +643,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: RP-431-2; Rules: V14, Refusals row; RP-463: B-06"
  },
  {
@@ -809,6 +812,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: sign-in"
  },
  {
@@ -823,6 +827,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: Member (GLOSSARY), ADR 0009"
  },
  {
@@ -921,6 +926,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: RP-108-1; Rules: ADR 0018"
  },
  {
@@ -1145,6 +1151,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "RP-588: bulk Transitions",
+  "needs": ["setup"],
   "covers": "Rules: Package bulk; RP-616 story 44 (reworded 2026-10-19); ADR 0017"
  },
  {
@@ -1159,6 +1166,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "RP-588: grouped notification",
+  "needs": ["mail", "owner"],
   "covers": "Rules: Package, V14, Notifications row"
  },
  {
@@ -1271,6 +1279,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: ADR 0023"
  },
  {
@@ -1383,6 +1392,7 @@
   "priority": "Low",
   "mode": "Manual",
   "waits": "RP-23: record checks (RP-155)",
+  "needs": ["owner"],
   "covers": "Rules: ADR 0023"
  },
  {
@@ -1453,6 +1463,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: RP-90-4; Rules: ADR 0014, workflow-engine 6"
  },
  {
@@ -1621,6 +1632,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "RP-28: SNAG-12 (RP-658)",
+  "needs": ["setup"],
   "covers": "Rules: RP-658, GLOSSARY Snag"
  },
  {
@@ -1999,6 +2011,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "RP-589: Register Import by a Rabaed Engineer (RP-645)",
+  "needs": ["owner"],
   "covers": "Rules: V9"
  },
  {
@@ -2041,6 +2054,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 69"
  },
  {
@@ -2055,6 +2069,7 @@
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 68"
  },
  {
@@ -2069,6 +2084,7 @@
   "priority": "Low",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: Notifications row"
  },
  {
@@ -2083,6 +2099,7 @@
   "priority": "High",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["mail", "job", "owner"],
   "covers": "Matrix: 72; Rules: digest (RP-358)"
  },
  {
@@ -2097,6 +2114,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["mail", "job", "setup", "owner"],
   "covers": "Matrix: 21, 76"
  },
  {
@@ -2125,6 +2143,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 71; Rules: Sent Back notification"
  },
  {
@@ -2139,6 +2158,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: I18N rules"
  },
  {
@@ -2153,6 +2173,7 @@
   "priority": "High",
   "mode": "Manual",
   "waits": "Not scheduled: Project close is not built (no ticket in the five epics)",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 15; Rules: RP-360"
  },
  {
@@ -2181,6 +2202,7 @@
   "priority": "High",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: CLAUDE.md Latin digits"
  },
  {
@@ -2279,6 +2301,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: ADR 0010, Rabaed Admin (GLOSSARY)"
  },
  {
@@ -2293,6 +2316,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Rules: V9, Company onboarding"
  },
  {
@@ -2307,6 +2331,7 @@
   "priority": "Medium",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: Company (GLOSSARY)"
  },
  {
@@ -2321,6 +2346,7 @@
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: 31, 38; Rules: ADR 0009, RP-252"
  },
  {
@@ -2335,6 +2361,7 @@
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: Option List (GLOSSARY)"
  },
  {
@@ -2349,6 +2376,7 @@
   "priority": "Low",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-412-1"
  },
  {
@@ -2363,6 +2391,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-443-1"
  },
  {
@@ -2377,6 +2406,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-566-1"
  },
  {
@@ -2391,6 +2421,7 @@
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: ADR 0010"
  },
  {
@@ -2405,6 +2436,7 @@
   "priority": "High",
   "mode": "Manual",
   "waits": "Not scheduled: no admin item commands are built (Admin has companies, numbering, option lists and Workflows only)",
+  "needs": ["owner"],
   "covers": "Matrix: 20; Rules: V9"
  },
  {
@@ -2559,6 +2591,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["mail", "setup", "owner"],
   "covers": "Design: sign-in.md"
  },
  {
@@ -2797,6 +2830,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 3, 4, 5, 6; Rules: V2, V3"
  },
  {
@@ -2909,6 +2943,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 78, 77; Rules: E3"
  },
  {
@@ -2951,6 +2986,7 @@
   "priority": "Highest",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 62"
  },
  {
@@ -2965,6 +3001,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 58, 59, RP-580-1; Rules: V19"
  },
  {
@@ -2979,6 +3016,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 71, RP-582-1, RP-582-2; Rules: V19"
  },
  {
@@ -2993,6 +3031,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: 61, 73, 74, 75, RP-392-1, RP-392-2, RP-399-1; Rules: Creation Date row"
  },
  {
@@ -3007,6 +3046,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: 35, RP-407-4; Rules: V14"
  },
  {
@@ -3021,6 +3061,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: 63, 64, 65; Rules: Dashboard row"
  },
  {
@@ -3063,6 +3104,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 67, 68; Rules: Watch row"
  },
  {
@@ -3077,6 +3119,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 19, 69; Rules: Notifications row"
  },
  {
@@ -3343,6 +3386,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: RP-108-1, RP-108-2; Rules: ADR 0018"
  },
  {
@@ -3469,6 +3513,7 @@
   "priority": "Highest",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["setup"],
   "covers": "Matrix: RP-90-1, RP-94-1; Rules: V3"
  },
  {
@@ -3623,6 +3668,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: RP-515-1; Rules: Derived values row"
  },
  {

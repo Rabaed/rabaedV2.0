@@ -393,11 +393,9 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
       hiddenFrom: c1Pm,
       label: "K1's internal move",
     });
-    const [seen] = await call<{ key: string }>(
-      c1Pm,
-      sql`select s.key from app.step_as_seen(${item.id}::uuid) seen join workflow_step s on s.id = seen.step_id`,
-    );
-    expect(seen!.key).toBe("consultant_review");
+    // C1 reads K1 by its role, and no K1 Step, not even the one its Submit reached (RP-1192-1).
+    const seen = await call<{ step_id: string | null; holder_role: string | null }>(c1Pm, sql`select step_id, holder_role from app.step_as_seen(${item.id}::uuid)`);
+    expect(seen).toEqual([{ step_id: null, holder_role: "consultant" }]);
     // C2 sees none of C1's item, its Workflow notwithstanding (V3).
     expect(await call(c2.member, sql`select id from work_item where id = ${item.id}::uuid`)).toEqual([]);
   });

@@ -124,7 +124,7 @@ describe("a Contractor's Question to Owner (seam 1, scenario RP-1108-1)", () => 
     const id = await asked(at.c1Engineer, "QSO", "Which façade colour");
     const open = await detail(r1Engineer, id);
     expect(open.documentNumber).toMatch(/-QSO-/);
-    expect(open.step.key).toBe("open");
+    expect(open.step?.key).toBe("open");
     await pickUp(r1Engineer, id);
     expect(await offered(r1Engineer, id)).toContain("answer");
     // The Owner reads it (oversight) and holds nothing; so does the informed Consultant.
@@ -137,7 +137,7 @@ describe("a Contractor's Question to Owner (seam 1, scenario RP-1108-1)", () => 
     await take(r1Engineer, id, "answer", { answers: { answer: "RAL 7016" } });
     await pickUp(at.c1Engineer, id);
     await take(at.c1Engineer, id, "ask_again", { reason: "Matt or gloss?" });
-    expect((await detail(r1Engineer, id)).step.key).toBe("open");
+    expect((await detail(r1Engineer, id)).step?.key).toBe("open");
     await take(r1Engineer, id, "answer", { answers: { answer: "Matt" } });
     await pickUp(at.c1Engineer, id);
     await take(at.c1Engineer, id, "close");
@@ -175,7 +175,7 @@ describe("a Contractor's Question to Owner (seam 1, scenario RP-1108-1)", () => 
     await pickUp(o1Pm, id);
     expect(await offered(o1Pm, id)).toContain("answer");
     await take(o1Pm, id, "answer", { answers: { answer: "Interlock" } });
-    expect((await detail(at.c1Engineer, id)).step.key).toBe("answered");
+    expect((await detail(at.c1Engineer, id)).step?.key).toBe("answered");
   });
 });
 
@@ -183,7 +183,7 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
   it("RP-1108-2: the Owner's QSC to C1 reaches C1, the Owner side and the Consultant (informed); C2 never", async () => {
     const id = await draftQuestion(o1Pm, "QSC", "When is the slab poured");
     await take(o1Pm, id, "ask");
-    expect((await detail(at.c1Pm, id)).step.key).toBe("open");
+    expect((await detail(at.c1Pm, id)).step?.key).toBe("open");
     expect(await offered(at.k1Manager, id)).toEqual([]);
     expect((await snags(at.k1Manager)).items.map((i) => i.id)).toContain(id);
     expect((await snags(r1Engineer)).items.map((i) => i.id)).toContain(id);
@@ -193,7 +193,7 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
     await pickUp(o1Pm, id);
     expect(await offered(o1Pm, id)).toEqual(expect.arrayContaining(["close", "ask_again"]));
     await take(o1Pm, id, "ask_again", { reason: "Which Sunday?" });
-    expect((await detail(at.c1Pm, id)).step.key).toBe("open");
+    expect((await detail(at.c1Pm, id)).step?.key).toBe("open");
     await take(at.c1Pm, id, "answer", { answers: { answer: "The 14th" } });
     await pickUp(o1Pm, id);
     await take(o1Pm, id, "close");
@@ -224,8 +224,8 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
       await hiddenFrom(c2Engineer, id, "C2");
     }
     // Positive controls: the asked Company reads each.
-    expect((await detail(r1Engineer, toOwner)).step.key).toBe("open");
-    expect((await detail(at.k1Manager, toConsultant)).step.key).toBe("open");
+    expect((await detail(r1Engineer, toOwner)).step?.key).toBe("open");
+    expect((await detail(at.k1Manager, toConsultant)).step?.key).toBe("open");
     // The Consultant's QSO is answered by R1 and closed by K1, still read by no Contractor.
     await pickUp(r1Engineer, toOwner);
     await take(r1Engineer, toOwner, "answer", { answers: { answer: "Accepted" } });
@@ -238,7 +238,7 @@ describe("the Owner side asks (seam 1, scenarios RP-1108-2 to RP-1108-4)", () =>
   it("RP-1108-4: the Owner Representative's Draft is its own until the Ask", async () => {
     const id = await draftQuestion(r1Engineer, "QSN", "Which sample is the reference");
     for (const other of [o1Pm, at.k1Manager, at.c1Pm, c2Engineer]) await hiddenFrom(other, id, "draft");
-    expect((await detail(r1Engineer, id)).step.key).toBe("draft");
+    expect((await detail(r1Engineer, id)).step?.key).toBe("draft");
     await take(r1Engineer, id, "ask");
     await pickUp(at.k1Manager, id);
     expect(await offered(at.k1Manager, id)).toContain("answer");
