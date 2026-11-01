@@ -76,7 +76,7 @@ as $$
     -- The Step it left comes from app.event_transitions, which gives it for those events only.
     fs.name,
     -- The Step it reached, which app.event_steps_reached gives only where it is the reader's own
-    -- Participant's or terminal (RP-1192, RP-1203), on an event of the reader's own Participant.
+    -- Participant's or terminal (RP-1192, RP-1203), on an event of the reader's own Participant or a Rabaed Engineer's.
     case when e.actor_participant_id is null or e.actor_participant_id = any (own.participant_ids) then ts.name end,
     -- A pool of one's `assigned` event stores why ("only_member"): its label says so.
     case when e.type <> 'assigned' then e.payload ->> 'reason' end,
