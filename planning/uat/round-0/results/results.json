@@ -1878,7 +1878,7 @@
     "ranAt": "2026-10-27T19:44:17.847Z"
   },
   "SUB-18": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Ali and Mohammed both get the shared item (200)",
@@ -1892,7 +1892,7 @@
       {
         "text": "No Step, no person, no Internal Note in it",
         "ok": true,
-        "detail": "{\"id\":\"792a9988-0212-4a73-b45f-04f4667e93d9\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 023915\",\"documentNum"
+        "detail": "{\"id\":\"d17e7295-fa18-4fa4-a33e-dc8e1c3124a2\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 193544\",\"documentNum"
       },
       {
         "text": "A Draft has nothing shared: the plain 404",
@@ -1900,12 +1900,12 @@
       },
       {
         "text": "The row menu of the Submitted MAR offers Download",
-        "ok": false,
-        "detail": "Open"
+        "ok": true,
+        "detail": "Open | Duplicate | Download"
       },
       {
-        "text": "A Draft offers no Download",
-        "ok": false,
+        "text": "A Draft offers Download of its Working Copy",
+        "ok": true,
         "detail": "Open | Edit | Duplicate | Download | Delete"
       }
     ],
@@ -1914,7 +1914,7 @@
       "evidence/SUB-18-2-row-menu-draft.jpg"
     ],
     "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
-    "ranAt": "2026-10-31T02:39:27.593Z"
+    "ranAt": "2026-11-01T19:36:02.400Z"
   },
   "SNG-15": {
     "status": "pass",

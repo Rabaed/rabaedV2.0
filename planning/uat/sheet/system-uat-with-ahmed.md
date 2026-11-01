@@ -225,7 +225,7 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Steps:**
   1. On a Submitted MAR choose Download from the row menu as Ali, then as Mohammed.
   2. Try Download on a Draft.
-- **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers nothing to download.
+- **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers Download of its Working Copy.
 
 ### SUB-19 Related submittals and free Links open the other item
 
