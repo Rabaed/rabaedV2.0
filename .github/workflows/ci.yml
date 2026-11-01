@@ -10,6 +10,10 @@ on:
   workflow_dispatch: # started by update-screenshots.yml after it commits new baselines
 permissions:
   contents: read
+# An explicit bash adds -o pipefail: GitHub's default shell is `bash -e`, where `a | b` ends with b's status (RP-1208).
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

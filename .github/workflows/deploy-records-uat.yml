@@ -19,6 +19,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# An explicit bash adds -o pipefail: GitHub's default shell is `bash -e`, where `a | b` ends with b's status (RP-1208).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   # As in Deploy UAT: main only, and never an older commit over a newer one (runs can start

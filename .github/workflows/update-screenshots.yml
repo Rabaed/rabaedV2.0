@@ -63,6 +63,10 @@ on:
     workflows: [CI]
     types: [completed]
 permissions: {}
+# An explicit bash adds -o pipefail: GitHub's default shell is `bash -e`, where `a | b` ends with b's status (RP-1208).
+defaults:
+  run:
+    shell: bash
 # Concurrency (RP-1199). A label run is keyed by the PR number,
 # update-screenshots-<PR number>; a manual workflow_dispatch has no PR number, so
 # it is keyed by the branch, update-screenshots-<branch>. The two can therefore run
