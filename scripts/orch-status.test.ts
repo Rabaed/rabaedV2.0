@@ -81,6 +81,15 @@ describe("gather and orchStatus", () => {
     expect(data.stacks).toEqual(["rabaed-lane11"]);
   });
 
+  it("fills waiting from the verifies check's waiting runs, so they show and make it not idle", () => {
+    const gh = fakeGh({ "pr list": "[]", "repo view": repoJson, "api graphql": JSON.stringify({ data: { repository: { mergeQueue: null } } }) });
+    const holder = { pid: 9, started: new Date(2026, 10, 1, 9, 30), command: "pnpm verify" };
+    const data = gather(gh, local({ verifies: () => ({ runs: [], waiting: [{ where: "the machine-wide verify line", holder }] }) }));
+    expect(data.waiting).toHaveLength(1);
+    expect(data.waiting[0]).toContain("pid 9");
+    expect(formatOrchStatus(data).join("\n")).toContain("Verifies waiting (1)");
+  });
+
   it("keeps going when gh fails, with warnings, and when Docker does not answer", () => {
     const gh: Gh = () => {
       throw new Error("gh: not logged in");

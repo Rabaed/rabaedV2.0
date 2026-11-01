@@ -1,4 +1,3 @@
-/* eslint-disable rabaed/no-avoid-terms -- "queue" here is GitHub's merge queue, by its own name. */
 // RP-1197 (item 5): `node scripts/orch-status.ts` is the Orchestrator's one-glance check-in: each open PR
 // (head, CI, `reviewed` and who added it, auto-merge, queue position), the merge queue, the running
 // stacks and the running and waiting verifies. It only reads, uses one `gh pr list` and one GraphQL call
@@ -14,6 +13,7 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 import type { PrEvent } from "./reviewed-required.ts";
 import { verifiesRunningNow, type VerifyCheck } from "./verifies-running.ts";
 import { describeHolder } from "./verify-lock.ts";
+import { describeRun } from "./verify-queue.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 
 /** Runs `gh` with these arguments and returns its stdout; throws when it fails. */
@@ -23,6 +23,7 @@ export type Gh = (args: string[]) => string;
 export const realGh: Gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
 
 const PR_FIELDS = "number,headRefName,headRefOid,isDraft,labels,autoMergeRequest,statusCheckRollup";
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
 const QUEUE_QUERY = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){mergeQueue(branch:\"main\"){entries(first:50){nodes{position state pullRequest{number}}}}}}";
 
 /** The open PRs: one `gh pr list` call. */
@@ -31,9 +32,11 @@ export function readOpenPrs(gh: Gh): OpenPr[] {
 }
 
 /** The merge queue's entries in queue order: one `gh repo view` and one GraphQL call. */
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
 export function readQueue(gh: Gh): QueueEntry[] {
   const repo = JSON.parse(gh(["repo", "view", "--json", "owner,name"])) as { owner: { login: string }; name: string };
   const answer = JSON.parse(gh(["api", "graphql", "-f", `query=${QUEUE_QUERY}`, "-F", `owner=${repo.owner.login}`, "-F", `name=${repo.name}`])) as {
+    // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
     data?: { repository?: { mergeQueue?: { entries?: { nodes?: { position: number; state: string; pullRequest?: { number: number } }[] } } | null } };
   };
   const nodes = answer.data?.repository?.mergeQueue?.entries?.nodes ?? [];
@@ -62,6 +65,7 @@ const reason = (error: unknown) => ((error as { stderr?: string }).stderr || (er
 
 /** Gathers the data; each half in its own try so one failure leaves the rest. */
 export function gather(gh: Gh, local: LocalSeam): OrchData {
+  // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
   const data: OrchData = { prs: [], events: new Map(), queue: [], stacks: [], running: [], waiting: [], warnings: [] };
   try {
     data.prs = readOpenPrs(gh);
@@ -71,6 +75,7 @@ export function gather(gh: Gh, local: LocalSeam): OrchData {
   try {
     data.queue = readQueue(gh);
   } catch (error) {
+    // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
     data.warnings.push(`the merge queue could not be read (${reason(error)}).`);
   }
   for (const pr of data.prs) {
@@ -91,7 +96,10 @@ export function gather(gh: Gh, local: LocalSeam): OrchData {
   try {
     const check = local.verifies();
     if ("unknown" in check) data.warnings.push(`whether a verify runs could not be checked (${check.unknown}).`);
-    else data.running = check.runs.map((r) => `${describeHolder(r.holder)}, in ${r.where}`);
+    else {
+      data.running = check.runs.map((r) => `${describeHolder(r.holder)}, in ${r.where}`);
+      data.waiting = (check.waiting ?? []).map((r) => `${describeRun(r.holder)}, in ${r.where}`);
+    }
   } catch (error) {
     data.warnings.push(`the verifies could not be read (${reason(error)}).`);
   }

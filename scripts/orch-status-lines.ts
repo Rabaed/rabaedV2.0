@@ -1,4 +1,3 @@
-/* eslint-disable rabaed/no-avoid-terms -- "queue" here is GitHub's merge queue, by its own name. */
 // RP-1197 (item 5): the pure half of `node scripts/orch-status.ts`. The Orchestrator's check-in needs one
 // glance at the open PRs, the merge queue, the running stacks and the verifies; this turns already-read
 // data into a few lines, and says "nothing to report" when all four are empty so idle rounds can be counted.
@@ -20,6 +19,7 @@ export interface OpenPr {
 }
 
 /** One merge queue entry. */
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
 export interface QueueEntry {
   position: number;
   state: string;
@@ -31,6 +31,7 @@ export interface OrchData {
   prs: OpenPr[];
   /** The PR's `reviewed` label events, by PR number (read only for PRs that carry the label). */
   events: Map<number, PrEvent[]>;
+  // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
   queue: QueueEntry[];
   /** Running stacks: one text per stack. */
   stacks: string[];
@@ -67,9 +68,11 @@ export function reviewedText(pr: OpenPr, events: PrEvent[] | undefined): string 
 }
 
 /** One line per open PR. */
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
 export function prLine(pr: OpenPr, events: PrEvent[] | undefined, queue: QueueEntry[]): string {
   const entry = queue.find((q) => q.pr === pr.number);
   const auto = pr.autoMergeRequest ? `auto-merge on${pr.autoMergeRequest.enabledBy?.login ? ` (${pr.autoMergeRequest.enabledBy.login})` : ""}` : "auto-merge off";
+  // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
   const where = entry ? `queue #${entry.position} ${entry.state.toLowerCase()}` : "not queued";
   const draft = pr.isDraft ? " draft" : "";
   return `#${pr.number} ${pr.headRefName}${draft}  head ${pr.headRefOid.slice(0, 7)}  CI ${ciState(pr.statusCheckRollup)}  ${reviewedText(pr, events)}  ${auto}  ${where}`;
@@ -79,10 +82,12 @@ export function prLine(pr: OpenPr, events: PrEvent[] | undefined, queue: QueueEn
 export function formatOrchStatus(data: OrchData): string[] {
   const idle = data.prs.length === 0 && data.queue.length === 0 && data.stacks.length === 0 && data.running.length === 0 && data.waiting.length === 0;
   const lines: string[] = [];
+  // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
   if (idle) lines.push("Nothing to report: no open PRs, empty merge queue, no running stacks, no verifies.");
   else {
     lines.push(`Open PRs: ${data.prs.length}.`);
     for (const pr of data.prs) lines.push(prLine(pr, data.events.get(pr.number), data.queue));
+    // eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's merge queue, by its own name.
     lines.push(data.queue.length === 0 ? "Merge queue: empty." : `Merge queue: ${data.queue.map((q) => `#${q.position} PR ${q.pr} (${q.state.toLowerCase()})`).join(", ")}.`);
     lines.push(data.stacks.length === 0 ? "Running stacks: none." : `Running stacks (${data.stacks.length}): ${data.stacks.join("; ")}.`);
     lines.push(data.running.length === 0 ? "Verifies running: none." : `Verifies running (${data.running.length}): ${data.running.join("; ")}.`);
