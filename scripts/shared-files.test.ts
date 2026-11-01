@@ -48,6 +48,24 @@ describe("branchMix", () => {
     expect(text).toContain('docs/agents/issue-tracker.md › "Ticket: workspace dependencies"');
   });
 
+  it("leaves a workflow mix to check:claims (RP-1199): workflows beside code, changed or deleted, get no second warning", () => {
+    const changed = commit({ ".github/workflows/ci.yml": "name: ci\n", "apps/admin/src/a.ts": "export const a = 2;\n" });
+    expect(branchMix(repo, changed)).toBeUndefined();
+    // Now the workflow is on origin/main, and the branch deletes it beside a code change.
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("rm", "-q", ".github/workflows/ci.yml");
+    const deleted = commit({ "apps/admin/src/a.ts": "export const a = 3;\n" });
+    expect(branchMix(repo, deleted)).toBeUndefined();
+  });
+
+  it("still names package.json and the lockfile beside code when workflows are in the branch too, without listing the workflows", () => {
+    const head = commit({ "package.json": "{}\n", ".github/workflows/ci.yml": "name: ci\n", "apps/admin/src/a.ts": "export const a = 2;\n" });
+    const text = branchMix(repo, head)?.join("\n") ?? "";
+    expect(text).toContain("shared: package.json");
+    expect(text).toContain("e.g. apps/admin/src/a.ts");
+    expect(text).not.toContain(".github/workflows/ci.yml");
+  });
+
   it("passes a dependencies-only branch: the lockfile and the dependency fields of a workspace package.json", () => {
     const head = commit(dependency);
     expect(branchMix(repo, head)).toBeUndefined();
