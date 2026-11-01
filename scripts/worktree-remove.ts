@@ -4,7 +4,8 @@
 // It refuses the main checkout, the current worktree, a folder a Claude session works in, and
 // lane 7's (Main 7's harness data), always; a folder git does not list outside .claude/worktrees/;
 // and, without --force, one with uncommitted or untracked files (listed) or unpushed commits
-// (merges of origin/main only do not count, RP-1198).
+// (merges of origin/main only do not count, RP-1198). Outside .claude/worktrees/ it deletes no folder: only
+// `git worktree remove` without --force, so git keeps one with changes (RP-1198, removal-guard.ts).
 // Its branch and its compose project stay: it says how to remove them.
 //
 //   pnpm worktree:remove <path> [--force]      (until its package.json line lands: node scripts/worktree-remove.ts)
@@ -60,7 +61,13 @@ if (refused !== undefined) {
 
 // From the main folder: never from inside the folder being removed.
 const run = (command: string, commandArgs: string[]) => execFileSync(command, commandArgs, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-const { removed, steps } = removeWorktreeFolder(target, { run, exists: existsSync });
+// RP-1198: removeWorktreeFolder refuses on its own too (the main checkout, lane 7's, a folder git does not list outside .claude/worktrees).
+const removal = removeWorktreeFolder(target, { run, exists: existsSync });
+if ("refused" in removal) {
+  console.error(removal.refused);
+  process.exit(1);
+}
+const { removed, steps } = removal;
 for (const line of steps) console.log(line);
 if (registered?.branch) console.log(`Branch ${registered.branch} kept: \`git branch -D ${registered.branch}\` once it is merged.`);
 if (target.project) console.log(`Compose project ${target.project} kept: \`pnpm lanes:prune --lane <n>\` frees it.`);

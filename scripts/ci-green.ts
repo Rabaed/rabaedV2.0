@@ -80,6 +80,7 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/paths.ts",
   "scripts/pnpm.ts",
   "scripts/pr-overlap.ts",
+  "scripts/removal-guard.ts",
   "scripts/reviewed-label.ts",
   "scripts/reviewed-required.ts",
   "scripts/session-lock.ts",

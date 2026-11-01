@@ -41,7 +41,9 @@
 // stories sets go one at a time with a pause, stopping at the first that times out.
 //
 // RP-1198: a worktree whose only commits beyond origin/main are merges of it (`git cherry` empty) has
-// nothing unpushed or unmerged, so it goes, and its branch with it (worktrees.ts mergesOnly).
+// nothing unpushed or unmerged, so it goes, and its branch with it (worktrees.ts mergesOnly). A merged
+// worktree outside .claude/worktrees/ is removed only by `git worktree remove` without --force: one git
+// keeps (uncommitted or untracked files) is kept and named, its folder untouched (removal-guard.ts).
 //
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
@@ -219,7 +221,13 @@ for (const w of chosen.remove) {
     continue;
   }
   attempt(w.path, () => {
-    if (reportRemoval(w.path, removeLinkedWorktree(w, mainRoot, TARGET))) failed++;
+    // RP-1198: removeLinkedWorktree refuses on its own (the main checkout, lane 7's, an outside worktree git keeps).
+    const removal = removeLinkedWorktree(w, mainRoot, TARGET);
+    if ("refused" in removal) {
+      logged.push(removal.refused);
+      return;
+    }
+    if (reportRemoval(w.path, removal)) failed++;
     removedPaths.push(w.path);
   });
 }
@@ -232,8 +240,9 @@ removeProjectsNow({
   remove: (p) =>
     attempt(p.project, () => {
       // removeProject reads the verifies again just before: one may have started since the prompt.
-      const { volumesKept } = removeProject(p, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
-      console.log(volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed compose project ${p.project}.`);
+      const removal = removeProject(p, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
+      if ("refused" in removal) logged.push(removal.refused);
+      else console.log(removal.volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? removal.volumesKept}).` : `Removed compose project ${p.project}.`);
     }),
   log: (line) => logged.push(line),
 });
@@ -256,8 +265,9 @@ for (const b of chosen.branches) {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).
     if (!refExists(`refs/heads/${b}`, mainRoot)) return;
     if (!inTarget(b, TARGET, mainRoot)) throw new Error(`${b} has commits ${TARGET} does not`);
-    deleteBranch(b, mainRoot);
-    console.log(`Removed branch ${b}.`);
+    const refused = deleteBranch(b, mainRoot);
+    if (refused !== undefined) logged.push(refused.refused);
+    else console.log(`Removed branch ${b}.`);
   });
 }
 try {

@@ -50,6 +50,7 @@ import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./workt
 import { isAppWorktree } from "./worktrees-pruning.ts";
 import {
   currentRoot,
+  deleteBranch,
   fetchPrune,
   gitChanges,
   gitError,
@@ -82,7 +83,6 @@ if (notMerged !== undefined) {
 }
 
 const mainRoot = listWorktrees()[0]!.path;
-const git = (args: string[]) => execFileSync("git", args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const stop = (why: string): never => {
   console.error(`lane:done refused: ${why}. Nothing was touched.`);
   process.exit(1);
@@ -210,7 +210,13 @@ for (const c of decision.remove) {
     kept.push({ what: describeWorktree(c), reason: refused.replace(/^Not removed: /, "") });
     continue;
   }
-  const { removed, steps } = removeWorktreeFolder(target, { run: (command, args) => execFileSync(command, args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), exists: existsSync });
+  // RP-1198: and the helper's own refusals, whatever was checked above.
+  const removal = removeWorktreeFolder(target, { run: (command, args) => execFileSync(command, args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), exists: existsSync });
+  if ("refused" in removal) {
+    kept.push({ what: describeWorktree(c), reason: removal.refused.replace(/^Not removed: /, "") });
+    continue;
+  }
+  const { removed, steps } = removal;
   if (!removed) {
     failed++;
     console.error(`Could not remove ${c.path}: ${steps.join("; ")}. Close what holds files in it (an editor, a dev server) and run this again.`);
@@ -235,12 +241,14 @@ if (stack !== undefined && stackGoes) {
   if (inUse !== undefined) kept.push({ what: `stack ${stack.project}`, reason: inUse });
   else {
     try {
-      // removeProject reads the verifies again just before (rule 4).
-      const { volumesKept } = removeProject(
+      // removeProject reads the verifies again just before (rule 4), and refuses lane 7's and the main checkout's stacks itself (RP-1198).
+      const removal = removeProject(
         { project: stack.project, reason: `PR #${pr.number} merged`, containers: stack.containers, volumes: stack.volumes },
         { keepVolumes: stack.action === "containers", volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow(mainRoot)) },
       );
-      if (volumesKept !== undefined) {
+      const volumesKept = "refused" in removal ? undefined : removal.volumesKept;
+      if ("refused" in removal) kept.push({ what: `stack ${stack.project}`, reason: removal.refused });
+      else if (volumesKept !== undefined) {
         console.log(`Removed ${stack.project}'s containers and network; its volumes stay.`);
         logged.push(`${stack.project}'s volumes: ${volumesKeptBecause ?? volumesKept}; \`pnpm lanes:prune --lane ${laneNumber}\` removes them once no verify runs.`);
       } else console.log(`Removed ${stack.project} with its volumes.`);
@@ -305,7 +313,12 @@ function deleteBranches(c: Candidate): void {
       continue;
     }
     try {
-      git(["branch", "-D", branch]);
+      // RP-1198: deleteBranch refuses main and a branch the main checkout or lane 7's worktree has checked out.
+      const refused = deleteBranch(branch, mainRoot);
+      if (refused !== undefined) {
+        logged.push(refused.refused);
+        continue;
+      }
       console.log(`  Removed branch ${branch}.`);
     } catch (error) {
       logged.push(`Branch ${branch} kept: ${gitError(error)}`);

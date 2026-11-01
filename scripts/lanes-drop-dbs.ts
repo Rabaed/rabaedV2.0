@@ -11,10 +11,13 @@
 // --lane N limits the candidates to lane N's Postgres (rabaed-laneN-db-1), with the same
 // confirmation and the same keep rules, so a spec's session drops only its own lane's
 // databases, not another session's on another lane (RP-535; as lanes:prune --lane N, RP-505).
+//
+// RP-1198: never lane 7's Postgres (Main 7's harness data): it is left out and named, `--lane 7` is refused,
+// and each drop (lanes.ts dropDatabase) refuses lane 7's and the main checkout's databases on its own.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { databasesInUse, dbContainers, dropOrKeep, LANE_SCHEME, laneProject, listContainers, orphanDatabases, parseConnections, parseDropDbsArgs, psql } from "./lanes.ts";
+import { databasesInUse, dropDatabase, dropDbsPostgres, dropOrKeep, LANE_SCHEME, laneProject, listContainers, orphanDatabases, parseConnections, parseDropDbsArgs, psql } from "./lanes.ts";
 import { listWorktrees } from "./worktrees.ts";
 
 const options = parseDropDbsArgs(process.argv.slice(2));
@@ -39,7 +42,12 @@ const readEnv = (dir: string) => {
 };
 const inUse = databasesInUse([...worktrees, process.cwd()], readEnv);
 
-const postgres = dbContainers(containers, lane);
+const { postgres, kept, refused } = dropDbsPostgres(containers, lane);
+if (refused !== undefined) {
+  console.error(refused);
+  process.exit(1);
+}
+for (const line of kept) console.log(`Kept, never dropped: ${line}`);
 if (lane !== undefined && postgres.length === 0) {
   console.log(`No running Postgres for lane ${lane} (${laneProject(lane)}-db-1); nothing to drop.`);
   process.exit(0);
@@ -48,7 +56,7 @@ const found = postgres
   .map((c) => {
     const orphans = orphanDatabases(psql(c.name, "select datname from pg_database where datname like 'rabaed\\_%'"), inUse);
     const connections = parseConnections(psql(c.name, "select datname, count(*) from pg_stat_activity where datname like 'rabaed\\_%' group by datname"));
-    return { container: c.name, ...dropOrKeep(orphans, connections) };
+    return { container: c.name, db: c, ...dropOrKeep(orphans, connections) };
   })
   .filter((o) => o.drop.length > 0 || o.busy.length > 0);
 
@@ -70,7 +78,11 @@ let failed = 0;
 for (const o of toDrop) {
   for (const name of o.drop) {
     try {
-      psql(o.container, `drop database "${name}"`);
+      const no = dropDatabase(o.db, name);
+      if (no !== undefined) {
+        console.log(no.refused);
+        continue;
+      }
       console.log(`Dropped ${name} in ${o.container}.`);
     } catch (error) {
       failed++;

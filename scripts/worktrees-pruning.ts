@@ -4,6 +4,7 @@ import {
   chooseMerged,
   claimOf,
   keptByClaims,
+  keptStackReason,
   projectInUseNow,
   protectedLaneReason,
   staleProjects,
@@ -142,10 +143,19 @@ type RemoveProjectsInput = {
  * only once that worktree is removed (orphans go regardless). Then each is judged again just
  * before it goes (RP-1073: removing the worktrees can take minutes, and a session may run
  * lane:env or start the lane meanwhile): projectInUseNow on what readNow reads now keeps it.
+ * RP-1198: lane 7's and the main checkout's stacks (lanes.ts keptStackReason) are refused first, never passed
+ * to remove; refused lists them, as they are logged.
  */
-export function removeProjectsNow({ projects, removedPaths, listed, readNow, exists, remove, log, platform }: RemoveProjectsInput): void {
+export function removeProjectsNow({ projects, removedPaths, listed, readNow, exists, remove, log, platform }: RemoveProjectsInput): { refused: string[] } {
   const removed = (path: string) => removedPaths.some((r) => samePath(r, path, platform));
+  const refused: string[] = [];
   for (const p of projects) {
+    const kept = keptStackReason(p.project);
+    if (kept !== undefined) {
+      refused.push(`Kept compose project ${p.project}: ${kept}.`);
+      log(refused.at(-1)!);
+      continue;
+    }
     const waiting = p.waitsFor.filter((path) => !removed(path));
     if (waiting.length > 0) {
       log(`Kept compose project ${p.project}: ${waiting.join(", ")} was not removed.`);
@@ -164,6 +174,7 @@ export function removeProjectsNow({ projects, removedPaths, listed, readNow, exi
     }
     remove(p);
   }
+  return { refused };
 }
 
 /**

@@ -63,7 +63,8 @@ import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLan
 import { volumesKeptReason, verifiesRunningNow } from "./verifies-running.ts";
 import { fetchPrune, gitChanges, gitError, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 import { pidAlive } from "./lanes-lock.ts";
-import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
+import { guardedHashes } from "./stories-volumes.ts";
+import { chooseVeraPdfContainers, listVeraPdfContainers, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
 const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
 const argv = process.argv.slice(2);
@@ -236,9 +237,10 @@ for (const s of candidates) {
     continue;
   }
   try {
-    // removeProject reads the verifies again just before: one may have started since the prompt.
-    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
-    console.log(volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed ${s.project}.`);
+    // removeProject reads the verifies again just before: one may have started since the prompt. It refuses lane 7's and the main checkout's stacks itself (RP-1198).
+    const removal = removeProject(s, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
+    if ("refused" in removal) kept.push({ what: s.project, reason: removal.refused });
+    else console.log(removal.volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? removal.volumesKept}).` : `Removed ${s.project}.`);
   } catch (error) {
     failed++;
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
@@ -251,7 +253,12 @@ for (const c of veraPdf) {
     continue;
   }
   try {
-    removeVeraPdfContainer(c.name);
+    // RP-1198: it refuses lane 7's worktree's and the main checkout's containers itself.
+    const refused = removeVeraPdfContainer(c.name);
+    if (refused !== undefined) {
+      kept.push({ what: c.name, reason: refused.refused });
+      continue;
+    }
     console.log(`Removed ${c.name}.`);
   } catch (error) {
     failed++;
@@ -268,10 +275,8 @@ function veraPdfCandidates(): GoneContainer[] {
     kept.push({ what: "veraPDF containers", reason: "Docker did not list them; none removed" });
     return [];
   }
-  const worktrees = listWorktrees()
-    .filter((w) => existsSync(w.path))
-    .map((w) => ({ path: w.path, project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") }));
-  const { remove, kept: stays } = chooseVeraPdfContainers({ containers: listed, alive: pidAlive, protectedHashes: protectedHashes(worktrees) });
+  // RP-1198: lane 7's worktree's and the main checkout's, as removeVeraPdfContainer refuses them.
+  const { remove, kept: stays } = chooseVeraPdfContainers({ containers: listed, alive: pidAlive, protectedHashes: guardedHashes() });
   kept.push(...stays);
   return remove;
 }

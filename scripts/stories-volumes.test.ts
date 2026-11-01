@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumes, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
+import { isRefused } from "./removal-guard.ts";
 import { volumeName, worktreeHash } from "./test-stories-linux.ts";
 import { parseWorktrees } from "./worktrees.ts";
 
@@ -102,6 +103,7 @@ describe("removeStoriesVolumesNow", () => {
         asked.push(list);
         return { removed: list, refused: [] };
       },
+      guarded: () => new Map(),
       ...over,
     };
     return { docker, asked };
@@ -134,6 +136,16 @@ describe("removeStoriesVolumesNow", () => {
   it("removes nothing when Docker does not answer", () => {
     const { docker, asked } = fakeDocker({ list: () => undefined });
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").kept).toEqual(["Docker did not answer: stories volumes not removed (run `pnpm worktrees:prune` later)."]);
+    expect(asked).toEqual([]);
+  });
+
+  it("removes none, and says why, when one it would remove is of a guarded worktree (lane 7's or the main checkout's, RP-1198)", () => {
+    const { docker, asked } = fakeDocker({ guarded: () => new Map([[worktreeHash(gone), "it is the main checkout's"]]) });
+    const result = removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32");
+    const refused = `No stories volume removed: ${setOf(gone)
+      .map((v) => `${v}: it is the main checkout's`)
+      .join("; ")}.`;
+    expect(result).toEqual({ removed: [], kept: [refused], errors: [], refused });
     expect(asked).toEqual([]);
   });
 });
@@ -181,7 +193,7 @@ describe("parseRemoval", () => {
 describe("stories volumes and running verifies (RP-1170: 361 of 372 removals timed out during verifies and hung Docker's volume API)", () => {
   it("removes none while a verify runs anywhere, and says so", () => {
     const asked: string[][] = [];
-    const docker: StoriesDocker = { list: () => volumes, mountedBy: () => noMounts, remove: (list) => (asked.push(list), { removed: list, refused: [] }), busy: () => "a verify runs (pid 7, in G:/x)" };
+    const docker: StoriesDocker = { list: () => volumes, mountedBy: () => noMounts, remove: (list) => (asked.push(list), { removed: list, refused: [] }), busy: () => "a verify runs (pid 7, in G:/x)", guarded: () => new Map() };
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32")).toEqual({
       removed: [],
       kept: ["Stories volumes not removed: a verify runs (pid 7, in G:/x); run `pnpm worktrees:prune` again once no verify runs."],
@@ -199,7 +211,8 @@ describe("stories volumes and running verifies (RP-1170: 361 of 372 removals tim
       if (calls.length === 2) throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { code: "ETIMEDOUT" });
       return args.slice(2).join("\n");
     };
-    const result = removeStoriesVolumes(sets, { run, wait: (ms) => waits.push(ms) });
+    const result = removeStoriesVolumes(sets, { run, wait: (ms) => waits.push(ms), guarded: new Map() });
+    if (isRefused(result)) throw new Error(result.refused);
     expect(calls).toHaveLength(2);
     expect(waits).toEqual([2000]);
     expect(result.removed).toHaveLength(3);
@@ -214,6 +227,7 @@ describe("stories volumes and running verifies (RP-1170: 361 of 372 removals tim
       mountedBy: () => noMounts,
       remove: (list) => ({ removed: [], refused: [{ volume: list[0]!, reason: "Docker did not answer (ETIMEDOUT)" }], notTried: list.slice(1) }),
       busy: () => undefined,
+      guarded: () => new Map(),
     };
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").errors).toEqual([
       `Could not remove stories volume ${volumeName(gone, ".")}: Docker did not answer (ETIMEDOUT)`,

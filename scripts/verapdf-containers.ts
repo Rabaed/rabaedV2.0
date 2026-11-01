@@ -10,10 +10,14 @@
 //
 // The pid is a host pid, checked on the machine running the prune. A session started from another
 // pid namespace on the same Docker (WSL, a Linux container) would look gone; none is started so today.
+//
+// RP-1198: removeVeraPdfContainer refuses on its own, before any Docker call, a container of lane 7's worktree
+// or of the main checkout (stories-volumes.ts guardedHashes), and any name that is not a veraPDF container's.
 import { execFileSync } from "node:child_process";
-import { protectedLaneReason } from "./lanes.ts";
-import { pathSpellings } from "./stories-volumes.ts";
-import { worktreeHash } from "./test-stories-linux.ts";
+import type { Refused } from "./removal-guard.ts";
+import { guardedHashes, protectedHashes } from "./stories-volumes.ts";
+
+export { protectedHashes };
 
 export const VERAPDF_LABEL = "rabaed.verapdf";
 
@@ -35,16 +39,6 @@ export function parseVeraPdfContainers(stdout: string): VeraPdfContainer[] {
       const pid = NAME.exec(name)?.[1];
       return { name, hash, pid: pid === undefined ? undefined : Number(pid), state, age };
     });
-}
-
-/** The worktree hashes whose containers are never removed, with why: those of the worktrees holding lane 7. */
-export function protectedHashes(worktrees: { path: string; project: string | undefined }[], platform: NodeJS.Platform = process.platform): Map<string, string> {
-  const hashes = new Map<string, string>();
-  for (const w of worktrees) {
-    const reason = protectedLaneReason(w.project);
-    if (reason !== undefined) for (const spelling of pathSpellings(w.path, platform)) hashes.set(worktreeHash(spelling), reason);
-  }
-  return hashes;
 }
 
 /** The containers to remove (their test process is gone), and those kept, with why. */
@@ -78,7 +72,24 @@ export function listVeraPdfContainers(timeout?: number): VeraPdfContainer[] | un
   }
 }
 
-/** Removes one container (it only sleeps; nothing in it is kept). */
-export function removeVeraPdfContainer(name: string): void {
-  execFileSync("docker", ["rm", "-f", name], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const docker = (args: string[]) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+/**
+ * Removes one container (it only sleeps; nothing in it is kept). RP-1198: refuses, running nothing, a name
+ * that is not a veraPDF container's, and one of lane 7's worktree or the main checkout (guarded: this clone's
+ * guardedHashes, read here unless given).
+ */
+export function removeVeraPdfContainer(name: string, { run = docker, guarded }: { run?: (args: string[]) => string; guarded?: Map<string, string> } = {}): Refused | undefined {
+  const hash = /^rabaed-verapdf-([0-9a-f]{8})-/.exec(name)?.[1];
+  if (hash === undefined) return { refused: `${name} not removed: it is not a veraPDF container (rabaed-verapdf-<hash>-<pid>-<n>).` };
+  let hashes: Map<string, string>;
+  try {
+    hashes = guarded ?? guardedHashes();
+  } catch (error) {
+    return { refused: `${name} not removed: the worktrees could not be listed (${(error as Error).message}), so lane 7's and the main checkout's are not known.` };
+  }
+  const why = hashes.get(hash);
+  if (why !== undefined) return { refused: `${name} not removed: ${why}.` };
+  run(["rm", "-f", name]);
+  return undefined;
 }
