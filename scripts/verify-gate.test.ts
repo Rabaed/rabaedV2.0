@@ -5,7 +5,19 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-green.ts";
 import { BASELINE_BOT_EMAIL, type ReviewedGit } from "./reviewed-label.ts";
-import { fileAtVia, fileVersionsVia, needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
+import {
+  baselineMarker,
+  baselineMarkerLogins,
+  baselineRefusals,
+  fileAtVia,
+  fileVersionsVia,
+  needsVerify,
+  requireVerified,
+  stampLine,
+  verifiedCommits,
+  verifyGate,
+  type GateSeam,
+} from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
 
 const steps = ["lint", "typecheck", "test:unit"];
@@ -131,6 +143,53 @@ describe("needsVerify", () => {
   });
 });
 
+describe("baselineRefusals (RP-1194: the lists only shrink against main)", () => {
+  const HEAD = "c".repeat(40);
+  const file = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+  const entry = "empty links > hides it :: expect(rows).toEqual([]);";
+  const gain = { file, entry };
+  const exception = `Baseline added: ${file} ${entry}: the row is made by a trigger the test cannot see`;
+  const main6 = (sha: string, text = exception) => ({ login: "mmhaleess90", type: "User", body: `${baselineMarker(sha)}\n${text}\n` });
+  const writers = new Set(["mmhaleess90"]);
+
+  it("refuses an added entry, naming its file and entry", () => {
+    const problems = baselineRefusals([gain], "## Summary", [], writers, HEAD, noMerges);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(file);
+    expect(problems[0]).toContain(entry);
+  });
+
+  it("refuses nothing when no list gains an entry", () => {
+    expect(baselineRefusals([], "", [], writers, HEAD, noMerges)).toEqual([]);
+  });
+
+  it("refuses the body's exception line alone: a lane can write it", () => {
+    const problems = baselineRefusals([gain], `## Summary\n\n- ${exception}\n`, [], writers, HEAD, noMerges);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(baselineMarker("<head sha>"));
+  });
+
+  it("accepts the exception line with Main 6's marker for the head naming the same entry", () => {
+    expect(baselineRefusals([gain], `- ${exception}\n`, [main6(HEAD)], writers, HEAD, noMerges)).toEqual([]);
+  });
+
+  it("refuses the marker without the body's line, or with a line that gives no reason", () => {
+    expect(baselineRefusals([gain], "", [main6(HEAD)], writers, HEAD, noMerges)).toHaveLength(1);
+    expect(baselineRefusals([gain], `Baseline added: ${file} ${entry}:`, [main6(HEAD, `Baseline added: ${file} ${entry}:`)], writers, HEAD, noMerges)).toHaveLength(1);
+  });
+
+  it("refuses a marker for another commit, one naming another entry, and one by a user who cannot push", () => {
+    expect(baselineRefusals([gain], exception, [main6("d".repeat(40))], writers, HEAD, noMerges)).toHaveLength(1);
+    expect(baselineRefusals([gain], exception, [main6(HEAD, `Baseline added: ${file} text other :: x: why`)], writers, HEAD, noMerges)).toHaveLength(1);
+    expect(baselineRefusals([gain], exception, [{ ...main6(HEAD), login: "stranger" }], writers, HEAD, noMerges)).toHaveLength(1);
+    expect(baselineRefusals([gain], exception, [{ ...main6(HEAD), type: "Bot" }], new Set(["mmhaleess90"]), HEAD, noMerges)).toHaveLength(1);
+  });
+
+  it("names the logins whose marker comments need a permission read", () => {
+    expect(baselineMarkerLogins([main6(HEAD), { login: "x", type: "User", body: "hi" }, { ...main6(HEAD), login: "bot", type: "Bot" }])).toEqual(["mmhaleess90"]);
+  });
+});
+
 describe("requireVerified", () => {
   function fakeGate(overrides: Partial<GateSeam> = {}) {
     const fetched: number[] = [];
@@ -144,6 +203,8 @@ describe("requireVerified", () => {
       packageJsonVersions: () => ({ before: undefined, after: undefined }),
       requiredChecks: async () => ["lint", "unit", "verify-gate"],
       ciRuns: async () => [],
+      comments: async () => [],
+      permission: async () => "none",
       ...overrides,
     };
     return { seam, fetched };
@@ -221,6 +282,86 @@ describe("requireVerified", () => {
       expect(result.ok).toBe(true);
       expect(heads).toEqual([HEAD]);
     });
+  });
+
+  describe("the ratchet lists against origin/main (RP-1194)", () => {
+    const HEAD_SHA = "e".repeat(40);
+    const list = "docs/visibility/untested-seams/RP-412.txt";
+    const exception = `Baseline added: ${list} RP-412-2 db: the row has no RLS policy to test yet`;
+    const lists = (before: string | undefined, after: string | undefined) => ({
+      changedFiles: () => [list],
+      packageJsonVersions: () => ({ before, after }),
+    });
+    const withBody = (body: string) => ({ pull: async () => ({ body, headSha: "abc1234", labels: ["reviewed"] }) });
+
+    it("refuses an entry the PR adds, stamped verify line or not, naming the file and entry", async () => {
+      const { seam } = fakeGate({ ...lists("RP-412-1 api\n", "RP-412-1 api\nRP-412-2 db\n") });
+      const result = await requireVerified(prEvent, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain(`${list} gains \`RP-412-2 db\``);
+      expect(result.summary).toContain("Baseline added:");
+    });
+
+    it("passes a list that only loses an entry, or is deleted", async () => {
+      expect((await requireVerified(prEvent, fakeGate(lists("RP-412-1 api\nRP-412-2 db\n", "RP-412-1 api\n")).seam)).ok).toBe(true);
+      expect((await requireVerified(prEvent, fakeGate(lists("RP-412-1 api\n", undefined)).seam)).ok).toBe(true);
+    });
+
+    it("passes a list edited without a new entry: a comment, the order", async () => {
+      expect((await requireVerified(prEvent, fakeGate(lists("RP-412-1 api\nRP-412-2 db\n", "# known gaps\nRP-412-2 db\nRP-412-1  api # since RP-1134\n")).seam)).ok).toBe(true);
+    });
+
+    it("refuses when main's list cannot be read", async () => {
+      const { seam } = fakeGate({
+        changedFiles: () => [list],
+        packageJsonVersions: () => {
+          throw new Error("git merge-base origin/main abc1234 failed:\nfatal: Not a valid object name origin/main");
+        },
+      });
+      const result = await requireVerified(prEvent, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("Not a valid object name origin/main");
+    });
+
+    it("passes a deliberate entry with the body's line and Main 6's marker on the head; refuses it with the line alone", async () => {
+      const marker = { login: "mmhaleess90", type: "User", body: `${baselineMarker(HEAD_SHA)}\nApproved.\n\n${exception}\n` };
+      const reads = { comments: async () => [marker], permission: async () => "admin" as const };
+      const body = `${line("abc1234")}\n\n${exception}\n`;
+      const pull = async () => ({ body, headSha: HEAD_SHA, labels: ["reviewed"] });
+      const event = { ...prEvent, headSha: HEAD_SHA };
+      const lineOnHead = { pull: async () => ({ body: `${line(HEAD_SHA.slice(0, 7))}\n\n${exception}\n`, headSha: HEAD_SHA, labels: ["reviewed"] }) };
+      expect((await requireVerified(event, fakeGate({ ...lists("RP-412-1 api\n", "RP-412-1 api\nRP-412-2 db\n"), ...lineOnHead, ...reads }).seam)).ok).toBe(true);
+      const alone = await requireVerified(event, fakeGate({ ...lists("RP-412-1 api\n", "RP-412-1 api\nRP-412-2 db\n"), pull, ...reads, comments: async () => [] }).seam);
+      expect(alone.ok).toBe(false);
+      expect(alone.summary).toContain(baselineMarker("<head sha>"));
+      const reader = await requireVerified(event, fakeGate({ ...lists("RP-412-1 api\n", "RP-412-1 api\nRP-412-2 db\n"), ...lineOnHead, ...reads, permission: async () => "read" as const }).seam);
+      expect(reader.ok).toBe(false);
+    });
+
+    it("refuses when the comments cannot be read", async () => {
+      const { seam } = fakeGate({
+        ...lists(undefined, "RP-412-1 api\n"),
+        ...withBody(`${line("abc1234")}\n\n${exception}\n`),
+        comments: async () => {
+          throw new Error("GitHub GET issues/7/comments answered 502");
+        },
+      });
+      const result = await requireVerified(prEvent, seam);
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain("502");
+    });
+  });
+
+  it("needs a verify for a docs-only PR that drops a scenario row (RP-1196)", async () => {
+    const table = (...ids: string[]) => `# RP-412 scenarios\n\n| # | Scenario | Who | Expected |\n|---|---|---|---|\n${ids.map((id) => `| ${id} | s | w | e |\n`).join("")}`;
+    const { seam } = fakeGate({
+      pull: async () => ({ body: "", headSha: "abc1234", labels: ["docs-only"] }),
+      changedFiles: () => ["docs/visibility/scenarios/RP-412.md"],
+      packageJsonVersions: () => ({ before: table("RP-412-1", "RP-412-2"), after: table("RP-412-1") }),
+    });
+    const result = await requireVerified(prEvent, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("docs/visibility/scenarios/RP-412.md (loses scenario RP-412-2)");
   });
 
   it("passes a PR whose body has a stamped line for the event's head", async () => {

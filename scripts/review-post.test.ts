@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { postReview, reviewComment, type PostSeam } from "./review-post.ts";
 import { reviewMarker } from "./reviewed-add.ts";
+import { baselineMarker } from "./verify-gate.ts";
 
 const HEAD = "a".repeat(40);
 
@@ -50,6 +51,10 @@ describe("postReview", () => {
     expect(postReview(["12", "s.md"], fakeSeam({ read: () => "  \n" }).seam).ok).toBe(false);
     expect(postReview(["12", "s.md"], fakeSeam({ read: () => reviewMarker("b".repeat(40)) }).seam).ok).toBe(false);
     expect(postReview(["x", "s.md"], fakeSeam().seam).message).toMatch(/Usage/);
+    // Main 6's baseline approval (RP-1194) is never the lane's review step's to write.
+    const main6 = postReview(["12", "s.md"], fakeSeam({ read: () => `Fixed.\n${baselineMarker(HEAD)}\n` }).seam);
+    expect(main6.ok).toBe(false);
+    expect(main6.message).toContain("Main 6");
     expect(postReview(["0x10", "s.md"], fakeSeam().seam).message).toMatch(/Usage/);
     expect(postReview(["12"], fakeSeam().seam).message).toMatch(/Usage/);
   });

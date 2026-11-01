@@ -322,6 +322,9 @@ describe("ciOwnChanges", () => {
     // An entry changed in place is one gone and one gained.
     expect(ciOwnChanges([gaps], at(list("RP-412-1 api"), list("RP-412-1 db")))).toEqual([`${gaps} (gains an entry)`]);
     expect(ciOwnChanges([gaps], at(undefined, undefined))).toEqual([`${gaps} (gains an entry)`]);
+    // A second copy lets a second assert through (RP-1194); a comment or spacing added to a gap line is no new gap.
+    expect(ciOwnChanges([hidden], at(list("empty a :: x"), list("empty a :: x", "empty a :: x")))).toEqual([`${hidden} (gains an entry)`]);
+    expect(ciOwnChanges([gaps], at(list("RP-412-1 api"), list("RP-412-1  api # since RP-1134")))).toEqual([]);
   });
 
   it("leaves a list that only shrinks or is deleted alone, and its README", () => {
@@ -329,6 +332,48 @@ describe("ciOwnChanges", () => {
     expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\ntext b :: y\n", after: "# fixed b\nempty a :: x\n" }))).toEqual([]);
     expect(ciOwnChanges([hidden], () => ({ before: "empty a :: x\n", after: undefined }))).toEqual([]);
     expect(ciOwnChanges(["docs/visibility/hidden-asserts/README.md"], () => ({ before: "a", after: "b" }))).toEqual([]);
+  });
+
+  describe("scenario rows only grow (RP-1196)", () => {
+    const table = (...ids: string[]) => `| # | Scenario | Who | Expected |\n|---|---|---|---|\n${ids.map((id) => `| ${id} | s | w | e |\n`).join("")}`;
+    const matrix = (...ids: string[]) => `# Visibility\n\n## Scenario matrix\n\n${table(...ids)}\n## Next\n\n${table("99")}`;
+    const ticket = "docs/visibility/scenarios/RP-412.md";
+    const files = (sides: Record<string, [string | undefined, string | undefined]>) => (file: string) => {
+      const [before, after] = sides[file] ?? [undefined, undefined];
+      return { before, after };
+    };
+
+    it("counts a scenario file that loses a row, naming the lost ID", () => {
+      const sides = files({ [ticket]: [`# RP-412 scenarios\n\n${table("RP-412-1", "RP-412-2")}`, `# RP-412 scenarios\n\n${table("RP-412-1")}`] });
+      expect(ciOwnChanges([ticket], sides)).toEqual([`${ticket} (loses scenario RP-412-2)`]);
+    });
+
+    it("counts a numbered matrix row removed from docs/visibility.md", () => {
+      const sides = files({ "docs/visibility.md": [matrix("1", "2", "3"), matrix("1", "3")] });
+      expect(ciOwnChanges(["docs/visibility.md"], sides)).toEqual(["docs/visibility.md (loses scenario 2)"]);
+    });
+
+    it("counts a deleted scenario file, naming every ID it held", () => {
+      const sides = files({ [ticket]: [`# RP-412 scenarios\n\n${table("RP-412-1", "RP-412-2")}`, undefined] });
+      expect(ciOwnChanges([ticket], sides)).toEqual([`${ticket} (loses scenarios RP-412-1, RP-412-2)`]);
+    });
+
+    it("leaves a file that only gains rows, or a new file, alone", () => {
+      const sides = files({
+        [ticket]: [`# RP-412 scenarios\n\n${table("RP-412-1")}`, `# RP-412 scenarios\n\n${table("RP-412-1", "RP-412-2")}`],
+        "docs/visibility/scenarios/RP-500.md": [undefined, `# RP-500 scenarios\n\n${table("RP-500-1")}`],
+        "docs/visibility.md": [matrix("1", "2"), `${matrix("1", "2")}\nMore prose.\n`],
+      });
+      expect(ciOwnChanges([ticket, "docs/visibility/scenarios/RP-500.md", "docs/visibility.md"], sides)).toEqual([]);
+    });
+
+    it("leaves a row moved from one changed scenario file to another alone", () => {
+      const sides = files({
+        "docs/visibility.md": [matrix("1", "RP-500-1"), matrix("1")],
+        "docs/visibility/scenarios/RP-500.md": [undefined, `# RP-500 scenarios\n\n${table("RP-500-1")}`],
+      });
+      expect(ciOwnChanges(["docs/visibility.md", "docs/visibility/scenarios/RP-500.md"], sides)).toEqual([]);
+    });
   });
 
   it("counts a new package.json, one it cannot parse, and one it could read on neither side", () => {

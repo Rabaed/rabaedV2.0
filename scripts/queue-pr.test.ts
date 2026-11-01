@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-green.ts";
 import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
-import { stampLine } from "./verify-gate.ts";
+import { baselineMarker, stampLine } from "./verify-gate.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
@@ -39,6 +39,8 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     ciRuns: () => [],
     checkRuns: () => [],
     commitStatuses: () => [],
+    comments: () => [],
+    permission: () => "none",
     mergeChecks: () => ({ ok: true, skipped: [] }),
     enqueue: (id, head) => {
       enqueued.push([id, head]);
@@ -356,6 +358,75 @@ describe("queuePr", () => {
       expect(result.lines.join("\n")).toContain(fix);
       expect(enqueued).toEqual([]);
     });
+  });
+
+  describe("the ratchet lists against origin/main (RP-1194); the rule is verify-gate.ts's, here only that the queue applies it", () => {
+    const HEAD = "e".repeat(40);
+    const list = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    const entry = "empty links > hides it :: expect(rows).toEqual([]);";
+    const exception = `Baseline added: ${list} ${entry}: made by a trigger the test cannot see`;
+    const onHead = (before: string | undefined, after: string | undefined, labels = ["reviewed"]): Partial<QueueSeam> => ({
+      fetchPull: () => HEAD,
+      head: () => HEAD,
+      pullRequest: () => ({ id: "PR_node", headRefOid: HEAD, headRefName: "feature" }),
+      labels: () => labels,
+      changedFiles: () => [list],
+      packageJsonVersions: () => ({ before, after }),
+    });
+
+    it("refuses an entry the PR adds, stamped line or docs-only label alike, naming the file and entry", () => {
+      for (const labels of [["reviewed"], ["docs-only"]]) {
+        const { seam, enqueued } = fakeSeam(onHead("", `${entry}\n`, labels));
+        const result = queuePr(149, seam, { noReview: labels.includes("docs-only") });
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).toContain(`${list} gains \`${entry}\``);
+        expect(enqueued).toEqual([]);
+      }
+    });
+
+    it("queues a PR whose list only loses an entry", () => {
+      const { seam, enqueued } = fakeSeam(onHead(`${entry}\ntext b :: y\n`, "text b :: y\n"));
+      expect(queuePr(149, seam).ok).toBe(true);
+      expect(enqueued).toHaveLength(1);
+    });
+
+    it("refuses when main's list cannot be read", () => {
+      const { seam, enqueued } = fakeSeam({
+        ...onHead(undefined, undefined),
+        packageJsonVersions: () => {
+          throw new Error("git merge-base origin/main failed: fatal: Not a valid object name origin/main");
+        },
+      });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("Not a valid object name origin/main");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("queues a deliberate entry with the body's line and Main 6's marker; refuses the line alone", () => {
+      const body = () => `${stampLine(`pnpm verify passed on ${HEAD.slice(0, 7)}: lint, typecheck, unit.`)}\n\n${exception}\n`;
+      const marker = { login: "mmhaleess90", type: "User", body: `${baselineMarker(HEAD)}\n${exception}\n` };
+      const approved = fakeSeam({ ...onHead("", `${entry}\n`), body, comments: () => [marker], permission: () => "admin" });
+      expect(queuePr(149, approved.seam).ok).toBe(true);
+      const alone = fakeSeam({ ...onHead("", `${entry}\n`), body, comments: () => [], permission: () => "admin" });
+      const result = queuePr(149, alone.seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain(baselineMarker("<head sha>"));
+    });
+  });
+
+  it("needs the verify line for a docs-only PR that drops a scenario row (RP-1196)", () => {
+    const table = (...ids: string[]) => `# RP-412 scenarios\n\n| # | Scenario | Who | Expected |\n|---|---|---|---|\n${ids.map((id) => `| ${id} | s | w | e |\n`).join("")}`;
+    const { seam, enqueued } = fakeSeam({
+      labels: () => ["docs-only"],
+      changedFiles: () => ["docs/visibility/scenarios/RP-412.md"],
+      packageJsonVersions: () => ({ before: table("RP-412-1", "RP-412-2"), after: table("RP-412-1") }),
+      body: () => "",
+    });
+    const result = queuePr(149, seam, { noReview: true });
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("loses scenario RP-412-2");
+    expect(enqueued).toEqual([]);
   });
 
   // RP-1190: CI green on the exact head counts as the verify; the rule is scripts/ci-green.ts's, here only that the queue applies it.

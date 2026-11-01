@@ -1,3 +1,4 @@
+import { matrixFile, scenarioRows, scenariosDir } from "./visibility-scenarios.ts";
 
 // CI green counts as the verify (RP-1190, owner's decision of 2026-10-31: "I agree if CI of GitHub do it the
 // test"). A PR's head passes the verify gate when the stamped `pnpm verify` line names it (RP-1094, still
@@ -123,30 +124,86 @@ const ciFieldsOf = (text: string | undefined): string | undefined => {
  * The visibility ratchets: lists of known weak asserts (scripts/check-hidden-asserts.ts) and untested scenarios
  * (scripts/check-scenario-seams.ts) that may only shrink. The checks read the PR's own list, in CI and in `pnpm
  * queue`'s merge checks alike, so a list that gains an entry lets a weaker test through: its CI run does not count.
- * One that only shrinks, or goes, is the fix they ask for.
+ * One that only shrinks, or goes, is the fix they ask for. The verify gate and `pnpm queue` also refuse a gain the
+ * stamped line would let through, unless it is a visible exception (`baselineRefusals`, scripts/verify-gate.ts, RP-1194).
  */
-const RATCHETS = ["docs/visibility/hidden-asserts/", "docs/visibility/untested-seams/"];
+const HIDDEN_ASSERTS = "docs/visibility/hidden-asserts/";
+const UNTESTED_SEAMS = "docs/visibility/untested-seams/";
 
-/** A ratchet list's entries: one a line, blank lines and `#` lines left out. */
-const ratchetEntries = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && !line.startsWith("#"));
+/** A changed file's text at the merge base and at the head; undefined where it does not exist. Throws when git cannot read it. */
+export type Versions = (file: string) => { before: string | undefined; after: string | undefined };
+
+/** True for a ratchet list: a `.txt` under one of the two folders. */
+const isRatchetList = (path: string) => (path.startsWith(HIDDEN_ASSERTS) || path.startsWith(UNTESTED_SEAMS)) && path.endsWith(".txt");
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`); and each
- * package.json that differs between the merge base and the head (`versions`, as `pnpm queue` reads them) in more than
- * its `version` or `description`. One it cannot parse, or read on either side, counts.
+ * A ratchet list's entries as its check reads them: one a line, blank lines and `#` lines left out; in an untested-seams
+ * list a `#` comment ends the line and the ID and seam are one space apart (scripts/check-scenario-seams.ts `parseGaps`).
  */
-export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
+const ratchetEntries = (path: string, text: string) =>
+  text.split("\n").flatMap((raw) => {
+    const line = path.startsWith(UNTESTED_SEAMS) ? raw.replace(/#.*/, "").trim().replace(/\s+/g, " ") : raw.trim();
+    return line === "" || line.startsWith("#") ? [] : [line];
+  });
+
+/** What a ratchet list gains that its check would let through: an entry, or a list neither side of which could be read. */
+export type RatchetGain = { file: string; entry: string };
+
+/** Named in place of an entry when neither side of a changed list exists: nothing shows it lost one, so it counts. */
+export const UNREADABLE_LIST = "(read on neither side)";
+
+/**
+ * The entries each changed ratchet list has at the head beyond the merge base (`versions`): an entry the
+ * PR adds or loosens (an entry changed in place is one gone and one gained; a second copy of one counts, since each copy
+ * lets one assert through). Removing entries, or the list, gains none. Throws when git cannot read a side.
+ */
+export function ratchetGains(changed: string[], versions: Versions): RatchetGain[] {
+  return changed.filter(isRatchetList).flatMap((file) => {
+    const { before, after } = versions(file);
+    if (after === undefined) return before === undefined ? [{ file, entry: UNREADABLE_LIST }] : [];
+    const left = new Map<string, number>();
+    for (const entry of ratchetEntries(file, before ?? "")) left.set(entry, (left.get(entry) ?? 0) + 1);
+    return ratchetEntries(file, after).flatMap((entry) => {
+      const n = left.get(entry) ?? 0;
+      left.set(entry, n - 1);
+      return n > 0 ? [] : [{ file, entry }];
+    });
+  });
+}
+
+const isScenarioFile = (path: string) => path === matrixFile || (path.startsWith(`${scenariosDir}/`) && path.endsWith(".md"));
+
+/**
+ * The scenario IDs the changed scenario files (docs/visibility.md's matrix, docs/visibility/scenarios/*.md) hold at
+ * the merge base and not at the head, by the file that held them: a removed row, or a deleted file, drops its test
+ * requirement (RP-1196). The changed files are compared as one set, so a row moved from one to another loses nothing.
+ */
+export function lostScenarios(changed: string[], versions: Versions): { file: string; ids: string[] }[] {
+  const files = changed.filter(isScenarioFile);
+  const sides = files.map((file) => ({ file, ...versions(file) }));
+  const idsOf = (file: string, markdown: string | undefined) => (markdown === undefined ? [] : scenarioRows([{ file, markdown }]).map((row) => row.id));
+  const now = new Set(sides.flatMap(({ file, after }) => idsOf(file, after)));
+  return sides.flatMap(({ file, before }) => {
+    const ids = [...new Set(idsOf(file, before))].filter((id) => id !== "" && !now.has(id));
+    return ids.length > 0 ? [{ file, ids }] : [];
+  });
+}
+
+/**
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`ratchetGains`); each
+ * scenario file that loses a scenario ID (`lostScenarios`); and each package.json that differs between the merge base
+ * and the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot
+ * parse, or read on either side, counts.
+ */
+export function ciOwnChanges(changed: string[], versions: Versions): string[] {
+  const gained = new Set(ratchetGains(changed, versions).map(({ file }) => file));
+  const lost = new Map(lostScenarios(changed, versions).map(({ file, ids }) => [file, ids]));
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
-    if (RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt")) {
-      const { before, after } = versions(path);
-      if (after === undefined) return before === undefined ? [`${path} (gains an entry)`] : [];
-      const was = new Set(ratchetEntries(before ?? ""));
-      return ratchetEntries(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
+    if (isRatchetList(path)) return gained.has(path) ? [`${path} (gains an entry)`] : [];
+    if (isScenarioFile(path)) {
+      const ids = lost.get(path);
+      return ids === undefined ? [] : [`${path} (loses ${ids.length === 1 ? "scenario" : "scenarios"} ${ids.join(", ")})`];
     }
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);
