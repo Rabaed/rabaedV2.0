@@ -23,10 +23,13 @@ import {
 } from "@rabaed/domain";
 import { useEffect, useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { VIEW_ICONS_ONLY } from "../../lib/widths.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
+import { Tooltip } from "../overlay/tooltip.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
 import { KanbanCard, type KanbanCardBadge, type KanbanCardOwner, type KanbanCardPlace } from "./kanban-card.tsx";
@@ -728,24 +731,35 @@ export function WorkItemViewSwitch<V extends ModuleView = WorkItemView>({
   hrefFor,
   linkAs: Link = "a",
 }: WorkItemViewSwitchProps<V>) {
+  // Its name in the shared tooltip while only the icon shows: on hover and on keyboard focus (packages/ui/README.md).
+  const iconsOnly = useMediaQuery(VIEW_ICONS_ONLY, false);
   return (
     <nav aria-label={labels.view} className="inline-flex overflow-hidden rounded-sm border border-control-border bg-surface">
-      {views.map((v) => (
-        <Link
-          key={v}
-          href={hrefFor(v)}
-          aria-current={v === view ? "page" : undefined}
-          title={labels[v]}
-          className={cn(
-            "inline-flex h-8 items-center gap-1.5 px-2.5 text-[13.5px] font-semibold text-text-secondary hover:bg-hover min-[1440px]:px-3 pointer-coarse:min-h-11",
-            "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
-            focusRing,
-          )}
-        >
-          <Icon name={viewIcons[v]} size={16} />
-          <span className="sr-only min-[1440px]:not-sr-only">{labels[v]}</span>
-        </Link>
-      ))}
+      {views.map((v) => {
+        const link = (
+          <Link
+            key={v}
+            href={hrefFor(v)}
+            aria-current={v === view ? "page" : undefined}
+            className={cn(
+              "inline-flex h-8 items-center justify-center gap-1.5 px-2.5 text-[13.5px] font-semibold text-text-secondary hover:bg-hover min-[1440px]:px-3 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+              "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
+              focusRing,
+            )}
+          >
+            <Icon name={viewIcons[v]} size={16} />
+            {/* A touch screen has no hover, so there the name stays on screen at any width. */}
+            <span className="sr-only min-[1440px]:not-sr-only pointer-coarse:not-sr-only">{labels[v]}</span>
+          </Link>
+        );
+        return iconsOnly ? (
+          <Tooltip key={v} content={labels[v]}>
+            {link}
+          </Tooltip>
+        ) : (
+          link
+        );
+      })}
     </nav>
   );
 }

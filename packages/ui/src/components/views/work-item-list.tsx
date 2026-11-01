@@ -3,6 +3,7 @@
 import {
   formatNumber,
   isFilteredWorkItemQuery,
+  layoutToSave,
   listColumns,
   searchMaxLength,
   withoutFilters,
@@ -32,6 +33,7 @@ import { exportFile, saveFile, shownColumns, wholeTableColumns, type WholeTableL
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { LIST_NARROW } from "../../lib/widths.ts";
 import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
@@ -380,10 +382,12 @@ function WorkItemListBody({
   };
   // Under 1600 wide the first layout puts the Code and "With" right after the Status, so they show at 1366 (RP-1177).
   // The server draws the narrow one, the usual laptop width; a wider window takes the design's order after hydration.
-  const narrow = useMediaQuery("(max-width: 1599.98px)");
-  // The columns as the Member arranges them now (null: the first layout); "Save as my default" keeps them.
-  const [arranged, setColumns] = useState<ListColumnLayout | null>(null);
-  const columns = arranged ?? initialColumns ?? listColumns(list.columnLayout, { narrow });
+  const narrow = useMediaQuery(LIST_NARROW);
+  // The columns as the Member arranges them now: null is the first layout (theirs, else the design's for the width),
+  // "design" the design's for the width after Reset; "Save as my default" keeps them (`layoutToSave`).
+  const [arranged, setColumns] = useState<ListColumnLayout | "design" | null>(null);
+  const columns =
+    arranged === "design" ? listColumns(null, { narrow }) : (arranged ?? initialColumns ?? listColumns(list.columnLayout, { narrow }));
   const showToast = useToast();
   const setToast = (title: string) => showToast({ title, tone: "success" });
   const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
@@ -792,6 +796,8 @@ function WorkItemListBody({
                 onOpen={onOpen}
                 openId={openId}
                 onColumnsChange={onSaveColumns ? setColumns : undefined}
+                // Every Module's List fits 1366 (RP-1177, the owner's answer); the Package page's table doesn't need to.
+                fit
                 selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
                 groups={groups}
                 rowEnd={
@@ -842,9 +848,10 @@ function WorkItemListBody({
                       labels={labels.columnSettings}
                       number={n}
                       onChange={setColumns}
-                      onReset={() => setColumns(listColumns(null, { narrow }))}
+                      onReset={() => setColumns("design")}
                       onSave={() => {
-                        void onSaveColumns(columns).then((saved) => {
+                        // The narrow first order goes back to the design's, so wide screens keep it (RP-1177).
+                        void onSaveColumns(layoutToSave(columns)).then((saved) => {
                           if (saved) setToast(labels.columnSettings.saved);
                         });
                       }}

@@ -102,6 +102,12 @@ export type WorkItemTableProps = {
   onOpen?: (row: WorkItemRow) => void;
   /** The row open in the panel: highlighted. */
   openId?: string;
+  /**
+   * Under 1600 wide, fit 1366 (RP-1177, a List's table; the owner's answers of 2026-11-02): cells 8px in, no drag dots
+   * before the names, the Subject 112px and "With" 140px at most, each in full in its tooltip. The Package page's
+   * table, whose columns fit, leaves it off.
+   */
+  fit?: boolean;
   className?: string;
 };
 
@@ -114,11 +120,11 @@ export function columnHeader(key: ListColumnKey, labels: Pick<WorkItemTableLabel
   return named ? named[locale] : labels.columns[key];
 }
 
-// Under 1600 wide the cells sit 8px in, not 12, so the Code and "With" fit at 1366 (RP-1177, the owner's answer).
+// `list-narrow:` is a fitting table (`fit`) under 1600 wide: its cells sit 8px in, not 12 (RP-1177).
 const cell =
-  "h-12 border-b border-border-subtle bg-surface px-3 max-[1599.98px]:px-2 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint group-data-open/row:bg-brand-tint";
+  "h-12 border-b border-border-subtle bg-surface px-3 list-narrow:px-2 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint group-data-open/row:bg-brand-tint";
 const head =
-  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 max-[1599.98px]:px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 list-narrow:px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
 const dash = <span className="text-faint">—</span>;
@@ -142,6 +148,7 @@ export function WorkItemTable({
   stageShowsCode = false,
   onOpen,
   openId,
+  fit = false,
   className,
 }: WorkItemTableProps) {
   const [dragging, setDragging] = useState<ListColumnKey | null>(null);
@@ -156,7 +163,7 @@ export function WorkItemTable({
   const choosable = selection?.selectable ? rows.filter(selection.selectable) : rows;
   const chosen = selection ? choosable.filter((r) => selection.selected.has(r.id)).length : 0;
   return (
-    <table className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
+    <table data-fit={fit ? "" : undefined} className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
       <caption className="sr-only">{labels.table}</caption>
       <thead>
         <tr>
@@ -212,8 +219,8 @@ export function WorkItemTable({
                 )}
               >
                 <span className="flex items-center gap-1.5">
-                  {/* Under 1600 wide the drag dots go, so the Code and "With" fit at 1366; the header still drags (RP-1177, the owner's answer). */}
-                  <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70 max-[1599.98px]:hidden" />
+                  {/* A fitting table under 1600 wide drops the drag dots, so the Code and "With" fit at 1366; the header still drags (RP-1177). */}
+                  <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70 list-narrow:hidden" />
                   {/* The name is part of the sort button, so a header scrolled under the pinned settings button keeps 24px uncovered, whatever the font widths. */}
                   <button
                     type="button"
@@ -368,8 +375,8 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           }
           dir="auto"
           title={row.title}
-          // 112px at most under 1600 wide (RP-1177, the owner's answers): the full title stays in the tooltip.
-          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg max-[1599.98px]:max-w-[112px]", focusRing, touchBox)}
+          // A fitting table under 1600 wide: 112px at most (RP-1177, the owner's answers), the whole Subject in the tooltip.
+          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg list-narrow:max-w-[112px]", focusRing, touchBox)}
         >
           {row.title}
         </Link>
@@ -414,8 +421,8 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
       const owner = ownerOf(row, locale, labels);
       if (!owner) return dash;
       return (
-        // 140px at most under 1600 wide (RP-1177): the name truncated, in full in the tooltip.
-        <span title={owner.name} className="flex min-w-0 items-center gap-2 max-[1599.98px]:max-w-[140px]">
+        // A fitting table under 1600 wide: 140px at most (RP-1177), the name truncated, in full in the tooltip.
+        <span title={owner.name} className="flex min-w-0 items-center gap-2 list-narrow:max-w-[140px]">
           {owner.kind === "pool" ? (
             <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
               <Icon name={poolIcon} size={13} />

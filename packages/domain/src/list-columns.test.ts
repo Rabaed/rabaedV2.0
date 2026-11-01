@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultListColumns, listColumnLayout, listColumns } from "./list-columns.ts";
+import { defaultListColumns, layoutToSave, listColumnLayout, listColumns } from "./list-columns.ts";
 
 const shown = (layout: { key: string; shown: boolean }[]) => layout.filter((c) => c.shown).map((c) => c.key);
 
@@ -49,6 +49,16 @@ describe("the List's columns (RP-409)", () => {
     expect(listColumns(null, { narrow: false })).toEqual(listColumns(null));
     const saved = listColumns(null).map((c) => (c.key === "locationLevel1" ? { ...c, shown: false } : c));
     expect(listColumns(saved, { narrow: true })).toEqual(listColumns(saved));
+  });
+
+  // The owner's answer of 2026-11-02: "Save as my default" under 1600 keeps the design's order when the Member moved
+  // nothing, so wide screens still show the anatomy's; a switch they turned is kept, and so is an order they made.
+  it("are kept in the design's order when saved from the narrow first order, the switches as set", () => {
+    const narrow = listColumns(null, { narrow: true }).map((c) => (c.key === "contractor" ? { ...c, shown: true } : c));
+    expect(layoutToSave(narrow)).toEqual(listColumns(null).map((c) => (c.key === "contractor" ? { ...c, shown: true } : c)));
+    const moved = [narrow[0]!, narrow[1]!, narrow[7]!, ...narrow.slice(2, 7), ...narrow.slice(8)];
+    expect(layoutToSave(moved)).toEqual(moved);
+    expect(layoutToSave(listColumns(null))).toEqual(listColumns(null));
   });
 
   it("keep a Member's order and switches, the Document Number and Subject always first and shown", () => {

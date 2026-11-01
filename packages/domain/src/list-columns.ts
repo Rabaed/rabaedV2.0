@@ -52,6 +52,17 @@ const narrowListColumns: ListColumnLayout = (() => {
 })();
 
 /**
+ * The layout "Save as my default" keeps (RP-1177, the owner's answer of 2026-11-02): the narrow first order goes
+ * back to the design's, each column's switch as set, so a wide screen still shows the anatomy's order; any other
+ * order is the Member's own and is kept as it is.
+ */
+export function layoutToSave(columns: ListColumnLayout): ListColumnLayout {
+  const order = (layout: ListColumnLayout) => layout.map((c) => c.key).join(",");
+  if (order(columns) !== order(narrowListColumns)) return columns;
+  return defaultListColumns.map((c) => columns.find((given) => given.key === c.key) ?? c);
+}
+
+/**
  * A layout as the List shows it: the locked columns first and shown, then the others in the saved
  * order, and any column the saved layout lacks (one added since) in its first place, as it starts.
  * With no saved layout, `narrow` (a window under 1600 wide) starts from the narrow first order.
