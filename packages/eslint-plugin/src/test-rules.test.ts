@@ -11,6 +11,9 @@ RuleTester.itOnly = it.only;
 const ts = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
 const disabled = (code: string) => ({ code, errors: [{ messageId: "disabled" }] });
+const envCondition = (code: string) => ({ code, errors: [{ messageId: "envCondition" }] });
+const contextSkip = (code: string) => ({ code, errors: [{ messageId: "contextSkip" }] });
+const focused = (code: string) => ({ code, errors: [{ messageId: "focused" }] });
 
 ts.run("no-disabled-tests", rabaed.rules["no-disabled-tests"], {
   valid: [
@@ -32,6 +35,18 @@ ts.run("no-disabled-tests", rabaed.rules["no-disabled-tests"], {
     `query.todo();`,
     // A local function of the same name.
     `function xit(name) { return name; } xit("a");`,
+    // A renamed import or an alias that still runs.
+    `import { it as spec } from "vitest"; spec("runs", () => {});`,
+    `import * as v from "vitest"; v.it("runs", () => {}); v.describe.each([1])("runs %s", () => {});`,
+    `const { each } = it; each([1])("runs %s", () => {});`,
+    `const t = test; t.concurrent("runs", async () => {});`,
+    `import { skip } from "list-tools"; skip(3);`,
+    // A runtime condition that is no environment variable, even when a local object is called env.
+    `const env = { platform: "linux" }; it.skipIf(env.platform === "win32")("runs", () => {});`,
+    // The test's context, read and not skipped; a skip that is not the context's.
+    `it("runs", (ctx) => { expect(ctx.task.name).toBe("runs"); });`,
+    `it("runs", () => { list.skip(); });`,
+    `describe("a group", (ctx) => { ctx.skip(); });`,
   ],
   invalid: [
     disabled(`it.skip("hidden", () => {});`),
@@ -58,6 +73,33 @@ ts.run("no-disabled-tests", rabaed.rules["no-disabled-tests"], {
     disabled("it.skipIf(`yes`)(\"hidden\", () => {});"),
     disabled(`it.skipIf([])("hidden", () => {});`),
     disabled(`it.skipIf(() => true)("hidden", () => {});`),
+    // An alias of a test function or a modifier (RP-1196 review).
+    disabled(`const s = it.skip; s("hidden", () => {});`),
+    disabled(`const { skip } = it; skip("hidden", () => {});`),
+    disabled(`const { todo: later } = describe; later("hidden");`),
+    disabled(`const t = it; t.skip("hidden", () => {});`),
+    disabled(`const s = it.skipIf; s(true)("hidden", () => {});`),
+    disabled(`const x = xit; x("hidden", () => {});`),
+    // A renamed or namespace import of vitest.
+    disabled(`import { test as t } from "vitest"; t.skip("hidden", () => {});`),
+    disabled(`import { it as spec } from "vitest"; spec.todo("later");`),
+    disabled(`import * as v from "vitest"; v.it.skip("hidden", () => {});`),
+    disabled(`import * as v from "vitest"; const { describe: d } = v; d.skip("hidden", () => {});`),
+    disabled(`import { describe as d } from "vitest"; d.skipIf(true)("hidden", () => {});`),
+    // A condition on an environment variable: CI sets its own, so the test may never run there.
+    envCondition(`it.skipIf(!process.env.DATABASE_URL)("hidden", () => {});`),
+    envCondition(`it.runIf(process.env["CI"] === "true")("hidden", () => {});`),
+    envCondition(`describe.skipIf(process.env.X === undefined)("hidden", () => {});`),
+    envCondition(`const { CI } = process.env; it.skipIf(!!CI)("hidden", () => {});`),
+    envCondition(`const env = process.env; it.runIf(env.X)("hidden", () => {});`),
+    envCondition(`const reports = process.env.TEST_TIMING_REPORTS; describe.skipIf(!reports)("hidden", () => {});`),
+    envCondition(`import { env } from "node:process"; it.skipIf(!env.X)("hidden", () => {});`),
+    // The test's context skips it from inside.
+    contextSkip(`it("hidden", (ctx) => { ctx.skip(); });`),
+    contextSkip(`test("hidden", async (context) => { if (slow) context.skip(); });`),
+    contextSkip(`it("hidden", ({ skip }) => { skip(); });`),
+    contextSkip(`it("hidden", function (ctx) { ctx.skip(); });`),
+    contextSkip(`it.concurrent("hidden", async ({ skip: off }) => { off(); });`),
   ],
 });
 
@@ -69,6 +111,8 @@ ts.run("no-focused-tests", rabaed.rules["no-focused-tests"], {
     `promise.only();`,
     // A local function of the same name (workflow-canvas.tsx has one called fit).
     `const fit = () => zoom(1); fit();`,
+    `import { it as spec } from "vitest"; spec("runs", () => {});`,
+    `import { only } from "pick-tools"; only(1);`,
   ],
   invalid: [
     { code: `it.only("focused", () => {});`, errors: [{ messageId: "focused" }] },
@@ -78,6 +122,12 @@ ts.run("no-focused-tests", rabaed.rules["no-focused-tests"], {
     { code: `it.concurrent.only("focused", async () => {});`, errors: [{ messageId: "focused" }] },
     { code: `fit("focused", () => {});`, errors: [{ messageId: "focused" }] },
     { code: `fdescribe("focused", () => {});`, errors: [{ messageId: "focused" }] },
+    // An alias, or a renamed or namespace import (RP-1196 review).
+    focused(`const o = it.only; o("focused", () => {});`),
+    focused(`const { only } = describe; only("focused", () => {});`),
+    focused(`import { test as t } from "vitest"; t.only("focused", () => {});`),
+    focused(`import * as v from "vitest"; v.describe.only("focused", () => {});`),
+    focused(`const f = fit; f("focused", () => {});`),
   ],
 });
 

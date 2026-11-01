@@ -18,6 +18,7 @@ ts.run("env-optional-secret", rabaed.rules["env-optional-secret"], {
     `const headerRow = z.int().min(1).optional();`,
     // In an env schema, but not an optional non-empty string.
     `export function portFromEnv(source = process.env) { return z.object({ PORT: z.coerce.number().min(1).optional(), NAME: z.string().min(3).optional(), ID: z.string().min(1) }).parse(source); }`,
+    `const env = z.object({ A: z.string().trim().optional(), B: z.string().trim().min(1), C: z.coerce.number().min(1).nullish() }).parse(process.env);`,
   ],
   invalid: [
     {
@@ -33,6 +34,19 @@ ts.run("env-optional-secret", rabaed.rules["env-optional-secret"], {
       // A file that reads process.env directly.
       code: `const env = z.object({ CHROMIUM_PATH: z.string().min(1).optional() }).parse(process.env);`,
       errors: [{ messageId: "optionalSecret" }],
+    },
+    {
+      // String modifiers before or after .min(1), a message, .nullish(), .nonempty() (RP-1196 review).
+      code: [
+        "const env = z.object({",
+        "  A: z.string().trim().min(1).optional(),",
+        "  B: z.string().trim().toLowerCase().min(1, \"why\").optional(),",
+        "  C: z.string().min(1).nullish(),",
+        "  D: z.string().min(1).trim().optional(),",
+        "  E: z.string({ error: \"x\" }).nonempty().optional(),",
+        "}).parse(process.env);",
+      ].join("\n"),
+      errors: [{ messageId: "optionalSecret" }, { messageId: "optionalSecret" }, { messageId: "optionalSecret" }, { messageId: "optionalSecret" }, { messageId: "optionalSecret" }],
     },
   ],
 });

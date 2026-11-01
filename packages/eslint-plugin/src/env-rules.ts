@@ -1,22 +1,31 @@
 import type { Rule } from "eslint";
 import type { CallExpression, Expression, Node, Super } from "estree";
 
-/** `<object>.<name>(…)` for a call, else undefined. */
-function methodCall(node: Expression | Super, name: string): (CallExpression & { callee: { object: Expression | Super } }) | undefined {
-  if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression" || node.callee.computed) return undefined;
-  const { property } = node.callee;
-  return property.type === "Identifier" && property.name === name ? (node as CallExpression & { callee: { object: Expression | Super } }) : undefined;
+/** The method a call is (`<object>.<name>(…)`), and the object it is called on; undefined for any other expression. */
+function methodOf(node: Expression | Super): { name: string; call: CallExpression; object: Expression | Super } | undefined {
+  if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression" || node.callee.computed || node.callee.property.type !== "Identifier") return undefined;
+  return { name: node.callee.property.name, call: node, object: node.callee.object };
 }
 
-/** `z.string(…).min(1, …).optional()`: the shape that refuses an empty `KEY=` line. */
+/** `.min(1, …)` or `.nonempty(…)`: what refuses an empty string. */
+const refusesEmpty = ({ name, call }: { name: string; call: CallExpression }) => {
+  const [first] = call.arguments;
+  return name === "nonempty" || (name === "min" && first?.type === "Literal" && first.value === 1);
+};
+
+/**
+ * `z.string(…)…min(1, …)….optional()` or `.nullish()`, any string methods (`.trim()`, `.toLowerCase()`) before or after
+ * the `.min(1)`: the shape that refuses an empty `KEY=` line.
+ */
 function isOptionalNonEmptyString(node: CallExpression): boolean {
-  if (node.arguments.length > 0) return false;
-  const optional = methodCall(node, "optional");
-  const min = optional && methodCall(optional.callee.object, "min");
-  const [first] = min?.arguments ?? [];
-  if (!min || first?.type !== "Literal" || first.value !== 1) return false;
-  const string = methodCall(min.callee.object, "string");
-  return string !== undefined && string.callee.object.type === "Identifier";
+  const outer = methodOf(node);
+  if (!outer || (outer.name !== "optional" && outer.name !== "nullish") || node.arguments.length > 0) return false;
+  let nonEmpty = false;
+  for (let current = methodOf(outer.object); current; current = methodOf(current.object)) {
+    if (current.name === "string") return nonEmpty && current.object.type === "Identifier";
+    if (refusesEmpty(current)) nonEmpty = true;
+  }
+  return false;
 }
 
 const fromEnvName = /FromEnv$/;
@@ -34,7 +43,7 @@ export const envOptionalSecret: Rule.RuleModule = {
     docs: { description: "In an env schema, write an optional string as optionalSecret (@rabaed/domain), which takes an empty line as unset." },
     messages: {
       optionalSecret:
-        "z.string().min(1).optional() refuses an empty `KEY=` line, which a .env holds for an unset value (RP-1196): write optionalSecret from @rabaed/domain, which takes empty as unset.",
+        "z.string().min(1).optional() (or .nullish(), .nonempty(), with .trim() and the like) refuses an empty `KEY=` line, which a .env holds for an unset value (RP-1196): write optionalSecret from @rabaed/domain, which takes empty as unset.",
     },
     schema: [],
   },
