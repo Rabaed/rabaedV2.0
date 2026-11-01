@@ -39,6 +39,7 @@ describe("inviting a Member", () => {
         email: invited.email,
         fullName: { en: "Khalid Omar", ar: "خالد عمر" },
         locale: "ar",
+        language: "ar",
         isAuthorizedPerson: false,
         canCreateProjects: false,
       },
