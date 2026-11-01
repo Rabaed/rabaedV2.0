@@ -144,7 +144,7 @@ export function conflictedFiles(output: string): string[] {
  */
 type Prepared =
   | { kind: "refused"; result: QueueResult }
-  | { kind: "ready"; id: string; head: string; warnings: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
+  | { kind: "ready"; id: string; head: string; warnings: string[]; first: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
 
 /** What the verify gate read in `prepare`, kept for --wait to read CI again: undefined when no verify is needed or the stamped line passed. */
 interface VerifyInputs {
@@ -249,14 +249,12 @@ function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean; wai
 }
 
 /**
- * RP-1113: the newest merge of main on the head that is not clean voids every verify line from before it, and until
- * now that showed only as the verify refusal, often hours after the conflict merge. The rule is `verifyGate`'s own walk.
- */
-/**
- * The merge of main that voids the body's stamped verify lines: the verify gate's own walk (`cleanWalk`, the one
+ * RP-1113: the merge of main that voids the body's stamped verify lines, which until now showed only as the verify
+ * refusal, often hours after the conflict merge. The verify gate's own walk (`cleanWalk`, the one
  * `onlyCleanCommitsSince` takes) from `head` back to each stamped commit (`verifiedCommits`) stops at it, because its
  * tree is not git's clean merge of its parents. Undefined when a line still counts, when there is none, or when the
- * walk stops at anything but a merge of main (an ordinary commit after the run: the verify refusal says that).
+ * walk stops at anything but a merge of main (an ordinary commit after the run, or past the walk's limit: the verify
+ * refusal says that).
  */
 export function uncleanMergeSince(body: string, head: string, git: ReviewedGit): { merge: string; verified: string[] } | undefined {
   const verified = verifiedCommits(body);
@@ -271,7 +269,8 @@ export function uncleanMergeSince(body: string, head: string, git: ReviewedGit):
 function uncleanMergeLine(pr: number, head: string, body: string, git: ReviewedGit): string | undefined {
   const found = uncleanMergeSince(body, head, git);
   if (!found) return undefined;
-  return `Warning: ${found.merge} is a merge of main that is not clean (its tree is not git's own merge of its parents: a conflict resolution or an edit), so the verify line from before it (${found.verified.join(", ")}) no longer counts. Run \`pnpm verify --pr ${pr}\` again on the head ${head}, or let CI pass on it if no CI-own file changed.`;
+  const lines = found.verified.length === 1 ? `the stamped verify line (on ${found.verified[0]}) no longer counts` : `no stamped verify line (on ${found.verified.join(", ")}) counts any more`;
+  return `Warning: ${found.merge} is a merge of main that is not clean (its tree is not git's own merge of its parents: a conflict resolution or an edit), so ${lines} for the head ${head}. Run \`pnpm verify --pr ${pr}\` again on the head.`;
 }
 
 function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }, first: string[]): QueueResult | Prepared {
@@ -286,14 +285,15 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
       "Fix: wait a moment for GitHub to settle, then run `pnpm queue` again.",
     );
   }
-  // Read once: the warning, the baseline exception and the verify gate all judge the same body.
-  const body = seam.body(pr);
-  const unclean = uncleanMergeLine(pr, head, body, seam);
-  if (unclean) first.push(unclean);
-  const warnings: string[] = [...first];
   let labelRunPending = false;
   const changed = seam.changedFiles(head);
   const labels = seam.labels(pr);
+  // Read once: the warning, the baseline exception and the verify gate all judge the same body.
+  const body = seam.body(pr);
+  // A docs-only PR needs no verify run, so a merge that voids its line is no news (RP-1113).
+  const unclean = needsVerify(labels, changed) ? uncleanMergeLine(pr, head, body, seam) : undefined;
+  if (unclean) first.push(unclean);
+  const warnings: string[] = [...first];
   // The ratchet lists only shrink against main, whatever the labels or the verify (RP-1194): the verify-gate check's rule.
   const versions = (file: string) => seam.packageJsonVersions(head, file);
   const gains = readOrRefuse(pr, head, () => ratchetGains(changed, versions));
@@ -415,7 +415,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   }
   if (onMerge.skipped.length > 0) warnings.push(`Warning: not run on the merge (the file is not there yet): ${onMerge.skipped.join(", ")}.`);
 
-  return { kind: "ready", id: pull.id, head, warnings, labelRunPending, verify, ciPending };
+  return { kind: "ready", id: pull.id, head, warnings, first: [...first], labelRunPending, verify, ciPending };
 }
 
 const POLL_MS = 60_000;
@@ -505,9 +505,16 @@ const realSleep = (ms: number) => new Promise<void>((resolveSleep) => setTimeout
  * Fails only when a required check fails (naming it) or never reports on the head.
  */
 export async function queuePrWhenChecksPass(pr: number, seam: QueueSeam, options: WaitOptions = {}): Promise<QueueResult> {
-  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const prepared = prepare(pr, seam, { ...options, waitForLabelRun: true });
   if (prepared.kind === "refused") return prepared.result;
+  // RP-1113: the lines that go first are logged before the wait's progress lines, and lead any refusal while waiting.
+  for (const line of prepared.first) options.log?.(line);
+  const result = await waitThenEnqueue(pr, seam, { ...prepared, warnings: prepared.warnings.filter((line) => !prepared.first.includes(line)) }, options);
+  return result.ok || prepared.first.length === 0 ? result : { ...result, lines: [...prepared.first, ...result.lines] };
+}
+
+async function waitThenEnqueue(pr: number, seam: QueueSeam, prepared: Extract<Prepared, { kind: "ready" }>, options: WaitOptions): Promise<QueueResult> {
+  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const { head } = prepared;
   const required = seam.requiredChecks();
   const started = now();

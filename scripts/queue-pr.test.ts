@@ -384,6 +384,12 @@ describe("queuePr", () => {
         expect(result.lines.join("\n")).not.toContain(UNCLEAN);
       });
 
+      it("gives no warning on a docs-only PR, which needs no verify", () => {
+        const { seam } = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "beef999");
+        const docs = { ...seam, labels: () => ["docs-only"], changedFiles: () => ["docs/adr/0001-x.md"] };
+        expect(queuePr(149, docs).lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
       it("gives no warning when the walk stops at a commit of the branch's own, not a merge", () => {
         // n1 is an ordinary commit after the verified one: the verify refusal says enough.
         const { seam } = history({ abc1234: ["n1", "m2"], n1: ["beef999"] }, [], "beef999");
@@ -826,6 +832,50 @@ describe("queuePrWhenChecksPass", () => {
   }
   const done = (name: string, conclusion = "success"): Run => ({ name, status: "completed", conclusion });
   const going = (name: string): Run => ({ name, status: "in_progress", conclusion: "" });
+
+  // RP-1113: the stamped line on beef999 is voided by abc1234, a merge of main with an edit; CI green on the head lets it wait.
+  describe("a merge of main that is not clean (RP-1113)", () => {
+    const UNCLEAN = "abc1234 is a merge of main that is not clean";
+    const greenCi: CiRun = {
+      id: 7,
+      headSha: "abc1234",
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      status: "completed",
+      conclusion: "success",
+      repo: "Rabaed/rabaedV2.0",
+      headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 149, baseRef: "main" }],
+      jobs: [{ name: "ci", status: "completed", conclusion: "success" }],
+    };
+    const unclean = (polls: Run[][]) =>
+      checking(polls, {
+        body: () => stampLine("pnpm verify passed on beef999: lint, typecheck, unit."),
+        parents: (commit) => (commit === "abc1234" ? ["beef999", "m2"] : []),
+        onMain: (commit) => commit.startsWith("m"),
+        tree: (commit) => (commit === "abc1234" ? "treeX" : "tree1"),
+        mergedTree: () => "tree1",
+        ciRuns: () => [greenCi],
+      });
+
+    it("logs the warning before any wait line, and does not repeat it in the summary", async () => {
+      const c = unclean([[going("ci")], [done("ci"), done("reviewed-required")]]);
+      const logged: string[] = [];
+      const result = await queuePrWhenChecksPass(149, c.seam, { ...c.options, log: (line) => logged.push(line) });
+      expect(result.ok).toBe(true);
+      expect(logged[0]).toContain(UNCLEAN);
+      expect(logged.slice(1).join("\n")).not.toContain(UNCLEAN);
+      expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+    });
+
+    it("puts it first on a refusal while waiting", async () => {
+      const c = unclean([[done("ci", "failure"), done("reviewed-required")]]);
+      const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+      expect(result.ok).toBe(false);
+      expect(result.lines[0]).toContain(UNCLEAN);
+      expect(result.lines.join("\n")).toContain("required check(s) failed");
+    });
+  });
 
   it("waits while a required check is pending or not reported yet, then queues the PR's head", async () => {
     const c = checking([[], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required", "skipped"), going("unrequired")]]);

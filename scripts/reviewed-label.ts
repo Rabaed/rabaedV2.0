@@ -75,9 +75,8 @@ export function isBaselineBotCommit(commit: string, git: ReviewedGit): boolean {
 /** True when the push `before` -> `after` only merged main in, with no change of its own. */
 export function keepsLabel(before: string, after: string, git: ReviewedGit): boolean {
   try {
-    const [first, second, ...rest] = git.parents(after);
-    if (first !== before || second === undefined || rest.length > 0) return false;
-    if (!git.onMain(second)) return false;
+    const [first, second] = git.parents(after);
+    if (first !== before || second === undefined || !isMergeOfMain(after, git)) return false;
     const merged = git.mergedTree(before, second);
     return merged !== undefined && merged === git.tree(after);
   } catch {
