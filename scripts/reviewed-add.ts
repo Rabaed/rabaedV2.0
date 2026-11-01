@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { isBaselineBotCommit, onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { CI_WORKFLOW, ciOverHttp, ciOwnChanges, readCiEvidence, type CiReads } from "./ci-green.ts";
 import { REQUIRED_CHECK } from "./reviewed-required.ts";
-import { canPush, commentsOverHttp, realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen, type CommentReads, type Permission, type ReviewComment } from "./verify-gate.ts";
+import { commentsOverHttp, errorText, markerWriters, realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen, type CommentReads, type Permission, type ReviewComment } from "./verify-gate.ts";
 
 // Adds the `reviewed` label to a PR (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 // It adds it only when both hold for the PR's current head:
@@ -44,13 +44,8 @@ export type { Permission, ReviewComment };
 const markedCommits = (comment: ReviewComment) => [...comment.body.matchAll(MARKER)].map(([, sha = ""]) => sha);
 const hasMarker = (comment: ReviewComment) => markedCommits(comment).length > 0;
 
-/** The users among the markers' authors who can push to the repo; `permission` is asked once per login. */
-export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
-  const logins = new Set(comments.filter((comment) => comment.type === "User" && hasMarker(comment)).map((comment) => comment.login));
-  const writers = new Set<string>();
-  for (const login of logins) if (canPush(await permission(login))) writers.add(login);
-  return writers;
-}
+/** The users among the review markers' authors who can push to the repo (`markerWriters`). */
+export const writersAmong = (comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> => markerWriters(comments, hasMarker, permission);
 
 /** A user (never a bot) in `writers`: one who can push to the repo (`writersAmong`). */
 export const isTrustedAuthor = (comment: ReviewComment, writers: ReadonlySet<string>) => comment.type === "User" && writers.has(comment.login);
@@ -167,7 +162,7 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
     ownChanges = ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file));
   } catch (error) {
     // A changed file git cannot read refuses, as in the verify gate (RP-1196).
-    return { ok: false, added: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this workflow.` };
+    return { ok: false, added: false, summary: `PR #${pr}: could not read ${head}'s changes: ${errorText(error)}. Re-run this workflow.` };
   }
   const verify = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:

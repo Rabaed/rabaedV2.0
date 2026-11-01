@@ -177,17 +177,25 @@ const hasException = (text: string, gain: RatchetGain) => bareLines(text).some((
 
 const baselineMarked = (comment: ReviewComment) => [...comment.body.matchAll(BASELINE_MARKER)].map(([, sha = ""]) => sha);
 
-/** The users whose comments hold a baseline marker: the logins whose permission the gate reads. */
-export const baselineMarkerLogins = (comments: ReviewComment[]): string[] => [
-  ...new Set(comments.filter((comment) => comment.type === "User" && baselineMarked(comment).length > 0).map((comment) => comment.login)),
-];
+/** True for a comment holding Main 6's baseline marker. */
+export const hasBaselineMarker = (comment: ReviewComment) => baselineMarked(comment).length > 0;
 
-/** The users among `baselineMarkerLogins` who can push to the repo. */
-export async function baselineWriters(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
-  const writers = new Set<string>();
-  for (const login of baselineMarkerLogins(comments)) if (canPush(await permission(login))) writers.add(login);
-  return writers;
+/**
+ * The users (never a bot) whose comments hold a marker (`marked`) and who can push to the repo (`canPush`); `permission`
+ * is asked once per login. One rule for the review marker (reviewed-add) and Main 6's baseline marker (this check and
+ * `pnpm queue`): sync when `permission` is (gh), a promise when it is async (the REST API).
+ */
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Permission): Set<string>;
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Promise<Permission>): Promise<Set<string>>;
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Permission | Promise<Permission>): Set<string> | Promise<Set<string>> {
+  const logins = [...new Set(comments.filter((comment) => comment.type === "User" && marked(comment)).map((comment) => comment.login))];
+  const answers = logins.map((login) => permission(login));
+  const keep = (permissions: Permission[]) => new Set(logins.filter((_, at) => canPush(permissions[at] ?? "none")));
+  return answers.some((answer) => answer instanceof Promise) ? Promise.all(answers).then(keep) : keep(answers as Permission[]);
 }
+
+/** An error's message for a summary line: trimmed, or the thrown value as text. */
+export const errorText = (error: unknown): string => (error instanceof Error ? error.message.trim() : String(error));
 
 /**
  * Why each ratchet list entry the PR adds or loosens (`gains`, against the merge base with origin/main) is refused
@@ -248,16 +256,16 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
     gains = ratchetGains(changed, versions);
     ownChanges = ciOwnChanges(changed, versions);
   } catch (error) {
-    return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
+    return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${errorText(error)}. Re-run this check.` };
   }
   // Before the docs-only pass and the verify: the lists are docs, and a stamped line does not excuse a new entry.
   if (gains.length > 0) {
     let refusals: string[];
     try {
       const comments = await seam.comments(pr);
-      refusals = baselineRefusals(gains, pull.body, comments, await baselineWriters(comments, (login) => seam.permission(login)), head, seam);
+      refusals = baselineRefusals(gains, pull.body, comments, await markerWriters(comments, hasBaselineMarker, (login) => seam.permission(login)), head, seam);
     } catch (error) {
-      return { ok: false, summary: `PR #${pr}: could not read its comments for the baseline exceptions: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
+      return { ok: false, summary: `PR #${pr}: could not read its comments for the baseline exceptions: ${errorText(error)}. Re-run this check.` };
     }
     if (refusals.length > 0) return { ok: false, summary: `PR #${pr}: ${refusals.join("; ")}. ${baselineFix(pr)}.` };
   }

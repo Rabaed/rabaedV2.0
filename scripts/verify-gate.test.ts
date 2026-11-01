@@ -7,16 +7,18 @@ import type { CiRun } from "./ci-green.ts";
 import { BASELINE_BOT_EMAIL, type ReviewedGit } from "./reviewed-label.ts";
 import {
   baselineMarker,
-  baselineMarkerLogins,
   baselineRefusals,
   fileAtVia,
   fileVersionsVia,
+  markerWriters,
   needsVerify,
   requireVerified,
   stampLine,
   verifiedCommits,
   verifyGate,
   type GateSeam,
+  type Permission,
+  type ReviewComment,
 } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
 
@@ -185,8 +187,28 @@ describe("baselineRefusals (RP-1194: the lists only shrink against main)", () =>
     expect(baselineRefusals([gain], exception, [{ ...main6(HEAD), type: "Bot" }], new Set(["mmhaleess90"]), HEAD, noMerges)).toHaveLength(1);
   });
 
-  it("names the logins whose marker comments need a permission read", () => {
-    expect(baselineMarkerLogins([main6(HEAD), { login: "x", type: "User", body: "hi" }, { ...main6(HEAD), login: "bot", type: "Bot" }])).toEqual(["mmhaleess90"]);
+});
+
+describe("markerWriters", () => {
+  const marked = (comment: ReviewComment) => comment.body.includes("<!-- m -->");
+  const comments: ReviewComment[] = [
+    { login: "owner", type: "User", body: "<!-- m -->" },
+    { login: "owner", type: "User", body: "again <!-- m -->" },
+    { login: "reader", type: "User", body: "<!-- m -->" },
+    { login: "talker", type: "User", body: "hi" },
+    { login: "github-actions[bot]", type: "Bot", body: "<!-- m -->" },
+  ];
+  const permissions: Record<string, Permission> = { owner: "admin", reader: "read", talker: "write", "github-actions[bot]": "admin" };
+
+  it("keeps the users (never a bot) whose comments hold the marker and who can push, asking once per login", () => {
+    const asked: string[] = [];
+    const writers = markerWriters(comments, marked, (login) => (asked.push(login), permissions[login] ?? "none"));
+    expect(writers).toEqual(new Set(["owner"]));
+    expect(asked).toEqual(["owner", "reader"]);
+  });
+
+  it("answers a promise when the permission reads are async", async () => {
+    await expect(markerWriters(comments, marked, async (login) => permissions[login] ?? "none")).resolves.toEqual(new Set(["owner"]));
   });
 });
 

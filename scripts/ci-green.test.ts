@@ -197,6 +197,21 @@ describe("isCiOwnFile", () => {
       expect(isCiOwnFile(path), path).toBe(false);
   });
 
+  it("names the workflows that judge a PR: the gate's own and every one that reports a required check (RP-1194)", () => {
+    for (const path of [
+      ".github/workflows/verify-gate.yml",
+      ".github/workflows/reviewed-add.yml",
+      ".github/workflows/reviewed-label.yml",
+      ".github/workflows/reviewed-required.yml",
+      ".github/workflows/secret-scan.yml",
+      ".github/workflows/dependency-audit.yml",
+      ".github/workflows/update-screenshots.yml",
+    ])
+      expect(isCiOwnFile(path), path).toBe(true);
+    for (const path of [".github/workflows/jira-close.yml", ".github/workflows/queue-drop-comment.yml", ".github/workflows/deploy-records-uat.yml", ".github/workflows/age-uat.yml"])
+      expect(isCiOwnFile(path), path).toBe(false);
+  });
+
   it("names the image CI's 'web image starts' job builds", () => {
     for (const path of ["Dockerfile", ".dockerignore", "apps/web/Dockerfile"]) expect(isCiOwnFile(path), path).toBe(true);
   });
@@ -318,7 +333,7 @@ const stringsIn = (value: unknown): string[] =>
   typeof value === "string" ? [value] : Array.isArray(value) ? value.flatMap(stringsIn) : value !== null && typeof value === "object" ? Object.values(value).flatMap(stringsIn) : [];
 
 /**
- * The files that decide what counts as green and that `isCiOwnFile` misses: every file a PR-facing workflow (or its
+ * The files that decide what counts as green and that `isCiOwnFile` misses: every PR-facing workflow file, every file it (or its
  * local action) runs, with the package.json scripts its `pnpm` calls run; every test config and what it loads by name
  * (setup files, global setups, reporters); every file already CI's own (the helpers, the checks); and what each of
  * them imports, all the way down. Imports reach workspace packages too, by their `exports`, but stop at app code
@@ -378,7 +393,11 @@ const ciOwnGaps = (files: Files): string[] => {
   for (const path of files.paths) {
     if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(path)) {
       const workflow = parse(files.read(path)) as { on?: unknown; jobs?: unknown };
-      if (judgesPrs(workflow.on)) steps(workflow.jobs);
+      // The workflow file too: a PR's run of it uses the PR's own copy (RP-1194).
+      if (judgesPrs(workflow.on)) {
+        roots.add(path);
+        steps(workflow.jobs);
+      }
     } else if (TEST_CONFIG.test(path)) {
       add(path);
       named(posix.dirname(path), files.read(path));
@@ -508,6 +527,40 @@ describe("ciOwnChanges", () => {
     });
   });
 
+  describe("a deleted test file (RP-1196)", () => {
+    const sides = (tree: Record<string, [string | undefined, string | undefined]>) => (file: string) => {
+      const [before, after] = tree[file] ?? [undefined, undefined];
+      return { before, after };
+    };
+
+    it("counts a deleted test, spec or file under a test/ folder: the tests it held no longer run", () => {
+      const gone = ["apps/api/test/links.test.ts", "packages/ui/src/button.spec.tsx", "apps/api/test/fixtures/registers/formats.xlsx", "packages/ui/test/stories.test.tsx"];
+      const versions = sides(Object.fromEntries(gone.map((file) => [file, ["it('a', () => {});\n", undefined]])));
+      expect(ciOwnChanges(gone, versions)).toEqual(gone.map((file) => `${file} (deletes a test file)`));
+    });
+
+    it("leaves a test that is added or edited alone, and a deleted file that is no test", () => {
+      const versions = sides({
+        "apps/api/test/new.test.ts": [undefined, "x"],
+        "apps/api/test/links.test.ts": ["x", "y"],
+        "apps/api/src/old.ts": ["x", undefined],
+        "docs/latest.md": ["x", undefined],
+      });
+      expect(ciOwnChanges(["apps/api/test/new.test.ts", "apps/api/test/links.test.ts", "apps/api/src/old.ts", "docs/latest.md"], versions)).toEqual([]);
+    });
+
+    it("leaves a test moved unchanged alone (git lists a delete and an add), but counts one moved and edited", () => {
+      const versions = sides({
+        "apps/api/test/links.test.ts": ["it('a', () => {});\n", undefined],
+        "apps/api/test/links/links.test.ts": [undefined, "it('a', () => {});\n"],
+        "apps/api/test/gone.test.ts": ["it('a', () => {});\nit('b', () => {});\n", undefined],
+        "apps/api/test/moved/gone.test.ts": [undefined, "it('a', () => {});\n"],
+      });
+      const changed = ["apps/api/test/links.test.ts", "apps/api/test/links/links.test.ts", "apps/api/test/gone.test.ts", "apps/api/test/moved/gone.test.ts"];
+      expect(ciOwnChanges(changed, versions)).toEqual(["apps/api/test/gone.test.ts (deletes a test file)"]);
+    });
+  });
+
   it("counts a new package.json, one it cannot parse, and one it could read on neither side", () => {
     expect(ciOwnChanges(["packages/new/package.json"], versions(undefined, { scripts: { postinstall: "node x.js" } }))).toEqual(["packages/new/package.json"]);
     expect(ciOwnChanges(["package.json"], () => ({ before: "{", after: "{}" }))).toEqual(["package.json"]);
@@ -533,7 +586,16 @@ describe("CI_OWN_FILES", () => {
       },
       [{ dir: ".", name: "root", scripts: { gate: "node scripts/gate-cli.ts" } }],
     );
-    expect(ciOwnGaps(files)).toEqual(["scripts/gate-cli.ts", "scripts/gate-rule.ts", "scripts/gate-run.ts"]);
+    expect(ciOwnGaps(files)).toEqual([".github/workflows/gate.yml", "scripts/gate-cli.ts", "scripts/gate-rule.ts", "scripts/gate-run.ts"]);
+  });
+
+  it("finds the PR-facing workflow file itself: a PR that edits one judges itself with its own copy (RP-1194)", () => {
+    const files = planted({
+      ".github/workflows/gate.yml": workflow("{ pull_request_target: { types: [opened] } }", "echo ok"),
+      ".github/workflows/queue.yml": workflow("merge_group", "echo ok"),
+      ".github/workflows/deploy.yml": workflow("workflow_dispatch", "echo ok"),
+    });
+    expect(ciOwnGaps(files)).toEqual([".github/workflows/gate.yml", ".github/workflows/queue.yml"]);
   });
 
   it("leaves a workflow alone that judges no PR (a deploy, a manual job)", () => {
@@ -550,7 +612,7 @@ describe("CI_OWN_FILES", () => {
       "scripts/drop-run.ts": "",
       "scripts/label-run.ts": "",
     });
-    expect(ciOwnGaps(files)).toEqual(["scripts/label-run.ts"]);
+    expect(ciOwnGaps(files)).toEqual([".github/workflows/label.yml", "scripts/label-run.ts"]);
   });
 
   it("finds what a test config loads by name (setup files, reporters) and what a helper imports", () => {

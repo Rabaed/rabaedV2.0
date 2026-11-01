@@ -37,6 +37,18 @@ export const OTHER_REQUIRED_CHECKS: Readonly<Record<string, string>> = {
  */
 export const CI_OWN_FILES: readonly string[] = [
   CI_WORKFLOW,
+  // The other workflows that judge a PR (on pull_request or merge_group): the gate's own and those reporting a required
+  // check (RP-1194). A PR's run of one uses the PR's own copy. Named one by one, not `.github/workflows/*`: the deploys,
+  // the manual jobs and those that run once the verdict is in (jira-close, queue-drop-comment) judge nothing.
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the workflow's file name (npm's word), not the domain's
+  ".github/workflows/dependency-audit.yml",
+  ".github/workflows/reviewed-add.yml",
+  ".github/workflows/reviewed-label.yml",
+  ".github/workflows/reviewed-required.yml",
+  ".github/workflows/secret-scan.yml",
+  // Its second render and flip-flop check decide which screenshot baselines the bot commits.
+  ".github/workflows/update-screenshots.yml",
+  ".github/workflows/verify-gate.yml",
   ".github/actions/**",
   "**/vitest.config.*",
   "**/vitest.workspace.*",
@@ -202,16 +214,40 @@ export function lostScenarios(changed: string[], versions: Versions): { file: st
 }
 
 /**
+ * A test (`*.test.*`, `*.spec.*`) or any file under a test/ folder: what CI runs, or what its tests read. Never under
+ * docs/: a ratchet list is named after its test (`hidden-asserts/apps/api/test/links.test.ts.txt`), and it may go.
+ */
+const isTestFile = (path: string) => !path.startsWith("docs/") && (/\.(?:test|spec)\.[^/]+$/.test(path) || /(^|\/)test\//.test(path));
+
+const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/**
+ * The changed test files the head deletes (RP-1196): the tests they held no longer run, and CI goes green without them.
+ * A test moved unchanged is not one: git lists a move as a delete and an add, so a deleted file whose name and text a
+ * changed test file gains elsewhere is left out. A move with an edit counts.
+ */
+export function removedTests(changed: string[], versions: Versions): string[] {
+  const tests = changed.filter(isTestFile).map((file) => ({ file, ...versions(file) }));
+  const added = tests.filter(({ before, after }) => before === undefined && after !== undefined);
+  return tests
+    .filter(({ file, before, after }) => before !== undefined && after === undefined && !added.some((add) => baseName(add.file) === baseName(file) && add.after === before))
+    .map(({ file }) => file);
+}
+
+/**
  * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`ratchetGains`); each
- * scenario file that loses a scenario ID (`lostScenarios`); and each package.json that differs between the merge base
+ * scenario file that loses a scenario ID (`lostScenarios`); each test file deleted (`removedTests`); and each package.json that differs between the merge base
  * and the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot
  * parse, or read on either side, counts.
  */
 export function ciOwnChanges(changed: string[], versions: Versions): string[] {
   const gained = new Set(ratchetGains(changed, versions).map(({ file }) => file));
   const lost = new Map(lostScenarios(changed, versions).map(({ file, ids }) => [file, ids]));
+  const removed = new Set(removedTests(changed.filter((path) => !isCiOwnFile(path)), versions));
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
+    // eslint-disable-next-line rabaed/no-avoid-terms -- a source file, git's word, not the domain's
+    if (removed.has(path)) return [`${path} (deletes a test file)`];
     if (isRatchetList(path)) return gained.has(path) ? [`${path} (gains an entry)`] : [];
     if (isScenarioFile(path)) {
       const ids = lost.get(path);

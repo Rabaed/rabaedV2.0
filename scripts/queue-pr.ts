@@ -9,10 +9,11 @@ import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, ratchetGains, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
 import {
   baselineFix,
-  baselineMarkerLogins,
   baselineRefusals,
-  canPush,
+  errorText,
   fileAtVia,
+  hasBaselineMarker,
+  markerWriters,
   needsVerify,
   packageJsonVersionsVia,
   VERIFY_CHECK,
@@ -228,7 +229,7 @@ function readOrRefuse<T>(pr: number, head: string, read: () => T): { ok: true; v
     return {
       ok: false,
       result: fail(
-        `PR #${pr}: could not read ${head}'s changed files: ${error instanceof Error ? error.message.trim() : String(error)}`,
+        `PR #${pr}: could not read ${head}'s changed files: ${errorText(error)}`,
         "Fix: run `git fetch origin main` and check that this clone has the PR's head and its merge base with origin/main (not shallow), then run `pnpm queue` again.",
       ),
     };
@@ -266,7 +267,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   if (!gains.ok) return gains.result;
   if (gains.value.length > 0) {
     const comments = seam.comments(pr);
-    const writers = new Set(baselineMarkerLogins(comments).filter((login) => canPush(seam.permission(login))));
+    const writers = markerWriters(comments, hasBaselineMarker, (login) => seam.permission(login));
     const baseline = baselineRefusals(gains.value, seam.body(pr), comments, writers, head, seam);
     if (baseline.length > 0) return fail(`PR #${pr}: ${baseline.join("; ")}.`, `${baselineFix(pr)}, then run \`pnpm queue ${pr}\` again.`);
   }
@@ -368,7 +369,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     onMerge = seam.mergeChecks(merge.output, head);
   } catch (error) {
     return fail(
-      `PR #${pr}: could not run main's checks on the merge of the PR and main: ${error instanceof Error ? error.message.trim() : String(error)}`,
+      `PR #${pr}: could not run main's checks on the merge of the PR and main: ${errorText(error)}`,
       "Fix: check that git can add a worktree in the temp folder (disk space, long paths: `git config core.longpaths true`), then run `pnpm queue` again.",
     );
   }
