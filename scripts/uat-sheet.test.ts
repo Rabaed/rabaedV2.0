@@ -3,7 +3,8 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { caseFromIssue, casesFromScenarios, numberedSteps, orderCases, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
+import { demoPeople } from "./demo-session.ts";
+import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
@@ -59,6 +60,7 @@ const expected: Omit<SheetCase, "url"> = {
   id: "SUB-08",
   title: "Raise a MAR and send it for review",
   part: "SUB",
+  partName: "Submittals",
   round: "1",
   who: "Hafiz (TMC Engineer); Ali (TMC PM)",
   steps: ["Open Submittals and choose Add Submittal.", "Fill the Form and Send for Review."],
@@ -183,7 +185,7 @@ describe("renderSheet", () => {
   it("opens with a How to start guide for the tester, in English and Arabic, with the UAT address (RP-1201)", () => {
     const html = renderSheet({ round: "R", cases, built: "x", uatUrl: "https://uat.example" });
     expect(html).toContain('"uatUrl":"https://uat.example"');
-    for (const text of ["How to start", "كيف تبدأ", "private window", "نافذة خاصة", "Owner runs", "يشغّلها مسؤول الاختبار"]) expect(html).toContain(text);
+    for (const text of ["How to start", "كيف تبدأ", "private window", "نافذة خاصة", "Cases the UAT owner runs", "يشغّلها مسؤول الاختبار", "section by section", "قسمًا قسمًا"]) expect(html).toContain(text);
   });
 
   it("gives the Excel export who runs each case and what it needs", () => {
@@ -196,6 +198,65 @@ describe("renderSheet", () => {
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
     expect(scripts.length).toBeGreaterThan(0);
     for (const code of scripts) expect(() => new vm.Script(code)).not.toThrow();
+  });
+});
+
+describe("the Who's who panel (RP-1204)", () => {
+  it("lists every demo person the sign-in script knows, and the Authorized Persons and Rabaed Engineer besides", () => {
+    const emails = DEMO_PEOPLE.map((p) => p.email);
+    for (const email of Object.values(demoPeople)) expect(emails).toContain(email);
+    for (const email of ["layla.mansour@designconsultants.demo.rabaed.test", "hind.almutairi@alwaha.demo.rabaed.test", "engineer@rabaed.demo.rabaed.test"]) expect(emails).toContain(email);
+    expect(new Set(DEMO_PEOPLE.map((p) => p.key)).size).toBe(DEMO_PEOPLE.length);
+  });
+
+  it("holds sign-in emails only, never a password", () => {
+    for (const p of DEMO_PEOPLE) expect(Object.keys(p).some((k) => /pass|secret|token/i.test(k))).toBe(false);
+    const html = renderSheet({ round: "R", cases: [], built: "x" });
+    expect(html).not.toMatch(/DEMO_PASSWORD|\.env\.demo/);
+  });
+
+  it("is in the page in English and Arabic", () => {
+    const html = renderSheet({ round: "R", cases: [], built: "x" });
+    expect(html).toContain('"email":"hafiz.hamdan@tmc.demo.rabaed.test"');
+    for (const text of ["Who's who", "من هو من", "The owner gives you each sign-in"]) expect(html).toContain(text);
+  });
+});
+
+describe("sections and the Markdown for an AI (RP-1204)", () => {
+  const make = (id: string, part: string, needs: SheetCase["needs"] = []): SheetCase => ({ ...caseFromIssue(issue(markdown), "https://uat.example"), id, key: `RP-${id}`, part, partName: part, needs });
+  const cases = [make("SUB-1", "SUB"), make("WF-1", "WF"), make("SUB-2", "SUB"), make("ADM-1", "ADM", ["owner"]), make("VIS-1", "VIS", ["mail"])];
+
+  it("groups the tester's cases by Part, numbered in the order the Parts first come, and puts the owner's cases last", () => {
+    const s = sectionsOf(cases);
+    expect(s.map((x) => [x.n, x.part, x.cases.map((c) => c.id)])).toEqual([
+      [1, "SUB", ["SUB-1", "SUB-2"]],
+      [2, "WF", ["WF-1"]],
+      [3, "VIS", ["VIS-1"]],
+      [0, "OWNER", ["ADM-1"]],
+    ]);
+    expect(s[0]!.name).toEqual({ en: "Submittals", ar: "التقديمات" });
+  });
+
+  it("writes every case under its numbered section, with the people and no password", () => {
+    const md = renderMarkdown({ round: "Round X", cases, built: "2026-11-01", uatUrl: "https://uat.example/" });
+    expect(md).toContain("# Rabaed UAT test sheet: Round X");
+    expect(md).toContain("https://uat.example/en");
+    for (const h of ["## 1. Submittals (2 cases)", "## 2. Workflows (1 cases)", "## Cases the UAT owner runs (1 cases)", "### SUB-1 ", "`RP-ADM-1`", "hafiz.hamdan@tmc.demo.rabaed.test"]) expect(md).toContain(h);
+    expect(md).not.toMatch(/password\s*[:=]|DEMO_PASSWORD/i);
+  });
+
+  it("ends with the JSON to hand back, which is the sheet's own work file", () => {
+    const md = renderMarkdown({ round: "Round X", cases, built: "x" });
+    const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(md)![1]!);
+    expect(json.sheet).toBe("rabaed-uat-sheet");
+    expect(json.round).toBe("Round X");
+    expect(Object.values(json.entries).every((e) => ["pass", "fail", "blocked", "notrun"].includes((e as { status: string }).status))).toBe(true);
+  });
+
+  it("puts the Markdown in the page, so the sheet can hand it over too", () => {
+    const html = renderSheet({ round: "R", cases, built: "x" });
+    expect(html).toContain("Download for an AI (.md)");
+    expect(html).toContain("# Rabaed UAT test sheet: R");
   });
 });
 
@@ -283,16 +344,19 @@ describe("the sheet's colours", () => {
   const rule = (selector: string) => new RegExp(`${selector.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
   const accent = /--accent:\s*(#[0-9a-f]{6})/i.exec(css)![1]!;
 
-  it("reads the owner badge at 4.5:1 or better", () => {
-    const style = rule(".badge.owner");
-    const color = /color:\s*(#[0-9a-f]{6})/i.exec(style)?.[1] ?? accent;
-    const background = /background:\s*(#[0-9a-f]{6})/i.exec(style)![1]!;
-    expect(contrast(color, background)).toBeGreaterThanOrEqual(4.5);
+  // The needs tags (owner, set-up, job, mail; RP-1199) are `.tag.need` since RP-1204's redesign; the plain tags `.tag`.
+  const pair = (selector: string) => {
+    const style = rule(selector);
+    return [/[^-]color:\s*(#[0-9a-f]{6})/i.exec(style)?.[1] ?? accent, /background:\s*(#[0-9a-f]{6})/i.exec(style)![1]!] as const;
+  };
+
+  it("reads the needs tags (the owner's among them) at 4.5:1 or better", () => {
+    expect(contrast(...pair(".tag.need"))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("reads the mail note and the other badges at 4.5:1 or better", () => {
-    expect(contrast("#5d6678", /background:\s*(#[0-9a-f]{6})/i.exec(rule(".note"))![1]!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast("#1d2433", /background:\s*(#[0-9a-f]{6})/i.exec(rule(".badge"))![1]!)).toBeGreaterThanOrEqual(4.5);
+  it("reads the mail note and the plain tags at 4.5:1 or better", () => {
+    expect(contrast(...pair(".note"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(...pair(".tag"))).toBeGreaterThanOrEqual(4.5);
   });
 });
 
