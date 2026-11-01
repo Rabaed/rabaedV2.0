@@ -7,6 +7,7 @@ import { createDb } from "@rabaed/db";
 import { takeTransitionRequest, type WorkItemDetail, type WorkItemHistory, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { STEP_AGE_REPORT_POSITION } from "../src/demo/seed.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
 import { takeTransition } from "../src/work-items/work-items.ts";
 import { attachDatasheet, createTestApi, expectHidden, readById, type Caller, type OnboardedCompany } from "./support/harness.ts";
@@ -408,7 +409,8 @@ describe("Positions", () => {
     });
     await ok(c1.caller.request("PUT", path, { positions: ["engineer", "project_manager"] }));
     const members = (await c1.caller.get(`/v1/participants/${c1ParticipantId}/members`)).json();
-    expect(members.positions.map((p: { key: string }) => p.key)).toEqual(["engineer", "project_manager"]);
+    // The demo seed adds the Contractor Position that holds Assign (RP-1186) to the test database too.
+    expect(members.positions.map((p: { key: string }) => p.key).filter((key: string) => key !== STEP_AGE_REPORT_POSITION)).toEqual(["engineer", "project_manager"]);
     expect(members.members.find((m: { id: string }) => m.id === member.id).positions).toEqual([
       "engineer",
       "project_manager",

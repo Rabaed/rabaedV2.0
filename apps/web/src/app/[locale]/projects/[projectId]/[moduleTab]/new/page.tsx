@@ -3,6 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { SnagPhoneNew } from "@/components/snag-phone-new";
 import { redirect } from "@/i18n/navigation";
+import { newItemHref } from "@/lib/new-item-route";
 import { parsePhoneStep, phoneFlowStep } from "@/lib/snag-phone-flow";
 import { getMe, getMyVisibility, getNewWorkItemForm, getRaisableTypes, getWorkItem, getWorkItemDocuments } from "@/lib/session";
 
@@ -10,9 +11,10 @@ import { getMe, getMyVisibility, getNewWorkItemForm, getRaisableTypes, getWorkIt
  * The camera-first New Snag on a phone (RP-630): the Snag List's "+" on a phone opens it, with
  * `?type=` one of the Snag List Types the Member may raise whose Form takes photos (any other
  * opens the usual New page). `?draft=` and `?step=` keep the Draft and the step in the URL, so
- * a reload reopens the same step; once the Draft is raised, its page.
+ * a reload reopens the same step; once the Draft is raised, its page. Another Module's tab
+ * (`/inspections/new`) opens that Module's usual New page.
  */
-export default async function SnagPhoneNewPage({
+export default async function ModuleTabNewPage({
   params,
   searchParams,
 }: {
@@ -22,11 +24,14 @@ export default async function SnagPhoneNewPage({
   const { locale, projectId, moduleTab } = await params;
   const { type: requested, draft: draftId, step, missing } = await searchParams;
   setRequestLocale(locale);
-  if (moduleOfTabPath(moduleTab) !== "snag_list") notFound();
+  const moduleKey = moduleOfTabPath(moduleTab);
+  if (!moduleKey) notFound();
+  // Another Module's tab (`/inspections/new`): its New page, so a WIR is raised as New WIR (RP-1179).
+  if (moduleKey !== "snag_list") return redirect({ href: newItemHref(projectId, moduleKey, requested), locale });
   const [me, raisable, covered] = await Promise.all([getMe(), getRaisableTypes(projectId, "snag_list"), getMyVisibility(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!raisable || !covered) notFound();
-  const usual = `/projects/${projectId}/work-items/new?module=snag_list${requested ? `&type=${encodeURIComponent(requested)}` : ""}`;
+  const usual = newItemHref(projectId, "snag_list", requested);
   const type = raisable.types.find((t) => t.code === requested);
   const form = type ? await getNewWorkItemForm(projectId, type.code) : null;
   const fields = form?.schema.sections.flatMap((s) => s.fields) ?? [];

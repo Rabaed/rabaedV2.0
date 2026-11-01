@@ -125,7 +125,7 @@ const cardTemplates: ChecklistTemplateChoice[] = [
 const cardCopy = {
   hidden: { en: "Templates for Civil · 1 for other Trades hidden", ar: "قوالب مدني · قالب واحد لتخصصات أخرى مخفي" },
   meta: { en: "v3 · 2 items", ar: "الإصدار 3 · بندان" },
-  notice: { en: "On Fail, some items need a comment or a photo from the Consultant", ar: "عند مرفوض، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري" },
+  notice: { en: "On Fail, some items need a comment or a photo from the Consultant", ar: "عند غير مطابق، تحتاج بعض البنود إلى تعليق أو صورة من الاستشاري" },
   hide: { en: "Hide items", ar: "إخفاء البنود" },
 };
 
