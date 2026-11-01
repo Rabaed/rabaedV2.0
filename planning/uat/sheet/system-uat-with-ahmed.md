@@ -15,22 +15,24 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 
 ## Who's who
 
-| Name | Sign-in email | Company | On the Project | Position | Used for |
-|---|---|---|---|---|---|
-| Saeed Al Qahtani | `saeed.alqahtani@tmc.demo.rabaed.test` | TMC Constructions | Contractor and Project Admin | Authorized Person | Company Profile (logo, Stamp), Members, invitations, Project Settings |
-| Hafiz Hamdan | `hafiz.hamdan@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Engineer | Raises Drafts and sends them for review; Snags; the phone cases |
-| Ali Sonour | `ali.sonour@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Project Manager | Reviews Hafiz's Drafts and Submits to the Consultant; Packages; the List and Dashboard |
-| Omar Al Harbi | `omar.alharbi@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, Tower 2 only | Engineer | Visibility narrowed to one Location: sees Tower 2 only |
-| Yousef Karim | `yousef.karim@betabuild.demo.rabaed.test` | Beta Build | Contractor, Electrical, everywhere | Engineer | A second Contractor on the same Project: must never see TMC's work |
-| Nasser Al Dosari | `nasser.aldosari@betabuild.demo.rabaed.test` | Beta Build | Beta Build's own Project, Jeddah Corniche Villas | Authorized Person | Not on Riyadh Gate Tower: must get the not-found page there |
-| Ahmed bin Said | `ahmed.binsaid@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | Reviews submittals for the Consultant (a demo person, not you) |
-| Sara | `sara@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | A second Consultant engineer: pools and pick-up |
-| Mohammed Al Shamsi | `mohammed.alshamsi@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Manager | Gives the Review Code (A, B, C, D) and signs the Documental Record |
-| Layla Mansour | `layla.mansour@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant | Authorized Person | Design Consultants' Company Profile and Members |
-| Faisal Al Otaibi | `faisal.alotaibi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative, Electrical, everywhere | Engineer (uses Arabic) | The Arabic cases |
-| Noura Al Harbi | `noura.alharbi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Project Manager (uses Arabic) | Holds the Owner's review; Arabic cases |
-| Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Al Waha's Company Profile and Members |
-| Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin cases (ADM): the UAT owner runs these |
+Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (CV). Locations: Main Zone: Tower 1 (Floors 01–03), Tower 2 (Floor 01). Thick border = covers less than their Company. Civil (CV) is covered by no Company.
+
+| Name | Sign-in email | Company | On the Project | Position | Covers | Used for |
+|---|---|---|---|---|---|---|
+| Saeed Al Qahtani | `saeed.alqahtani@tmc.demo.rabaed.test` | TMC Constructions | Contractor and Project Admin | Authorized Person | Company profile | Company Profile (logo, Stamp), Members, invitations, Project Settings |
+| Hafiz Hamdan | `hafiz.hamdan@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Engineer | EL · all towers | Raises Drafts and sends them for review; Snags; the phone cases |
+| Ali Sonour | `ali.sonour@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Project Manager | EL · all towers | Reviews Hafiz's Drafts and Submits to the Consultant; Packages; the List and Dashboard |
+| Omar Al Harbi | `omar.alharbi@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, Tower 2 only | Engineer | EL · Tower 2 only | Visibility narrowed to one Location: sees Tower 2 only |
+| Yousef Karim | `yousef.karim@betabuild.demo.rabaed.test` | Beta Build | Contractor, Electrical, everywhere | Engineer | EL · all towers | A second Contractor on the same Project: must never see TMC's work |
+| Nasser Al Dosari | `nasser.aldosari@betabuild.demo.rabaed.test` | Beta Build | Beta Build's own Project, Jeddah Corniche Villas | Authorized Person | Beta Build, own Project, not here | Not on Riyadh Gate Tower: must get the not-found page there |
+| Ahmed bin Said | `ahmed.binsaid@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | EL, ME · all towers | Reviews submittals for the Consultant (a demo person, not you) |
+| Sara | `sara@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Mechanical only | Engineer | ME only · all towers | A Consultant engineer narrowed to one Trade: sees Mechanical items only, never the Electrical ones (RP-1207) |
+| Mohammed Al Shamsi | `mohammed.alshamsi@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Manager | EL, ME · all towers | Gives the Review Code (A, B, C, D) and signs the Documental Record |
+| Layla Mansour | `layla.mansour@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant | Authorized Person | Company profile | Design Consultants' Company Profile and Members |
+| Faisal Al Otaibi | `faisal.alotaibi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative, Electrical, everywhere | Engineer (uses Arabic) | EL · all towers | The Arabic cases |
+| Noura Al Harbi | `noura.alharbi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Project Manager (uses Arabic) | EL · all towers | Holds the Owner's review; Arabic cases |
+| Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Company profile | Al Waha's Company Profile and Members |
+| Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin, UAT owner only | Rabaed Admin cases (ADM): the UAT owner runs these |
 
 ## 1. Submittals (28 cases)
 

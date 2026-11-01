@@ -259,7 +259,17 @@ export interface DemoPerson {
   role: Bilingual;
   position: Bilingual;
   usedFor: Bilingual;
+  /** What the person covers, for the map: Trades and Locations (RP-1206). */
+  covers: Bilingual;
+  /** The map's second line, when it says more than the Position (e.g. "Manager, gives the Code"). */
+  mapRole?: Bilingual;
+  /** Covers less than their Company: drawn with a thick border on the map. */
+  narrowed?: boolean;
 }
+
+const EL_ALL = { en: "EL · all towers", ar: "كهرباء · كل الأبراج" };
+const ELME_ALL = { en: "EL, ME · all towers", ar: "كهرباء وميكانيكا · كل الأبراج" };
+const PROFILE = { en: "Company profile", ar: "ملف الشركة" };
 
 const TMC = { en: "TMC Constructions", ar: "تي إم سي للإنشاءات" };
 const BETA = { en: "Beta Build", ar: "بيتا للبناء" };
@@ -275,7 +285,7 @@ const ENGINEER = { en: "Engineer", ar: "مهندس" };
  * sign-ins. The keys are the first names a case's "Who" line uses.
  */
 /* eslint-disable rabaed/no-avoid-terms -- "Project Manager" here is a Position's name (GLOSSARY, Position), not the avoided name for the Project Admin. */
-export const DEMO_PEOPLE: DemoPerson[] = [
+const PEOPLE_LIST: Omit<DemoPerson, "covers" | "mapRole" | "narrowed">[] = [
   { key: "saeed", name: "Saeed Al Qahtani", email: "saeed.alqahtani@tmc.demo.rabaed.test", company: TMC, role: { en: "Contractor and Project Admin", ar: "المقاول ومسؤول المشروع" }, position: AP,
     usedFor: { en: "Company Profile (logo, Stamp), Members, invitations, Project Settings", ar: "ملف الشركة (الشعار والختم)، الأعضاء، الدعوات، إعدادات المشروع" } },
   { key: "hafiz", name: "Hafiz Hamdan", email: "hafiz.hamdan@tmc.demo.rabaed.test", company: TMC, role: CONTRACTOR, position: ENGINEER,
@@ -290,8 +300,8 @@ export const DEMO_PEOPLE: DemoPerson[] = [
     usedFor: { en: "Not on Riyadh Gate Tower: must get the not-found page there", ar: "ليس في برج بوابة الرياض: يجب أن تظهر له صفحة غير موجودة هناك" } },
   { key: "ahmed", name: "Ahmed bin Said", email: "ahmed.binsaid@designconsultants.demo.rabaed.test", company: DCL, role: { en: "Consultant, Electrical and Mechanical", ar: "الاستشاري، الكهرباء والميكانيكا" }, position: ENGINEER,
     usedFor: { en: "Reviews submittals for the Consultant (a demo person, not you)", ar: "يراجع الاعتمادات عن الاستشاري (شخص تجريبي، ليس أنت)" } },
-  { key: "sara", name: "Sara", email: "sara@designconsultants.demo.rabaed.test", company: DCL, role: { en: "Consultant, Electrical and Mechanical", ar: "الاستشاري، الكهرباء والميكانيكا" }, position: ENGINEER,
-    usedFor: { en: "A second Consultant engineer: pools and pick-up", ar: "مهندسة استشاري ثانية: المجموعات والاستلام" } },
+  { key: "sara", name: "Sara", email: "sara@designconsultants.demo.rabaed.test", company: DCL, role: { en: "Consultant, Mechanical only", ar: "الاستشاري، الميكانيكا فقط" }, position: ENGINEER,
+    usedFor: { en: "A Consultant engineer narrowed to one Trade: sees Mechanical items only, never the Electrical ones (RP-1207)", ar: "مهندسة استشاري مقيّدة بتخصص واحد: ترى بنود الميكانيكا فقط ولا ترى الكهرباء (RP-1207)" } },
   { key: "mohammed", name: "Mohammed Al Shamsi", email: "mohammed.alshamsi@designconsultants.demo.rabaed.test", company: DCL, role: { en: "Consultant, Electrical and Mechanical", ar: "الاستشاري، الكهرباء والميكانيكا" }, position: { en: "Manager", ar: "مدير" },
     usedFor: { en: "Gives the Review Code (A, B, C, D) and signs the Documental Record", ar: "يعطي رمز المراجعة (A وB وC وD) ويوقّع السجل الوثائقي" } },
   { key: "layla", name: "Layla Mansour", email: "layla.mansour@designconsultants.demo.rabaed.test", company: DCL, role: { en: "Consultant", ar: "الاستشاري" }, position: AP,
@@ -305,6 +315,46 @@ export const DEMO_PEOPLE: DemoPerson[] = [
   { key: "engineer", name: "Rabaed Engineer", email: "engineer@rabaed.demo.rabaed.test", company: { en: "Rabaed", ar: "رابض" }, role: { en: "Rabaed Admin", ar: "Rabaed Admin" }, position: { en: "Rabaed Engineer", ar: "مهندس رابض" },
     usedFor: { en: "Rabaed Admin cases (ADM): the UAT owner runs these", ar: "حالات Rabaed Admin (ADM): يشغّلها مسؤول الاختبار" } },
 ];
+
+/** Each person's line on the map (RP-1206), as the demo seed grants it: every Member covers their Company, but Omar (Tower 2) and Sara (Mechanical, RP-1207). */
+const ON_MAP: Record<string, Pick<DemoPerson, "covers" | "mapRole" | "narrowed">> = {
+  saeed: { covers: PROFILE },
+  hafiz: { covers: EL_ALL },
+  ali: { covers: EL_ALL },
+  omar: { covers: { en: "EL · Tower 2 only", ar: "كهرباء · البرج 2 فقط" }, narrowed: true },
+  yousef: { covers: EL_ALL },
+  nasser: { covers: { en: "Beta Build, own Project, not here", ar: "بيتا للبناء، مشروعه الخاص، ليس هنا" } },
+  ahmed: { covers: ELME_ALL },
+  sara: { covers: { en: "ME only · all towers", ar: "ميكانيكا فقط · كل الأبراج" }, narrowed: true },
+  mohammed: { covers: ELME_ALL, mapRole: { en: "Manager, gives the Code", ar: "مدير، يعطي الرمز" } },
+  layla: { covers: PROFILE },
+  faisal: { covers: EL_ALL, mapRole: { en: "Engineer, Arabic", ar: "مهندس، بالعربية" } },
+  noura: { covers: EL_ALL, mapRole: { en: "PM, Owner's review", ar: "مديرة المشروع، مراجعة المالك" } },
+  hind: { covers: PROFILE },
+  engineer: { covers: { en: "Rabaed Admin, UAT owner only", ar: "Rabaed Admin، لمسؤول الاختبار فقط" } },
+};
+export const DEMO_PEOPLE: DemoPerson[] = PEOPLE_LIST.map((p) => ({ ...p, ...(ON_MAP[p.key] ?? { covers: { en: "", ar: "" } }) }));
+
+/**
+ * The Who's who map (RP-1206, owner-approved 2026-11-01): the Project's Trades and Locations, its Companies side by
+ * side in the order a submittal travels (Contractors, then the Consultant, then the Owner representative), their
+ * people under them, and who stands outside the Project.
+ */
+export const PEOPLE_MAP = {
+  project: { en: "Riyadh Gate Tower – Phase 2", ar: "برج بوابة الرياض – المرحلة 2" },
+  trades: { en: "Electrical (EL), Mechanical (ME), Civil (CV)", ar: "الكهرباء (EL)، الميكانيكا (ME)، الأعمال المدنية (CV)" },
+  locations: { en: "Main Zone: Tower 1 (Floors 01–03), Tower 2 (Floor 01)", ar: "المنطقة الرئيسية: البرج 1 (الطوابق 01–03)، البرج 2 (الطابق 01)" },
+  companies: [
+    { key: "beta", name: BETA, role: { en: "Contractor", ar: "مقاول" }, tone: "contractor", people: ["yousef"] },
+    { key: "tmc", name: TMC, role: { en: "Contractor, Admin", ar: "مقاول، مسؤول المشروع" }, tone: "contractor", people: ["saeed", "hafiz", "ali", "omar"] },
+    { key: "dcl", name: { en: "Design Consultants", ar: "المصممون الاستشاريون" }, role: { en: "Consultant", ar: "الاستشاري" }, tone: "consultant", people: ["layla", "ahmed", "sara", "mohammed"] },
+    { key: "waha", name: WAHA, role: { en: "Owner representative", ar: "ممثل المالك" }, tone: "owner", people: ["hind", "faisal", "noura"] },
+  ],
+  /** Submittals travel: TMC submits to the Consultant, who passes them to the Owner's review. */
+  flow: [["tmc", "dcl"], ["dcl", "waha"]],
+  outside: ["engineer", "nasser"],
+  note: { en: "Thick border = covers less than their Company. Civil (CV) is covered by no Company.", ar: "الإطار السميك = يغطي أقل من شركته. لا تغطي أي شركة الأعمال المدنية (CV)." },
+};
 /* eslint-enable rabaed/no-avoid-terms */
 
 export interface Section {
@@ -375,9 +425,11 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
     "",
     "## Who's who",
     "",
-    "| Name | Sign-in email | Company | On the Project | Position | Used for |",
-    "|---|---|---|---|---|---|",
-    ...DEMO_PEOPLE.map((p) => `| ${cell(p.name)} | \`${p.email}\` | ${cell(p.company.en)} | ${cell(p.role.en)} | ${cell(p.position.en)} | ${cell(p.usedFor.en)} |`),
+    `${PEOPLE_MAP.project.en}. Trades: ${PEOPLE_MAP.trades.en}. Locations: ${PEOPLE_MAP.locations.en}. ${PEOPLE_MAP.note.en}`,
+    "",
+    "| Name | Sign-in email | Company | On the Project | Position | Covers | Used for |",
+    "|---|---|---|---|---|---|---|",
+    ...DEMO_PEOPLE.map((p) => `| ${cell(p.name)} | \`${p.email}\` | ${cell(p.company.en)} | ${cell(p.role.en)} | ${cell(p.position.en)} | ${cell(p.covers.en)} | ${cell(p.usedFor.en)} |`),
     "",
   ];
   for (const s of sectionsOf(cases)) {
@@ -427,7 +479,7 @@ export function renderSheet({ round, cases, built, uatUrl = DEFAULT_UAT_URL }: {
   return template
     .replace("/*__FFLATE__*/", () => findFflate())
     .replace("/*__XLSX__*/", () => writer)
-    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), people: DEMO_PEOPLE, parts: PART_NAMES, markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
+    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), people: DEMO_PEOPLE, peopleMap: PEOPLE_MAP, parts: PART_NAMES, markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
     .replaceAll("__ROUND__", round.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!));
 }
 
