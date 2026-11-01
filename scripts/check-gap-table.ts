@@ -139,12 +139,16 @@ function searchableText(page: string): string {
   return [page, ...scripts].join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-/** Whether a CSS rule has the whole selector: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`. */
+const QUOTE = "[\"'`]";
+
+/**
+ * Whether a CSS rule has the whole selector: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
+ * The selector, or the list it is in, must reach the rule's `{` before a quote or a `;`, so the
+ * `.a` and `.b` of `querySelectorAll(".a, .b")` are no rule. The first rule of a packed string follows its quote.
+ */
 function hasRule(text: string, selector: string): boolean {
-  const wanted = escapeRegExp(selector);
-  // The first rule of a packed string follows its quote; there a rule must show its `{`, so `querySelectorAll(".a, .b")` is no rule.
-  const inString = `["'\`]${wanted}(?:\\s*,[^"'\`{}]*)*\\s*\\{`;
-  return new RegExp(`(?:(?:^|[\\s{},;>])${wanted}\\s*[{,])|(?:${inString})`, "m").test(text);
+  const listItem = `\\s*,(?:[^"'\`{};\\[]|\\[[^\\]]*\\])*`; // a quote may sit inside an attribute selector's brackets
+  return new RegExp(`(?:^|[\\s{},;>]|${QUOTE})${escapeRegExp(selector)}(?:${listItem})*\\s*\\{`, "m").test(text);
 }
 
 /** The problems with one `<file> › <part>` citation. */
@@ -164,7 +168,7 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   if (relative(resolve(refs), path).startsWith("..")) return [`cites ${file}, outside ${refs}`];
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
-  // Lines are counted in the file as written, selectors looked for in its packed scripts too (RP-1209).
+  // The selector is looked for in the page's scripts too (RP-1209); lines below still count the file as written.
   if (selector && !hasRule(searchableText(content), selector)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;

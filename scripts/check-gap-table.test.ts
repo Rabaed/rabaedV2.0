@@ -194,6 +194,19 @@ describe("checkGapTable", () => {
     expect(check(table("| 1 | Real | calls.html › `.real`; calls.html › `.also`; calls.html › `.pair`; calls.html › `.shown` | x | match | | |"))).toEqual([]);
   });
 
+  it("takes no selector of a quoted selector list that never reaches a rule's brace, whichever quote or place", () => {
+    write(refs, "lists.html", "<script>\ndocument.querySelectorAll(\".ghost, .row, .x\");\ndocument.querySelectorAll('.one, .two, .three');\nroot.matches(`.a, .b, .c`);\n// .slashed{a:b}\n</script>\n");
+    const cited = [".row", ".x", ".two", ".three", ".b", ".c"];
+    const errors = check(table(...cited.map((selector, i) => `| ${i + 1} | Call | lists.html › \`${selector}\` | x | match | | |`)));
+    expect(errors).toHaveLength(cited.length);
+    expect(check(table("| 1 | Line comment | lists.html › `.slashed` | x | match | | |"))).toEqual([]);
+  });
+
+  it("matches the first selector of a list whose later selector holds a quoted attribute value", () => {
+    write(refs, "attr.html", '<script>const css = ".opt, .opt[data-k=\\"1\\"], .third{x:y}";</script>\n');
+    expect(check(table("| 1 | Opt | attr.html › `.opt`; attr.html › `.third` | x | match | | |"))).toEqual([]);
+  });
+
   it("matches a selector holding an escaped quote, and scans past one inside a rule", () => {
     write(refs, "packed.html", PACKED_PAGE);
     const markdown = table("| 1 | Option | packed.html › `.opt[data-k=\"1\"]`; packed.html › `.note::before`; packed.html › `.late` | x | match | | |");
