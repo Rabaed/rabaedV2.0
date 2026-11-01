@@ -77,6 +77,9 @@ const MAIN_CHECKOUT_PROJECTS = ["rabaed", "rabaed-lane0"];
 export const keptStackReason = (project: string): string | undefined =>
   protectedLaneReason(project) ?? (MAIN_CHECKOUT_PROJECTS.includes(project) ? "it is the main checkout's stack (lane 0), which no clean-up removes" : undefined);
 
+/** Whether n is a lane a clean-up may free: a real lane number, never lane 7's (Main 7's harness data). */
+export const freeableLane = (n: number | undefined): n is number => n !== undefined && isValidLane(n) && protectedLaneReason(laneProject(n)) === undefined;
+
 /** The compose projects that can hold lane n's ports: its own, and its twin's (legacy m and m0, RP-605). */
 export function laneProjects(n: number): string[] {
   const twin = twinLane(n);

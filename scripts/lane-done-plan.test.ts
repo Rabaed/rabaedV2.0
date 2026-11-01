@@ -3,6 +3,7 @@ import type { Container, EnvClaim } from "./lanes.ts";
 import {
   claimIdsFor,
   laneLabel,
+  laneStacks,
   mergedLeftovers,
   notMergedRefusal,
   parseLaneDoneArgs,
@@ -12,6 +13,7 @@ import {
   type Candidate,
   type Decision,
   type DecisionInput,
+  type LaneStack,
   type PullRequest,
 } from "./lane-done-plan.ts";
 
@@ -359,7 +361,60 @@ describe("mergedLeftovers (RP-1198:`pnpm lane:done` with no number, outside a la
     { number: 585, headRefName: "RP-1185-z", headRefOid: "c".repeat(40) },
     { number: 570, headRefName: "main", headRefOid: "d".repeat(40) },
   ];
-  const base = { mainRoot: "G:/rabaed", currentBranch: "main-4-work" as string | undefined, merged, limit: 200, platform: "linux" as const };
+  const base = { mainRoot: "G:/rabaed", currentBranch: "main-4-work" as string | undefined, merged, limit: 200, stacks: [] as LaneStack[] | undefined, platform: "linux" as const };
+
+  // RP-1198 review P1: "every merged PR that still has a worktree or stack in this clone" (comment 15382, point 2).
+  describe("lane stacks whose worktree is gone", () => {
+    const stack = (lane: number, ...folders: string[]): LaneStack => ({ project: `rabaed-lane${lane}`, folders });
+
+    it("lists a stack under the merged PR its folder is named after, or whose worktree git still lists, with --lane", () => {
+      const lines = mergedLeftovers({
+        ...base,
+        worktrees: [wt("G:/rabaed", "main"), wt("G:/rabaed/.claude/worktrees/rp-1188", "RP-1188-y")],
+        stacks: [stack(42, "G:/rabaed/.claude/worktrees/RP-1190-x"), stack(43, "G:/rabaed/.claude/worktrees/rp-1188"), stack(31, "G:/rabaed/.claude/worktrees/worktree-RP-1185-z")],
+      });
+      expect(lines).toEqual([
+        "The current branch main-4-work has no merged PR, so lane:done removes nothing here. Merged PRs (of the last 200) that still have a worktree or stack in this clone:",
+        '  PR #585 (RP-1185-z): stack rabaed-lane31 (its worktree "G:/rabaed/.claude/worktrees/worktree-RP-1185-z" is gone): pnpm lane:done 585 --lane 31',
+        '  PR #588 (RP-1188-y): "G:/rabaed/.claude/worktrees/rp-1188", stack rabaed-lane43: pnpm lane:done 588 --lane 43',
+        '  PR #590 (RP-1190-x): stack rabaed-lane42 (its worktree "G:/rabaed/.claude/worktrees/RP-1190-x" is gone): pnpm lane:done 590 --lane 42',
+        "Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.",
+      ]);
+    });
+
+    it("lists a stack tied to no merged PR as an orphan, with the lanes:prune command; volumes only too", () => {
+      const lines = mergedLeftovers({ ...base, worktrees: [wt("G:/rabaed", "main")], stacks: [stack(44, "G:/rabaed/.claude/worktrees/hopeful-x"), stack(32)] });
+      expect(lines).toEqual([
+        "The current branch main-4-work has no merged PR, so lane:done removes nothing here. No merged PR (of the last 200) still has a worktree or stack in this clone.",
+        "Lane stacks whose worktree is gone, tied to no merged PR here:",
+        '  rabaed-lane44 (from "G:/rabaed/.claude/worktrees/hopeful-x"): pnpm lanes:prune --merged --lane 44',
+        "  rabaed-lane32 (volumes only): pnpm lanes:prune --merged --lane 32",
+        "Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.",
+      ]);
+    });
+
+    it("never lists lane 7's stack, the main checkout's, or one a living worktree's .env or folder holds", () => {
+      const lines = mergedLeftovers({
+        ...base,
+        worktrees: [wt("G:/rabaed", "main"), wt("G:/rabaed/.claude/worktrees/rp-1200", "RP-1200-open", "f".repeat(40), "rabaed-lane47")],
+        stacks: [stack(7, "D:/uat/RP-1190-x"), { project: "rabaed", folders: ["G:/rabaed"] }, stack(47, "G:/elsewhere"), stack(48, "G:/rabaed/.claude/worktrees/rp-1200")],
+      });
+      expect(lines).toEqual(["The current branch main-4-work has no merged PR, so lane:done removes nothing here. No merged PR (of the last 200) still has a worktree or stack in this clone."]);
+    });
+
+    it("reads the lane stacks from Docker's containers and volumes, each with its containers' folders", () => {
+      const containers = [db(), db({ name: "rabaed-lane41-api-1" }), db({ name: "rabaed-db-1", project: "rabaed", workingDir: "G:/rabaed" }), db({ name: "x", project: "rabaed-lane32", workingDir: "" })];
+      expect(laneStacks(containers, [{ project: "rabaed-lane41" }, { project: "rabaed-lane44" }, { project: "other" }])).toEqual([
+        { project: "rabaed-lane41", folders: ["G:/rabaed/.claude/worktrees/rp-1170"] },
+        { project: "rabaed-lane32", folders: [] },
+        { project: "rabaed-lane44", folders: [] },
+      ]);
+    });
+
+    it("says the stacks were not checked when Docker did not answer", () => {
+      expect(mergedLeftovers({ ...base, worktrees: [], stacks: undefined }).at(-1)).toBe("Docker did not answer, so the lane stacks were not checked; `pnpm lanes:prune --stale` lists them.");
+    });
+  });
 
   it("lists each merged PR that still has a worktree here, oldest first, each with its command, and the lane stack its .env names", () => {
     const lines = mergedLeftovers({
@@ -374,7 +429,7 @@ describe("mergedLeftovers (RP-1198:`pnpm lane:done` with no number, outside a la
       ],
     });
     expect(lines).toEqual([
-      "The current branch main-4-work has no merged PR, so lane:done removes nothing here. Merged PRs (of the last 200) that still have a worktree in this clone:",
+      "The current branch main-4-work has no merged PR, so lane:done removes nothing here. Merged PRs (of the last 200) that still have a worktree or stack in this clone:",
       '  PR #588 (RP-1188-y): "G:/rabaed/.claude/worktrees/rp-1188": pnpm lane:done 588',
       '  PR #590 (RP-1190-x): "G:/rabaed/.claude/worktrees/rp-1190 a" with stack rabaed-lane41, "D:/review/rp-1190": pnpm lane:done 590',
       "Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.",
@@ -389,7 +444,7 @@ describe("mergedLeftovers (RP-1198:`pnpm lane:done` with no number, outside a la
 
   it("says so when no merged PR has anything left here, on a detached HEAD too", () => {
     expect(mergedLeftovers({ ...base, currentBranch: undefined, worktrees: [wt("G:/rabaed/.claude/worktrees/main-4", undefined)] })).toEqual([
-      "The current worktree is on a detached HEAD with no merged PR, so lane:done removes nothing here. No merged PR (of the last 200) still has a worktree in this clone.",
+      "The current worktree is on a detached HEAD with no merged PR, so lane:done removes nothing here. No merged PR (of the last 200) still has a worktree or stack in this clone.",
     ]);
   });
 });

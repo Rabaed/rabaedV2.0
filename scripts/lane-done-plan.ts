@@ -1,5 +1,5 @@
 import { branchKey } from "./lane-claims.ts";
-import { isValidLane, laneOfProject, laneProject, protectedLaneReason, type Container, type EnvClaim, type Volume } from "./lanes.ts";
+import { freeableLane, isValidLane, laneOfProject, laneProject, protectedLaneReason, pruneCommand, type Container, type EnvClaim, type Volume } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { listedChanges } from "./prune-guards.ts";
 
@@ -243,11 +243,28 @@ export type MergedPrRef = Pick<PullRequest, "number" | "headRefName" | "headRefO
 /** A worktree of this clone, with COMPOSE_PROJECT_NAME from its .env. */
 export type CloneWorktree = { path: string; branch: string | undefined; head: string; project: string | undefined };
 
+/** A lane's Compose project as Docker lists it: the folders its containers were started from (none: volumes only). */
+export type LaneStack = { project: string; folders: string[] };
+
+/** The lane stacks among Docker's containers and volumes, each with its containers' folders. */
+export function laneStacks(containers: Pick<Container, "project" | "workingDir">[], volumes: Pick<Volume, "project">[]): LaneStack[] {
+  const stacks = new Map<string, Set<string>>();
+  for (const { project } of [...containers, ...volumes]) if (laneOfProject(project) !== undefined && !stacks.has(project)) stacks.set(project, new Set());
+  for (const c of containers) if (c.workingDir !== "") stacks.get(c.project)?.add(c.workingDir);
+  return [...stacks].map(([project, folders]) => ({ project, folders: [...folders] }));
+}
+
+const folderName = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+
 /**
  * RP-1198: `pnpm lane:done` with no number where the current branch has no merged PR (the Main's own
- * worktree): every merged PR that still has a worktree in this clone (on its branch, or a detached HEAD
- * at its head), oldest first, each with its exact command. It only lists: lane:done removes nothing then.
- * merged: the last `limit` merged PRs; the main checkout and a `main` branch are never a PR's.
+ * worktree): every merged PR that still has a worktree or a lane stack in this clone, oldest first, each
+ * with its exact command. A worktree is a PR's when it is on its branch, or a detached HEAD at its head.
+ * A stack no living worktree's .env or folder holds (its worktree is gone) is the PR's when git still
+ * lists a worktree of the PR at its folder, or its folder is named after the PR's branch (or the app's
+ * `worktree-<branch>`); one tied to no PR is listed apart with its lanes:prune command (review P1). Never
+ * lane 7's. It only lists: lane:done removes nothing then. merged: the last `limit` merged PRs; the main
+ * checkout and a `main` branch are never a PR's. stacks: undefined when Docker did not answer.
  */
 export function mergedLeftovers({
   worktrees,
@@ -255,6 +272,7 @@ export function mergedLeftovers({
   mainRoot,
   currentBranch,
   limit,
+  stacks,
   platform,
 }: {
   worktrees: CloneWorktree[];
@@ -262,26 +280,52 @@ export function mergedLeftovers({
   mainRoot: string;
   currentBranch: string | undefined;
   limit: number;
+  stacks: LaneStack[] | undefined;
   platform?: NodeJS.Platform;
 }): string[] {
   const where = currentBranch === undefined ? "The current worktree is on a detached HEAD with no merged PR" : `The current branch ${currentBranch} has no merged PR`;
-  const found = new Map<number, { pr: MergedPrRef; worktrees: CloneWorktree[] }>();
+  type Entry = { pr: MergedPrRef; worktrees: CloneWorktree[]; stacks: { lane: number; text: string }[] };
+  const found = new Map<number, Entry>();
+  const entryOf = (pr: MergedPrRef) => found.get(pr.number) ?? found.set(pr.number, { pr, worktrees: [], stacks: [] }).get(pr.number)!;
+  const prOf = (w: CloneWorktree) =>
+    samePath(w.path, mainRoot, platform) || w.branch === "main"
+      ? undefined
+      : merged.find((p) => p.headRefName !== "main" && (w.branch === undefined ? p.headRefOid === w.head : p.headRefName === w.branch));
   for (const w of worktrees) {
-    if (samePath(w.path, mainRoot, platform) || w.branch === "main") continue;
-    const pr = merged.find((p) => p.headRefName !== "main" && (w.branch === undefined ? p.headRefOid === w.head : p.headRefName === w.branch));
-    if (pr === undefined) continue;
-    const entry = found.get(pr.number) ?? { pr, worktrees: [] };
-    entry.worktrees.push(w);
-    found.set(pr.number, entry);
+    const pr = prOf(w);
+    if (pr !== undefined) entryOf(pr).worktrees.push(w);
   }
-  if (found.size === 0) return [`${where}, so lane:done removes nothing here. No merged PR (of the last ${limit}) still has a worktree in this clone.`];
-  const lines = [`${where}, so lane:done removes nothing here. Merged PRs (of the last ${limit}) that still have a worktree in this clone:`];
-  for (const { pr, worktrees: here } of [...found.values()].sort((a, b) => a.pr.number - b.pr.number)) {
-    const folders = here.map((w) => `"${w.path}"${w.project === undefined ? "" : ` with stack ${w.project}`}`).join(", ");
+  const orphans: string[] = [];
+  for (const s of stacks ?? []) {
+    const lane = laneOfProject(s.project);
+    if (!freeableLane(lane) || worktrees.some((w) => w.project === s.project)) continue;
+    const at = worktrees.find((w) => s.folders.some((f) => samePath(f, w.path, platform)));
+    if (at !== undefined) {
+      // Its folder is a worktree git lists: the PR's (its folder gone or its .env not naming the stack), or a living one's to keep.
+      const pr = prOf(at);
+      if (pr !== undefined) entryOf(pr).stacks.push({ lane, text: `stack ${s.project}` });
+      continue;
+    }
+    const named = (p: MergedPrRef) => s.folders.some((f) => [p.headRefName, `worktree-${p.headRefName}`].some((n) => samePath(folderName(f), n, platform)));
+    const pr = merged.find((p) => p.headRefName !== "main" && named(p));
+    const folders = s.folders.map((f) => `"${f}"`).join(", ");
+    const from = s.folders.length === 0 ? "volumes only" : `from ${folders}`;
+    if (pr !== undefined) entryOf(pr).stacks.push({ lane, text: `stack ${s.project} (its worktree ${folders} is gone)` });
+    else orphans.push(`  ${s.project} (${from}): ${pruneCommand(lane, { merged: true })}`);
+  }
+  const lines =
+    found.size === 0
+      ? [`${where}, so lane:done removes nothing here. No merged PR (of the last ${limit}) still has a worktree or stack in this clone.`]
+      : [`${where}, so lane:done removes nothing here. Merged PRs (of the last ${limit}) that still have a worktree or stack in this clone:`];
+  for (const { pr, worktrees: here, stacks: theirs } of [...found.values()].sort((a, b) => a.pr.number - b.pr.number)) {
+    const folders = [...here.map((w) => `"${w.path}"${w.project === undefined ? "" : ` with stack ${w.project}`}`), ...theirs.map((s) => s.text)].join(", ");
     const harness = here.map((w) => protectedLaneReason(w.project)).find((r) => r !== undefined);
-    lines.push(`  PR #${pr.number} (${pr.headRefName}): ${folders}: ${harness === undefined ? laneDoneCommand(pr.number) : `not lane:done's: ${harness}`}`);
+    const commands = theirs.length === 0 ? laneDoneCommand(pr.number) : theirs.map((s) => laneDoneCommand(pr.number, "--lane", String(s.lane))).join(", ");
+    lines.push(`  PR #${pr.number} (${pr.headRefName}): ${folders}: ${harness === undefined ? commands : `not lane:done's: ${harness}`}`);
   }
-  lines.push("Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.");
+  if (orphans.length > 0) lines.push("Lane stacks whose worktree is gone, tied to no merged PR here:", ...orphans);
+  if (found.size + orphans.length > 0) lines.push("Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.");
+  if (stacks === undefined) lines.push("Docker did not answer, so the lane stacks were not checked; `pnpm lanes:prune --stale` lists them.");
   return lines;
 }
 
