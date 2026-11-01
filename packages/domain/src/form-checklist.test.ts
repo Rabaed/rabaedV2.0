@@ -254,7 +254,8 @@ describe("the summary", () => {
       Array.from({ length: 21 }, (_, i) => [`i${i}`, { answer: i < 18 ? "pass" : i < 20 ? "fail" : "na" }]),
     );
     expect(checklistSummaryText(checklistSummary(bigField, value), "en")).toBe("18 Pass / 2 Fail / 1 N/A");
-    expect(checklistSummaryText(checklistSummary(bigField, value), "ar")).toBe("18 مقبول / 2 مرفوض / 1 لا ينطبق");
+    // The owner's Screen Board's words, as the WIR's summary bar says them (RP-1179).
+    expect(checklistSummaryText(checklistSummary(bigField, value), "ar")).toBe("18 مطابق / 2 غير مطابق / 1 لا ينطبق");
     expect(formatFormValue(bigField, value, "en")).toBe("18 Pass / 2 Fail / 1 N/A");
   });
 

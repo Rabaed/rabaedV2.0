@@ -5,8 +5,9 @@ import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { workItemListLabels } from "../../storybook/views.ts";
+import { viewSwitchLabels, workItemListLabels } from "../../storybook/views.ts";
 import { MoreActionsMenu } from "./list-menus.tsx";
+import { WorkItemViewSwitch } from "./work-item-board.tsx";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
 // The Submittals List (RP-409, the owner's design; spec RP-344) as a Contractor
@@ -361,9 +362,52 @@ export const ColumnSettingsOpen: Story = {
     await expect(within(panel).getByText(storyText(context, b("13 / 14 shown", "13 / 14 معروض")))).toBeVisible();
     await expect(within(tableOf(context)).getByRole("columnheader", { name: new RegExp(storyText(context, b("Contractor", "المقاول"))) })).toBeVisible();
     await userEvent.click(within(panel).getByRole("button", { name: storyText(context, b("Save as my default", "حفظ كافتراضي")) }));
-    await expect(context.args.onSaveColumns).toHaveBeenCalledWith(
-      listColumns(null).map((c) => (c.key === "contractor" ? { ...c, shown: true } : c)),
-    );
+    // Saved in the design's order whatever the window's width (RP-1177, the owner's answer): only the switch turned.
+    await expect(context.args.onSaveColumns).toHaveBeenCalledWith(listColumns(null).map((c) => (c.key === "contractor" ? { ...c, shown: true } : c)));
+  },
+};
+
+/**
+ * Under 1440 wide (RP-1177, UX-04, the owner's answers of 2026-11-02): the views show their icons only, each still
+ * named for screen readers and by its tooltip, so the toolbar keeps one row at 1366; and under 1600, with no saved
+ * layout, the Code and "With" come right after the Status, where they show without scrolling. The runner is 1024 wide.
+ */
+export const LaptopWidth: Story = {
+  render: (args, context) => (
+    <WorkItemList
+      {...args}
+      viewSwitch={<WorkItemViewSwitch view="list" views={["kanban", "list", "packages"]} labels={viewSwitchLabels[storyLocale(context)]} hrefFor={(v) => `?view=${v}`} />}
+      locale={storyLocale(context)}
+      labels={workItemListLabels[storyLocale(context)]}
+    />
+  ),
+  play: async (context) => {
+    await expect(innerWidth).toBeLessThan(1440);
+    const views = context.canvas.getByRole("navigation", { name: viewSwitchLabels[storyLocale(context)].view });
+    for (const name of ["kanban", "list", "packages"] as const) {
+      const link = within(views).getByRole("link", { name: viewSwitchLabels[storyLocale(context)][name] });
+      // The icon alone: 16px and the padding.
+      await expect(link.getBoundingClientRect().width).toBeLessThan(44);
+    }
+    const headers = within(tableOf(context)).getAllByRole("columnheader").map((h) => h.textContent ?? "");
+    const status = headers.indexOf(storyText(context, copy.status));
+    await expect(headers.slice(status, status + 3)).toEqual([storyText(context, copy.status), storyText(context, b("Code", "الرمز")), storyText(context, copy.withColumn)]);
+    // The owner's third to fifth answers: no drag dots before the names (the headers still drag), each Subject 112px
+    // at most, the longest included, its full words in the tooltip.
+    for (const grip of tableOf(context).querySelectorAll("thead svg.tabler-icon-grid-dots")) await expect(getComputedStyle(grip).display).toBe("none");
+    const subjects = [...tableOf(context).querySelectorAll<HTMLElement>("tbody a[title]")];
+    await expect(subjects.length).toBeGreaterThan(0);
+    for (const subject of subjects) await expect(subject.getBoundingClientRect().width, subject.title).toBeLessThanOrEqual(112);
+    // A view's name also shows on keyboard focus, in the shared tooltip, not only on hover (packages/ui/README.md › Tooltip).
+    within(views).getByRole("link", { name: viewSwitchLabels[storyLocale(context)].kanban }).focus();
+    await expect(await screen.findByRole("tooltip")).toHaveTextContent(viewSwitchLabels[storyLocale(context)].kanban);
+    // The fourth answer: "With" 140px at most, its full name in the tooltip; the cells 8px in from each side.
+    const owner = cellOf(context, "LED downlights", copy.withColumn);
+    const name = b("Faisal Al Harbi", "فيصل الحربي")[storyLocale(context)];
+    const holder = owner.querySelector<HTMLElement>(`[title="${name}"]`);
+    await expect(holder).not.toBeNull();
+    await expect(holder!.getBoundingClientRect().width).toBeLessThanOrEqual(140);
+    await expect(getComputedStyle(owner).paddingInlineStart).toBe("8px");
   },
 };
 

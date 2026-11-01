@@ -4,6 +4,7 @@ import type { Locale, ModuleKey, RaisableTypes } from "@rabaed/domain";
 import { Field, SegmentedControl } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
+import { newItemHref } from "@/lib/new-item-route";
 
 /**
  * The New item's Type picker (RP-590): the Types of the Module the viewer may
@@ -32,7 +33,7 @@ export function NewItemTypePicker({
       <SegmentedControl
         value={selected}
         onValueChange={(code) =>
-          router.replace(`/projects/${projectId}/work-items/new?${moduleKey === "submittals" ? "" : `module=${moduleKey}&`}type=${encodeURIComponent(code)}`)
+          router.replace(newItemHref(projectId, moduleKey, code))
         }
         options={types.map((type) => ({
           value: type.code,

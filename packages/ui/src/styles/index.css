@@ -36,6 +36,16 @@
  */
 @custom-variant fills-window (&:has([data-fills-window]));
 
+/* A List's table under 1600 wide (RP-1177): its columns fit 1366. Only a table marked `data-fit` (the List's, not the
+   Package page's); the same width as LIST_NARROW in src/lib/widths.ts. */
+@custom-variant list-narrow {
+  @media (max-width: 1599.98px) {
+    [data-fit] & {
+      @slot;
+    }
+  }
+}
+
 @layer base {
   html {
     color-scheme: light;

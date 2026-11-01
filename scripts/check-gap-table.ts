@@ -16,6 +16,7 @@ import { join, relative, resolve } from "node:path";
 //     Rule cell must be in the file it names, word for word (spacing, emphasis and curly quotes aside).
 // With --refs (the folder holding the owner's pages, e.g. D:\Artifacts), each cited file must be there,
 // a selector must be in it and a line must exist. Without it, citations are checked for shape only.
+// A selector is found in a `<style>` block and in CSS packed into a script string (RP-1209).
 
 export interface GapTableOptions {
   /** The repository root, where the ADRs, docs/visibility.md, GLOSSARY.md and CLAUDE.md are read. */
@@ -118,6 +119,38 @@ function ruleErrors(cell: string, ruleForced: boolean, repo: string): string[] {
   return errors;
 }
 
+const JS_ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r" };
+
+/**
+ * A script with its escapes read (RP-1209): some owner pages pack CSS into a string, each rule after a literal `\n`.
+ * One pass, so `\\n` stays a backslash and an `n`; a `\` before a line break joins the lines.
+ */
+function unescapeScript(script: string): string {
+  return script.replace(/\\(?:(\r?\n)|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([\s\S]))/g, (_escape, lineBreak, unicode, hex, char) => {
+    if (lineBreak !== undefined) return "";
+    if (unicode !== undefined || hex !== undefined) return String.fromCharCode(parseInt(unicode ?? hex, 16));
+    return JS_ESCAPES[char as string] ?? (char as string);
+  });
+}
+
+/** The page as written, then each of its scripts unescaped, without block comments: the text a CSS rule's selector is looked for in. */
+function searchableText(page: string): string {
+  const scripts = [...page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => unescapeScript(match[1]!));
+  return [page, ...scripts].join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+const QUOTE = "[\"'`]";
+
+/**
+ * Whether a CSS rule has the whole selector: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
+ * The selector, or the list it is in, must reach the rule's `{` before a quote or a `;`, so the
+ * `.a` and `.b` of `querySelectorAll(".a, .b")` are no rule. The first rule of a packed string follows its quote.
+ */
+function hasRule(text: string, selector: string): boolean {
+  const listItem = `\\s*,(?:[^"'\`{};\\[]|\\[[^\\]]*\\])*`; // a quote may sit inside an attribute selector's brackets
+  return new RegExp(`(?:^|[\\s{},;>]|${QUOTE})${escapeRegExp(selector)}(?:${listItem})*\\s*\\{`, "m").test(text);
+}
+
 /** The problems with one `<file> › <part>` citation. */
 function citationErrors(citation: string, refs: string | undefined): string[] {
   const match = /^([^`›]+?\.[A-Za-z0-9]+)\s*(?:›|>)\s*(.+)$/.exec(citation);
@@ -135,8 +168,8 @@ function citationErrors(citation: string, refs: string | undefined): string[] {
   if (relative(resolve(refs), path).startsWith("..")) return [`cites ${file}, outside ${refs}`];
   if (!existsSync(path)) return [`cites ${file}, not found in ${refs}`];
   const content = readFileSync(path, "utf8");
-  // The whole selector of a CSS rule: `.wl.sel` is not found in `.wl.selected{…}` nor `.wl` in `.wl.sel{…}`.
-  if (selector && !new RegExp(`(?:^|[\\s{},;>])${escapeRegExp(selector)}\\s*[{,]`, "m").test(content)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
+  // The selector is looked for in the page's scripts too (RP-1209); lines below still count the file as written.
+  if (selector && !hasRule(searchableText(content), selector)) return [`\`${selector}\` is not in ${file} as a CSS rule's selector`];
   if (lines) {
     const count = content.replace(/\r?\n$/, "").split(/\r?\n/).length;
     if (last > count) return [`cites line ${last} of ${file}, which has ${count} lines`];

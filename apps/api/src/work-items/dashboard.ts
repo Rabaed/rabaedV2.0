@@ -1,7 +1,7 @@
 import { withMember, type Db } from "@rabaed/db";
 import {
   dashboardCard,
-  moduleKeys,
+  moduleTabOrder,
   workItemQuery,
   type BilingualText,
   type Dashboard,
@@ -45,7 +45,8 @@ export function getDashboard(db: Db, memberId: string, projectId: string, now: D
     `.execute(trx);
     const everything = workItemQuery.parse({});
     const modules: Dashboard["modules"] = [];
-    for (const key of moduleKeys) {
+    // In the Project's tab order (RP-1176, UX-03): Submittals first, the Snag List after Inspections.
+    for (const key of moduleTabOrder) {
       const ofModule = types.filter((t) => t.module_key === key);
       if (ofModule.length === 0) continue;
       const counts = await countWorkItemBuckets(trx, { projectId, moduleKey: key }, everything, now);

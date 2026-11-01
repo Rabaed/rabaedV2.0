@@ -5,6 +5,7 @@ import { CreateWorkItemForm } from "@/components/create-work-item-form";
 import { NewItemTypePicker } from "@/components/new-item-type-picker";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
+import { newPageWords } from "@/lib/new-item-route";
 import {
   getMe,
   getMyVisibility,
@@ -57,6 +58,7 @@ export default async function NewWorkItemPage({
   const form = chosen ? await getNewWorkItemForm(projectId, chosen.code) : null;
   // The WIR request's own layout (RP-655): an Inspection Type whose Form picks a Checklist Template.
   const request = moduleKey === "inspections" && !!form && form.schema.sections.some((s) => s.fields.some((f) => f.type === "checklist_template"));
+  const words = newPageWords(moduleKey);
 
   return (
     <div className={request ? "max-w-6xl space-y-6" : "max-w-2xl space-y-6"}>
@@ -82,11 +84,11 @@ export default async function NewWorkItemPage({
             {moduleKey === "submittals" ? t("title") : tabs(moduleKey)}
           </Link>
         )}
-        {/* The WIR request is headed by its Type's own name ("Work Inspection Request"). */}
-        <h1 className="text-h4 font-semibold">{request && chosen ? chosen.name[locale] : t("newItem")}</h1>
+        {/* The WIR request is headed by its Type's own name ("Work Inspection Request"); any other Inspections page says New Inspection, never New Submittal (RP-1179). */}
+        <h1 className="text-h4 font-semibold">{request && chosen ? chosen.name[locale] : t(words.heading)}</h1>
       </div>
       {!chosen || !form ? (
-        <p className="text-muted">{t("noRaisableType")}</p>
+        <p className="text-muted">{t(words.noType)}</p>
       ) : (
         <>
           <NewItemTypePicker projectId={project.id} types={raisable.types} selected={chosen.code} moduleKey={moduleKey} locale={locale} />
