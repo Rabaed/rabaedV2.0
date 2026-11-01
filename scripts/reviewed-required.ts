@@ -1,5 +1,5 @@
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { posix, resolve } from "node:path";
 import { REVIEWED_LABEL } from "./reviewed-label.ts";
 
 // The `reviewed-required` check (RP-606), a required check on the main ruleset: it fails while a
@@ -43,16 +43,44 @@ export const REQUIRED_CHECK = "reviewed-required";
  */
 export const GATE_PATHS_BLOCK = false;
 
-/** The scripts the gate runs, by exact path; `scripts/reviewed-*.ts` is matched on its own. */
-const GATE_SCRIPTS = new Set(["scripts/verify-gate.ts", "scripts/ci-green.ts", "scripts/review-post.ts"]);
+/** The scripts the gate's workflows run, and review-post.ts; `scripts/reviewed-*.ts` is matched on its own too. */
+export const GATE_ENTRY_SCRIPTS: readonly string[] = [
+  "scripts/reviewed-required.ts",
+  "scripts/reviewed-add.ts",
+  "scripts/reviewed-label.ts",
+  "scripts/verify-gate.ts",
+  "scripts/ci-green.ts",
+  "scripts/review-post.ts",
+];
 
-/** Whether `file` is one of the gate's own files: `.github/workflows/**`, `scripts/reviewed-*.ts`, `verify-gate.ts`, `ci-green.ts` or `review-post.ts`. */
-export function isGatePath(file: string): boolean {
-  return file.startsWith(".github/workflows/") || /^scripts\/reviewed-[^/]*\.ts$/.test(file) || GATE_SCRIPTS.has(file);
+/** A relative import: `from "./x.ts"` (on one line or after several), `import "./x.ts"` or `import("./x.ts")`, either quote. */
+const LOCAL_IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.{1,2}\/[^"'\n]+)\1/g;
+
+/**
+ * The gate's scripts (Main 6 on #617): the entry scripts and every file they import, all the way down, by
+ * relative import. `read` gives a file's text, undefined when it is not there. The check reads it from its own
+ * checkout, the default branch's, so a PR is judged by main's imports.
+ */
+export function gateScripts(read: (path: string) => string | undefined, entries: readonly string[] = GATE_ENTRY_SCRIPTS): string[] {
+  const found = new Set<string>();
+  const queue = [...entries];
+  for (let path = queue.shift(); path !== undefined; path = queue.shift()) {
+    if (found.has(path)) continue;
+    const text = read(path);
+    if (text === undefined) continue;
+    found.add(path);
+    for (const [, , specifier] of text.matchAll(LOCAL_IMPORT)) queue.push(posix.normalize(posix.join(posix.dirname(path), specifier!)));
+  }
+  return [...found];
+}
+
+/** Whether `file` is one of the gate's own files: `.github/workflows/**`, `scripts/reviewed-*.ts`, or one of `scripts` (the gate's scripts, `gateScripts`). */
+export function isGatePath(file: string, scripts: ReadonlySet<string> = new Set(GATE_ENTRY_SCRIPTS)): boolean {
+  return file.startsWith(".github/workflows/") || /^scripts\/reviewed-[^/]*\.ts$/.test(file) || scripts.has(file);
 }
 
 /** The gate paths among `files`, each once, in the order they come. */
-export const gatePathsIn = (files: string[]): string[] => [...new Set(files.filter(isGatePath))];
+export const gatePathsIn = (files: string[], scripts?: ReadonlySet<string>): string[] => [...new Set(files.filter((file) => isGatePath(file, scripts)))];
 
 /** The label that lets a PR changing only docs merge without a /code-review (RP-606). */
 export const DOCS_ONLY_LABEL = "docs-only";
@@ -103,7 +131,7 @@ export interface RequiredSeam {
   files(pr: number): Promise<string[]>;
   /** The PR's issue events, oldest first. */
   events(pr: number): Promise<PrEvent[]>;
-  /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
+  /** The `reviewed-label` workflow's pull_request_target and pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
   sleep(ms: number): Promise<void>;
 }
@@ -136,9 +164,9 @@ function readOnce(seam: RequiredSeam): RequiredSeam {
 export async function requireReviewed(
   event: RequiredEvent,
   seam: RequiredSeam,
-  options: { pollMs?: number; timeoutMs?: number; blockGatePaths?: boolean } = {},
+  options: { pollMs?: number; timeoutMs?: number; blockGatePaths?: boolean; gateScripts?: ReadonlySet<string> } = {},
 ): Promise<RequiredResult> {
-  const { blockGatePaths = GATE_PATHS_BLOCK, ...waits } = options;
+  const { blockGatePaths = GATE_PATHS_BLOCK, gateScripts: scripts, ...waits } = options;
   const once = readOnce(seam);
   const verdict = await reviewVerdict(event, once, waits);
   if (event.kind === "pull_request" && event.draft) return { ...verdict, warnings: [] };
@@ -153,22 +181,21 @@ export async function requireReviewed(
     if (blockGatePaths) return { ok: false, summary: `${why}. Re-run this check.`, warnings: [] };
     return { ...verdict, warnings: [`${why}.`] };
   }
-  const found = gatePathFinding(pr, (await once.pull(pr)).changedFiles, listed, blockGatePaths);
+  const found = gatePathFinding(pr, (await once.pull(pr)).changedFiles, gatePathsIn(listed, scripts), listed.length, blockGatePaths);
   if (found === undefined) return { ...verdict, warnings: [] };
   if (blockGatePaths && verdict.ok) return { ok: false, summary: found, warnings: [] };
   return { ...verdict, warnings: [found] };
 }
 
 /** What the check says of PR `pr`'s gate paths; undefined when it changes none (and all its files are listed). */
-function gatePathFinding(pr: number, changedFiles: number, listed: string[], blocking: boolean): string | undefined {
-  const paths = gatePathsIn(listed);
+function gatePathFinding(pr: number, changedFiles: number, paths: string[], listedCount: number, blocking: boolean): string | undefined {
   // The API stops listing at 3000 files: a gate path may be among those it left out.
-  const unlisted = listed.length < changedFiles;
+  const unlisted = listedCount < changedFiles;
   if (paths.length === 0 && !unlisted) return undefined;
   const what =
     paths.length > 0
       ? `PR #${pr} changes the merge gate's own files: ${paths.join(", ")}`
-      : `PR #${pr} changes ${changedFiles} files, more than GitHub lists (${listed.length}), so whether it changes the merge gate's own files cannot be told`;
+      : `PR #${pr} changes ${changedFiles} files, more than GitHub lists (${listedCount}), so whether it changes the merge gate's own files cannot be told`;
   return blocking
     ? `${what}. Only the owner may merge such a PR, by bypassing the main ruleset from the GitHub page (RP-1148).`
     : `${what}. They decide what judges every PR, so a reviewer checks them closely; until RP-1148 part B the check only warns (GATE_PATHS_BLOCK in scripts/reviewed-required.ts).`;
@@ -349,8 +376,15 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
       return files;
     },
     async labelRuns(headSha) {
-      const runs = (await get(`actions/workflows/reviewed-label.yml/runs?head_sha=${headSha}&event=pull_request`, true)) as { workflow_runs: { status: string }[] } | undefined;
-      return runs?.workflow_runs.map((run) => ({ status: run.status }));
+      // reviewed-label runs on pull_request_target from RP-1148 part A's workflow PR (main's copy, so a PR can't make
+      // it keep a stale label), on pull_request before it: both count. Undefined only when the workflow is not there.
+      const answers = await Promise.all(
+        ["pull_request_target", "pull_request"].map(
+          async (event) => (await get(`actions/workflows/reviewed-label.yml/runs?head_sha=${headSha}&event=${event}`, true)) as { workflow_runs: { status: string }[] } | undefined,
+        ),
+      );
+      if (answers.every((answer) => answer === undefined)) return undefined;
+      return answers.flatMap((answer) => answer?.workflow_runs ?? []).map((run) => ({ status: run.status }));
     },
   };
 }
@@ -362,7 +396,9 @@ async function main() {
   if (!token || !repository || !eventName) throw new Error("GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_NAME must be set");
   const event = requiredEvent(eventName, JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")), repository);
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
-  const result = await requireReviewed(event, { ...overHttp(repository, token), sleep });
+  // The gate's scripts as this checkout (the default branch's) imports them.
+  const scripts = new Set(gateScripts((path) => (existsSync(path) ? readFileSync(path, "utf8") : undefined)));
+  const result = await requireReviewed(event, { ...overHttp(repository, token), sleep }, { gateScripts: scripts });
   (result.ok ? console.log : console.error)(result.summary);
   // An annotation on the run, and a line of its summary, for each warning (RP-1148: the gate paths a PR changes).
   for (const warning of result.warnings) console.log(`::warning title=Merge gate files::${warning.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
