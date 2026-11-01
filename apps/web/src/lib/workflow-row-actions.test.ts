@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copyRowActions, defaultRowActions, typeRowActions } from "./workflow-row-actions.ts";
+import { copyRowMenu, defaultRowActions, typeRowActions } from "./workflow-row-actions.ts";
 
 describe("a Work Item Type row's actions on Settings › Workflows (RP-1178)", () => {
   const rabaedDefault = { source: "rabaed_default" as const, hasLibrary: false };
@@ -49,12 +49,12 @@ describe("a Rabaed Default Workflow row's actions (RP-1178)", () => {
 });
 
 describe("a Project's own Workflow row's actions (RP-1178)", () => {
-  it("has one button, Edit (the owner's Open), with Use for the Type and the Versions in the menu", () => {
-    expect(copyRowActions({ versionNo: 1, bound: false })).toEqual({ primary: "edit", menu: ["useFor", "versions"] });
+  it("keeps Use for the Type and the Versions in the menu, Edit (the owner's Open) being the button", () => {
+    expect(copyRowMenu({ versionNo: 1, bound: false })).toEqual(["useFor", "versions"]);
   });
 
   it("drops Use for once the Type runs it, and both before a Version is published", () => {
-    expect(copyRowActions({ versionNo: 3, bound: true })).toEqual({ primary: "edit", menu: ["versions"] });
-    expect(copyRowActions({ versionNo: null, bound: false })).toEqual({ primary: "edit", menu: [] });
+    expect(copyRowMenu({ versionNo: 3, bound: true })).toEqual(["versions"]);
+    expect(copyRowMenu({ versionNo: null, bound: false })).toEqual([]);
   });
 });

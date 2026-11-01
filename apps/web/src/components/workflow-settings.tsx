@@ -32,7 +32,7 @@ import { SaveToLibraryAction } from "@/components/save-to-library-action";
 import { Link, useRouter } from "@/i18n/navigation";
 import { refusalMessage, setupCall, type SetupResult } from "@/lib/setup-call";
 import { copyIntoProject } from "@/lib/copy-into-project";
-import { copyRowActions, defaultRowActions, typeRowActions, type TypeRowAction } from "@/lib/workflow-row-actions";
+import { copyRowMenu, defaultRowActions, typeRowActions, type TypeRowAction } from "@/lib/workflow-row-actions";
 
 type Props = {
   projectId: string;
@@ -97,7 +97,7 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
       case "exception":
         return { key: action, label: t("addException"), icon: "briefcase", onSelect: () => setDialog({ kind: "exception", type }) };
       case "versions":
-        return { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${type.workflow.id}/versions/${type.workflow.versionNo ?? 1}`) };
+        return items.versions(type.workflow);
       case "saveToLibrary":
         return { key: action, label: tLibrary("action"), icon: "folder", onSelect: () => setDialog({ kind: "saveToLibrary", type }) };
       case "back":
@@ -130,6 +130,8 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
     else setNotice(errorText(res.error, res.body));
   };
 
+  const items = useRowItems(base, bind, done, (e) => setNotice(errorText(e)));
+
   return (
     <>
       <SettingsSection
@@ -161,7 +163,7 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
             <tbody>
               {settings.types.map((type) => (
                 <tr key={type.id} className="border-b border-border-subtle last:border-b-0" data-testid="workflow-type-row">
-                  <th scope="row" className={`${cell} min-w-44 text-start font-normal`}>
+                  <th scope="row" className={`${cell} min-w-36 text-start font-normal`}>
                     <span className="flex flex-col gap-0.5">
                       <bdi dir="ltr" translate="no" className="w-fit rounded-[5px] bg-segment-participant-tint px-1.5 py-px text-caption font-bold text-segment-participant-fg">
                         {type.code}
@@ -180,7 +182,7 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
                       </span>
                     </span>
                   </td>
-                  <td className={`${cell} min-w-40`}>
+                  <td className={`${cell} min-w-32`}>
                     {type.exceptions.length === 0 ? (
                       <span className="text-muted">{t("noExceptions")}</span>
                     ) : (
@@ -375,13 +377,8 @@ function CopiesSection({
 }) {
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
-  const router = useRouter();
+  const items = useRowItems(base, onBind, onDone, onError);
   const rows = types.flatMap((type) => type.copies.map((copy) => ({ type, copy })));
-  const bindFor = async (type: WorkflowSettingsType, workflowId: string) => {
-    const res = await onBind(type, workflowId, null);
-    if (res.ok) onDone(t("copyUsed", { type: type.code }));
-    else onError(res.error);
-  };
   return (
     <SettingsSection title={t("copiesTitle")} description={t("copiesIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="workflow-copies">
       {rows.length === 0 ? (
@@ -423,11 +420,14 @@ function CopiesSection({
                         </Link>
                       }
                       menuLabel={t("actionsFor", { type: copy.name[locale] })}
-                      menu={copyRowActions(copy).menu.map((action) =>
-                        action === "useFor"
-                          ? { key: action, label: t("useFor", { type: type.code }), icon: "circle-check", onSelect: () => void bindFor(type, copy.id) }
-                          : { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${copy.id}/versions/${copy.versionNo ?? 1}`) },
-                      )}
+                      menu={copyRowMenu(copy).map((action) => {
+                        switch (action) {
+                          case "useFor":
+                            return items.bind(type, copy.id);
+                          case "versions":
+                            return items.versions(copy);
+                        }
+                      })}
                     />
                   </td>
                 </tr>
@@ -483,25 +483,48 @@ function DefaultActions({
 }) {
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
-  const router = useRouter();
+  const items = useRowItems(base, onBind, onDone, onError);
   const { primary, menu } = defaultRowActions(workflow);
-  const useFor: RowActionsItem = {
-    key: "useFor",
-    label: t("useFor", { type: type.code }),
-    onSelect: () =>
-      void onBind(type, workflow.id, null).then((res) => (res.ok ? onDone(t("copyUsed", { type: type.code })) : onError(res.error))),
+  const item = (action: "duplicate" | "versions"): RowActionsItem => {
+    switch (action) {
+      case "duplicate":
+        return { key: action, label: t("duplicateEdit"), icon: "copy", onSelect: () => onDuplicate(type, workflow) };
+      case "versions":
+        return items.versions(workflow);
+    }
   };
   return (
     <RowActions
-      primary={primary && <PrimaryButton item={useFor} />}
+      primary={primary && <PrimaryButton item={items.bind(type, workflow.id)} />}
       menuLabel={t("actionsFor", { type: workflow.name[locale] })}
-      menu={menu.map((action) =>
-        action === "duplicate"
-          ? { key: action, label: t("duplicateEdit"), icon: "copy", onSelect: () => onDuplicate(type, workflow) }
-          : { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${workflow.id}/versions/${workflow.versionNo ?? 1}`) },
-      )}
+      menu={menu.map(item)}
     />
   );
+}
+
+/** The commands several tables' rows share: use a Workflow for its Type, and read its Versions. */
+function useRowItems(
+  base: string,
+  onBind: (type: WorkflowSettingsType, workflowId: string, participantId: string | null) => Promise<SetupResult>,
+  onDone: (message?: string) => void,
+  onError: (error: string) => void,
+) {
+  const t = useTranslations("projectSettings.workflows");
+  const router = useRouter();
+  return {
+    bind: (type: WorkflowSettingsType, workflowId: string): RowActionsItem => ({
+      key: "useFor",
+      label: t("useFor", { type: type.code }),
+      icon: "circle-check",
+      onSelect: () => void onBind(type, workflowId, null).then((res) => (res.ok ? onDone(t("copyUsed", { type: type.code })) : onError(res.error))),
+    }),
+    versions: (workflow: WorkflowSettingsWorkflow): RowActionsItem => ({
+      key: "versions",
+      label: t("viewVersions"),
+      icon: "git-branch",
+      onSelect: () => router.push(`${base}/${workflow.id}/versions/${workflow.versionNo ?? 1}`),
+    }),
+  };
 }
 
 /** A dialog with a form: submit runs `onSubmit`, which says why it was refused or closes the dialog. */

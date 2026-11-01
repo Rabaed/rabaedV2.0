@@ -35,8 +35,8 @@ export function defaultRowActions(row: WorkflowRow): { primary: "useFor" | null;
   return { primary: published && !row.bound ? "useFor" : null, menu: published ? ["duplicate", "versions"] : ["duplicate"] };
 }
 
-/** A Project's own Workflow: Edit is the button (the owner's "Open"); Use for the Type and the Versions are in the menu. */
-export function copyRowActions(row: WorkflowRow): { primary: "edit"; menu: ("useFor" | "versions")[] } {
-  if (row.versionNo === null) return { primary: "edit", menu: [] };
-  return { primary: "edit", menu: row.bound ? ["versions"] : ["useFor", "versions"] };
+/** A Project's own Workflow's menu: Use for the Type and the Versions. Its button is always Edit (the owner's "Open"). */
+export function copyRowMenu(row: WorkflowRow): ("useFor" | "versions")[] {
+  if (row.versionNo === null) return [];
+  return row.bound ? ["versions"] : ["useFor", "versions"];
 }
