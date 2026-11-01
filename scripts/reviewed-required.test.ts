@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
   gatePathsIn,
+  gateScripts,
   isGatePath,
   overHttp,
   queuedPrNumber,
@@ -34,10 +35,19 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
     jobs: Record<string, { name?: string; if?: string; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
   };
   const jobs = Object.values(wf.jobs);
-  const types = wf.on.pull_request?.types ?? [];
+  // pull_request_target from RP-1148 part A's workflow PR (GitHub runs main's copy of this file), pull_request before it.
+  const prEvent = "pull_request_target" in wf.on ? "pull_request_target" : "pull_request";
+  const types = wf.on[prEvent]?.types ?? [];
 
   it("runs on every PR event that can change the answer, and on merge_group", () => {
-    expect(wf.on).toEqual({ pull_request: { types: expect.arrayContaining(["opened", "reopened", "synchronize", "labeled", "unlabeled"]) }, merge_group: null });
+    expect(wf.on).toEqual({ [prEvent]: { types: expect.arrayContaining(["opened", "reopened", "synchronize", "labeled", "unlabeled"]) }, merge_group: null });
+  });
+
+  // RP-1148 part A: on pull_request a PR runs its own copy of this file, so it could rewrite its own required check.
+  it.skipIf(prEvent !== "pull_request_target")("runs on pull_request_target, so the PR is judged by main's copy of this file (RP-1148)", () => {
+    expect(wf.on.pull_request).toBeUndefined();
+    const checkouts = jobs.flatMap((job) => job.steps.filter((step) => step.uses?.startsWith("actions/checkout")));
+    for (const checkout of checkouts) expect(checkout.with?.ref).toBe("${{ github.event.repository.default_branch }}");
   });
 
   // The draft events land in the workflow's own PR after this script (rule 3, RP-1018), so this waits for them.
@@ -121,9 +131,44 @@ describe("isGatePath", () => {
       expect(isGatePath(file), file).toBe(false);
   });
 
+  it("is every file the gate's scripts import, given their closure (Main 6, #617)", () => {
+    const scripts = new Set(["scripts/verify-gate.ts", "scripts/git-files.ts"]);
+    expect(isGatePath("scripts/git-files.ts", scripts)).toBe(true);
+    expect(isGatePath("scripts/queue-pr.ts", scripts)).toBe(false);
+  });
+
   it("lists the gate paths among a PR's files, each once, in their order", () => {
     expect(gatePathsIn(["docs/a.md", "scripts/ci-green.ts", ".github/workflows/ci.yml", "scripts/ci-green.ts"])).toEqual(["scripts/ci-green.ts", ".github/workflows/ci.yml"]);
     expect(gatePathsIn(["apps/web/src/page.tsx"])).toEqual([]);
+  });
+});
+
+describe("gateScripts", () => {
+  const tree = (files: Record<string, string>) => (path: string) => files[path];
+  // Quoted through a helper, so ci-green.test.ts's import scan does not read these samples as this file's imports.
+  const q = (specifier: string, quote = '"') => `${quote}${specifier}${quote}`;
+
+  it("walks the relative imports of the entry scripts, all the way down, each file once", () => {
+    const read = tree({
+      "scripts/gate.ts": `import { a } from ${q("./a.ts")};\nimport {\n  b,\n} from ${q("./b.ts", "'")};\nimport { parse } from ${q("yaml")};\nimport { c } from ${q("node:fs")};`,
+      "scripts/a.ts": `export { x } from ${q("./shared/x.ts")};\nconst later = await import(${q("./b.ts")});`,
+      "scripts/b.ts": `import { gate } from ${q("./gate.ts")};`,
+      "scripts/shared/x.ts": `import { a } from ${q("../a.ts")};`,
+    });
+    expect(gateScripts(read, ["scripts/gate.ts"]).sort()).toEqual(["scripts/a.ts", "scripts/b.ts", "scripts/gate.ts", "scripts/shared/x.ts"]);
+  });
+
+  it("skips a file that is not there (an entry not on this branch yet, or a typo in an import)", () => {
+    expect(gateScripts(tree({ "scripts/gate.ts": `import { a } from ${q("./gone.ts")};` }), ["scripts/gate.ts", "scripts/later.ts"])).toEqual(["scripts/gate.ts"]);
+  });
+
+  it("on this checkout, reaches what the gate scripts import, such as git-files.ts and visibility-scenarios.ts", () => {
+    const root = join(dirname(import.meta.filename), "..");
+    const read = (path: string) => (existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : undefined);
+    const found = gateScripts(read);
+    for (const file of ["scripts/reviewed-required.ts", "scripts/reviewed-label.ts", "scripts/verify-gate.ts", "scripts/ci-green.ts", "scripts/git-files.ts", "scripts/visibility-scenarios.ts"])
+      expect(found, file).toContain(file);
+    expect(found).not.toContain("scripts/queue-pr.ts");
   });
 });
 
@@ -161,6 +206,13 @@ describe("requireReviewed on a PR that changes the gate's own files", () => {
       expect(result).toEqual({ ok: true, summary: "PR #7 has the 'reviewed' label: passes.", warnings: [] });
     });
   }
+
+  it("names a file the gate's scripts import, from the closure main's checkout gives it", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 1 }), files: async () => ["scripts/git-files.ts"] });
+    expect((await requireReviewed(onPr, seam)).warnings).toEqual([]);
+    const closure = new Set(["scripts/verify-gate.ts", "scripts/git-files.ts"]);
+    expect((await requireReviewed(onPr, seam, { gateScripts: closure })).warnings[0]).toContain("scripts/git-files.ts");
+  });
 
   it("warns when the API lists fewer files than the PR changes, as a gate path may be among the rest", async () => {
     const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 4000 }), files: async () => ["apps/web/src/page.tsx"] });
