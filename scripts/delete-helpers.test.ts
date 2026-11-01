@@ -23,6 +23,23 @@ import * as worktrees from "./worktrees.ts";
 /** Exported names that sound like they remove something: whole camelCase words at the start, or one at the end. */
 const REMOVER = /^(remove|delete|rd|release|drop|prune|stop)(?![a-z])|(Remove|Delete|Prune|Drop)$/;
 
+/** A junction on Windows (no admin needed), a directory symlink elsewhere. */
+const LINK_TYPE = process.platform === "win32" ? "junction" : "dir";
+
+/** Whether this machine can make a link at all, tried once in a temp folder: the link test runs only where it can. */
+const CAN_LINK = (() => {
+  const probe = mkdtempSync(join(tmpdir(), "rp1198-link-probe-"));
+  try {
+    mkdirSync(join(probe, "target"));
+    symlinkSync(join(probe, "target"), join(probe, "link"), LINK_TYPE);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+})();
+
 /** The ones that delete no worktree, folder, branch, stack, volume or database, each with why. */
 const REMOVES_NOTHING: Record<string, string> = {
   "lanes-lock.ts:removeStale": "a lane lock file, only when the holder it names is gone (its own pid check)",
@@ -440,13 +457,9 @@ describe("delete helpers refuse on their own (RP-1198)", () => {
     for (const path of [f.main.toUpperCase(), mixedCase(f.main), f.lane7.toUpperCase(), mixedCase(f.lane7)]) refusesAll(path);
   });
 
-  it("refuses a junction or symlink under .claude/worktrees/ that points outside, and leaves its target intact", (ctx) => {
+  it.runIf(CAN_LINK)("refuses a junction or symlink under .claude/worktrees/ that points outside, and leaves its target intact", () => {
     const link = join(f.main, ".claude", "worktrees", "link-out");
-    try {
-      symlinkSync(f.outside, link, process.platform === "win32" ? "junction" : "dir");
-    } catch (error) {
-      ctx.skip(`a link cannot be made here: ${(error as Error).message}`);
-    }
+    symlinkSync(f.outside, link, LINK_TYPE);
     try {
       refusesAll(link);
       // The real rd, too: it refuses the link before it runs.

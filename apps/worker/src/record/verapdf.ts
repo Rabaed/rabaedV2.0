@@ -4,6 +4,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 
 // PDF/A-3 validation with veraPDF (RP-155; ADR 0023), the industry's reference validator, run
@@ -183,8 +184,8 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
 
 const env = z.object({
   VERAPDF: z.enum(["cli", "docker"]).optional(),
-  VERAPDF_PATH: z.string().min(1).optional(),
-  VERAPDF_IMAGE: z.string().min(1).optional(),
+  VERAPDF_PATH: optionalSecret,
+  VERAPDF_IMAGE: optionalSecret,
 });
 
 /** Whether `image` names one exact image: a digest, or a version tag that is not `latest`. */

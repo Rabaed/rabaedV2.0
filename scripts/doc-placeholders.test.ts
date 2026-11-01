@@ -170,6 +170,8 @@ describe("the repository", () => {
     expect(placeholderProblems(".", placeholderDocs("."), baseline())).toEqual([]);
   });
 
-  if (mainBaseline === undefined) it.skip("adds no baseline entry origin/main lacks: skipped, origin/main or its baseline is not there", () => {});
-  else it("adds no baseline entry origin/main's baseline lacks", () => expect(baselineGains(mainBaseline, baseline())).toEqual([]));
+  // Runs only where origin/main has the baseline: not in a shallow CI clone, nor before the baseline first merges.
+  it.runIf(mainBaseline !== undefined)("adds no baseline entry origin/main's baseline lacks", () =>
+    expect(baselineGains(mainBaseline ?? {}, baseline())).toEqual([]),
+  );
 });

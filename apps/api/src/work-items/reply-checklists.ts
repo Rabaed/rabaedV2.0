@@ -164,8 +164,10 @@ export async function arrivalRecommendedCode(trx: Trx, workItemId: string): Prom
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
         and e.actor_participant_id = e.audience_participant_id
         and e.seq = (
+          -- The latest move: app.event_steps_reached has a row for each event that moved the item (RP-1203).
           select max(m.seq) from work_item_event m
-          where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code') and m.to_step_id is not null
+          join app.event_steps_reached(array(select x.id from work_item_event x where x.work_item_id = ${workItemId}::uuid)) rs on rs.event_id = m.id
+          where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code')
         )
     )
     select r.payload ->> 'recommended_code' as code, oc.name

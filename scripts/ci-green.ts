@@ -1,3 +1,4 @@
+import { matrixFile, scenarioRows, scenariosDir } from "./visibility-scenarios.ts";
 
 // CI green counts as the verify (RP-1190, owner's decision of 2026-10-31: "I agree if CI of GitHub do it the
 // test"). A PR's head passes the verify gate when the stamped `pnpm verify` line names it (RP-1094, still
@@ -28,13 +29,26 @@ export const OTHER_REQUIRED_CHECKS: Readonly<Record<string, string>> = {
 /**
  * CI's own files: what decides what CI runs and how it judges it. A change to one voids the PR's CI run as a
  * verify. A leading `**` and slash is any folder, `*` anything but a slash. ci-green.test.ts checks that every script and local
- * action ci.yml runs, every vitest global setup, and every scripts/ file those scripts import is here. App code
+ * action a PR-facing workflow runs (with the package.json scripts it calls), every test config and what it loads,
+ * and everything those and the files here import is here (`ciOwnGaps`). App code
  * and tests are not: CI tests them, and review reads them. A package.json counts on any change but its `version`
  * or `description` (`ciOwnChanges`): CI calls `pnpm test:unit` and the like, `pnpm install` runs lifecycle scripts,
  * and its dependencies, overrides and `packageManager` choose the tools that run the tests.
  */
 export const CI_OWN_FILES: readonly string[] = [
   CI_WORKFLOW,
+  // The other workflows that judge a PR (on pull_request or merge_group): the gate's own and those reporting a required
+  // check (RP-1194). A PR's run of one uses the PR's own copy. Named one by one, not `.github/workflows/*`: the deploys,
+  // the manual jobs and those that run once the verdict is in (jira-close, queue-drop-comment) judge nothing.
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the workflow's file name (npm's word), not the domain's
+  ".github/workflows/dependency-audit.yml",
+  ".github/workflows/reviewed-add.yml",
+  ".github/workflows/reviewed-label.yml",
+  ".github/workflows/reviewed-required.yml",
+  ".github/workflows/secret-scan.yml",
+  // Its second render and flip-flop check decide which screenshot baselines the bot commits.
+  ".github/workflows/update-screenshots.yml",
+  ".github/workflows/verify-gate.yml",
   ".github/actions/**",
   "**/vitest.config.*",
   "**/vitest.workspace.*",
@@ -73,6 +87,7 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/design-strip-fonts.ts",
   "scripts/desktop-sessions.ts",
   "scripts/docs-only.ts",
+  "scripts/git-files.ts",
   "scripts/hidden-columns.ts",
   "scripts/lanes.ts",
   "scripts/migrations.ts",
@@ -92,6 +107,17 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/visibility-scenarios.ts",
   "scripts/worktrees-stale.ts",
   "scripts/worktrees.ts",
+  // The scripts the other PR-facing workflows run: reviewed-add's label, the pnpm audit check, update-screenshots'
+  // second render and flip-flop check.
+  "scripts/reviewed-add.ts",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the script's file name (npm's word), not the domain's
+  "scripts/dependency-audit.ts",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the script's file name (npm's word), not the domain's
+  "scripts/dependency-audit-needed.ts",
+  "scripts/unstable-screenshots-reporter.ts",
+  "scripts/screenshot-flip-flop.ts",
+  // Root package.json's `prepare`, which every `pnpm install` in CI runs.
+  "scripts/hooks-install.ts",
 ];
 
 const globPattern = (glob: string) =>
@@ -124,44 +150,128 @@ const ciFieldsOf = (text: string | undefined): string | undefined => {
  * The visibility ratchets: lists of known weak asserts (scripts/check-hidden-asserts.ts) and untested scenarios
  * (scripts/check-scenario-seams.ts) that may only shrink. The checks read the PR's own list, in CI and in `pnpm
  * queue`'s merge checks alike, so a list that gains an entry lets a weaker test through: its CI run does not count.
- * One that only shrinks, or goes, is the fix they ask for.
+ * One that only shrinks, or goes, is the fix they ask for. The verify gate and `pnpm queue` also refuse a gain the
+ * stamped line would let through, unless it is a visible exception (`baselineRefusals`, scripts/verify-gate.ts, RP-1194).
  */
-const RATCHETS = ["docs/visibility/hidden-asserts/", "docs/visibility/untested-seams/"];
+const HIDDEN_ASSERTS = "docs/visibility/hidden-asserts/";
+const UNTESTED_SEAMS = "docs/visibility/untested-seams/";
 
-/** A ratchet list's entries: one a line, blank lines and `#` lines left out. */
-const ratchetEntries = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && !line.startsWith("#"));
+/** A changed file's text at the merge base and at the head; undefined where it does not exist. Throws when git cannot read it. */
+export type Versions = (file: string) => { before: string | undefined; after: string | undefined };
+
+/** True for a ratchet list: a `.txt` under one of the two folders. */
+const isRatchetList = (path: string) => (path.startsWith(HIDDEN_ASSERTS) || path.startsWith(UNTESTED_SEAMS)) && path.endsWith(".txt");
 
 /** RP-1198: doc-placeholders.test.ts's baseline, `{ "<doc>": ["<snippet>", …] }`, a ratchet too; a second copy of a snippet is an entry. */
 const PLACEHOLDER_BASELINE = "scripts/doc-placeholders-baseline.json";
 const baselineEntries = (text: string) =>
   Object.entries(JSON.parse(text) as Record<string, string[]>).flatMap(([doc, snippets]) => snippets.map((s, i) => `${doc}\t${s}\t${snippets.slice(0, i).filter((t) => t === s).length}`));
 
-/** A ratchet's entries by its path, or undefined when the path is no ratchet. */
-const ratchetOf = (path: string): ((text: string) => string[]) | undefined =>
-  path === PLACEHOLDER_BASELINE ? baselineEntries : RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt") ? ratchetEntries : undefined;
+/** True when the placeholder baseline gains an entry between the merge base and the head; a side it cannot parse, or neither side, counts. */
+const placeholderBaselineGains = ({ before, after }: { before: string | undefined; after: string | undefined }): boolean => {
+  if (after === undefined) return before === undefined;
+  try {
+    const was = new Set(before === undefined ? [] : baselineEntries(before));
+    return baselineEntries(after).some((entry) => !was.has(entry));
+  } catch {
+    return true;
+  }
+};
 
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`, the placeholder baseline; one it cannot parse counts); and each
- * package.json that differs between the merge base and the head (`versions`, as `pnpm queue` reads them) in more than
- * its `version` or `description`. One it cannot parse, or read on either side, counts.
+ * A ratchet list's entries as its check reads them: one a line, blank lines and `#` lines left out; in an untested-seams
+ * list a `#` comment ends the line and the ID and seam are one space apart (scripts/check-scenario-seams.ts `parseGaps`).
  */
-export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
+const ratchetEntries = (path: string, text: string) =>
+  text.split("\n").flatMap((raw) => {
+    const line = path.startsWith(UNTESTED_SEAMS) ? raw.replace(/#.*/, "").trim().replace(/\s+/g, " ") : raw.trim();
+    return line === "" || line.startsWith("#") ? [] : [line];
+  });
+
+/** What a ratchet list gains that its check would let through: an entry, or a list neither side of which could be read. */
+export type RatchetGain = { file: string; entry: string };
+
+/** Named in place of an entry when neither side of a changed list exists: nothing shows it lost one, so it counts. */
+export const UNREADABLE_LIST = "(read on neither side)";
+
+/**
+ * The entries each changed ratchet list has at the head beyond the merge base (`versions`): an entry the
+ * PR adds or loosens (an entry changed in place is one gone and one gained; a second copy of one counts, since each copy
+ * lets one assert through). Removing entries, or the list, gains none. Throws when git cannot read a side.
+ */
+export function ratchetGains(changed: string[], versions: Versions): RatchetGain[] {
+  return changed.filter(isRatchetList).flatMap((file) => {
+    const { before, after } = versions(file);
+    if (after === undefined) return before === undefined ? [{ file, entry: UNREADABLE_LIST }] : [];
+    const left = new Map<string, number>();
+    for (const entry of ratchetEntries(file, before ?? "")) left.set(entry, (left.get(entry) ?? 0) + 1);
+    return ratchetEntries(file, after).flatMap((entry) => {
+      const n = left.get(entry) ?? 0;
+      left.set(entry, n - 1);
+      return n > 0 ? [] : [{ file, entry }];
+    });
+  });
+}
+
+const isScenarioFile = (path: string) => path === matrixFile || (path.startsWith(`${scenariosDir}/`) && path.endsWith(".md"));
+
+/**
+ * The scenario IDs the changed scenario files (docs/visibility.md's matrix, docs/visibility/scenarios/*.md) hold at
+ * the merge base and not at the head, by the file that held them: a removed row, or a deleted file, drops its test
+ * requirement (RP-1196). The changed files are compared as one set, so a row moved from one to another loses nothing.
+ */
+export function lostScenarios(changed: string[], versions: Versions): { file: string; ids: string[] }[] {
+  const files = changed.filter(isScenarioFile);
+  const sides = files.map((file) => ({ file, ...versions(file) }));
+  const idsOf = (file: string, markdown: string | undefined) => (markdown === undefined ? [] : scenarioRows([{ file, markdown }]).map((row) => row.id));
+  const now = new Set(sides.flatMap(({ file, after }) => idsOf(file, after)));
+  return sides.flatMap(({ file, before }) => {
+    const ids = [...new Set(idsOf(file, before))].filter((id) => id !== "" && !now.has(id));
+    return ids.length > 0 ? [{ file, ids }] : [];
+  });
+}
+
+/**
+ * A test (`*.test.*`, `*.spec.*`) or any file under a test/ folder: what CI runs, or what its tests read. Never under
+ * docs/: a ratchet list is named after its test (`hidden-asserts/apps/api/test/links.test.ts.txt`), and it may go.
+ */
+const isTestFile = (path: string) => !path.startsWith("docs/") && (/\.(?:test|spec)\.[^/]+$/.test(path) || /(^|\/)test\//.test(path));
+
+const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/**
+ * The changed test files the head deletes (RP-1196): the tests they held no longer run, and CI goes green without them.
+ * A test moved unchanged is not one: git lists a move as a delete and an add, so a deleted file whose name and text a
+ * changed test file gains elsewhere is left out. A move with an edit counts.
+ */
+export function removedTests(changed: string[], versions: Versions): string[] {
+  const tests = changed.filter(isTestFile).map((file) => ({ file, ...versions(file) }));
+  const added = tests.filter(({ before, after }) => before === undefined && after !== undefined);
+  return tests
+    .filter(({ file, before, after }) => before !== undefined && after === undefined && !added.some((add) => baseName(add.file) === baseName(file) && add.after === before))
+    .map(({ file }) => file);
+}
+
+/**
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`ratchetGains`, and
+ * RP-1198's placeholder baseline, `placeholderBaselineGains`); each
+ * scenario file that loses a scenario ID (`lostScenarios`); each test file deleted (`removedTests`); and each package.json that differs between the merge base
+ * and the head (`versions`, as `pnpm queue` reads them) in more than its `version` or `description`. One it cannot
+ * parse, or read on either side, counts.
+ */
+export function ciOwnChanges(changed: string[], versions: Versions): string[] {
+  const gained = new Set(ratchetGains(changed, versions).map(({ file }) => file));
+  const lost = new Map(lostScenarios(changed, versions).map(({ file, ids }) => [file, ids]));
+  const removed = new Set(removedTests(changed.filter((path) => !isCiOwnFile(path)), versions));
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
-    const entriesOf = ratchetOf(path);
-    if (entriesOf !== undefined) {
-      const { before, after } = versions(path);
-      if (after === undefined) return before === undefined ? [`${path} (gains an entry)`] : [];
-      try {
-        const was = new Set(before === undefined ? [] : entriesOf(before));
-        return entriesOf(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
-      } catch {
-        return [`${path} (gains an entry)`];
-      }
+    // eslint-disable-next-line rabaed/no-avoid-terms -- a source file, git's word, not the domain's
+    if (removed.has(path)) return [`${path} (deletes a test file)`];
+    if (path === PLACEHOLDER_BASELINE) return placeholderBaselineGains(versions(path)) ? [`${path} (gains an entry)`] : [];
+    if (isRatchetList(path)) return gained.has(path) ? [`${path} (gains an entry)`] : [];
+    if (isScenarioFile(path)) {
+      const ids = lost.get(path);
+      return ids === undefined ? [] : [`${path} (loses ${ids.length === 1 ? "scenario" : "scenarios"} ${ids.join(", ")})`];
     }
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);

@@ -33,7 +33,7 @@ export const passwordResetRoutes =
       const now = ctx.now();
       const memberId = await resetPassword(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_reset_link");
-      await signInFromLink(ctx, request, reply, memberId, request.body.locale, now);
+      await signInFromLink(ctx, request, reply, memberId, now);
       return reply.code(204).send();
     });
   };
