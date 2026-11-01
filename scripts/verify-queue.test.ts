@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { machineDir, machineLockFile, turnMessage, readLine, removePlaces, waitForTurn } from "./verify-queue.ts";
-import { releaseLock, type LockHolder, type Processes } from "./verify-lock.ts";
+import { machineDir, machineLockFile, oldSlotFiles, turnMessage, readLine, removePlaces, waitForTurn } from "./verify-queue.ts";
+import { parseHolder, releaseLock, serializeHolder, type LockHolder, type Processes } from "./verify-lock.ts";
 
 const dir = () => mkdtempSync(join(tmpdir(), "verify-line-"));
 const alive: Processes = { isAlive: () => true, startOf: () => new Date(2026, 9, 20, 9, 5) };
@@ -115,5 +115,68 @@ describe("readLine and removePlaces", () => {
     expect(readLine(d, run(99), alive).waiting).toEqual([]);
     releaseLock(machineLockFile(d), 10);
     void second;
+  });
+});
+
+describe("an old per-Main slot (RP-1096) still held by a run from before the machine-wide line", () => {
+  const writeHolder = (file: string, h: LockHolder) => writeFileSync(file, serializeHolder(h));
+
+  it("keeps a new verify waiting behind it, saying so, until it ends; the two never run together", async () => {
+    const d = dir();
+    const slot = join(d, "rabaed-verify-main1.lock");
+    writeHolder(slot, run(5, "14", 600));
+    const lines: string[] = [];
+    const events: string[] = [];
+    const c = clock((n) => {
+      if (n === 3) {
+        events.push("old ends");
+        rmSync(slot);
+      }
+    });
+    await waitForTurn(d, run(10, "21"), { processes: alive, ...c, report: (l) => lines.push(l), oldSlots: [slot] });
+    events.push("new starts");
+    expect(events).toEqual(["old ends", "new starts"]);
+    expect(lines[0]).toBe("Verify turn: waiting behind lane 14 (#600), position 2 (it holds a Main's old verify slot).");
+  });
+
+  it("does not wait for a dead holder of an old slot", async () => {
+    const d = dir();
+    const slot = join(d, "rabaed-verify-main1.lock");
+    writeHolder(slot, run(777));
+    const processes: Processes = { isAlive: (pid) => pid !== 777, startOf: () => undefined };
+    const turn = await waitForTurn(d, run(10), { processes, ...clock(), report: () => {}, oldSlots: [slot] });
+    expect(turn.waitedMs).toBe(0);
+  });
+
+  it("counts a run holding both an old slot and the machine lock once", async () => {
+    const d = dir();
+    const slot = join(d, "rabaed-verify-main1.lock");
+    writeHolder(slot, run(5, "14"));
+    writeHolder(join(d, "verify.lock"), run(5, "14"));
+    const lines: string[] = [];
+    const c = clock((n) => {
+      if (n === 2) {
+        rmSync(slot);
+        releaseLock(machineLockFile(d), 5);
+      }
+    });
+    await waitForTurn(d, run(10), { processes: alive, ...c, report: (l) => lines.push(l), oldSlots: [slot] });
+    expect(lines[0]).toContain("position 2");
+  });
+});
+
+describe("oldSlotFiles", () => {
+  it("lists the Main slots and the main folder's among a git folder's files, as full paths", () => {
+    expect(oldSlotFiles("G:/repo/.git", ["HEAD", "rabaed-verify-main1.lock", "rabaed-verify-main-folder.lock", "config"]).map((p) => p.replace(/\\/g, "/"))).toEqual([
+      "G:/repo/.git/rabaed-verify-main1.lock",
+      "G:/repo/.git/rabaed-verify-main-folder.lock",
+    ]);
+  });
+});
+
+describe("serializeHolder", () => {
+  it("writes dates as ISO text that parseHolder reads back", () => {
+    const h = run(5, "14", 600);
+    expect(parseHolder(serializeHolder(h))).toMatchObject({ pid: 5, lane: "14", pr: 600, started: h.started });
   });
 });

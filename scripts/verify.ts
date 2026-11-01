@@ -12,7 +12,7 @@ import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type 
 import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
 import { acquireLock, liveHolder, lockFile, releaseLock, type LockHolder, type Processes } from "./verify-lock.ts";
-import { machineDir, machineLockFile, removePlaces, waitForTurn } from "./verify-queue.ts";
+import { machineDir, machineLockFile, oldSlotsOf, removePlaces, waitForTurn } from "./verify-queue.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
@@ -236,7 +236,7 @@ const reportWait = (line: string) => {
 const turn = await waitForTurn(
   line,
   { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}`, lane: postgres.lane, pr: options.pr, worktree: root },
-  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait },
+  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, oldSlots: oldSlotsOf(root) },
 );
 if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
 if (turn.waitedMs > 0) {

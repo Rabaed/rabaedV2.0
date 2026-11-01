@@ -59,13 +59,16 @@ function link(from: string, file: string): boolean {
   }
 }
 
+/** A holder as the text a lock or a place in the line holds: its dates as ISO strings (parseHolder reads it back). */
+export const serializeHolder = (holder: LockHolder): string => JSON.stringify({ ...holder, started: holder.started.toISOString(), pidStarted: holder.pidStarted?.toISOString() });
+
 /**
  * Creates the lock file for `self`, false when one is already there. It is written to a temp file
  * beside it and linked into place, so a reader never sees a live run's lock empty.
  */
 function create(file: string, self: LockHolder): boolean {
   const temp = `${file}.${self.pid}`;
-  writeFileSync(temp, JSON.stringify({ ...self, started: self.started.toISOString(), pidStarted: self.pidStarted?.toISOString() }));
+  writeFileSync(temp, serializeHolder(self));
   try {
     return link(temp, file);
   } finally {

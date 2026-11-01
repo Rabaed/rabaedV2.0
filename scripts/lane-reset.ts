@@ -188,7 +188,7 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
   d.log(`${project} will lose:`);
   d.log(`  containers: ${parts.containers.join(", ") || "none"}`);
   d.log(`  volumes: ${parts.volumes.join(", ") || "none"}`);
-  d.log("Not checked: lane:reset cannot see a stopped clone with no live Claude session whose .env names this project; check other clones by hand.");
+  d.log("Not looked at: lane:reset cannot see a stopped clone with no live Claude session whose .env is for this project; look in other clones by hand.");
   if (!(await d.confirm(`Remove these containers and volumes of ${project}? Their data is gone for good.`))) {
     d.log("Nothing removed.");
     return 0;

@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { processStart } from "./process-start.ts";
 import { describeHolder, liveHolder, lockFile, type LockHolder, type Processes } from "./verify-lock.ts";
-import { describeRun, machineDir, machineLockFile, readLine } from "./verify-queue.ts";
+import { addByPid, describeRun, machineDir, machineLockFile, OLD_SLOT, readLine } from "./verify-queue.ts";
 import { isRunning } from "./worktrees-stale.ts";
 import { listWorktrees } from "./worktrees.ts";
 
@@ -20,14 +20,13 @@ export type VerifyRun = { where: string; holder: LockHolder };
 /** `waiting` (RP-1197): runs queued behind the machine-wide verify, each about to verify; absent when none. */
 export type VerifyCheck = { runs: VerifyRun[]; waiting?: VerifyRun[] } | { unknown: string };
 
-const SLOT = /^rabaed-verify-.+\.lock$/;
 
 /** The machine-wide verify lock (RP-1197, when `machineDirectory` is given), every worktree's `.verify.lock`, then the Mains' verify slots among the common git folder's files. */
 export function verifyLockFiles(worktrees: string[], commonGitDir: string, commonFiles: string[], machineDirectory?: string): VerifyLock[] {
   return [
     ...(machineDirectory === undefined ? [] : [{ where: "the machine-wide verify line", file: machineLockFile(machineDirectory) }]),
     ...worktrees.map((path) => ({ where: path, file: lockFile(path) })),
-    ...commonFiles.filter((name) => SLOT.test(name)).map((name) => ({ where: `the verify slot ${name}`, file: join(commonGitDir, name) })),
+    ...commonFiles.filter((name) => OLD_SLOT.test(name)).map((name) => ({ where: `the verify slot ${name}`, file: join(commonGitDir, name) })),
   ];
 }
 
@@ -36,7 +35,7 @@ export function runningVerifies(locks: VerifyLock[], holderOf: (file: string) =>
   const runs: VerifyRun[] = [];
   for (const lock of locks) {
     const holder = holderOf(lock.file);
-    if (holder !== undefined && !runs.some((r) => r.holder.pid === holder.pid)) runs.push({ where: lock.where, holder });
+    if (holder !== undefined) addByPid(runs, { where: lock.where, holder }, (run) => run.holder.pid);
   }
   return runs;
 }

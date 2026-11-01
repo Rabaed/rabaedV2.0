@@ -215,18 +215,18 @@ describe("resetLane", () => {
 
   it("refuses when a live Claude session's folder (a second clone's) has a .env naming the project", async () => {
     const f = fake({
-      sessionCwds: () => ["C:\w\mine", "D:\other-clone\wt"],
-      readEnv: (dir) => (dir === "D:\other-clone\wt" ? "COMPOSE_PROJECT_NAME=rabaed-lane33\n" : undefined),
-      worktrees: () => [{ path: "C:\w\mine", branch: "RP-1" }],
+      sessionCwds: () => ["C:\\w\\mine", "D:\\other-clone\\wt"],
+      readEnv: (dir) => (dir === "D:\\other-clone\\wt" ? "COMPOSE_PROJECT_NAME=rabaed-lane33\n" : undefined),
+      worktrees: () => [{ path: "C:\\w\\mine", branch: "RP-1" }],
     });
     expect(await resetLane(["33"], f.deps)).toBe(1);
-    expect(f.err.join("\n")).toContain("a live Claude session in D:\other-clone\wt has a .env naming rabaed-lane33");
+    expect(f.err.join("\n")).toContain("a live Claude session in D:\\other-clone\\wt has a .env naming rabaed-lane33");
     expect(f.asked).toEqual([]);
     expect(f.removed).toEqual([]);
   });
 
   it("a live session whose .env names another lane, or none, does not refuse", async () => {
-    const f = fake({ sessionCwds: () => ["D:\a", "D:\b"], readEnv: (dir) => (dir === "D:\a" ? "COMPOSE_PROJECT_NAME=rabaed-lane331\n" : undefined), worktrees: () => [{ path: "C:\w\mine", branch: "RP-1" }] });
+    const f = fake({ sessionCwds: () => ["D:\\a", "D:\\b"], readEnv: (dir) => (dir === "D:\\a" ? "COMPOSE_PROJECT_NAME=rabaed-lane331\n" : undefined), worktrees: () => [{ path: "C:\\w\\mine", branch: "RP-1" }] });
     expect(await resetLane(["33"], f.deps)).toBe(0);
   });
 

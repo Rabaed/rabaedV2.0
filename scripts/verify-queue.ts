@@ -1,8 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { acquireLock, liveHolder, type LockHolder, type Processes } from "./verify-lock.ts";
+import { acquireLock, liveHolder, serializeHolder, type LockHolder, type Processes } from "./verify-lock.ts";
 
+// In this file "line" is the machine-wide verify queue: the glossary lint forbids that word in identifiers, so the
+// line, a place in it and a run's turn are what the code and its messages call it.
 // RP-1197: never two full `pnpm verify` runs at once on one machine. On 2026-10-29 and again on 2026-10-31
 // many verifies at once starved Docker and the CPU, and per-worktree and per-Main locks (RP-996, RP-1096)
 // could not see a run in another clone. The line lives in one folder outside every clone: `verify.lock`
@@ -15,6 +18,28 @@ import { acquireLock, liveHolder, type LockHolder, type Processes } from "./veri
 export function machineDir(env: Record<string, string | undefined> = process.env, temp: string = tmpdir()): string {
   const set = env.RABAED_VERIFY_DIR;
   return set !== undefined && set !== "" ? set : join(temp, "rabaed-verify");
+}
+
+/** Adds `item` to `list` unless one with its pid (`pidOf`) is already there: one run can hold several locks. */
+export function addByPid<T>(list: T[], item: T, pidOf: (item: T) => number): void {
+  if (!list.some((x) => pidOf(x) === pidOf(item))) list.push(item);
+}
+const holderPid = (holder: LockHolder): number => holder.pid;
+
+/** A file name among the common git folder's: a Main's verify slot from before the machine-wide line (RP-1096), or the main folder's. */
+export const OLD_SLOT = /^rabaed-verify-.+\.lock$/;
+
+/** The old per-Main slot files among `names` (a git folder's files), as full paths. */
+export const oldSlotFiles = (commonGitDir: string, names: string[]): string[] => names.filter((name) => OLD_SLOT.test(name)).map((name) => join(commonGitDir, name));
+
+/** The old slot files of the clone at `cwd`, read now; none when git or its folder cannot be read (the machine-wide lock then stands alone). */
+export function oldSlotsOf(cwd: string): string[] {
+  try {
+    const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return oldSlotFiles(common, readdirSync(common));
+  } catch {
+    return [];
+  }
 }
 
 /** The lock of the run that is verifying now. */
@@ -58,7 +83,7 @@ export function readLine(dir: string, self: LockHolder, processes: Processes): M
   const waiting: LockHolder[] = [];
   for (const name of placeNames(dir)) {
     const place = liveHolder(join(lineDir(dir), name), self, processes);
-    if (place !== undefined && place.pid !== holder?.pid && !waiting.some((w) => w.pid === place.pid)) waiting.push(place);
+    if (place !== undefined && place.pid !== holder?.pid) addByPid(waiting, place, holderPid);
   }
   return { ...(holder === undefined ? {} : { holder }), waiting };
 }
@@ -76,6 +101,11 @@ export type TurnDeps = {
   report: (line: string) => void;
   pollMs?: number;
   reportEveryMs?: number;
+  /**
+   * The old per-Main slot files (oldSlotFiles; RP-1096) that a verify from before this line may still hold.
+   * A live holder is ahead of every new run, so an old-branch verify and a new one never run together.
+   */
+  oldSlots?: string[];
 };
 
 /**
@@ -86,24 +116,29 @@ export type TurnDeps = {
 export async function waitForTurn(
   dir: string,
   self: LockHolder,
-  { processes, now, sleep, report, pollMs = 5_000, reportEveryMs = 600_000 }: TurnDeps,
+  { processes, now, sleep, report, pollMs = 5_000, reportEveryMs = 600_000, oldSlots = [] }: TurnDeps,
 ): Promise<{ waitedMs: number; tookOver?: string }> {
   mkdirSync(lineDir(dir), { recursive: true });
   const start = now();
   const own = placeName(start, self.pid);
   const ownFile = join(lineDir(dir), own);
-  writeFileSync(ownFile, JSON.stringify({ ...self, started: self.started.toISOString(), pidStarted: self.pidStarted?.toISOString() }));
+  writeFileSync(ownFile, serializeHolder(self));
   let said: string | undefined;
   let nextReport = start + reportEveryMs;
   try {
     for (;;) {
-      const ahead: LockHolder[] = [];
+      const old: LockHolder[] = [];
+      for (const file of oldSlots) {
+        const slotHolder = liveHolder(file, self, processes);
+        if (slotHolder !== undefined) addByPid(old, slotHolder, holderPid);
+      }
+      const ahead: LockHolder[] = [...old];
       for (const name of placeNames(dir)) {
         if (name === own) break;
         const file = join(lineDir(dir), name);
         const place = liveHolder(file, self, processes);
         if (place === undefined) rmSync(file, { force: true });
-        else if (!ahead.some((a) => a.pid === place.pid)) ahead.push(place);
+        else addByPid(ahead, place, holderPid);
       }
       let hint = "";
       if (ahead.length === 0) {
@@ -113,7 +148,9 @@ export async function waitForTurn(
         if (/ delete /.test(result.message)) hint = ` ${result.message}`;
       }
       const holder = liveHolder(machineLockFile(dir), self, processes);
-      const message = turnMessage(holder === undefined ? ahead : [holder, ...ahead.filter((a) => a.pid !== holder.pid)]);
+      const front = holder === undefined ? ahead : [holder, ...ahead.filter((a) => a.pid !== holder.pid)];
+      const inFront = front[front.length - 1];
+      const message = turnMessage(front) + (inFront !== undefined && old.some((o) => o.pid === inFront.pid) ? " (it holds a Main's old verify slot)" : "");
       if (message !== said) {
         report(`Verify turn: ${message}.${hint}`);
         said = message;
