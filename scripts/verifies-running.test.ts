@@ -21,6 +21,16 @@ describe("verifyLockFiles", () => {
   });
 });
 
+describe("verifyLockFiles, machine-wide (RP-1197)", () => {
+  it("names the machine-wide verify lock first when its folder is given", () => {
+    const files = verifyLockFiles(["G:/r"], "G:/r/.git", [], "T:/rabaed-verify");
+    expect(files.map((f) => [f.where, f.file.replace(/\\/g, "/")])).toEqual([
+      ["the machine-wide verify line", "T:/rabaed-verify/verify.lock"],
+      ["G:/r", "G:/r/.verify.lock"],
+    ]);
+  });
+});
+
 describe("runningVerifies", () => {
   it("lists the live holders, one per pid", () => {
     const holders: Record<string, LockHolder> = { a: run(11), b: run(11), c: run(12) };
@@ -46,6 +56,14 @@ describe("volumesKeptReason", () => {
   it("names the runs", () => {
     expect(volumesKeptReason({ runs: [{ where: "G:/a", holder: run(11) }] })).toBe("a verify runs (pid 11, started 10:02, `pnpm verify`, in G:/a)");
     expect(describeRuns([{ where: "G:/a", holder: run(11) }, { where: "G:/b", holder: run(12) }])).toBe("2 verifies run (pid 11, started 10:02, `pnpm verify`, in G:/a; pid 12, started 10:02, `pnpm verify`, in G:/b)");
+  });
+
+  it("keeps the volumes while a run waits in the machine-wide line, and names it by lane and PR (RP-1197)", () => {
+    const waiting = [{ where: "the machine-wide verify line", holder: { ...run(21), lane: "13", pr: 577 } }];
+    expect(volumesKeptReason({ runs: [], waiting })).toBe("1 waiting (lane 13 (#577), in the machine-wide verify line)");
+    expect(volumesKeptReason({ runs: [{ where: "G:/a", holder: run(11) }], waiting })).toBe(
+      "a verify runs (pid 11, started 10:02, `pnpm verify`, in G:/a); 1 waiting (lane 13 (#577), in the machine-wide verify line)",
+    );
   });
 
   it("keeps the volumes when the locks could not be read", () => {

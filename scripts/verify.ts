@@ -10,7 +10,8 @@ import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
 import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
-import { acquireLock, liveHolder, lockFile, mainSlot, releaseLock, waitForLock, type LockHolder, type Processes } from "./verify-lock.ts";
+import { acquireLock, liveHolder, lockFile, releaseLock, type LockHolder, type Processes } from "./verify-lock.ts";
+import { machineDir, machineLockFile, removePlaces, waitForTurn } from "./verify-queue.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
@@ -30,13 +31,13 @@ import { listWorktrees } from "./worktrees.ts";
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
-// waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
+// waits its turn in the machine-wide verify line: one full verify runs on the machine at a time (RP-1197; was one per Main, RP-1096).
 // `--pr <n>` writes the stamped last line into PR n's body after a full, clean run, and refuses unless HEAD is the PR's head (RP-1171).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 // HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
 // RP-1169: so does the working tree changing (verify-tree.ts: the tracked and untracked files that differ from HEAD), checked
-// after every step, once more after waiting for the Main's slot, and every 15 s during a step, which is killed at once
+// after every step, once more after waiting for its turn, and every 15 s during a step, which is killed at once
 // (a merge by the app's base-branch sync half-done). A live verify in another worktree on the same lane database (same
 // compose project or Postgres port) stops it before the first step (verify-lane-db.ts).
 
@@ -93,7 +94,7 @@ const merging = mergeRefusal(readMergeState(root), "pnpm verify");
 if (merging !== undefined) stopEarly(merging);
 
 // Rule 3 before anything runs (RP-993): root shared files (the lockfile, say) beside code
-// showed only at `pnpm queue`, by the same rule, after the whole branch was built. A warning,
+// showed only at `pnpm line`, by the same rule, after the whole branch was built. A warning,
 // said again above the last line, not a stop: a feature branch may build on a dependencies-only
 // PR that has not merged yet.
 let mix: string[] | undefined;
@@ -103,8 +104,8 @@ try {
   stopEarly(error instanceof Error ? error.message : String(error));
 }
 const mixWarning = mix && [
-  // eslint-disable-next-line rabaed/no-avoid-terms -- git's changed files and `pnpm queue` (GitHub's merge queue), by their own names.
-  "Warning: this branch changes root shared file(s) together with other files against origin/main, so `pnpm queue` will refuse it (planning/parallel-sessions.md rule 3):",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- git's changed files and `pnpm line` (GitHub's merge line), by their own names.
+  "Warning: this branch changes root shared file(s) together with other files against origin/main, so `pnpm line` will refuse it (planning/parallel-sessions.md rule 3):",
   ...mix,
   "(Against an old origin/main, main's own changes count too: `git fetch origin main` first.)",
 ].join("\n");
@@ -214,25 +215,26 @@ const checkStack = async () => {
 };
 await checkStack();
 
-// One verify per Main at a time (RP-1096; the owner chose per Main): a run in another of the Main's
-// lanes waits for this one. The slot is a lock in the clone's common git folder; released on every exit.
-const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root, encoding: "utf8" });
-if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the Mains' verify slots.");
-const slot = mainSlot(common.stdout.trim(), postgres.lane);
-process.on("exit", () => releaseLock(slot.file, process.pid));
+// One full verify at a time on the whole machine (RP-1197, which replaces RP-1096's one per Main): a run waits
+// its turn in a line in a folder outside every clone and prints its place. Held to the last step, released on every exit.
+const line = machineDir();
+process.on("exit", () => {
+  releaseLock(machineLockFile(line), process.pid);
+  removePlaces(line, process.pid);
+});
 // With --log the waiting lines go to the terminal too, so a run that waits is not silent there; the last line is still verify's.
 const reportWait = (line: string) => {
   out.info(line);
   if (options.log !== undefined) terminal.stderr(line);
 };
-const turn = await waitForLock(
-  slot.file,
-  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}` },
-  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
+const turn = await waitForTurn(
+  line,
+  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}`, lane: postgres.lane, pr: options.pr, worktree: root },
+  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait },
 );
 if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
 if (turn.waitedMs > 0) {
-  out.info(`Got ${slot.name} after ${Math.round(turn.waitedMs / 60_000)} min.`);
+  out.info(`Got the machine's verify turn after ${Math.round(turn.waitedMs / 60_000)} min.`);
   // The stack may have gone down while this run waited.
   await checkStack();
   // And the branch may have moved: the run starts on what it waited with, not on what it began as.

@@ -5,6 +5,8 @@ import { join } from "node:path";
 // databases and fail each other. The lock is a file in the worktree, so verify in two
 // worktrees still runs side by side. The pid check is passed in, so it is unit-tested.
 // RP-1096 adds each Main's one verify slot (mainSlot): a second verify among a Main's lanes waits for it.
+// RP-1197: the machine-wide verify lock (verify-queue.ts) reuses acquireLock and replaces the Main slot in `pnpm verify`;
+// a LockHolder also carries the run's lane, PR and worktree for its messages.
 // RP-1136: Windows reuses pids quickly, so a lock also records when its process started (pidStarted, as
 // the OS reports it). A lock is held only while its pid runs, is not the caller's own or an ancestor's,
 // and started at that time (a lock without the time: started before the lock was taken); a pid whose
@@ -14,7 +16,16 @@ import { join } from "node:path";
  * Who holds the lock: the verify process, when it took the lock, how it was started, and when the OS
  * says that process started (absent in locks written before RP-1136, or when it couldn't be read).
  */
-export type LockHolder = { pid: number; started: Date; command: string; pidStarted?: Date | undefined };
+export type LockHolder = {
+  pid: number;
+  started: Date;
+  command: string;
+  pidStarted?: Date | undefined;
+  /** RP-1197: the run's lane ("13") from its .env, the PR number under --pr, and its worktree, for the machine-wide queue's messages. */
+  lane?: string | undefined;
+  pr?: number | undefined;
+  worktree?: string | undefined;
+};
 
 /**
  * The process checks the lock uses, injected so they are unit-tested: whether a pid runs, when it
@@ -62,7 +73,7 @@ function create(file: string, self: LockHolder): boolean {
   }
 }
 
-const readText = (file: string): string | undefined => {
+export const readText = (file: string): string | undefined => {
   try {
     return readFileSync(file, "utf8");
   } catch {
@@ -71,7 +82,7 @@ const readText = (file: string): string | undefined => {
 };
 
 /** The run named in a lock's text; undefined when it is gone or unreadable. */
-function parseHolder(text: string | undefined): LockHolder | undefined {
+export function parseHolder(text: string | undefined): LockHolder | undefined {
   try {
     const stored = JSON.parse(text ?? "") as { pid: number; started: string; command: string; pidStarted?: string };
     if (!Number.isInteger(stored.pid)) return undefined;
