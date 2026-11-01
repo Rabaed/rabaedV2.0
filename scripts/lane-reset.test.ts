@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseLaneResetArgs, projectParts, resetLane, type ResetDeps } from "./lane-reset.ts";
-import type { Container, StaleProject, Volume } from "./lanes.ts";
+import type { Container, RemoveProjectOptions, StaleProject, Volume } from "./lanes.ts";
+import { DOCKER_NOT_ANSWERING, DOCKER_NOT_RUNNING, type DockerProbe } from "./docker-probe.ts";
 
 const container = (name: string, project: string, workingDir = "C:\\w\\lane"): Container => ({ name, state: "running", project, workingDir, ports: [] });
 const volume = (name: string, project: string): Volume => ({ name, project });
@@ -15,6 +16,9 @@ function fake(over: Partial<ResetDeps> & { answer?: boolean } = {}): Fake {
   const { answer = true, ...rest } = over;
   const deps: ResetDeps = {
     cwd: "C:\\w\\mine",
+    probe: () => ({ ok: true }),
+    sessionCwds: () => [],
+    docker: () => "",
     listContainers: () => [container("rabaed-lane33-db-1", "rabaed-lane33"), container("rabaed-lane331-db-1", "rabaed-lane331"), container("rabaed-lane3-db-1", "rabaed-lane3")],
     listVolumes: () => [volume("rabaed-lane33_db-data", "rabaed-lane33"), volume("rabaed-lane33_files-data", "rabaed-lane33"), volume("rabaed-lane3_db-data", "rabaed-lane3")],
     worktrees: () => [{ path: "C:\\w\\mine", branch: "RP-1" }],
@@ -105,14 +109,138 @@ describe("resetLane", () => {
     expect(f.removed).toEqual([]);
   });
 
-  it("refuses when Docker does not answer (containers or volumes)", async () => {
-    for (const over of [{ listContainers: () => undefined }, { listVolumes: () => { throw new Error("timed out"); } }]) {
-      const f = fake(over);
+  it("probes Docker first and refuses a hang or a Docker that is down with the probe's own message, reading nothing else", async () => {
+    const cases: [DockerProbe, string][] = [
+      [{ ok: false, kind: "hang", message: DOCKER_NOT_ANSWERING }, DOCKER_NOT_ANSWERING],
+      [{ ok: false, kind: "down", message: DOCKER_NOT_RUNNING }, DOCKER_NOT_RUNNING],
+    ];
+    for (const [probe, message] of cases) {
+      let read = false;
+      const f = fake({ probe: () => probe, listContainers: () => ((read = true), []) });
       expect(await resetLane(["33"], f.deps)).toBe(1);
-      expect(f.err.join("\n")).toContain("Docker is not answering");
+      expect(f.err.join("\n")).toContain(message);
+      expect(read).toBe(false);
       expect(f.asked).toEqual([]);
       expect(f.removed).toEqual([]);
     }
+  });
+
+  it("refuses when a listing fails after a healthy probe (Docker stopped answering): the wait message", async () => {
+    for (const over of [{ listContainers: () => undefined }, { listVolumes: () => { throw new Error("timed out"); } }]) {
+      const f = fake(over);
+      expect(await resetLane(["33"], f.deps)).toBe(1);
+      expect(f.err.join("\n")).toContain(DOCKER_NOT_ANSWERING);
+      expect(f.asked).toEqual([]);
+      expect(f.removed).toEqual([]);
+    }
+  });
+
+  it("refuses, removing nothing, when the containers or volumes differ after the prompt", async () => {
+    for (const change of ["container", "volume"] as const) {
+      let changed = false;
+      const f = fake({
+        listContainers: () => [container("rabaed-lane33-db-1", "rabaed-lane33"), ...(changed && change === "container" ? [container("rabaed-lane33-new-1", "rabaed-lane33")] : [])],
+        listVolumes: () => [volume("rabaed-lane33_db-data", "rabaed-lane33"), ...(changed && change === "volume" ? [volume("rabaed-lane33_new", "rabaed-lane33")] : [])],
+        confirm: async () => ((changed = true), true),
+      });
+      expect(await resetLane(["33"], f.deps)).toBe(1);
+      expect(f.err.join("\n")).toContain("changed since it was shown; run it again");
+      expect(f.removed).toEqual([]);
+    }
+  });
+
+  it("goes on when the second look shows the same containers and volumes, in any order", async () => {
+    let second = false;
+    const f = fake({
+      listVolumes: () => (second ? [volume("rabaed-lane33_files-data", "rabaed-lane33"), volume("rabaed-lane33_db-data", "rabaed-lane33")] : [volume("rabaed-lane33_db-data", "rabaed-lane33"), volume("rabaed-lane33_files-data", "rabaed-lane33")]),
+      confirm: async () => ((second = true), true),
+    });
+    expect(await resetLane(["33"], f.deps)).toBe(0);
+    expect(f.removed).toHaveLength(1);
+  });
+
+  it("runs the removal's docker calls with a timeout, and on a timeout says what was and was not removed, exit 1", async () => {
+    const timeouts: number[] = [];
+    const f = fake({
+      listContainers: () => [container("rabaed-lane33-db-1", "rabaed-lane33"), container("rabaed-lane33-web-1", "rabaed-lane33")],
+      docker: (args, timeoutMs) => {
+        timeouts.push(timeoutMs);
+        if (args[0] === "volume") throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { code: "ETIMEDOUT" });
+        return "";
+      },
+      remove: (stale, options: RemoveProjectOptions) => {
+        for (const name of stale.containers) options.run!(["rm", "-f", "-v", name]);
+        options.run!(["volume", "rm", ...stale.volumes]);
+        return { volumesKept: undefined };
+      },
+    });
+    expect(await resetLane(["33"], f.deps)).toBe(1);
+    expect(timeouts.length).toBe(3);
+    expect(timeouts.every((ms) => ms > 0 && Number.isFinite(ms))).toBe(true);
+    const said = f.err.join("\n");
+    expect(said).toContain("timed out");
+    expect(said).toContain("Removed: containers rabaed-lane33-db-1, rabaed-lane33-web-1");
+    expect(said).toContain("Not removed: volumes rabaed-lane33_db-data, rabaed-lane33_files-data");
+    expect(f.out.join("\n")).not.toContain("Removed rabaed-lane33");
+  });
+
+  it("a timeout on a container says which containers are left", async () => {
+    const f = fake({
+      listContainers: () => [container("rabaed-lane33-db-1", "rabaed-lane33"), container("rabaed-lane33-web-1", "rabaed-lane33")],
+      docker: (args) => {
+        if (args.at(-1) === "rabaed-lane33-web-1") throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { code: "ETIMEDOUT" });
+        return "";
+      },
+      remove: (stale, options: RemoveProjectOptions) => {
+        try {
+          for (const name of stale.containers) options.run!(["rm", "-f", "-v", name]);
+        } catch (error) {
+          throw new Error("Could not remove container", { cause: error });
+        }
+        return { volumesKept: undefined };
+      },
+    });
+    expect(await resetLane(["33"], f.deps)).toBe(1);
+    expect(f.err.join("\n")).toContain("Removed: containers rabaed-lane33-db-1");
+    expect(f.err.join("\n")).toContain("Not removed: containers rabaed-lane33-web-1; volumes rabaed-lane33_db-data, rabaed-lane33_files-data");
+  });
+
+  it("compares folders as envClaims does: forward slashes and case do not make this worktree look like another's", async () => {
+    const f = fake({
+      listContainers: () => [container("rabaed-lane33-db-1", "rabaed-lane33", "c:/w/MINE")],
+      holders: () => ({ runningSession: () => "this very session", desktopSession: () => undefined }),
+    });
+    expect(await resetLane(["33"], f.deps)).toBe(0);
+  });
+
+  it("refuses when a live Claude session's folder (a second clone's) has a .env naming the project", async () => {
+    const f = fake({
+      sessionCwds: () => ["C:\w\mine", "D:\other-clone\wt"],
+      readEnv: (dir) => (dir === "D:\other-clone\wt" ? "COMPOSE_PROJECT_NAME=rabaed-lane33\n" : undefined),
+      worktrees: () => [{ path: "C:\w\mine", branch: "RP-1" }],
+    });
+    expect(await resetLane(["33"], f.deps)).toBe(1);
+    expect(f.err.join("\n")).toContain("a live Claude session in D:\other-clone\wt has a .env naming rabaed-lane33");
+    expect(f.asked).toEqual([]);
+    expect(f.removed).toEqual([]);
+  });
+
+  it("a live session whose .env names another lane, or none, does not refuse", async () => {
+    const f = fake({ sessionCwds: () => ["D:\a", "D:\b"], readEnv: (dir) => (dir === "D:\a" ? "COMPOSE_PROJECT_NAME=rabaed-lane331\n" : undefined), worktrees: () => [{ path: "C:\w\mine", branch: "RP-1" }] });
+    expect(await resetLane(["33"], f.deps)).toBe(0);
+  });
+
+  it("refuses when the live sessions cannot be listed", async () => {
+    const f = fake({ sessionCwds: () => undefined });
+    expect(await resetLane(["33"], f.deps)).toBe(1);
+    expect(f.err.join("\n")).toContain("running Claude sessions could not be checked");
+    expect(f.removed).toEqual([]);
+  });
+
+  it("says before the prompt what it cannot see: a stopped clone with no live session", async () => {
+    const f = fake();
+    await resetLane(["33"], f.deps);
+    expect(f.out.join("\n")).toContain("cannot see a stopped clone with no live Claude session");
   });
 
   it("refuses while any verify runs, even one for another lane", async () => {

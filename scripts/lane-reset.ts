@@ -8,21 +8,28 @@
 //
 // It lists the project's volumes, refuses (before any prompt) when:
 //   - the lane is protected (lane 7 is Main 7's harness, lanes.ts protectedLaneReason);
-//   - Docker does not answer;
+//   - Docker does not answer (probeDocker first, with its own message: a hang says wait, down says start it);
 //   - any verify runs anywhere on the machine (verifies-running.ts), or that cannot be checked;
 //   - a running or open Claude session works in a folder that holds the project (its containers'
 //     folders or another worktree whose .env names it); this worktree's own session is the owner's;
-//   - another worktree's .env names the project (envClaims).
-// Otherwise it asks [y/N] (--yes skips it), looks again, and removes that project only (removeProject):
+//   - another worktree's .env names the project (envClaims), or the .env of any live Claude session's
+//     folder does (~/.claude/sessions), which protects a second clone's lane.
+// What it cannot see: a stopped clone, one with no live Claude session and no container, whose .env names
+// the project. The header it prints before the prompt says so.
+// Otherwise it asks [y/N] (--yes skips it), looks again, refuses if the containers or volumes are not the
+// ones it showed, and removes that project only (removeProject, each docker call with a timeout):
 // a project matches by its exact compose name, so rabaed-lane3 never matches rabaed-lane31.
 // Exit codes: 0 done or nothing to remove, 1 refused or failed, 2 bad arguments.
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { holdReason, systemHolders, type Holders } from "./claude-sessions.ts";
+import { holdReason, systemHolders, systemSessionCheck, type Holders } from "./claude-sessions.ts";
 import { confirmOrExit } from "./confirm.ts";
+import { DOCKER_PROBE_TIMEOUT_MS, DOCKER_NOT_ANSWERING, probeDocker, type DockerProbe } from "./docker-probe.ts";
 import {
   envClaims,
   isValidLane,
   LANE_SCHEME,
+  composeProjectOfEnv,
   laneProject,
   listContainers,
   listVolumes,
@@ -36,8 +43,11 @@ import {
   type Volume,
 } from "./lanes.ts";
 import { verifiesRunningNow, volumesKeptReason, type VerifyCheck } from "./verifies-running.ts";
-import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
+import { samePath } from "./paths.ts";
 import { listWorktrees } from "./worktrees.ts";
+
+/** How long each docker call of the removal may take (a corrupt volume can be slow, a jammed Docker never answers). */
+export const REMOVE_TIMEOUT_MS = 60_000;
 
 const USAGE = "Usage: pnpm lane:reset <n> [--yes]   (removes lane n's containers and volumes; nothing else)";
 
@@ -63,6 +73,12 @@ export function projectParts(project: string, containers: Container[], volumes: 
 /** Everything lane:reset reads or does outside this file; faked in tests. */
 export type ResetDeps = {
   cwd: string;
+  /** Whether Docker answers (docker-probe.ts); asked first. */
+  probe: () => DockerProbe;
+  /** The folders of the live Claude sessions, or undefined when they cannot be listed. */
+  sessionCwds: () => string[] | undefined;
+  /** One docker call of the removal, killed after timeoutMs (throws on failure or timeout). */
+  docker: (args: string[], timeoutMs: number) => string;
   /** Containers, or undefined when Docker did not answer. */
   listContainers: () => Container[] | undefined;
   /** Volumes; throws when Docker did not answer. */
@@ -90,9 +106,9 @@ function look(lane: number, d: ResetDeps): Look {
   try {
     volumes = d.listVolumes();
   } catch {
-    return { dockerDown: "no answer for the volume list" };
+    return { dockerDown: "volumes" };
   }
-  if (containers === undefined) return { dockerDown: "no answer for the container list" };
+  if (containers === undefined) return { dockerDown: "containers" };
   const parts = projectParts(project, containers, volumes);
   const refusals: string[] = [];
 
@@ -105,14 +121,33 @@ function look(lane: number, d: ResetDeps): Look {
   // The folders that could hold a session: the project's container folders and the claiming worktrees.
   // This worktree's own folder is left out: its session is the one asking.
   const holders = d.holders();
-  const own = (dir: string) => dir.replace(/[\\/]+$/, "").toLowerCase() === d.cwd.replace(/[\\/]+$/, "").toLowerCase();
+  const own = (dir: string) => samePath(dir, d.cwd, d.platform);
   const folders = [...new Set([...containers.filter((c) => c.project === project).map((c) => c.workingDir), ...claims.map((c) => c.path)])].filter((dir) => dir !== "" && !own(dir) && d.exists(dir));
   for (const dir of folders) {
     const reason = holdReason(dir, holders);
     if (reason !== undefined) refusals.push(`${project} is held by a Claude session in ${dir}: ${reason}`);
   }
+
+  // Every live Claude session's folder, in this clone or another: a second clone's lane is named in its
+  // own .env, which envClaims (this clone's worktrees only) cannot see.
+  const cwds = d.sessionCwds();
+  if (cwds === undefined) refusals.push("running Claude sessions could not be checked, so a second clone's .env cannot be read");
+  else {
+    const seen = d.worktrees().map((w) => w.path);
+    for (const dir of new Set(cwds)) {
+      if (samePath(dir, d.cwd, d.platform) || seen.some((p) => samePath(p, dir, d.platform))) continue;
+      if (composeProjectOfEnv(d.readEnv(dir) ?? "") === project) refusals.push(`a live Claude session in ${dir} has a .env naming ${project}`);
+    }
+  }
   return { parts, refusals };
 }
+
+const sameList = (a: string[], b: string[]): boolean => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
+
+const isTimeout = (error: unknown): boolean => {
+  const e = error as { code?: string; message?: string; cause?: unknown } | undefined;
+  return e?.code === "ETIMEDOUT" || /ETIMEDOUT|timed out/i.test(e?.message ?? "") || (e?.cause !== undefined && isTimeout(e.cause));
+};
 
 /** Runs lane:reset; returns the exit code. */
 export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
@@ -134,13 +169,15 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
     d.error("Nothing was removed.");
     return 1;
   };
-  const dockerRefusal = (why: string): number => {
-    d.error(`lane:reset refused: Docker is not answering (${why}, ${DOCKER_TIMEOUT_MS / 1000} s): it is stopped or jammed. Tell your Main; do not restart it yourself. Nothing was removed.`);
+  const dockerRefusal = (message: string): number => {
+    d.error(`lane:reset refused: ${message}. Nothing was removed.`);
     return 1;
   };
 
+  const probe = d.probe();
+  if (!probe.ok) return dockerRefusal(probe.message);
   const first = look(lane, d);
-  if ("dockerDown" in first) return dockerRefusal(first.dockerDown);
+  if ("dockerDown" in first) return dockerRefusal(DOCKER_NOT_ANSWERING);
   if (first.refusals.length > 0) return refuse(first.refusals);
   const { parts } = first;
   if (parts.containers.length === 0 && parts.volumes.length === 0) {
@@ -151,6 +188,7 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
   d.log(`${project} will lose:`);
   d.log(`  containers: ${parts.containers.join(", ") || "none"}`);
   d.log(`  volumes: ${parts.volumes.join(", ") || "none"}`);
+  d.log("Not checked: lane:reset cannot see a stopped clone with no live Claude session whose .env names this project; check other clones by hand.");
   if (!(await d.confirm(`Remove these containers and volumes of ${project}? Their data is gone for good.`))) {
     d.log("Nothing removed.");
     return 0;
@@ -158,17 +196,36 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
 
   // The second look, after the prompt: a verify or a session may have started while it waited.
   const second = look(lane, d);
-  if ("dockerDown" in second) return dockerRefusal(second.dockerDown);
+  if ("dockerDown" in second) return dockerRefusal(DOCKER_NOT_ANSWERING);
   if (second.refusals.length > 0) return refuse(second.refusals);
+  if (!sameList(parts.containers, second.parts.containers) || !sameList(parts.volumes, second.parts.volumes)) {
+    d.error(`lane:reset refused: ${project}'s containers or volumes changed since it was shown; run it again. Nothing was removed.`);
+    return 1;
+  }
 
+  // Each docker call runs with a timeout; what it finished is remembered, to say what was and was not removed.
+  const doneContainers: string[] = [];
+  let doneVolumes: string[] = [];
+  const run = (args: string[]): string => {
+    const output = d.docker(args, REMOVE_TIMEOUT_MS);
+    if (args[0] === "rm") doneContainers.push(args[args.length - 1]!);
+    else if (args[0] === "volume" && args[1] === "rm") doneVolumes = args.slice(2);
+    return output;
+  };
   try {
-    const { volumesKept } = d.remove(second.parts, { volumesKeptBecause: () => volumesKeptReason(d.verifies()) });
+    const { volumesKept } = d.remove(second.parts, { volumesKeptBecause: () => volumesKeptReason(d.verifies()), run });
     if (volumesKept !== undefined) {
       d.error(`${project}: containers removed, volumes kept because ${volumesKept}. Run lane:reset again when it is over.`);
       return 1;
     }
   } catch (error) {
-    d.error(`Could not remove ${project}: ${(error as Error).message}`);
+    const left = [
+      second.parts.containers.filter((c) => !doneContainers.includes(c)).length > 0 ? `containers ${second.parts.containers.filter((c) => !doneContainers.includes(c)).join(", ")}` : undefined,
+      second.parts.volumes.filter((v) => !doneVolumes.includes(v)).length > 0 ? `volumes ${second.parts.volumes.filter((v) => !doneVolumes.includes(v)).join(", ")}` : undefined,
+    ].filter((x) => x !== undefined);
+    const gone = [doneContainers.length > 0 ? `containers ${doneContainers.join(", ")}` : undefined, doneVolumes.length > 0 ? `volumes ${doneVolumes.join(", ")}` : undefined].filter((x) => x !== undefined);
+    const why = isTimeout(error) ? `Docker timed out during the removal (${REMOVE_TIMEOUT_MS / 1000} s per call): wait, don't restart it` : `Could not remove ${project}: ${(error as Error).message}`;
+    d.error(`${why}. Removed: ${gone.join("; ") || "nothing"}. Not removed: ${left.join("; ") || "nothing"}. Run lane:reset again once Docker answers.`);
     return 1;
   }
   d.log(`Removed ${project}: containers ${second.parts.containers.join(", ") || "none"}; volumes ${second.parts.volumes.join(", ") || "none"}.`);
@@ -179,8 +236,15 @@ export async function resetLane(args: string[], d: ResetDeps): Promise<number> {
 /** The real Docker, git and terminal. */
 export const realDeps = (yes: boolean): ResetDeps => ({
   cwd: process.cwd(),
-  listContainers: () => listContainers(DOCKER_TIMEOUT_MS),
-  listVolumes: () => listVolumes(DOCKER_TIMEOUT_MS),
+  probe: () => probeDocker(),
+  sessionCwds: () => {
+    const check = systemSessionCheck();
+    return check.kind === "ok" ? check.sessions.map((s) => s.cwd) : undefined;
+  },
+  docker: (args, timeout) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout }),
+  // A healthy probe means Docker answers within its timeout; the listings wait no longer.
+  listContainers: () => listContainers(DOCKER_PROBE_TIMEOUT_MS),
+  listVolumes: () => listVolumes(DOCKER_PROBE_TIMEOUT_MS),
   worktrees: () => listWorktrees().filter((w) => existsSync(w.path)),
   readEnv: readWorktreeEnv,
   exists: existsSync,
