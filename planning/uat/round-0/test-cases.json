@@ -2241,7 +2241,7 @@
   "title": "Rabaed opens in Arabic; a switch to English is remembered",
   "who": "Faisal; Noura",
   "steps": "1) In a browser set to English, sign in as each. 2) Switch to English. 3) Sign out and sign in again.",
-  "expected": "Opens in Arabic, with names in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.",
+  "expected": "Opens in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.",
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",

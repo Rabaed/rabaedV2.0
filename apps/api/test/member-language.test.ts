@@ -11,35 +11,35 @@ const api = await createTestApi();
 afterAll(() => api.close());
 
 let a: Caller;
-let arabic: { email: string; caller: Caller };
-let colleague: Caller;
 let other: Caller;
 
 const me = async (by: Caller) => (await by.get("/v1/me")).json() as SignedInMember;
 const language = async (by: Caller) => (await me(by)).member.language;
 const choose = (by: Caller, body: unknown) => by.request("PUT", "/v1/me/language", body);
+/** A Member of the Authorized Person's Company, invited in `locale` and signed in; each test builds its own. */
+const invitedIn = async (locale: "ar" | "en") => {
+  const invited = await api.inviteMember(a, { locale });
+  return { email: invited.email, caller: await api.acceptInvitation(invited.invitationToken) };
+};
 
 beforeAll(async () => {
-  const company = await api.authorizedPerson();
-  a = company.caller;
-  const invited = await api.inviteMember(a, { locale: "ar" });
-  arabic = { email: invited.email, caller: await api.acceptInvitation(invited.invitationToken) };
-  colleague = (await api.inviteMember(a, { locale: "ar" }).then((m) => api.acceptInvitation(m.invitationToken)));
+  a = (await api.authorizedPerson()).caller;
   other = (await api.authorizedPerson()).caller;
 });
 
 describe("a Member's language (scenario RP-1174-1)", () => {
   it("is the one they were invited in, given back with who they are", async () => {
-    expect(await language(arabic.caller)).toBe("ar");
-    expect(await language(a)).toBe("en");
+    expect(await language((await invitedIn("ar")).caller)).toBe("ar");
+    expect(await language((await invitedIn("en")).caller)).toBe("en");
   });
 
   it("is not changed by the browser's language at sign-in", async () => {
-    const fromEnglishBrowser = await api.signIn(arabic.email, DEFAULT_PASSWORD, "en");
-    expect(await language(fromEnglishBrowser)).toBe("ar");
+    const arabic = await invitedIn("ar");
+    expect(await language(await api.signIn(arabic.email, DEFAULT_PASSWORD, "en"))).toBe("ar");
   });
 
   it("is kept for the Member who switched, and opens the next sign-in", async () => {
+    const arabic = await invitedIn("ar");
     const res = await choose(arabic.caller, { locale: "en" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ locale: "en" });
@@ -50,14 +50,14 @@ describe("a Member's language (scenario RP-1174-1)", () => {
   });
 
   it("is the language of their emails too: the settings show the same one", async () => {
+    const arabic = await invitedIn("ar");
     await choose(arabic.caller, { locale: "en" });
     const settings = (await arabic.caller.get("/v1/notification-settings")).json() as { preferredLanguage: string };
     expect(settings.preferredLanguage).toBe("en");
-    await choose(arabic.caller, { locale: "ar" });
   });
 
   it("is saved alone: the Member's other email settings stay as they were", async () => {
-    const paused = (await api.inviteMember(a).then((m) => api.acceptInvitation(m.invitationToken)));
+    const paused = (await invitedIn("en")).caller;
     const view = (await paused.get("/v1/notification-settings")).json() as { settings: unknown };
     expect((await paused.request("PUT", "/v1/notification-settings", { settings: view.settings, emailPaused: true, preferredLanguage: "en" })).statusCode).toBe(204);
     expect((await choose(paused, { locale: "ar" })).statusCode).toBe(200);
@@ -66,8 +66,10 @@ describe("a Member's language (scenario RP-1174-1)", () => {
   });
 
   it("is nobody else's: a colleague and another Company's Member keep their own", async () => {
+    const switcher = (await invitedIn("ar")).caller;
+    const colleague = (await invitedIn("ar")).caller;
     expect((await choose(other, { locale: "ar" })).statusCode).toBe(200);
-    expect((await choose(arabic.caller, { locale: "en" })).statusCode).toBe(200);
+    expect((await choose(switcher, { locale: "en" })).statusCode).toBe(200);
     expect(await language(colleague)).toBe("ar");
     expect(await language(a)).toBe("en");
     expect(await language(other)).toBe("ar");
