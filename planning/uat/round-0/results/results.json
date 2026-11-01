@@ -1878,7 +1878,7 @@
     "ranAt": "2026-10-27T19:44:17.847Z"
   },
   "SUB-18": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
         "text": "Ali and Mohammed both get the shared item (200)",
@@ -1892,7 +1892,7 @@
       {
         "text": "No Step, no person, no Internal Note in it",
         "ok": true,
-        "detail": "{\"id\":\"792a9988-0212-4a73-b45f-04f4667e93d9\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 023915\",\"documentNum"
+        "detail": "{\"id\":\"d17e7295-fa18-4fa4-a33e-dc8e1c3124a2\",\"projectId\":\"88705372-91e2-4806-aa3c-fbdf6807324f\",\"formVersionId\":\"4629ecf1-5e14-49ca-958c-c5a7f175a39e\",\"title\":\"UAT SUB-18 download 193544\",\"documentNum"
       },
       {
         "text": "A Draft has nothing shared: the plain 404",
@@ -1900,12 +1900,12 @@
       },
       {
         "text": "The row menu of the Submitted MAR offers Download",
-        "ok": false,
-        "detail": "Open"
+        "ok": true,
+        "detail": "Open | Duplicate | Download"
       },
       {
-        "text": "A Draft offers no Download",
-        "ok": false,
+        "text": "A Draft offers Download of its Working Copy",
+        "ok": true,
         "detail": "Open | Edit | Duplicate | Download | Delete"
       }
     ],
@@ -1914,7 +1914,7 @@
       "evidence/SUB-18-2-row-menu-draft.jpg"
     ],
     "notes": "POST /work-items/<Draft>/working-copy as Hafiz answers 200 {\"status\":\"preparing\"}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.\nThe content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.",
-    "ranAt": "2026-10-31T02:39:27.593Z"
+    "ranAt": "2026-11-01T19:36:02.400Z"
   },
   "SNG-15": {
     "status": "pass",
@@ -4258,22 +4258,12 @@
     "ranAt": "2026-10-27T18:48:50.402Z"
   },
   "I18N-05": {
-    "status": "fail",
+    "status": "pass",
     "checks": [
       {
-        "text": "faisal: with an English browser the app opens in Arabic because the Member's language is Arabic",
-        "ok": false,
-        "detail": "opened /en"
-      },
-      {
-        "text": "faisal: the Member's stored language is ar",
+        "text": "faisal: with an English browser Rabaed opens in Arabic, right to left",
         "ok": true,
-        "detail": "ar"
-      },
-      {
-        "text": "faisal: with an Arabic browser the app opens in Arabic, right to left",
-        "ok": true,
-        "detail": "/ar dir=rtl"
+        "detail": "opened /ar dir=rtl"
       },
       {
         "text": "faisal: the name shows in Arabic",
@@ -4286,19 +4276,19 @@
         "detail": "http://lane7.localhost:3700/en"
       },
       {
-        "text": "noura: with an English browser the app opens in Arabic because the Member's language is Arabic",
-        "ok": false,
+        "text": "faisal: next time (an Arabic browser) opens in English, as switched",
+        "ok": true,
         "detail": "opened /en"
       },
       {
-        "text": "noura: the Member's stored language is ar",
+        "text": "faisal: after switching back, a new visit opens in Arabic again",
         "ok": true,
-        "detail": "ar"
+        "detail": "opened /ar"
       },
       {
-        "text": "noura: with an Arabic browser the app opens in Arabic, right to left",
+        "text": "noura: with an English browser Rabaed opens in Arabic, right to left",
         "ok": true,
-        "detail": "/ar dir=rtl"
+        "detail": "opened /ar dir=rtl"
       },
       {
         "text": "noura: the name shows in Arabic",
@@ -4309,13 +4299,24 @@
         "text": "noura: can switch to English",
         "ok": true,
         "detail": "http://lane7.localhost:3700/en"
+      },
+      {
+        "text": "noura: next time (an Arabic browser) opens in English, as switched",
+        "ok": true,
+        "detail": "opened /en"
+      },
+      {
+        "text": "noura: after switching back, a new visit opens in Arabic again",
+        "ok": true,
+        "detail": "opened /ar"
       }
     ],
     "screenshots": [
-      "evidence/I18N-05-1-faisal-english-browser.jpg"
+      "evidence/I18N-05-1-faisal-english-browser-opens-arabic.jpg",
+      "evidence/I18N-05-2-faisal-next-visit-english.jpg"
     ],
-    "notes": "FAIL (I18N-05): steps: sign in as Faisal (or Noura) with the browser language set to English (the harness's demo session; a Playwright context with locale en-US) and open the site root. Expected (Test Case I18N-05; strategy 5.11 'Their language is Arabic from sign-in (locale set at onboarding)'; CLAUDE.md 'Arabic and English from day one'): the app opens in Arabic for an Arabic-first Member. Actual: it opens /en, and Faisal's and Noura's stored language ar only sets the language of their emails; with an Arabic browser it opens /ar. Screenshot: evidence/I18N-05-1-faisal-english-browser.jpg.\nSign-in itself needs a password, so the harness uses each person's demo session. The app opens in the browser's language (the URL decides; next-intl negotiates it): the Member's stored language 'ar' only sets the language of their emails (apps/web/src/lib/browser-locale.ts, data-model member_notification_preference). The plan's expectation 'Arabic from sign-in' holds only for an Arabic browser.",
-    "ranAt": "2026-10-31T02:42:12.219Z"
+    "notes": "Sign-in itself needs a password, so the harness uses each person's demo session, and a fresh browser context stands for a new visit. Rule checked: Rabaed opens in Arabic for every Member, a switch to English is kept on the Member, and the browser's language is ignored (RP-1174, #612). Each Member is switched back to Arabic at the end, so the data is left as found.",
+    "ranAt": "2026-11-01T19:28:04.173Z"
   },
   "VIS-20": {
     "status": "pass",

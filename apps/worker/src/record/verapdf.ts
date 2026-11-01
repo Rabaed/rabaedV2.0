@@ -4,6 +4,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 
 // PDF/A-3 validation with veraPDF (RP-155; ADR 0023), the industry's reference validator, run
@@ -119,7 +120,7 @@ export const VERAPDF_SESSION_SECONDS = 3600;
  * The `docker run` arguments of a session's container (RP-1122). Its name and label let
  * `pnpm lanes:prune` (scripts/verapdf-containers.ts, which reads this name back) find it and
  * remove it once the process `pid` that started it is gone. `hash` names the worktree, as
- * scripts/test-stories-linux.ts's worktreeHash does; `n` is random, so two sessions never share a
+ * scripts/stories-hash.ts's worktreeHash does; `n` is random, so two sessions never share a
  * name (worker threads share one pid, and a killed run's pid may be reused).
  */
 export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string; dir: string; hash: string; pid: number; n: number }): string[] {
@@ -140,7 +141,7 @@ export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string
   ];
 }
 
-/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/test-stories-linux.ts; scripts/verapdf-containers.test.ts checks they agree). */
+/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/stories-hash.ts; scripts/verapdf-containers.test.ts checks they agree). */
 export const veraPdfWorktreeHash = (): string => createHash("sha1").update(resolve(import.meta.dirname, "../../../..")).digest("hex").slice(0, 8);
 
 /**
@@ -183,8 +184,8 @@ export function veraPdfDockerSession(image: string): PdfAValidatorSession {
 
 const env = z.object({
   VERAPDF: z.enum(["cli", "docker"]).optional(),
-  VERAPDF_PATH: z.string().min(1).optional(),
-  VERAPDF_IMAGE: z.string().min(1).optional(),
+  VERAPDF_PATH: optionalSecret,
+  VERAPDF_IMAGE: optionalSecret,
 });
 
 /** Whether `image` names one exact image: a digest, or a version tag that is not `latest`. */

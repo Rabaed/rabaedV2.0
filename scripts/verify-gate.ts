@@ -3,14 +3,15 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ciOverHttp, ciOwnChanges, ciRunningLine, ciVerdict, readCiEvidence, type CiEvidence, type CiReads } from "./ci-green.ts";
+import { ciOverHttp, ciOwnChanges, ciRunningLine, ciVerdict, ratchetGains, readCiEvidence, type CiEvidence, type CiReads, type RatchetGain } from "./ci-green.ts";
 import { onlyCleanCommitsSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEvent } from "./reviewed-required.ts";
 
 // The verify gate (RP-1094): a PR merges only when its body shows `pnpm verify` passed on its head,
 // or on a commit only clean merges of main followed (`onlyCleanCommitsSince`, RP-1017), or the screenshot
 // bot's baseline-only commits (`isBaselineBotCommit`, RP-1103: they voided #458, #459, #476). One rule for
-// `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request and merge_group,
+// `pnpm queue` (scripts/queue-pr.ts) and for the `verify-gate` check on pull_request_target (pull_request until
+// RP-1148 part A's workflow PR; `requiredEvent` reads both) and merge_group,
 // so a merge started from GitHub's button cannot skip it (14 PRs merged without a valid line, retro
 // 2026-10-29).
 //
@@ -24,6 +25,12 @@ import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEve
 // count. A dirty run or one resumed with `--from` (RP-1019) is never stamped. The salt is in this public
 // file, so the stamp catches hand edits and copied lines; it is not a signature against someone who
 // computes one on purpose.
+//
+// The ratchet lists (RP-1194): a stamped line does not let a PR add or loosen an entry in a hidden-asserts or
+// untested-seams list. The PR's lists are compared with those at its merge base with origin/main, which this check
+// reads from main's own copy of the script; `baselineRefusals` says when an entry may still pass. The CI unit run of
+// check-hidden-asserts and check-scenario-seams keeps reading the PR's own lists: it runs the PR's own copy of those
+// checks, in a shallow checkout without origin/main, so a compare there would prove nothing.
 //
 // Run by .github/workflows/verify-gate.yml from the default branch's copy (a PR cannot edit the
 // script that checks it), in a checkout with main's full history; it fetches the PR's head itself.
@@ -112,14 +119,111 @@ export function verifiedOrGreen(body: string, head: string, pr: number, git: Rev
 /** What a passing `verifiedOrGreen` rests on, for the summaries. */
 export const verifiedBy = (verified: Extract<Verified, { ok: true }>) => (verified.via === "stamp" ? `\`pnpm verify\` on ${verified.commit}` : `CI green (run ${verified.runId})`);
 
-/** False only for a PR with the `docs-only` label that changes only docs: it needs no verify run (as `pnpm queue` has it). */
+/**
+ * False only for a PR with the `docs-only` label that changes only docs: it needs no verify run (as `pnpm queue` has it).
+ * The callers also ask for one when `ciOwnChanges` names a change (RP-1196): a ratchet list or a scenario file is a doc,
+ * so without that a docs-only PR could drop a scenario row with no verify at all.
+ */
 export const needsVerify = (labels: string[], changedFiles: string[]): boolean => !(labels.includes(DOCS_ONLY_LABEL) && changedFiles.every(isDoc));
+
+/** GitHub's legacy base role for a user on the repo (`permission` in the collaborator permission answer). */
+export type Permission = "admin" | "write" | "read" | "none";
+
+/**
+ * GitHub's `permission` values (GET /repos/{o}/{r}/collaborators/{login}/permission) that can push to the repo:
+ * `maintain` is reported as `write`, `triage` as `read`. A marker counts only from a user with one of these, the
+ * people who could push or label the PR anyway. The lanes post as the owner's account. `author_association` is not
+ * used: GitHub reports MEMBER only for a public org membership, so CI's token saw the owner as CONTRIBUTOR (RP-1159).
+ * No bot counts: no review bot posts on this repo, and any workflow can comment as github-actions[bot].
+ */
+export const canPush = (permission: Permission): boolean => permission === "admin" || permission === "write";
+
+/** A comment on a PR's conversation, as the markers are read from it. */
+export interface ReviewComment {
+  login: string;
+  /** GitHub's `user.type`: "User" or "Bot". */
+  type: string;
+  body: string;
+}
+
+/** How the gates read a PR's comments and a commenter's permission (GitHub's REST API, or gh). */
+export interface CommentReads {
+  /** Every comment on the PR's conversation. */
+  comments(pr: number): Promise<ReviewComment[]>;
+  /** GitHub's `permission` for `login` on the repo. */
+  permission(login: string): Promise<Permission>;
+}
+
+/**
+ * The marker of Main 6's approval of a baseline entry a PR adds (RP-1194; RP-1148, the owner's approval, is parked). It
+ * is a PR comment, never the body: the body is the lane's to write. It names the head Main 6 read, and the comment
+ * repeats each `Baseline added:` line it approves, so a line added to the body afterwards is not approved. The lane's
+ * own review step cannot write it: scripts/review-post.ts refuses a summary holding it. Every session posts as the
+ * owner's GitHub login, so nothing GitHub records tells Main 6's comment from a lane's: the marker is a visible,
+ * deliberate step that no lane tool takes, not a signature (RP-1148 option 1 would make it one).
+ */
+export const BASELINE_MARKER_START = "<!-- main-6-baseline:";
+export const baselineMarker = (sha: string) => `${BASELINE_MARKER_START} ${sha} -->`;
+
+const BASELINE_MARKER = /<!-- main-6-baseline: ([0-9a-f]{40}) -->/g;
+
+/** The start of the exception line for one entry, in the PR body and in Main 6's comment alike. */
+const exceptionLine = ({ file, entry }: RatchetGain) => `Baseline added: ${file} ${entry}:`;
+
+/** The body's lines, each without its markdown list bullet, quote mark or code span. */
+const bareLines = (text: string) => text.split("\n").map((line) => line.trim().replace(/^(?:[-*>]\s+)+/, "").replace(/^`(.*)`$/, "$1").trim());
+
+/** True when `text` has the exception line for `gain` with a reason after it. */
+const hasException = (text: string, gain: RatchetGain) => bareLines(text).some((line) => line.startsWith(exceptionLine(gain)) && line.slice(exceptionLine(gain).length).trim() !== "");
+
+const baselineMarked = (comment: ReviewComment) => [...comment.body.matchAll(BASELINE_MARKER)].map(([, sha = ""]) => sha);
+
+/** True for a comment holding Main 6's baseline marker. */
+export const hasBaselineMarker = (comment: ReviewComment) => baselineMarked(comment).length > 0;
+
+/**
+ * The users (never a bot) whose comments hold a marker (`marked`) and who can push to the repo (`canPush`); `permission`
+ * is asked once per login. One rule for the review marker (reviewed-add) and Main 6's baseline marker (this check and
+ * `pnpm queue`): sync when `permission` is (gh), a promise when it is async (the REST API).
+ */
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Permission): Set<string>;
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Promise<Permission>): Promise<Set<string>>;
+export function markerWriters(comments: ReviewComment[], marked: (comment: ReviewComment) => boolean, permission: (login: string) => Permission | Promise<Permission>): Set<string> | Promise<Set<string>> {
+  const logins = [...new Set(comments.filter((comment) => comment.type === "User" && marked(comment)).map((comment) => comment.login))];
+  const answers = logins.map((login) => permission(login));
+  const keep = (permissions: Permission[]) => new Set(logins.filter((_, at) => canPush(permissions[at] ?? "none")));
+  return answers.some((answer) => answer instanceof Promise) ? Promise.all(answers).then(keep) : keep(answers as Permission[]);
+}
+
+/** An error's message for a summary line: trimmed, or the thrown value as text. */
+export const errorText = (error: unknown): string => (error instanceof Error ? error.message.trim() : String(error));
+
+/**
+ * Why each ratchet list entry the PR adds or loosens (`gains`, against the merge base with origin/main) is refused
+ * (RP-1194): the lists only shrink, stamped verify or not. An entry passes only as a visible exception: the body's line
+ * `Baseline added: <file> <entry>: <reason>`, and a comment by one of `writers` (never a bot) holding
+ * `baselineMarker(<sha>)` for the head, or a commit only clean merges of main led to it from, with the same line.
+ */
+export function baselineRefusals(gains: RatchetGain[], body: string, comments: ReviewComment[], writers: ReadonlySet<string>, head: string, git: ReviewedGit): string[] {
+  const approvals = comments.filter((comment) => comment.type === "User" && writers.has(comment.login) && baselineMarked(comment).some((sha) => onlyCleanCommitsSince(sha, head, git)));
+  return gains.flatMap((gain) => {
+    if (hasException(body, gain) && approvals.some((comment) => hasException(comment.body, gain))) return [];
+    const why = hasException(body, gain)
+      ? `no comment holding \`${baselineMarker("<head sha>")}\` for the head ${head} by a user who can push repeats its \`${exceptionLine(gain)}\` line`
+      : `its body has no \`${exceptionLine(gain)} <reason>\` line`;
+    return [`${gain.file} gains \`${gain.entry}\` against origin/main, and the hidden-asserts and untested-seams lists only shrink (RP-1194): ${why}`];
+  });
+}
+
+/** The fix both the check and `pnpm queue` print for `baselineRefusals`. */
+export const baselineFix = (pr: number) =>
+  `Fix: fix the test so the entry is not needed, and drop it from the list; or, for a deliberate entry, put \`Baseline added: <file> <entry>: <reason>\` in PR #${pr}'s body and ask Main 6 to review it and comment \`${baselineMarker("<head sha>")}\` with the same line (then edit the body, or re-run the check)`;
 
 /** The fix both the check and `pnpm queue` print. */
 export const verifyFix = (pr: number, head: string) =>
   `Fix: wait for CI to pass on ${head} (a PR that changes CI's own files cannot use it), or run \`pnpm verify\` on ${head} (a clean checkout of it) and put its last line, stamp included, in the PR body: \`pnpm verify --pr ${pr}\` writes it there (or \`gh pr edit ${pr} --body-file <file>\`)`;
 
-export interface GateSeam extends ReviewedGit, CiReads {
+export interface GateSeam extends ReviewedGit, CiReads, CommentReads {
   /** The PR now: its body, head and labels. */
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[] }>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
@@ -143,46 +247,89 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
   // On a PR the check answers for the event's head; in the queue the PR's head is pinned.
   const head = event.kind === "pull_request" ? event.headSha : pull.headSha;
   let ownChanges: string[];
+  let gains: RatchetGain[];
+  let changed: string[];
   try {
     seam.fetchPull(pr);
     // Against main (the queue's base_ref), never merge_group.base_sha: that includes the entries ahead.
-    const changed = seam.changedFiles(head);
-    if (!needsVerify(pull.labels, changed)) return { ok: true, summary: `PR #${pr} has the '${DOCS_ONLY_LABEL}' label and changes only docs: no verify run needed.` };
-    ownChanges = ciOwnChanges(changed, (file) => seam.packageJsonVersions(head, file));
+    changed = seam.changedFiles(head);
+    const versions = (file: string) => seam.packageJsonVersions(head, file);
+    gains = ratchetGains(changed, versions);
+    ownChanges = ciOwnChanges(changed, versions);
   } catch (error) {
-    return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this check.` };
+    return { ok: false, summary: `PR #${pr}: could not read ${head}'s changes: ${errorText(error)}. Re-run this check.` };
   }
+  // Before the docs-only pass and the verify: the lists are docs, and a stamped line does not excuse a new entry.
+  if (gains.length > 0) {
+    let refusals: string[];
+    try {
+      const comments = await seam.comments(pr);
+      refusals = baselineRefusals(gains, pull.body, comments, await markerWriters(comments, hasBaselineMarker, (login) => seam.permission(login)), head, seam);
+    } catch (error) {
+      return { ok: false, summary: `PR #${pr}: could not read its comments for the baseline exceptions: ${errorText(error)}. Re-run this check.` };
+    }
+    if (refusals.length > 0) return { ok: false, summary: `PR #${pr}: ${refusals.join("; ")}. ${baselineFix(pr)}.` };
+  }
+  if (!needsVerify(pull.labels, changed) && ownChanges.length === 0) return { ok: true, summary: `PR #${pr} has the '${DOCS_ONLY_LABEL}' label and changes only docs: no verify run needed.` };
   const gate = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   if (gate.ok && gate.via === "ci") return { ok: true, summary: `PR #${pr}: CI passed on its head ${head} (run ${gate.runId}), and it changes none of CI's own files: passes.` };
   if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main and screenshot-bot baseline commits led to the head ${head} from`}: passes.` };
   return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body, or CI finishing, runs this check again.` };
 }
 
-export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Pick<GateSeam, "pull"> {
+const get = (repository: string, token: string, fetcher: typeof fetch) => async (path: string, allow404 = false): Promise<unknown> => {
+  const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+  });
+  if (allow404 && response.status === 404) return undefined;
+  if (!response.ok) throw new Error(`GitHub GET ${path} answered ${response.status}`);
+  return response.json();
+};
+
+const COMMENTS_PER_PAGE = 100;
+
+/** `CommentReads` over GitHub's REST API (reviewed-add reads them the same way); needs only the token's read access. */
+export function commentsOverHttp(repository: string, token: string, fetcher: typeof fetch = fetch): CommentReads {
+  const read = get(repository, token, fetcher);
   return {
-    async pull(pr) {
-      const response = await fetcher(`https://api.github.com/repos/${repository}/pulls/${pr}`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-      });
-      if (!response.ok) throw new Error(`GitHub GET pulls/${pr} answered ${response.status}`);
-      const pull = (await response.json()) as { body: string | null; head: { sha: string }; labels: { name: string }[] };
-      return { body: pull.body ?? "", headSha: pull.head.sha, labels: pull.labels.map((label) => label.name) };
+    async comments(pr) {
+      const all: ReviewComment[] = [];
+      // 30 pages of 100: far more comments than any PR here has.
+      for (let page = 1; page <= 30; page++) {
+        const batch = (await read(`issues/${pr}/comments?per_page=${COMMENTS_PER_PAGE}&page=${page}`)) as {
+          body: string | null;
+          user: { login: string; type: string } | null;
+        }[];
+        all.push(...batch.map((comment) => ({ login: comment.user?.login ?? "", type: comment.user?.type ?? "", body: comment.body ?? "" })));
+        if (batch.length < COMMENTS_PER_PAGE) break;
+      }
+      return all;
+    },
+    async permission(login) {
+      // 404: no such user (a deleted account's ghost), so no access. Needs only the token's metadata read.
+      const found = (await read(`collaborators/${encodeURIComponent(login)}/permission`, true)) as { permission: Permission } | undefined;
+      return found?.permission ?? "none";
     },
   };
 }
 
-/** A file's text at the merge base of origin/main and `commit` (what the three-dot diff diffs against) and at `commit`; undefined where it does not exist. */
-export function packageJsonVersionsVia(cwd: string, spawn: typeof spawnSync): (commit: string, file: string) => { before: string | undefined; after: string | undefined } {
-  const run = (args: string[]) => spawn("git", args, { cwd, encoding: "utf8" });
-  return (commit, file) => {
-    const show = (ref: string) => {
-      const done = run(["show", `${ref}:${file}`]);
-      return done.status === 0 ? (done.stdout ?? "") : undefined;
-    };
-    const base = run(["merge-base", "origin/main", commit]);
-    return { before: base.status === 0 ? show((base.stdout ?? "").trim()) : undefined, after: show(commit) };
+export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Pick<GateSeam, "pull" | keyof CommentReads> {
+  const read = get(repository, token, fetcher);
+  return {
+    async pull(pr) {
+      const pull = (await read(`pulls/${pr}`)) as { body: string | null; head: { sha: string }; labels: { name: string }[] };
+      return { body: pull.body ?? "", headSha: pull.head.sha, labels: pull.labels.map((label) => label.name) };
+    },
+    ...commentsOverHttp(repository, token, fetcher),
   };
 }
+
+// The fail-closed file reads live in git-files.ts (node built-ins only, so the pre-push hook can load them).
+export { fileAtVia, fileVersionsVia, type FileVersions } from "./git-files.ts";
+import { fileVersionsVia } from "./git-files.ts";
+
+/** The package.json reads of the gates: `fileVersionsVia`, under the name the seams use. */
+export const packageJsonVersionsVia = fileVersionsVia;
 
 export function realGateGit(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): Omit<GateSeam, "pull" | keyof CiReads> {
   const must = (args: string[]) => {

@@ -2,12 +2,27 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
-import { realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
+import { cleanWalk, isMergeOfMain, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
-import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
-import { needsVerify, packageJsonVersionsVia, VERIFY_CHECK, verifiedOrGreen, verifyFix } from "./verify-gate.ts";
+import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, ratchetGains, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
+import {
+  baselineFix,
+  baselineRefusals,
+  errorText,
+  fileAtVia,
+  hasBaselineMarker,
+  markerWriters,
+  needsVerify,
+  packageJsonVersionsVia,
+  VERIFY_CHECK,
+  verifiedCommits,
+  verifiedOrGreen,
+  verifyFix,
+  type Permission,
+  type ReviewComment,
+} from "./verify-gate.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -36,6 +51,8 @@ import { isAncestor } from "./worktrees.ts";
 // Or, instead of the line, CI green on the exact head (RP-1190, `verifiedOrGreen`, scripts/ci-green.ts), for a
 // PR that changes none of CI's own files. While CI runs it refuses with "CI still running on <sha>: N jobs
 // left"; --wait waits for CI instead, and for the verify-gate check that re-runs once CI is green.
+// A PR whose hidden-asserts or untested-seams list gains an entry against origin/main is refused whatever its
+// labels or verify, unless the entry is a visible exception with Main 6's marker (RP-1194, `baselineRefusals`).
 // Once the PR is queued (RP-1170), it stops the lane's stack: the containers of the worktree on the PR's branch,
 // with `docker stop`, so its volumes stay (queue-stack-stop.ts says when it leaves one running). --keep-stack
 // skips that; a stop Docker refuses is a warning, never a failed queue.
@@ -74,6 +91,10 @@ export interface QueueSeam extends ReviewedGit {
   labels(pr: number): string[];
   /** The PR's body (`gh pr view <pr> --json body`); "" when it has none. */
   body(pr: number): string;
+  /** Every comment on the PR's conversation (`gh api repos/{owner}/{repo}/issues/<pr>/comments`), for Main 6's baseline marker (RP-1194). */
+  comments(pr: number): ReviewComment[];
+  /** GitHub's `permission` for `login` on the repo (`gh api repos/{owner}/{repo}/collaborators/<login>/permission`). */
+  permission(login: string): Permission;
   /** True when `.github/workflows/reviewed-label.yml` exists on origin/main (`git cat-file -e`). */
   labelWorkflowOnMain(): boolean;
   /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
@@ -123,7 +144,7 @@ export function conflictedFiles(output: string): string[] {
  */
 type Prepared =
   | { kind: "refused"; result: QueueResult }
-  | { kind: "ready"; id: string; head: string; warnings: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
+  | { kind: "ready"; id: string; head: string; warnings: string[]; first: string[]; labelRunPending: boolean; verify: VerifyInputs | undefined; ciPending: boolean };
 
 /** What the verify gate read in `prepare`, kept for --wait to read CI again: undefined when no verify is needed or the stamped line passed. */
 interface VerifyInputs {
@@ -201,16 +222,58 @@ function verifyState(pr: number, head: string, seam: QueueSeam, inputs: VerifyIn
   return { state: "refused", result: fail(`PR #${pr}: ${gate.reason}.`, `${verifyFix(pr, head)}, then run \`pnpm queue ${pr}\` again.`) };
 }
 
+/** `read`'s answer, or the refusal naming the git error that stopped it: a changed file git cannot read refuses (RP-1196). */
+function readOrRefuse<T>(pr: number, head: string, read: () => T): { ok: true; value: T } | { ok: false; result: QueueResult } {
+  try {
+    return { ok: true, value: read() };
+  } catch (error) {
+    return {
+      ok: false,
+      result: fail(
+        `PR #${pr}: could not read ${head}'s changed files: ${errorText(error)}`,
+        "Fix: run `git fetch origin main` and check that this clone has the PR's head and its merge base with origin/main (not shallow), then run `pnpm queue` again.",
+      ),
+    };
+  }
+}
+
 /** The ruleset's required checks and the head's CI runs, any gh error as evidence the gate refuses. */
 const ciEvidence = (seam: QueueSeam, head: string) => ciEvidenceOf(() => ({ required: seam.requiredChecks(), runs: seam.ciRuns(head) }));
 
 /** The refusals, in order; on success, what to enqueue. `waitForLabelRun` (--wait) lets a reviewed-label run and a CI run still going through. */
 function prepare(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): Prepared {
-  const prepared = refusals(pr, seam, options);
-  return "lines" in prepared ? refused(prepared) : prepared;
+  // Lines that go before anything else `pnpm queue` prints, a refusal included (RP-1113).
+  const first: string[] = [];
+  const prepared = refusals(pr, seam, options, first);
+  return "lines" in prepared ? refused({ ...prepared, lines: [...first, ...prepared.lines] }) : prepared;
 }
 
-function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }): QueueResult | Prepared {
+/**
+ * RP-1113: the merge of main that voids the body's stamped verify lines, which until now showed only as the verify
+ * refusal, often hours after the conflict merge. The verify gate's own walk (`cleanWalk`, the one
+ * `onlyCleanCommitsSince` takes) from `head` back to each stamped commit (`verifiedCommits`) stops at it, because its
+ * tree is not git's clean merge of its parents. Undefined when a line still counts, when there is none, or when the
+ * walk stops at anything but a merge of main (an ordinary commit after the run, or past the walk's limit: the verify
+ * refusal says that).
+ */
+export function uncleanMergeSince(body: string, head: string, git: ReviewedGit): { merge: string; verified: string[] } | undefined {
+  const verified = verifiedCommits(body);
+  const walks = verified.map((commit) => cleanWalk(commit, head, git));
+  if (walks.length === 0 || walks.some((walk) => walk.clean)) return undefined;
+  // Every walk starts at the head along the same first parents, so each stops at the same commit.
+  const [walk] = walks;
+  const merge = walk && !walk.clean ? walk.stoppedAt : undefined;
+  return merge !== undefined && isMergeOfMain(merge, git) ? { merge, verified } : undefined;
+}
+
+function uncleanMergeLine(pr: number, head: string, body: string, git: ReviewedGit): string | undefined {
+  const found = uncleanMergeSince(body, head, git);
+  if (!found) return undefined;
+  const lines = found.verified.length === 1 ? `the stamped verify line (on ${found.verified[0]}) no longer counts` : `no stamped verify line (on ${found.verified.join(", ")}) counts any more`;
+  return `Warning: ${found.merge} is a merge of main that is not clean (its tree is not git's own merge of its parents: a conflict resolution or an edit), so ${lines} for the head ${head}. Run \`pnpm verify --pr ${pr}\` again on the head.`;
+}
+
+function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }, first: string[]): QueueResult | Prepared {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
@@ -222,10 +285,25 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
       "Fix: wait a moment for GitHub to settle, then run `pnpm queue` again.",
     );
   }
-  const warnings: string[] = [];
   let labelRunPending = false;
   const changed = seam.changedFiles(head);
   const labels = seam.labels(pr);
+  // Read once: the warning, the baseline exception and the verify gate all judge the same body.
+  const body = seam.body(pr);
+  // A docs-only PR needs no verify run, so a merge that voids its line is no news (RP-1113).
+  const unclean = needsVerify(labels, changed) ? uncleanMergeLine(pr, head, body, seam) : undefined;
+  if (unclean) first.push(unclean);
+  const warnings: string[] = [...first];
+  // The ratchet lists only shrink against main, whatever the labels or the verify (RP-1194): the verify-gate check's rule.
+  const versions = (file: string) => seam.packageJsonVersions(head, file);
+  const gains = readOrRefuse(pr, head, () => ratchetGains(changed, versions));
+  if (!gains.ok) return gains.result;
+  if (gains.value.length > 0) {
+    const comments = seam.comments(pr);
+    const writers = markerWriters(comments, hasBaselineMarker, (login) => seam.permission(login));
+    const baseline = baselineRefusals(gains.value, body, comments, writers, head, seam);
+    if (baseline.length > 0) return fail(`PR #${pr}: ${baseline.join("; ")}.`, `${baselineFix(pr)}, then run \`pnpm queue ${pr}\` again.`);
+  }
   // The same rule as the main ruleset's reviewed-required check (RP-606), so what this queues the queue keeps.
   const gate = reviewGate(labels, changed);
   if (!gate.ok) {
@@ -263,8 +341,11 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   // A docs-only PR needs no verify run, whether or not it also carries `reviewed` (reviewGate then answers via reviewed).
   let verify: VerifyInputs | undefined;
   let ciPending = false;
-  if (needsVerify(labels, changed)) {
-    const inputs = { body: seam.body(pr), ownChanges: ciOwnChanges(changed, (file) => seam.packageJsonVersions(head, file)) };
+  const own = readOrRefuse(pr, head, () => ciOwnChanges(changed, versions));
+  if (!own.ok) return own.result;
+  // A docs-only PR that drops a scenario row or grows a list still needs one (RP-1196), as in the verify-gate check.
+  if (needsVerify(labels, changed) || own.value.length > 0) {
+    const inputs = { body, ownChanges: own.value };
     const state = verifyState(pr, head, seam, inputs, ciEvidence(seam, head));
     if (state.state === "refused") return state.result;
     if (state.state === "running" && !options.waitForLabelRun) return state.result;
@@ -279,7 +360,9 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   }
 
   // The same rule as `pnpm verify` and the pre-push hook (RP-993), so a mix shows before the push.
-  const shared = sharedFilesMix(changed, (file) => seam.packageJsonVersions(head, file));
+  const mix = readOrRefuse(pr, head, () => sharedFilesMix(changed, versions));
+  if (!mix.ok) return mix.result;
+  const shared = mix.value;
   if (shared) {
     return fail(`PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`, ...shared, "Split it out, then run `pnpm queue` again.");
   }
@@ -319,7 +402,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
     onMerge = seam.mergeChecks(merge.output, head);
   } catch (error) {
     return fail(
-      `PR #${pr}: could not run main's checks on the merge of the PR and main: ${error instanceof Error ? error.message.trim() : String(error)}`,
+      `PR #${pr}: could not run main's checks on the merge of the PR and main: ${errorText(error)}`,
       "Fix: check that git can add a worktree in the temp folder (disk space, long paths: `git config core.longpaths true`), then run `pnpm queue` again.",
     );
   }
@@ -332,7 +415,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   }
   if (onMerge.skipped.length > 0) warnings.push(`Warning: not run on the merge (the file is not there yet): ${onMerge.skipped.join(", ")}.`);
 
-  return { kind: "ready", id: pull.id, head, warnings, labelRunPending, verify, ciPending };
+  return { kind: "ready", id: pull.id, head, warnings, first: [...first], labelRunPending, verify, ciPending };
 }
 
 const POLL_MS = 60_000;
@@ -422,9 +505,16 @@ const realSleep = (ms: number) => new Promise<void>((resolveSleep) => setTimeout
  * Fails only when a required check fails (naming it) or never reports on the head.
  */
 export async function queuePrWhenChecksPass(pr: number, seam: QueueSeam, options: WaitOptions = {}): Promise<QueueResult> {
-  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const prepared = prepare(pr, seam, { ...options, waitForLabelRun: true });
   if (prepared.kind === "refused") return prepared.result;
+  // RP-1113: the lines that go first are logged before the wait's progress lines, and lead any refusal while waiting.
+  for (const line of prepared.first) options.log?.(line);
+  const result = await waitThenEnqueue(pr, seam, { ...prepared, warnings: prepared.warnings.filter((line) => !prepared.first.includes(line)) }, options);
+  return result.ok || prepared.first.length === 0 ? result : { ...result, lines: [...prepared.first, ...result.lines] };
+}
+
+async function waitThenEnqueue(pr: number, seam: QueueSeam, prepared: Extract<Prepared, { kind: "ready" }>, options: WaitOptions): Promise<QueueResult> {
+  const { sleep = realSleep, now = Date.now, log = () => {} } = options;
   const { head } = prepared;
   const required = seam.requiredChecks();
   const started = now();
@@ -579,7 +669,15 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     },
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
     body: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "body"])) as { body: string | null }).body ?? "",
-    labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
+    comments: (pr) =>
+      must("gh", ["api", "--paginate", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`, "--jq", '.[] | {login: (.user.login // ""), type: (.user.type // ""), body: (.body // "")}'])
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as ReviewComment),
+    // Any gh error throws: a permission it cannot read never counts as a writer's.
+    permission: (login) => must("gh", ["api", `repos/{owner}/{repo}/collaborators/${encodeURIComponent(login)}/permission`, "--jq", ".permission"]).trim() as Permission,
+    // Absent only when origin/main lacks it; a git error throws rather than skip the label check (RP-1196).
+    labelWorkflowOnMain: () => fileAtVia(cwd, spawn)("origin/main", ".github/workflows/reviewed-label.yml") !== undefined,
     labelRuns: (commit) => JSON.parse(must("gh", ["run", "list", "--workflow", "reviewed-label.yml", "--commit", commit, "--json", "status,conclusion"])) as { status: string; conclusion: string }[],
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
     removalReason: (id, since) => {

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-green.ts";
 import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
 import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
-import { stampLine } from "./verify-gate.ts";
+import { baselineMarker, stampLine } from "./verify-gate.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
@@ -39,6 +39,8 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     ciRuns: () => [],
     checkRuns: () => [],
     commitStatuses: () => [],
+    comments: () => [],
+    permission: () => "none",
     mergeChecks: () => ({ ok: true, skipped: [] }),
     enqueue: (id, head) => {
       enqueued.push([id, head]);
@@ -331,6 +333,72 @@ describe("queuePr", () => {
       expect(enqueued).toEqual([]);
     });
 
+    // RP-1113: a merge of main that is not git's own clean merge breaks the walk, so a verify line from before it no
+    // longer counts. Say so first, naming the merge, instead of leaving it to the verify refusal hours later.
+    describe("a merge of main that is not clean (RP-1113)", () => {
+      const UNCLEAN = "is a merge of main that is not clean";
+      // `tree` answers treeX for the commits in `edited`: their tree differs from the clean merge (tree1).
+      const history = (graph: Record<string, string[]>, edited: string[], verified: string) =>
+        fakeSeam({
+          body: verifiedOn(verified),
+          parents: (commit) => graph[commit] ?? [],
+          onMain: (commit) => commit.startsWith("m"),
+          tree: (commit) => (edited.includes(commit) ? "treeX" : "tree1"),
+          mergedTree: () => "tree1",
+        });
+
+      it("gives no warning when the merges after the verify line are clean", () => {
+        const { seam } = history({ abc1234: ["beef999", "m2"] }, [], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(true);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("names a conflict-resolved merge after the verify line, first, and says verify must run again on the head", () => {
+        const { seam, enqueued } = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        const [first] = result.lines;
+        expect(first).toContain(`abc1234 ${UNCLEAN}`);
+        expect(first).toContain("beef999");
+        expect(first).toContain("no longer counts");
+        expect(first).toContain("`pnpm verify --pr 149`");
+        expect(enqueued).toEqual([]);
+      });
+
+      it("names the newest such merge, under a clean one on top of it", () => {
+        // abc1234 cleanly merges m3 into cafe001; cafe001 merged m2 into the verified beef999 with an edit.
+        const { seam } = history({ abc1234: ["cafe001", "m3"], cafe001: ["beef999", "m2"] }, ["cafe001"], "beef999");
+        const [first] = queuePr(149, seam).lines;
+        expect(first).toContain(`cafe001 ${UNCLEAN}`);
+        expect(first).not.toContain("abc1234 is a merge");
+      });
+
+      it("gives no warning for a verify line on that merge, or after it", () => {
+        const on = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "abc1234");
+        expect(queuePr(149, on.seam).lines.join("\n")).not.toContain(UNCLEAN);
+        // Verified on cafe001, the merge with an edit; abc1234 merges m3 in cleanly after it.
+        const after = history({ abc1234: ["cafe001", "m3"], cafe001: ["beef999", "m2"] }, ["cafe001"], "cafe001");
+        const result = queuePr(149, after.seam);
+        expect(result.ok).toBe(true);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("gives no warning on a docs-only PR, which needs no verify", () => {
+        const { seam } = history({ abc1234: ["beef999", "m2"] }, ["abc1234"], "beef999");
+        const docs = { ...seam, labels: () => ["docs-only"], changedFiles: () => ["docs/adr/0001-x.md"] };
+        expect(queuePr(149, docs).lines.join("\n")).not.toContain(UNCLEAN);
+      });
+
+      it("gives no warning when the walk stops at a commit of the branch's own, not a merge", () => {
+        // n1 is an ordinary commit after the verified one: the verify refusal says enough.
+        const { seam } = history({ abc1234: ["n1", "m2"], n1: ["beef999"] }, [], "beef999");
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+      });
+    });
+
     it("queues when any of several verify lines names the head (a later run after fixes)", () => {
       const { seam } = fakeSeam({ body: () => `${stampLine("pnpm verify passed on 5356b95: lint.")}\n\n\`${stampLine("pnpm verify passed on abc1234: lint, typecheck.")}\`` });
       expect(queuePr(149, seam).ok).toBe(true);
@@ -358,7 +426,89 @@ describe("queuePr", () => {
     });
   });
 
+  describe("the ratchet lists against origin/main (RP-1194); the rule is verify-gate.ts's, here only that the queue applies it", () => {
+    const HEAD = "e".repeat(40);
+    const list = "docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt";
+    const entry = "empty links > hides it :: expect(rows).toEqual([]);";
+    const exception = `Baseline added: ${list} ${entry}: made by a trigger the test cannot see`;
+    const onHead = (before: string | undefined, after: string | undefined, labels = ["reviewed"]): Partial<QueueSeam> => ({
+      fetchPull: () => HEAD,
+      head: () => HEAD,
+      pullRequest: () => ({ id: "PR_node", headRefOid: HEAD, headRefName: "feature" }),
+      labels: () => labels,
+      changedFiles: () => [list],
+      packageJsonVersions: () => ({ before, after }),
+    });
+
+    it("refuses an entry the PR adds, stamped line or docs-only label alike, naming the file and entry", () => {
+      for (const labels of [["reviewed"], ["docs-only"]]) {
+        const { seam, enqueued } = fakeSeam(onHead("", `${entry}\n`, labels));
+        const result = queuePr(149, seam, { noReview: labels.includes("docs-only") });
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).toContain(`${list} gains \`${entry}\``);
+        expect(enqueued).toEqual([]);
+      }
+    });
+
+    it("queues a PR whose list only loses an entry", () => {
+      const { seam, enqueued } = fakeSeam(onHead(`${entry}\ntext b :: y\n`, "text b :: y\n"));
+      expect(queuePr(149, seam).ok).toBe(true);
+      expect(enqueued).toHaveLength(1);
+    });
+
+    it("refuses when main's list cannot be read", () => {
+      const { seam, enqueued } = fakeSeam({
+        ...onHead(undefined, undefined),
+        packageJsonVersions: () => {
+          throw new Error("git merge-base origin/main failed: fatal: Not a valid object name origin/main");
+        },
+      });
+      const result = queuePr(149, seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain("Not a valid object name origin/main");
+      expect(enqueued).toEqual([]);
+    });
+
+    it("queues a deliberate entry with the body's line and Main 6's marker; refuses the line alone", () => {
+      const body = () => `${stampLine(`pnpm verify passed on ${HEAD.slice(0, 7)}: lint, typecheck, unit.`)}\n\n${exception}\n`;
+      const marker = { login: "mmhaleess90", type: "User", body: `${baselineMarker(HEAD)}\n${exception}\n` };
+      const approved = fakeSeam({ ...onHead("", `${entry}\n`), body, comments: () => [marker], permission: () => "admin" });
+      expect(queuePr(149, approved.seam).ok).toBe(true);
+      const alone = fakeSeam({ ...onHead("", `${entry}\n`), body, comments: () => [], permission: () => "admin" });
+      const result = queuePr(149, alone.seam);
+      expect(result.ok).toBe(false);
+      expect(result.lines.join("\n")).toContain(baselineMarker("<head sha>"));
+    });
+  });
+
+  it("needs the verify line for a docs-only PR that drops a scenario row (RP-1196)", () => {
+    const table = (...ids: string[]) => `# RP-412 scenarios\n\n| # | Scenario | Who | Expected |\n|---|---|---|---|\n${ids.map((id) => `| ${id} | s | w | e |\n`).join("")}`;
+    const { seam, enqueued } = fakeSeam({
+      labels: () => ["docs-only"],
+      changedFiles: () => ["docs/visibility/scenarios/RP-412.md"],
+      packageJsonVersions: () => ({ before: table("RP-412-1", "RP-412-2"), after: table("RP-412-1") }),
+      body: () => "",
+    });
+    const result = queuePr(149, seam, { noReview: true });
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("loses scenario RP-412-2");
+    expect(enqueued).toEqual([]);
+  });
+
   // RP-1190: CI green on the exact head counts as the verify; the rule is scripts/ci-green.ts's, here only that the queue applies it.
+  it("refuses, naming why, when git cannot read a changed package.json, and queues nothing (RP-1196)", () => {
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["apps/admin/package.json"],
+      packageJsonVersions: () => {
+        throw new Error("git ls-tree failed: fatal: Not a valid object name abc1234");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("Not a valid object name abc1234");
+    expect(enqueued).toEqual([]);
+  });
+
   describe("CI green instead of the verify line (RP-1190)", () => {
     const ciRun = (status: string, conclusion: string | null, overrides: Partial<CiRun> = {}): CiRun => ({
       id: 88,
@@ -683,6 +833,50 @@ describe("queuePrWhenChecksPass", () => {
   const done = (name: string, conclusion = "success"): Run => ({ name, status: "completed", conclusion });
   const going = (name: string): Run => ({ name, status: "in_progress", conclusion: "" });
 
+  // RP-1113: the stamped line on beef999 is voided by abc1234, a merge of main with an edit; CI green on the head lets it wait.
+  describe("a merge of main that is not clean (RP-1113)", () => {
+    const UNCLEAN = "abc1234 is a merge of main that is not clean";
+    const greenCi: CiRun = {
+      id: 7,
+      headSha: "abc1234",
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      status: "completed",
+      conclusion: "success",
+      repo: "Rabaed/rabaedV2.0",
+      headRepo: "Rabaed/rabaedV2.0",
+      pulls: [{ number: 149, baseRef: "main" }],
+      jobs: [{ name: "ci", status: "completed", conclusion: "success" }],
+    };
+    const unclean = (polls: Run[][]) =>
+      checking(polls, {
+        body: () => stampLine("pnpm verify passed on beef999: lint, typecheck, unit."),
+        parents: (commit) => (commit === "abc1234" ? ["beef999", "m2"] : []),
+        onMain: (commit) => commit.startsWith("m"),
+        tree: (commit) => (commit === "abc1234" ? "treeX" : "tree1"),
+        mergedTree: () => "tree1",
+        ciRuns: () => [greenCi],
+      });
+
+    it("logs the warning before any wait line, and does not repeat it in the summary", async () => {
+      const c = unclean([[going("ci")], [done("ci"), done("reviewed-required")]]);
+      const logged: string[] = [];
+      const result = await queuePrWhenChecksPass(149, c.seam, { ...c.options, log: (line) => logged.push(line) });
+      expect(result.ok).toBe(true);
+      expect(logged[0]).toContain(UNCLEAN);
+      expect(logged.slice(1).join("\n")).not.toContain(UNCLEAN);
+      expect(result.lines.join("\n")).not.toContain(UNCLEAN);
+    });
+
+    it("puts it first on a refusal while waiting", async () => {
+      const c = unclean([[done("ci", "failure"), done("reviewed-required")]]);
+      const result = await queuePrWhenChecksPass(149, c.seam, c.options);
+      expect(result.ok).toBe(false);
+      expect(result.lines[0]).toContain(UNCLEAN);
+      expect(result.lines.join("\n")).toContain("required check(s) failed");
+    });
+  });
+
   it("waits while a required check is pending or not reported yet, then queues the PR's head", async () => {
     const c = checking([[], [going("ci")], [done("ci"), going("reviewed-required")], [done("ci"), done("reviewed-required", "skipped"), going("unrequired")]]);
     const result = await queuePrWhenChecksPass(149, c.seam, c.options);
@@ -962,18 +1156,25 @@ describe("realSeam", () => {
     expect(calls.every((call) => call.command === "gh" && call.args.slice(0, 2).join(" ") === "api graphql" && call.args.includes("id=PR_node"))).toBe(true);
   });
 
-  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where git show fails", () => {
+  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where the path is not there", () => {
     const { calls, seam } = recorded((_command, args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base777\n" };
-      if (args[1] === "base777:apps/admin/package.json") return { status: 0, stdout: "OLD" };
-      return { status: 128, stderr: "fatal: path does not exist" };
+      if (args[0] === "ls-tree") return { status: 0, stdout: args[3] === "base777" ? "100644 blob o1\tapps/admin/package.json\0" : "" };
+      if (args[0] === "cat-file") return { status: 0, stdout: "OLD" };
+      return { status: 1 };
     });
     expect(seam.packageJsonVersions("abc1234", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
     expect(calls.map((call) => [call.command, ...call.args])).toEqual([
       ["git", "merge-base", "origin/main", "abc1234"],
-      ["git", "show", "base777:apps/admin/package.json"],
-      ["git", "show", "abc1234:apps/admin/package.json"],
+      ["git", "ls-tree", "-z", "--full-tree", "base777", "--", "apps/admin/package.json"],
+      ["git", "cat-file", "blob", "o1"],
+      ["git", "ls-tree", "-z", "--full-tree", "abc1234", "--", "apps/admin/package.json"],
     ]);
+  });
+
+  it("throws, never reading the file as deleted, when git cannot read the PR's commit (RP-1196)", () => {
+    const { seam } = recorded((_command, args) => (args[0] === "merge-base" ? { status: 0, stdout: "base777\n" } : { status: 128, stderr: "fatal: Not a valid object name abc1234" }));
+    expect(() => seam.packageJsonVersions("abc1234", "apps/admin/package.json")).toThrow("Not a valid object name abc1234");
   });
 
   it("runs the migration checks for the PR's commit against origin/main with node", () => {
@@ -1030,13 +1231,23 @@ describe("realSeam", () => {
   });
 
   it("lists the reviewed-label runs for a commit through gh run list, and checks the workflow file on origin/main", () => {
-    const { calls, seam } = recorded((command) => (command === "gh" ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' } : { status: 0 }));
+    const { calls, seam } = recorded((command, args) =>
+      command === "gh"
+        ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' }
+        : { status: 0, stdout: args[0] === "ls-tree" ? "100644 blob o1\t.github/workflows/reviewed-label.yml\0" : "on: pull_request\n" },
+    );
     expect(seam.labelRuns("abc1234")).toEqual([{ status: "completed", conclusion: "success" }]);
     expect(seam.labelWorkflowOnMain()).toBe(true);
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["gh", "run", "list", "--workflow", "reviewed-label.yml", "--commit", "abc1234", "--json", "status,conclusion"],
-      ["git", "cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"],
+      ["git", "ls-tree", "-z", "--full-tree", "origin/main", "--", ".github/workflows/reviewed-label.yml"],
+      ["git", "cat-file", "blob", "o1"],
     ]);
+  });
+
+  it("says the workflow is not on main only when origin/main lacks it, and throws when git cannot read origin/main (RP-1196)", () => {
+    expect(recorded(() => ({ status: 0, stdout: "" })).seam.labelWorkflowOnMain()).toBe(false);
+    expect(() => recorded(() => ({ status: 128, stderr: "fatal: Not a valid object name origin/main" })).seam.labelWorkflowOnMain()).toThrow("Not a valid object name origin/main");
   });
 
   it("enqueues through gh api graphql, passing the PR id and the head to pin", () => {

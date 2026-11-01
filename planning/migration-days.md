@@ -174,3 +174,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271122 | RP-955 | 31 | close_shares_handed_over |
 | 20271125 | RP-1042 | 32 | record_test_key (20271123 is RP-1140 #548) |
 | 20271126 | RP-1192 | 12 | step_hidden_outside_holder |
+| 20271127 | RP-1203 | 12 | event_step_reached_holder |

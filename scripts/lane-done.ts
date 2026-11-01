@@ -1,5 +1,11 @@
-// `pnpm lane:done <pr>` (RP-1170): the whole clean-up of a finished lane in one command, run from
+// `pnpm lane:done 580` (RP-1170): the whole clean-up of a finished lane in one command, run from
 // another worktree (the Main's or the Orchestrator's) once the PR has merged and its session is archived.
+//   0. With no number (RP-1198): in the lane's own worktree, the current branch's merged PR (`gh pr list
+//      --head`); lane:done then removes what it safely can (its subagent worktrees), keeps this worktree
+//      and its stack, and ends with the exact `pnpm lane:done 580 --yes` to run from the Main's worktree.
+//      Elsewhere (no merged PR on this branch) it lists every merged PR that still has a worktree or a lane
+//      stack in this clone, and the lane stacks whose worktree is gone, each with its command
+//      (lane-done-plan.ts startWithoutNumber, mergedLeftovers), and removes nothing.
 //   1. Checks the PR merged, before anything else (gh pr view); then refuses a shallow clone, fetches
 //      origin (`git fetch --prune origin`) and checks the PR's head is in origin/main.
 //   2. Finds the lane's worktree (on the PR's branch, or a detached HEAD at its head) and the subagent
@@ -7,29 +13,46 @@
 //      (lane-done-plan.ts: the safety rules are there, with their tests). Every one kept is listed at once.
 //   3. Removes each, only under .claude/worktrees/ and only past `pnpm worktree:remove`'s own refusals
 //      (worktree-removal.ts removalRefusal), with its long-path steps (core.longpaths, `rd /s /q \\?\…`,
-//      `git worktree prune`), then its branch: the lane's when its tip is in origin/main; a subagent's when
+//      `git worktree prune`), then its branch: the lane's when its tip is in origin/main or its only commits
+//      beyond it are merges of it (RP-1198: those are neither ahead nor unpushed either); a subagent's when
 //      every file it changed matches origin/main (a cherry-picked result: its commits are not in main);
-//      the app's worktree-agent-* branch only when its tip is in origin/main.
+//      the app's worktree-agent-* branch only when its tip is in origin/main (or merges only, as the lane's).
 //   4. Removes the lane's stack (containers, volumes, network; lanes.ts removeProject), never lane 7's and
 //      never one another worktree's .env or a live session uses, checked again just before; while a
 //      verify runs anywhere on the machine its volumes stay (verifies-running.ts).
-//   5. Prints the RP-603 RELEASE text as its last line. It never posts to Jira itself.
+//   5. Prints the RP-603 RELEASE text as its last line (run inside the lane: the command for the rest).
+//      It never posts to Jira itself. A branch with no RP key gets its claims' comment ids, read from
+//      RP-603 when JIRA_EMAIL and JIRA_API_TOKEN are set (claims.ts).
 //
-//   pnpm lane:done <pr> [--lane N] [--force] [--yes] [--dry-run]
+//   pnpm lane:done [pr number] [--lane N] [--force] [--yes] [--dry-run]
 //     --lane N   the lane, when the PR's worktree is gone (or to check it is the one its .env names); never 7
 //     --force    removes worktrees with uncommitted or untracked files, or commits origin/main lacks
 //     --yes      skips the confirmation; --dry-run only lists, and removes nothing
+// RP-1198: after its arguments, before anything else, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { fetchComments, readClaims } from "./claims.ts";
 import { holdReason, systemHolders } from "./claude-sessions.ts";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { aheadOf, branchPaths } from "./lane-done-git.ts";
 import { branchKey } from "./lane-claims.ts";
-import { describeWorktree, notMergedRefusal, parseLaneDoneArgs, decideLaneDone, releaseLines, type Candidate, type PullRequest } from "./lane-done-plan.ts";
+import {
+  claimIdsFor,
+  describeWorktree,
+  laneStacks,
+  lastLines,
+  notMergedRefusal,
+  parseLaneDoneArgs,
+  decideLaneDone,
+  releaseLines,
+  startWithoutNumber,
+  type Candidate,
+  type PullRequest,
+} from "./lane-done-plan.ts";
 import {
   claimOf,
-  composeProjectOfEnv,
   envClaims,
   laneOfProject,
   laneProject,
@@ -37,6 +60,7 @@ import {
   listVolumes,
   projectInUseNow,
   readProjectNow,
+  projectOfFolder,
   readWorktreeEnv,
   removeProject,
   type Volume,
@@ -47,7 +71,23 @@ import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
 import { isAppWorktree } from "./worktrees-pruning.ts";
-import { currentRoot, fetchPrune, gitChanges, gitError, isAgentWorktree, isAncestor, isShallowRepo, listWorktrees, refExists, systemLiveness, unpushedCount, type Worktree } from "./worktrees.ts";
+import {
+  currentRoot,
+  deleteBranch,
+  fetchPrune,
+  gitChanges,
+  gitError,
+  isAgentWorktree,
+  isAncestor,
+  isShallowRepo,
+  listWorktrees,
+  mergedInto,
+  refExists,
+  systemLiveness,
+  unlessMergesOnly,
+  unpushedCount,
+  type Worktree,
+} from "./worktrees.ts";
 
 const TARGET = "origin/main";
 const parsed = parseLaneDoneArgs(process.argv.slice(2));
@@ -56,17 +96,47 @@ if ("error" in parsed) {
   process.exit(1);
 }
 const { force, yes, dryRun } = parsed;
+stopIfBehindOrigin("pnpm lane:done");
+const here = currentRoot();
+
+// RP-1198: no number. The current branch's merged PR, or else a list of the merged PRs left here (lane-done-plan.ts startWithoutNumber).
+const listed = listWorktrees();
+const start =
+  parsed.pr !== undefined
+    ? { pr: parsed.pr }
+    : startWithoutNumber({
+        currentBranch: listed.find((w) => samePath(w.path, here))?.branch,
+        gh: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+        worktrees: () => listed.map((w) => ({ path: w.path, branch: w.branch, head: w.head, project: projectOfFolder(w.path) })),
+        mainRoot: listed[0]!.path,
+        stacks: () => {
+          try {
+            const running = listContainers(DOCKER_TIMEOUT_MS);
+            return running && laneStacks(running, listVolumes(DOCKER_TIMEOUT_MS));
+          } catch {
+            return undefined;
+          }
+        },
+      });
+if ("error" in start) {
+  console.error(start.error);
+  process.exit(1);
+}
+if ("list" in start) {
+  for (const line of start.list) console.log(line);
+  process.exit(0);
+}
+const prNumber = start.pr;
 
 // Rule 8: the PR first.
-const pr = readPullRequest(parsed.pr);
+const pr = readPullRequest(prNumber);
 const notMerged = notMergedRefusal(pr);
 if (notMerged !== undefined) {
   console.error(notMerged);
   process.exit(1);
 }
 
-const mainRoot = listWorktrees()[0]!.path;
-const git = (args: string[]) => execFileSync("git", args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const mainRoot = listed[0]!.path;
 const stop = (why: string): never => {
   console.error(`lane:done refused: ${why}. Nothing was touched.`);
   process.exit(1);
@@ -84,16 +154,14 @@ try {
 if (!refExists(TARGET, mainRoot)) stop(`${TARGET} not found`);
 if (!isAncestor(pr.headRefOid, TARGET, mainRoot)) stop(`PR #${pr.number}'s head ${pr.headRefOid.slice(0, 9)} is not in ${TARGET} after the fetch`);
 
-const here = currentRoot();
 const live = systemLiveness();
 const worktrees = listWorktrees(mainRoot);
-const projectOf = (path: string) => (existsSync(path) ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined);
 const onPrBranch = (w: Worktree) => w.branch === pr.headRefName || (w.branch === undefined && w.head === pr.headRefOid);
 const lanes = worktrees.filter(onPrBranch);
-const laneNumber = parsed.lane ?? lanes.map((w) => laneOfProject(projectOf(w.path) ?? "")).find((n) => n !== undefined);
-const agents = laneNumber === undefined ? [] : worktrees.filter((w) => !onPrBranch(w) && isAgentWorktree(w.path, mainRoot) && projectOf(w.path) === laneProject(laneNumber));
+const laneNumber = parsed.lane ?? lanes.map((w) => laneOfProject(projectOfFolder(w.path) ?? "")).find((n) => n !== undefined);
+const agents = laneNumber === undefined ? [] : worktrees.filter((w) => !onPrBranch(w) && isAgentWorktree(w.path, mainRoot) && projectOfFolder(w.path) === laneProject(laneNumber));
 // A subagent worktree whose .env names no lane cannot be told apart from another lane's: named, left to worktrees:clean.
-const unattributed = worktrees.filter((w) => isAgentWorktree(w.path, mainRoot) && existsSync(w.path) && projectOf(w.path) === undefined).length;
+const unattributed = worktrees.filter((w) => isAgentWorktree(w.path, mainRoot) && existsSync(w.path) && projectOfFolder(w.path) === undefined).length;
 const candidates: Candidate[] = [...lanes.map((w) => facts(w, "lane")), ...agents.map((w) => facts(w, "agent"))];
 const isCandidate = (path: string) => candidates.some((c) => samePath(c.path, path));
 const claims = envClaims(
@@ -117,7 +185,7 @@ const decision = decideLaneDone({
   claims,
   containers: containers ?? [],
   volumes: volumes ?? [],
-  currentProject: projectOf(here),
+  currentProject: projectOfFolder(here),
   volumesKeptBecause,
   force,
   exists: existsSync,
@@ -147,7 +215,10 @@ if (stack !== undefined && (stack.action === "remove" || stack.action === "conta
 const printKept = () => {
   for (const line of keptLast(kept, logged)) console.log(line);
 };
-const release = releaseLines({ pr, lane: laneNumber, openSiblings: openSiblings() });
+// RP-1198: run in the lane's own worktree, which stays with its stack, the last line is the command for the rest.
+// Jira is read only when the RELEASE is printed (not from inside the lane) and the branch names no key.
+const claimIds = !candidates.some((c) => c.isCurrent) && branchKey(pr.headRefName) === undefined ? await keylessClaimIds() : undefined;
+const release = lastLines({ pr, candidates, release: () => releaseLines({ pr, lane: laneNumber, openSiblings: openSiblings(), claimIds }) });
 const printRelease = () => {
   for (const line of release) console.log(line);
 };
@@ -182,8 +253,9 @@ for (const c of decision.remove) {
     readable,
     changes: readable ? attempt(() => gitChanges(c.path)) : undefined,
     // Rule 3 found every change of a subagent's branch in origin/main, so its commits, never pushed, lose nothing.
-    unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unpushedCount(registered.head, mainRoot)) : undefined,
-    project: exists ? projectOf(c.path) : c.project,
+    // RP-1198: a lane's merges of origin/main only are not unpushed work.
+    unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unlessMergesOnly(unpushedCount(registered.head, mainRoot), registered.head, mainRoot, TARGET)) : undefined,
+    project: exists ? projectOfFolder(c.path) : c.project,
     held: holdReason(c.path, systemHolders(), { sinceListed: true }),
   };
   // `pnpm worktree:remove`'s own refusals, last: never the main checkout, the current worktree, a held one,
@@ -193,7 +265,13 @@ for (const c of decision.remove) {
     kept.push({ what: describeWorktree(c), reason: refused.replace(/^Not removed: /, "") });
     continue;
   }
-  const { removed, steps } = removeWorktreeFolder(target, { run: (command, args) => execFileSync(command, args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), exists: existsSync });
+  // RP-1198: and the helper's own refusals, whatever was checked above.
+  const removal = removeWorktreeFolder(target, { run: (command, args) => execFileSync(command, args, { cwd: mainRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), exists: existsSync });
+  if ("refused" in removal) {
+    kept.push({ what: describeWorktree(c), reason: removal.refused.replace(/^Not removed: /, "") });
+    continue;
+  }
+  const { removed, steps } = removal;
   if (!removed) {
     failed++;
     console.error(`Could not remove ${c.path}: ${steps.join("; ")}. Close what holds files in it (an editor, a dev server) and run this again.`);
@@ -218,12 +296,14 @@ if (stack !== undefined && stackGoes) {
   if (inUse !== undefined) kept.push({ what: `stack ${stack.project}`, reason: inUse });
   else {
     try {
-      // removeProject reads the verifies again just before (rule 4).
-      const { volumesKept } = removeProject(
+      // removeProject reads the verifies again just before (rule 4), and refuses lane 7's and the main checkout's stacks itself (RP-1198).
+      const removal = removeProject(
         { project: stack.project, reason: `PR #${pr.number} merged`, containers: stack.containers, volumes: stack.volumes },
         { keepVolumes: stack.action === "containers", volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow(mainRoot)) },
       );
-      if (volumesKept !== undefined) {
+      const volumesKept = "refused" in removal ? undefined : removal.volumesKept;
+      if ("refused" in removal) kept.push({ what: `stack ${stack.project}`, reason: removal.refused });
+      else if (volumesKept !== undefined) {
         console.log(`Removed ${stack.project}'s containers and network; its volumes stay.`);
         logged.push(`${stack.project}'s volumes: ${volumesKeptBecause ?? volumesKept}; \`pnpm lanes:prune --lane ${laneNumber}\` removes them once no verify runs.`);
       } else console.log(`Removed ${stack.project} with its volumes.`);
@@ -250,7 +330,8 @@ function attempt<T>(read: () => T): T | undefined {
 function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
   const exists = existsSync(w.path);
   const readable = exists && existsSync(join(w.path, ".git"));
-  const ahead = attempt(() => aheadOf(w.head, TARGET, mainRoot));
+  // RP-1198: a branch that only merged origin/main in after its PR has nothing ahead of it.
+  const ahead = attempt(() => unlessMergesOnly(aheadOf(w.head, TARGET, mainRoot), w.head, mainRoot, TARGET));
   const paths = kind === "agent" ? attempt(() => branchPaths(w.head, TARGET, mainRoot)) : undefined;
   return {
     path: w.path,
@@ -267,7 +348,7 @@ function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
     locked: w.locked,
     ownChanges: paths?.changed.length,
     changes: !exists ? [] : readable ? attempt(() => gitChanges(w.path)) : undefined,
-    project: projectOf(w.path),
+    project: projectOfFolder(w.path),
     onPr: pr.commits.includes(w.head) || isAncestor(pr.headRefOid, w.head, mainRoot),
     ahead: Number.isInteger(ahead) ? ahead : undefined,
     filesNotInMain: paths?.notInTarget,
@@ -280,13 +361,19 @@ function deleteBranches(c: Candidate): void {
   const created = `worktree-${c.path.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}`;
   if (c.kind === "agent" && created !== c.branch && refExists(`refs/heads/${created}`, mainRoot)) branches.push(created);
   for (const branch of branches) {
-    const merged = isAncestor(`refs/heads/${branch}`, TARGET, mainRoot);
+    // RP-1198: a tip that only merged origin/main in is not its ancestor, but has nothing it lacks.
+    const merged = mergedInto(branch, TARGET, mainRoot);
     if (!merged && !(c.kind === "agent" && branch === c.branch)) {
       logged.push(`Branch ${branch} kept: it has commits ${TARGET} does not.`);
       continue;
     }
     try {
-      git(["branch", "-D", branch]);
+      // RP-1198: deleteBranch refuses main and a branch the main checkout or lane 7's worktree has checked out.
+      const refused = deleteBranch(branch, mainRoot);
+      if (refused !== undefined) {
+        logged.push(refused.refused);
+        continue;
+      }
       console.log(`  Removed branch ${branch}.`);
     } catch (error) {
       logged.push(`Branch ${branch} kept: ${gitError(error)}`);
@@ -305,6 +392,18 @@ function readPullRequest(number: number): PullRequest {
   }
   const raw = JSON.parse(out) as { number: number; state: string; mergedAt: string | null; headRefName: string; headRefOid: string; mergeCommit: { oid: string } | null; commits: { oid: string }[] };
   return { number: raw.number, state: raw.state, mergedAt: raw.mergedAt ?? undefined, headRefName: raw.headRefName, headRefOid: raw.headRefOid, mergeCommit: raw.mergeCommit?.oid, commits: raw.commits.map((c) => c.oid) };
+}
+
+/** RP-1198: the open RP-603 claims of a branch with no RP key, or undefined when they cannot be read. */
+async function keylessClaimIds(): Promise<number[] | undefined> {
+  const email = process.env.JIRA_EMAIL;
+  const token = process.env.JIRA_API_TOKEN;
+  if (!email || !token) return undefined;
+  try {
+    return claimIdsFor(readClaims(await fetchComments(email, token)), pr);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The other open PRs whose branch starts with the same key; none when gh cannot tell. */

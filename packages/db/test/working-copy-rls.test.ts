@@ -349,6 +349,22 @@ describe("scenarios RP-23-3 and RP-1083-3: what a Working Copy prints", () => {
     expect(rows).toHaveLength(1);
   });
 
+  // The List row menu's Download of another Company's Submitted item (UAT SUB-18): the same ask as the item page's.
+  it("RP-1175-1: the other Company's ask and the raiser's own are one job for the item as shared; another Contractor's ask is refused", async () => {
+    const { c1, k1, c2 } = copyTower;
+    const asked = async (memberId: string) => ((await request(memberId, id)).outcome === "not_found" ? [] : [{ id }]);
+    await expectHiddenFrom({
+      read: asked,
+      target: id,
+      seenBy: [k1.members.manager, k1.members.engineer, c1.members.project_manager, c1.members.engineer],
+      hiddenFrom: [c2.members.engineer],
+    });
+    const { rows } = await migrator.query("select id from working_copy where work_item_id = $1 and app_version = 'test' and stale_at is null", [id]);
+    expect(rows).toHaveLength(1); // not hidden-from: one job, not a hidden row
+    // What every one of them is given is what the first test above read: nothing C1 changed since it arrived.
+    expect(JSON.stringify(content)).not.toContain(CHANGED); // not hidden-from: the content the beforeAll read, whose first test reads the shared description from it
+  });
+
   // V5 and V19 (visibility.md, the Documental Record row): a reply Document only an internal event took (the
   // Owner's review's Recommendation) stays K1's and the Owner's (RP-1079).
   it("RP-1083-3: prints no reply Document only an internal event took, as the Recommendation to the Owner", async () => {

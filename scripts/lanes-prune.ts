@@ -31,22 +31,26 @@
 // it names every worktree that keeps the lane at once (mergedBlockers, keptByClaims); a container
 // whose kill got no exit event is tried again (lanes.ts removeProject); and while a verify runs
 // anywhere on the machine (verifies-running.ts) the containers go but every volume stays.
+//
+// RP-1198: in every mode, after its arguments, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import {
   chooseMerged,
-  composeProjectOfEnv,
   envClaims,
   keptByClaims,
   laneKeptByClaim,
   LANE_SCHEME,
+  laneOfProject,
   laneProject,
   listContainers,
   mergedBlockers,
   listVolumes,
   onlyLane,
   parsePruneArgs,
+  projectOfFolder,
   projectInUseNow,
   readProjectNow,
   readWorktreeEnv,
@@ -63,7 +67,8 @@ import { bareMergedYesRefusal, guardCandidates, keptLast, laneRefusal, mergedLan
 import { volumesKeptReason, verifiesRunningNow } from "./verifies-running.ts";
 import { fetchPrune, gitChanges, gitError, isShallowRepo, judgeWorktree, listWorktrees, refExists, systemLiveness } from "./worktrees.ts";
 import { pidAlive } from "./lanes-lock.ts";
-import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
+import { guardedHashes } from "./stories-volumes.ts";
+import { chooseVeraPdfContainers, listVeraPdfContainers, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
 const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
 const argv = process.argv.slice(2);
@@ -74,6 +79,7 @@ if (argv.includes("--stale")) {
     console.error(`--stale is a report on its own.\n${usage}`);
     process.exit(1);
   }
+  stopIfBehindOrigin("pnpm lanes:prune");
   const listed = listContainers(DOCKER_TIMEOUT_MS);
   let volumes: Volume[] | undefined;
   try {
@@ -99,11 +105,13 @@ if (!options) {
   console.error(usage);
   process.exit(1);
 }
-const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal(options);
+// RP-1198: the refusal offers this worktree's own lane by its number.
+const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal({ ...options, ownLane: laneOfProject(projectOfFolder(".") ?? "") });
 if (refused !== undefined) {
   console.error(refused);
   process.exit(1);
 }
+stopIfBehindOrigin("pnpm lanes:prune");
 const withMerged = options.merged;
 const lane = options.lane;
 
@@ -112,7 +120,7 @@ if (!containers) {
   console.error("Docker is not running (or not installed); start it and re-run.");
   process.exit(1);
 }
-const currentProject = composeProjectOfEnv(readWorktreeEnv(".") ?? "");
+const currentProject = projectOfFolder(".");
 const volumes = listVolumes();
 const inScope = (project: string) => lane === undefined || project === laneProject(lane);
 /** What was kept, with why: printed last (RP-1101), so it is not cut off. */
@@ -159,7 +167,7 @@ if (withMerged) {
     .filter((w) => existsSync(w.path))
     .map((w, i) => {
       const finished = i > 0 && w.branch !== "main" && judgeWorktree(w, "origin/main", mainRoot, live).finished;
-      return { path: w.path, branch: w.branch, finished, changes: finished ? changesOf(w.path) : [], project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") };
+      return { path: w.path, branch: w.branch, finished, changes: finished ? changesOf(w.path) : [], project: projectOfFolder(w.path) };
     });
   const { worktrees, kept: dirty } = mergedLanes(judged);
   const known = new Set(stale.map((s) => s.project));
@@ -236,9 +244,10 @@ for (const s of candidates) {
     continue;
   }
   try {
-    // removeProject reads the verifies again just before: one may have started since the prompt.
-    const { volumesKept } = removeProject(s, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
-    console.log(volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed ${s.project}.`);
+    // removeProject reads the verifies again just before: one may have started since the prompt. It refuses lane 7's and the main checkout's stacks itself (RP-1198).
+    const removal = removeProject(s, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
+    if ("refused" in removal) kept.push({ what: s.project, reason: removal.refused });
+    else console.log(removal.volumesKept !== undefined ? `Removed ${s.project}'s containers; its volumes stay (${volumesStay ?? removal.volumesKept}).` : `Removed ${s.project}.`);
   } catch (error) {
     failed++;
     console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
@@ -251,7 +260,12 @@ for (const c of veraPdf) {
     continue;
   }
   try {
-    removeVeraPdfContainer(c.name);
+    // RP-1198: it refuses lane 7's worktree's and the main checkout's containers itself.
+    const refused = removeVeraPdfContainer(c.name);
+    if (refused !== undefined) {
+      kept.push({ what: c.name, reason: refused.refused });
+      continue;
+    }
     console.log(`Removed ${c.name}.`);
   } catch (error) {
     failed++;
@@ -268,10 +282,8 @@ function veraPdfCandidates(): GoneContainer[] {
     kept.push({ what: "veraPDF containers", reason: "Docker did not list them; none removed" });
     return [];
   }
-  const worktrees = listWorktrees()
-    .filter((w) => existsSync(w.path))
-    .map((w) => ({ path: w.path, project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? "") }));
-  const { remove, kept: stays } = chooseVeraPdfContainers({ containers: listed, alive: pidAlive, protectedHashes: protectedHashes(worktrees) });
+  // RP-1198: lane 7's worktree's and the main checkout's, as removeVeraPdfContainer refuses them.
+  const { remove, kept: stays } = chooseVeraPdfContainers({ containers: listed, alive: pidAlive, protectedHashes: guardedHashes() });
   kept.push(...stays);
   return remove;
 }

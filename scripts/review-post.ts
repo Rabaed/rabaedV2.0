@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { reviewMarker } from "./reviewed-add.ts";
+import { BASELINE_MARKER_START, baselineMarker } from "./verify-gate.ts";
 
 // Posts /code-review's summary on a PR with the marker CI's reviewed-add workflow looks for (RP-1118):
 //
@@ -37,6 +38,10 @@ export function postReview(args: string[], seam: PostSeam): { ok: boolean; messa
   const summary = seam.read(file);
   if (summary.trim() === "") return { ok: false, message: `${file} is empty: put /code-review's summary in it.` };
   if (summary.includes("<!-- code-review:")) return { ok: false, message: `${file} already holds a code-review marker; this script writes the marker itself.` };
+  // RP-1194: the lane's review step never approves its own baseline entry (scripts/verify-gate.ts `baselineMarker`).
+  if (summary.includes(BASELINE_MARKER_START)) {
+    return { ok: false, message: `${file} holds Main 6's baseline marker (\`${baselineMarker("<sha>")}\`); only Main 6 posts it, after its own review, never through this script.` };
+  }
   const dirty = seam.dirty();
   if (dirty.length > 0) return { ok: false, message: `The checkout has changes (${dirty[0]}${dirty.length > 1 ? `, and ${dirty.length - 1} more` : ""}): commit and push the review's fixes first.` };
   const head = seam.head();

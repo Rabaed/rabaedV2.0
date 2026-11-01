@@ -6,7 +6,8 @@
 //      branch, then its rabaed-* compose project (containers, volumes, network) once
 //      the worktree is removed;
 //   2. every other local branch merged into origin/main and checked out nowhere
-//      (merge-base --is-ancestor origin/main, then `git branch -D`), never main;
+//      (merge-base --is-ancestor origin/main, or merges of it only: worktrees.ts mergedInto, then
+//      `git branch -D`), never main;
 //   3. the orphaned compose projects lanes:prune finds;
 //   4. the rabaed-stories-* volumes of the worktrees it removes and of those git no longer lists (RP-1120).
 // It never touches the main checkout or the current worktree, nor one whose Claude
@@ -40,18 +41,25 @@
 // the compose projects lose their containers and networks only, and the stories volumes stay; the
 // stories sets go one at a time with a pause, stopping at the first that times out.
 //
+// RP-1198: a worktree whose only commits beyond origin/main are merges of it (`git cherry` empty) has
+// nothing unpushed or unmerged, so it goes, and its branch with it (worktrees.ts mergesOnly). A merged
+// worktree outside .claude/worktrees/ is removed only by `git worktree remove` without --force: one git
+// keeps (uncommitted or untracked files) is kept and named, its folder untouched (removal-guard.ts).
+//
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
 //   pnpm worktrees:prune [--stale-days <n>] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists
+// RP-1198: after its arguments, before the fetch, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
+import { listContainers, listVolumes, projectOfFolder, readProjectNow, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { keptLast, shallowRefusal } from "./prune-guards.ts";
 import { chooseStoriesVolumes, describeCount, inUseLine, listVolumeMounts, removeStoriesVolumesNow, storiesSets, storiesVolumesIn } from "./stories-volumes.ts";
-import { STORIES_VOLUME_PREFIX } from "./test-stories-linux.ts";
+import { STORIES_VOLUME_PREFIX } from "./stories-hash.ts";
 import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, removeProjectsNow, type PruneWorktree } from "./worktrees-pruning.ts";
@@ -62,15 +70,16 @@ import {
   fetchPrune,
   gatherFacts,
   gitError,
-  inTarget,
   isShallowRepo,
   listWorktrees,
   localBranches,
+  mergedInto,
   pruneWorktrees,
   refExists,
   removeLinkedWorktree,
   reportRemoval,
   systemLiveness,
+  unlessMergesOnly,
   unpushedCount,
   type Worktree,
 } from "./worktrees.ts";
@@ -94,6 +103,7 @@ for (let i = 0; i < args.length; i++) {
     process.exit(1);
   }
 }
+stopIfBehindOrigin("pnpm worktrees:prune");
 
 const mainRoot = listWorktrees()[0]!.path;
 const shallow = shallowRefusal(isShallowRepo(mainRoot), "worktrees:prune");
@@ -120,12 +130,13 @@ const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
   gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
-    unpushed: unpushedCount(w.head, mainRoot),
-    project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
+    // RP-1198: merges of origin/main only are not unpushed work (gatherFacts' ahead leaves them out too).
+    unpushed: unlessMergesOnly(unpushedCount(w.head, mainRoot), w.head, mainRoot, TARGET),
+    project: projectOfFolder(w.path),
   }));
 const worktrees = pruneFacts(listWorktrees(mainRoot));
 const containers = listContainers();
-const docker = containers && { containers, volumes: listVolumes(), currentProject: composeProjectOfEnv(readWorktreeEnv(here) ?? "") };
+const docker = containers && { containers, volumes: listVolumes(), currentProject: projectOfFolder(here) };
 const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync, holders: live.holders });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
@@ -214,7 +225,13 @@ for (const w of chosen.remove) {
     continue;
   }
   attempt(w.path, () => {
-    if (reportRemoval(w.path, removeLinkedWorktree(w, mainRoot, TARGET))) failed++;
+    // RP-1198: removeLinkedWorktree refuses on its own (the main checkout, lane 7's, an outside worktree git keeps).
+    const removal = removeLinkedWorktree(w, mainRoot, TARGET);
+    if ("refused" in removal) {
+      logged.push(removal.refused);
+      return;
+    }
+    if (reportRemoval(w.path, removal)) failed++;
     removedPaths.push(w.path);
   });
 }
@@ -227,8 +244,9 @@ removeProjectsNow({
   remove: (p) =>
     attempt(p.project, () => {
       // removeProject reads the verifies again just before: one may have started since the prompt.
-      const { volumesKept } = removeProject(p, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
-      console.log(volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? volumesKept}).` : `Removed compose project ${p.project}.`);
+      const removal = removeProject(p, { keepVolumes: volumesStay !== undefined, volumesKeptBecause: () => volumesKeptReason(verifiesRunningNow()) });
+      if ("refused" in removal) logged.push(removal.refused);
+      else console.log(removal.volumesKept !== undefined ? `Removed compose project ${p.project}'s containers; its volumes stay (${volumesStay ?? removal.volumesKept}).` : `Removed compose project ${p.project}.`);
     }),
   log: (line) => logged.push(line),
 });
@@ -250,9 +268,11 @@ for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).
     if (!refExists(`refs/heads/${b}`, mainRoot)) return;
-    if (!inTarget(b, TARGET, mainRoot)) throw new Error(`${b} has commits ${TARGET} does not`);
-    deleteBranch(b, mainRoot);
-    console.log(`Removed branch ${b}.`);
+    // RP-1198 review P2: a branch that only merged origin/main in, with no worktree, goes too (S2's merge-tree check included).
+    if (!mergedInto(b, TARGET, mainRoot)) throw new Error(`${b} has commits ${TARGET} does not`);
+    const refused = deleteBranch(b, mainRoot);
+    if (refused !== undefined) logged.push(refused.refused);
+    else console.log(`Removed branch ${b}.`);
   });
 }
 try {

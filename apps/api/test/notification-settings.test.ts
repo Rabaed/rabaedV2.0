@@ -155,12 +155,12 @@ describe("notification settings", () => {
     expect((await settingsOf(member)).settings.weekly_report).toEqual({ email: "off" });
   });
 
-  it("take the language of emails from the browser at the first sign-in that tells it, and only then", async () => {
+  it("don't take the language of emails from the browser at sign-in: it stays the Member's (RP-1174)", async () => {
     const { email } = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"]);
-    const first = await api.signIn(email, DEFAULT_PASSWORD, "ar");
-    expect((await settingsOf(first)).preferredLanguage).toBe("ar");
-    const later = await api.signIn(email, DEFAULT_PASSWORD, "en");
-    expect((await settingsOf(later)).preferredLanguage).toBe("ar");
+    const before = (await settingsOf(await api.signIn(email, DEFAULT_PASSWORD))).preferredLanguage;
+    const other = before === "ar" ? "en" : "ar";
+    const fromOtherBrowser = await api.signIn(email, DEFAULT_PASSWORD, other);
+    expect((await settingsOf(fromOtherBrowser)).preferredLanguage).toBe(before);
   });
 
   it("don't show the Weekly Step Age report row to a Member who doesn't hold Assign", async () => {

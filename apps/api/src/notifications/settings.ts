@@ -77,18 +77,17 @@ export function updateNotificationSettings(db: Db, memberId: string, body: Updat
 }
 
 /**
- * At sign-in: the browser's language becomes the language of the Member's
- * emails, the first time it is told and never after (they change it in their
- * settings).
+ * The Member's language, from the language switch (RP-1174): the web app opens in it and their
+ * emails are written in it. Their row only (RLS); the rest of their email settings stay as they
+ * were. Until they switch it is the language they were invited in.
  */
-export function rememberBrowserLanguage(db: Db, memberId: string, locale: Locale, now: Date): Promise<void> {
+export function setMemberLanguage(db: Db, memberId: string, locale: Locale, now: Date): Promise<void> {
   return withMember(db, memberId, async (trx) => {
     await sql`
       insert into member_notification_preference (member_id, preferred_language, updated_at)
       values (${memberId}::uuid, ${locale}, ${now})
       on conflict (member_id) do update
       set preferred_language = excluded.preferred_language, updated_at = excluded.updated_at
-      where member_notification_preference.preferred_language is null
     `.execute(trx);
   });
 }

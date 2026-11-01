@@ -1,3 +1,4 @@
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 import { catcherTransport } from "./catcher.ts";
 import { createMailer, type Mailer, type MailTransport } from "./mailer.ts";
@@ -24,10 +25,10 @@ export function mailerFromEnv(source: NodeJS.ProcessEnv = process.env): Configur
   const env = z
     .object({
       MAIL_FROM: z.email(),
-      MAIL_SES_CONFIGURATION_SET: z.string().min(1).optional(),
+      MAIL_SES_CONFIGURATION_SET: optionalSecret,
       MAIL_CATCHER_URL: z.url().optional(),
       // .env.example leaves it empty: a blank key is no key.
-      SENDGRID_API_KEY: z.preprocess((key) => (typeof key === "string" && key.trim() === "" ? undefined : key), z.string().optional()),
+      SENDGRID_API_KEY: optionalSecret,
     })
     .parse(source);
   const chosen: { name: ConfiguredMailer["transport"]; build: () => MailTransport }[] = [];

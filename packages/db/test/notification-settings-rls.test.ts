@@ -115,6 +115,30 @@ describe("notification_setting and member_notification_preference", () => {
   });
 });
 
+describe("the Member's language in member_notification_preference (scenario RP-1174-1)", () => {
+  // What PUT /v1/me/language runs: the Member's language, nothing else of the row.
+  const saveLanguage = (as: string, target: string, language: "ar" | "en") =>
+    rowsAs(
+      as,
+      sql`insert into member_notification_preference (member_id, preferred_language) values (${target}::uuid, ${language})
+        on conflict (member_id) do update set preferred_language = excluded.preferred_language`,
+    );
+  const stored = async (member: string) =>
+    (await migrator.query("select email_paused, preferred_language from member_notification_preference where member_id = $1", [member])).rows;
+
+  it("is saved by the Member on their own row alone, leaving the rest of the row", async () => {
+    await saveLanguage(a.member, a.member, "en");
+    expect(await stored(a.member)).toEqual([{ email_paused: true, preferred_language: "en" }]);
+  });
+
+  it("can't be saved by another Member for them, and their own save changes no one else's", async () => {
+    await expect(saveLanguage(b.member, a.member, "ar")).rejects.toThrow(/row-level security/);
+    await saveLanguage(b.member, b.member, "ar");
+    expect(await stored(b.member)).toEqual([{ email_paused: false, preferred_language: "ar" }]);
+    expect(await stored(a.member)).toEqual([{ email_paused: true, preferred_language: "en" }]);
+  });
+});
+
 describe("project_mute", () => {
   const mute = (member: string, projectId: string, muted: boolean) =>
     rowsAs<{ outcome: string }>(member, sql`select app.set_project_mute(${projectId}::uuid, ${muted}) as outcome`).then((r) => r[0]!.outcome);

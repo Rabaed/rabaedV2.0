@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { isBaselineBotCommit, onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { CI_WORKFLOW, ciOverHttp, ciOwnChanges, readCiEvidence, type CiReads } from "./ci-green.ts";
 import { REQUIRED_CHECK } from "./reviewed-required.ts";
-import { realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen } from "./verify-gate.ts";
+import { commentsOverHttp, errorText, markerWriters, realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen, type CommentReads, type Permission, type ReviewComment } from "./verify-gate.ts";
 
 // Adds the `reviewed` label to a PR (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 // It adds it only when both hold for the PR's current head:
@@ -25,8 +25,8 @@ import { realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen } from "./verify
 // added with GITHUB_TOKEN starts no `labeled` run, so it then re-runs the head's failed `reviewed-required` run,
 // which reads the labels live. Docs-only PRs are unchanged: `docs-only` still passes without `reviewed`.
 //
-// Run by .github/workflows/reviewed-add.yml (PR 2) from the default branch's copy, on pull_request (the body's
-// verify line, a push, ready for review) and issue_comment (the review comment), and, once the workflow PR of RP-1190
+// Run by .github/workflows/reviewed-add.yml (PR 2) from the default branch's copy, on pull_request_target
+// (pull_request until RP-1148 part A's workflow PR; the body's verify line, a push, ready for review) and issue_comment (the review comment), and, once the workflow PR of RP-1190
 // lands, on workflow_run (CI finished on the head), in a checkout with main's full history; it fetches the PR's
 // head itself and runs none of its code. On workflow_run it needs `actions: write` for the verify-gate re-run, and
 // `actions: read` to read CI.
@@ -37,35 +37,15 @@ export const reviewMarker = (sha: string) => `<!-- code-review: ${sha} -->`;
 
 const MARKER = /<!-- code-review: ([0-9a-f]{40}) -->/g;
 
-/**
- * GitHub's `permission` values (GET /repos/{o}/{r}/collaborators/{login}/permission) that can push to the repo:
- * `maintain` is reported as `write`, `triage` as `read`. A marker counts only from a user with one of these, the
- * people who could push or label the PR anyway. The lanes post as the owner's account. `author_association` is not
- * used: GitHub reports MEMBER only for a public org membership, so CI's token saw the owner as CONTRIBUTOR (RP-1159).
- * No bot counts: no review bot posts on this repo, and any workflow can comment as github-actions[bot].
- */
-const WRITE_PERMISSIONS: ReadonlySet<Permission> = new Set(["admin", "write"]);
-
-/** GitHub's legacy base role for a user on the repo (`permission` in the collaborator permission answer). */
-export type Permission = "admin" | "write" | "read" | "none";
-
-export interface ReviewComment {
-  login: string;
-  /** GitHub's `user.type`: "User" or "Bot". */
-  type: string;
-  body: string;
-}
+// Who counts (`canPush`), the comment shape and how comments are read are verify-gate.ts's, which reads Main 6's
+// baseline marker the same way (RP-1194).
+export type { Permission, ReviewComment };
 
 const markedCommits = (comment: ReviewComment) => [...comment.body.matchAll(MARKER)].map(([, sha = ""]) => sha);
 const hasMarker = (comment: ReviewComment) => markedCommits(comment).length > 0;
 
-/** The users among the markers' authors who can push to the repo; `permission` is asked once per login. */
-export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
-  const logins = new Set(comments.filter((comment) => comment.type === "User" && hasMarker(comment)).map((comment) => comment.login));
-  const writers = new Set<string>();
-  for (const login of logins) if (WRITE_PERMISSIONS.has(await permission(login))) writers.add(login);
-  return writers;
-}
+/** The users among the review markers' authors who can push to the repo (`markerWriters`). */
+export const writersAmong = (comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> => markerWriters(comments, hasMarker, permission);
 
 /** A user (never a bot) in `writers`: one who can push to the repo (`writersAmong`). */
 export const isTrustedAuthor = (comment: ReviewComment, writers: ReadonlySet<string>) => comment.type === "User" && writers.has(comment.login);
@@ -100,7 +80,8 @@ export function addEvent(eventName: string, payload: unknown): AddEvent | undefi
     issue?: { number: number; pull_request?: unknown };
     workflow_run?: { event: string; path: string; head_sha: string; pull_requests?: { number: number; head: { sha: string } }[] };
   };
-  if (eventName === "pull_request" && event.pull_request) return { pr: event.pull_request.number };
+  // pull_request_target has the same payload; GitHub runs main's copy of the workflow for it (RP-1148).
+  if ((eventName === "pull_request" || eventName === "pull_request_target") && event.pull_request) return { pr: event.pull_request.number };
   if (eventName === "issue_comment" && event.issue) return event.issue.pull_request ? { pr: event.issue.number } : undefined;
   if (eventName === "workflow_run" && event.workflow_run) {
     const run = event.workflow_run;
@@ -108,23 +89,19 @@ export function addEvent(eventName: string, payload: unknown): AddEvent | undefi
     const pull = (run.pull_requests ?? []).find((candidate) => candidate.head.sha === run.head_sha);
     return pull ? { pr: pull.number } : undefined;
   }
-  throw new Error(`reviewed-add runs on pull_request, issue_comment and workflow_run, not ${eventName}`);
+  throw new Error(`reviewed-add runs on pull_request_target (or pull_request), issue_comment and workflow_run, not ${eventName}`);
 }
 
-export interface AddSeam extends ReviewedGit, CiReads {
+export interface AddSeam extends ReviewedGit, CiReads, CommentReads {
   /** The PR now. */
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
-  /** Every comment on the PR's conversation. */
-  comments(pr: number): Promise<ReviewComment[]>;
-  /** GitHub's `permission` for `login` on the repo. */
-  permission(login: string): Promise<Permission>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
-  /** The `reviewed-required` workflow's pull_request runs for `headSha`, newest first. */
+  /** The `reviewed-required` workflow's pull_request_target and pull_request runs for `headSha`, newest first. */
   requiredRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
-  /** The `verify-gate` workflow's pull_request runs for `headSha`, newest first. */
+  /** The `verify-gate` workflow's pull_request_target and pull_request runs for `headSha`, newest first. */
   verifyRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
   /** Paths `head` changes against main (`git diff --name-only origin/main...<head>`). */
   changedFiles(head: string): string[];
@@ -181,7 +158,14 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!settled) return { ok: false, added: false, summary: `PR #${pr}: the reviewed-label run for ${head} did not finish within ${timeoutMs / 1000} s. Re-run this workflow once it has.` };
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
-  const verify = verifiedOrGreen(pull.body, head, pr, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
+  let ownChanges: string[];
+  try {
+    ownChanges = ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file));
+  } catch (error) {
+    // A changed file git cannot read refuses, as in the verify gate (RP-1196).
+    return { ok: false, added: false, summary: `PR #${pr}: could not read ${head}'s changes: ${errorText(error)}. Re-run this workflow.` };
+  }
+  const verify = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:
   // re-run its failed run now CI is green, so the required check shows it.
   let reran = "";
@@ -224,8 +208,6 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   return { ok: true, added: true, summary: `${added}${rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : ""}.${reran}` };
 }
 
-const PER_PAGE = 100;
-
 export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Omit<AddSeam, keyof ReviewedGit | keyof CiReads | "fetchPull" | "changedFiles" | "packageJsonVersions" | "sleep"> {
   const call = async (method: string, path: string, body?: unknown, allow404 = false): Promise<unknown> => {
     const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
@@ -237,10 +219,16 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     if (!response.ok) throw new Error(`GitHub ${method} ${path} answered ${response.status}`);
     return response.status === 204 || response.status === 201 ? undefined : response.json();
   };
-  const runs = async (workflow: string, headSha: string) =>
-    (await call("GET", `actions/workflows/${workflow}/runs?head_sha=${headSha}&event=pull_request`, undefined, true)) as
-      | { workflow_runs: { id: number; status: string; conclusion: string | null }[] }
-      | undefined;
+  type Runs = { workflow_runs: { id: number; status: string; conclusion: string | null }[] };
+  const runs = async (workflow: string, headSha: string, event = "pull_request") =>
+    (await call("GET", `actions/workflows/${workflow}/runs?head_sha=${headSha}&event=${event}`, undefined, true)) as Runs | undefined;
+  // The gate workflows run on pull_request_target from RP-1148 part A's workflow PR, on pull_request before it:
+  // both count, newest first (a run's id grows with time).
+  const gateRuns = async (workflow: string, headSha: string) =>
+    (await Promise.all(["pull_request_target", "pull_request"].map(async (event) => (await runs(workflow, headSha, event))?.workflow_runs ?? [])))
+      .flat()
+      .sort((a, b) => b.id - a.id)
+      .map(({ id, status, conclusion }) => ({ id, status, conclusion }));
   return {
     async pull(pr) {
       const pull = (await call("GET", `pulls/${pr}`)) as {
@@ -259,34 +247,12 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
         open: pull.state === "open",
       };
     },
-    async comments(pr) {
-      const all: ReviewComment[] = [];
-      // 30 pages of 100: far more comments than any PR here has.
-      for (let page = 1; page <= 30; page++) {
-        const batch = (await call("GET", `issues/${pr}/comments?per_page=${PER_PAGE}&page=${page}`)) as {
-          body: string | null;
-          user: { login: string; type: string } | null;
-        }[];
-        all.push(...batch.map((comment) => ({ login: comment.user?.login ?? "", type: comment.user?.type ?? "", body: comment.body ?? "" })));
-        if (batch.length < PER_PAGE) break;
-      }
-      return all;
-    },
-    async permission(login) {
-      // 404: no such user (a deleted account's ghost), so no access. Needs only the token's metadata read.
-      const found = (await call("GET", `collaborators/${encodeURIComponent(login)}/permission`, undefined, true)) as { permission: Permission } | undefined;
-      return found?.permission ?? "none";
-    },
+    ...commentsOverHttp(repository, token, fetcher),
     async labelRuns(headSha) {
       return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));
     },
-    async requiredRuns(headSha) {
-      // The API lists runs newest first.
-      return ((await runs("reviewed-required.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
-    },
-    async verifyRuns(headSha) {
-      return ((await runs("verify-gate.yml", headSha))?.workflow_runs ?? []).map(({ id, status, conclusion }) => ({ id, status, conclusion }));
-    },
+    requiredRuns: (headSha) => gateRuns("reviewed-required.yml", headSha),
+    verifyRuns: (headSha) => gateRuns("verify-gate.yml", headSha),
     addLabel: async (pr) => void (await call("POST", `issues/${pr}/labels`, { labels: [REVIEWED_LABEL] })),
     async removeLabel(pr) {
       // 404: the label is already gone, which is the goal.
