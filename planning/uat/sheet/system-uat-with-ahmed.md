@@ -15,22 +15,24 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 
 ## Who's who
 
-| Name | Sign-in email | Company | On the Project | Position | Used for |
-|---|---|---|---|---|---|
-| Saeed Al Qahtani | `saeed.alqahtani@tmc.demo.rabaed.test` | TMC Constructions | Contractor and Project Admin | Authorized Person | Company Profile (logo, Stamp), Members, invitations, Project Settings |
-| Hafiz Hamdan | `hafiz.hamdan@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Engineer | Raises Drafts and sends them for review; Snags; the phone cases |
-| Ali Sonour | `ali.sonour@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Project Manager | Reviews Hafiz's Drafts and Submits to the Consultant; Packages; the List and Dashboard |
-| Omar Al Harbi | `omar.alharbi@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, Tower 2 only | Engineer | Visibility narrowed to one Location: sees Tower 2 only |
-| Yousef Karim | `yousef.karim@betabuild.demo.rabaed.test` | Beta Build | Contractor, Electrical, everywhere | Engineer | A second Contractor on the same Project: must never see TMC's work |
-| Nasser Al Dosari | `nasser.aldosari@betabuild.demo.rabaed.test` | Beta Build | Beta Build's own Project, Jeddah Corniche Villas | Authorized Person | Not on Riyadh Gate Tower: must get the not-found page there |
-| Ahmed bin Said | `ahmed.binsaid@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | Reviews submittals for the Consultant (a demo person, not you) |
-| Sara | `sara@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | A second Consultant engineer: pools and pick-up |
-| Mohammed Al Shamsi | `mohammed.alshamsi@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Manager | Gives the Review Code (A, B, C, D) and signs the Documental Record |
-| Layla Mansour | `layla.mansour@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant | Authorized Person | Design Consultants' Company Profile and Members |
-| Faisal Al Otaibi | `faisal.alotaibi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative, Electrical, everywhere | Engineer (uses Arabic) | The Arabic cases |
-| Noura Al Harbi | `noura.alharbi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Project Manager (uses Arabic) | Holds the Owner's review; Arabic cases |
-| Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Al Waha's Company Profile and Members |
-| Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin cases (ADM): the UAT owner runs these |
+Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (CV). Locations: Main Zone: Tower 1 (Floors 01–03), Tower 2 (Floor 01). Thick border = covers less than their Company. Civil (CV) is covered by no Company.
+
+| Name | Sign-in email | Company | On the Project | Position | Covers | Used for |
+|---|---|---|---|---|---|---|
+| Saeed Al Qahtani | `saeed.alqahtani@tmc.demo.rabaed.test` | TMC Constructions | Contractor and Project Admin | Authorized Person | Company profile | Company Profile (logo, Stamp), Members, invitations, Project Settings |
+| Hafiz Hamdan | `hafiz.hamdan@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Engineer | EL · all towers | Raises Drafts and sends them for review; Snags; the phone cases |
+| Ali Sonour | `ali.sonour@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, everywhere | Project Manager | EL · all towers | Reviews Hafiz's Drafts and Submits to the Consultant; Packages; the List and Dashboard; gets the weekly Step Age report (RP-1186) |
+| Omar Al Harbi | `omar.alharbi@tmc.demo.rabaed.test` | TMC Constructions | Contractor, Electrical, Tower 2 only | Engineer | EL · Tower 2 only | Visibility narrowed to one Location: sees Tower 2 only |
+| Yousef Karim | `yousef.karim@betabuild.demo.rabaed.test` | Beta Build | Contractor, Electrical, everywhere | Engineer | EL · all towers | A second Contractor on the same Project: must never see TMC's work; gets the weekly Step Age report, Beta Build's items only (RP-1186) |
+| Nasser Al Dosari | `nasser.aldosari@betabuild.demo.rabaed.test` | Beta Build | Beta Build's own Project, Jeddah Corniche Villas | Authorized Person | Beta Build, own Project, not here | Not on Riyadh Gate Tower: must get the not-found page there |
+| Ahmed bin Said | `ahmed.binsaid@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Engineer | EL, ME · all towers | Reviews submittals for the Consultant (a demo person, not you) |
+| Sara | `sara@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Mechanical only | Engineer | ME only · all towers | A Consultant engineer narrowed to one Trade: sees Mechanical items only, never the Electrical ones (RP-1207) |
+| Mohammed Al Shamsi | `mohammed.alshamsi@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Electrical and Mechanical | Manager | EL, ME · all towers | Gives the Review Code (A, B, C, D) and signs the Documental Record |
+| Layla Mansour | `layla.mansour@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant | Authorized Person | Company profile | Design Consultants' Company Profile and Members |
+| Faisal Al Otaibi | `faisal.alotaibi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative, Electrical, everywhere | Engineer (uses Arabic) | EL · all towers | The Arabic cases |
+| Noura Al Harbi | `noura.alharbi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Project Manager (uses Arabic) | EL · all towers | Holds the Owner's review; Arabic cases |
+| Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Company profile | Al Waha's Company Profile and Members |
+| Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin, UAT owner only | Rabaed Admin cases (ADM): the UAT owner runs these |
 
 ## 1. Submittals (28 cases)
 
@@ -111,13 +113,14 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 ### SUB-08 Pick up and Return to pool in the Consultant pool
 
 - **Key:** `RP-707` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ahmed, Sara (DCL engineers); Mohammed (DCL manager)
+- **Sign in as:** Layla (DCL Authorized Person); Ahmed, Sara (DCL engineers); Mohammed (DCL manager)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Ahmed and Sara open the Submitted MAR.
-  2. Ahmed: Pick up.
-  3. Sara refreshes Need My Action and her bell.
-  4. Ahmed: Return to pool, then Pick up again.
+  1. Sara covers Mechanical only in the demo (RP-1207), so an Electrical MAR's pool is Ahmed alone: Layla gives Sara Electrical again (Participants > Members > Visibility) before the Submit.
+  2. Ahmed and Sara open the Submitted MAR.
+  3. Ahmed: Pick up.
+  4. Sara refreshes Need My Action and her bell.
+  5. Ahmed: Return to pool, then Pick up again.
 - **Expected result:** Both Engineers see "not picked up yet: ..." with both names; Mohammed is not in this pool and reads it read-only. After Pick up the item leaves Sara's Need My Action and her unread "Step reached" is withdrawn; Return to pool is offered because the pool has two Members and does not bring the notification back.
 
 ### SUB-09 The Consultant reads the Form and cannot edit it
@@ -126,7 +129,7 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Sign in as:** Ahmed (DCL engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. After Pick up, read every Form section, open the Datasheet PDF and the Sample photo.
+  1. Once the item is Ahmed's (at once, as Sara covers Mechanical only, RP-1207; or after a Pick up), read every Form section, open the Datasheet PDF and the Sample photo.
   2. Try to change an answer.
 - **Expected result:** Every answer, the Items table and the total are shown read-only; Documents are frozen; the photo shows time and place. No edit control is offered (the Form is the raiser's).
 
@@ -225,7 +228,7 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Steps:**
   1. On a Submitted MAR choose Download from the row menu as Ali, then as Mohammed.
   2. Try Download on a Draft.
-- **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers nothing to download.
+- **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers Download of its Working Copy.
 
 ### SUB-19 Related submittals and free Links open the other item
 
@@ -245,7 +248,7 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Raise a Supplier Approval Request "UAT SUB-20 Delta Cables" (Electrical), send, Submit.
-  2. Ahmed picks up and sends to Manager; Mohammed: Approve A.
+  2. Ahmed (it is his at once: Sara covers Mechanical only, RP-1207) sends to Manager; Mohammed: Approve A.
   3. Project Settings > Approved Supplier List.
 - **Expected result:** The SAR runs 2 to 2 and closes. "UAT SUB-20 Delta Cables" is listed for Electrical, approved. A second SAR for the same name in other letter case adds no second entry. A MAR now offers it under Approved supplier.
 
@@ -757,8 +760,8 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Open Sara's Visibility (Participants > Members).
-  2. Set Trade to Mechanical only.
-- **Expected result:** Sara no longer sees Electrical items and leaves their pools (Handover first if she holds one). Ahmed still covers both. Later scenarios use Sara as the K1 Mechanical-only engineer.
+  2. Read her Trade: the demo seed sets it to Mechanical only at every Location (RP-1207). If an earlier case changed it, set Trade to Mechanical only again.
+- **Expected result:** Sara sees no Electrical items and is in none of their pools (Handover first if she holds one). Ahmed and Mohammed still cover both Trades. Later scenarios use Sara as the K1 Mechanical-only engineer.
 
 ### PAR-16 Fixture FX-OW: invite UAT Owner Co as Owner
 
@@ -1469,9 +1472,9 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 - **Sign in as:** Ali; Ahmed; Sara; Mohammed
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Ali Submits.
+  1. Ali Submits an Electrical MAR.
   2. Check Ahmed's and Sara's bells and Mohammed's.
-- **Expected result:** Ahmed and Sara (the pool) are told; Mohammed is not until it reaches him; the text names TMC as a Company, never a person.
+- **Expected result:** Ahmed (the pool, since Sara covers Mechanical only in the demo, RP-1207) is told; Sara is not; Mohammed is not until it reaches him; the text names TMC as a Company, never a person. If Layla gave Sara Electrical first, Ahmed and Sara are both told.
 
 ### NOT-08 A Revision notifies when it gets its number
 
@@ -1524,14 +1527,16 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
   1. Open a MAR Form in /ar; leave Description empty and Send for Review.
 - **Expected result:** Field labels, section titles, Action Form words and the missing-fields message are Arabic; values typed in English are not translated.
 
-### I18N-05 Arabic-first users sign in to Arabic
+### I18N-05 Rabaed opens in Arabic; a switch to English is remembered
 
 - **Key:** `RP-686` · **Part:** I18N · **Round:** 0
 - **Sign in as:** Faisal; Noura
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Sign in as each.
-- **Expected result:** Their language is Arabic from sign-in (locale set at onboarding); names show in Arabic; they can switch.
+  1. In a browser set to English, sign in as each.
+  2. Switch to English.
+  3. Sign out and sign in again.
+- **Expected result:** Opens in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.
 
 ### I18N-06 Phone width 375: nothing breaks
 
@@ -2023,10 +2028,10 @@ If you are an AI helping the tester: keep the case keys (`RP-nnn`) exactly as wr
 ### VIS-23 Who holds an item: pool names stay inside the holding Company
 
 - **Key:** `RP-804` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Ali, Hafiz (TMC); Ahmed, Sara, Mohammed (DCL)
+- **Sign in as:** Actors: Ali, Hafiz (TMC); Layla, Ahmed, Sara, Mohammed (DCL)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Ali Submits a MAR: it waits in DCL pool of two Engineers.
+  1. Layla gives Sara Electrical again (the demo has her on Mechanical only, RP-1207). Ali Submits a MAR: it waits in DCL pool of two Engineers.
   2. Ali reads With on the item, List and Kanban.
   3. Ahmed picks it up; Sara and Ali read again.
   4. Mohammed issues Code B; the Comments wait in TMC pool.
@@ -2602,9 +2607,8 @@ The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailb
 - **Sign in as:** Ali (TMC PM holding Assign); Yousef
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Setup first: give the tester's Position (Ahmed's on the Vercel UAT, Ali's on lane 7) Assign on Submittals. No demo Position holds Assign, so the report has no recipients until one does (RP-922). The report covers Submittals only, not WIRs.
-  2. Needs aged items (AGE fixture; the demo has only TWR-MAR-01-0002 and TWR-MAR-01-0003 Rev 1 open and numbered) and the lane engineer to run the job (OQ-2).
-  3. Read Ali and Yousef mail and open the link.
+  1. Needs aged items (AGE fixture; the demo has only TWR-MAR-01-0002 and TWR-MAR-01-0003 Rev 1 open and numbered) and the lane engineer to run the job (OQ-2). The demo seed already gives Ali and Yousef the Step Age Report Position, which holds Assign on Submittals (RP-1186). The report covers Submittals only, not WIRs.
+  2. Read Ali and Yousef mail and open the link.
 - **Expected result:** Grouped 4+, 3, 2 and 1 weeks; lists only items the reader can open, never an un-numbered Draft; another Company by name only; Yousef lists only Beta Build items; an empty report is not sent; the link opens the List with the same filter.
 
 ### NOT-10 Emails and the bell follow the Member's language
@@ -2764,7 +2768,7 @@ The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailb
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Ali Submits.
-  2. Ahmed picks it up, sends to Manager, Mohammed Returns it to Ahmed.
+  2. Ahmed (it is his at once: Sara covers Mechanical only, RP-1207) sends to Manager, Mohammed Returns it to Ahmed.
   3. Ali reads With, the Stage, Step Age and the workflow drawer.
   4. Needs AGE: age the item 5 weeks inside TMC, then Submit.
 - **Expected result:** Ali sees With Design Consultants LLC and Step Age counted from the Submit, no reset, no internal move. DCL Step Age runs from when the item reached DCL (week 1), not the five weeks inside TMC; four weeks later it counts for DCL. No Step or person of the other Company appears.

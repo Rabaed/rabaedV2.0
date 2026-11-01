@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { moduleKeys, workItemSearchParams, type Dashboard, type DashboardCard, type DashboardFigure, type WorkItemList } from "@rabaed/domain";
+import { moduleTabOrder, workItemSearchParams, type Dashboard, type DashboardCard, type DashboardFigure, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -160,10 +160,12 @@ describe("scenario 63: Pending and In preparation", () => {
 
   it("groups cards under their Module, with no time axis", async () => {
     const d = await dashboard(tower.c1Pm, tower.projectId);
-    // In the Dashboard's order; other test files add test-only Types (e.g. the Snag List one below).
+    // In the Project's tab order (RP-1176, UX-03: Submittals first, the Snag List after Inspections); other test
+    // files add test-only Types (e.g. the Snag List one below).
     const keys = d.modules.map((m) => m.key);
     expect(keys).toContain("submittals");
-    expect(keys).toEqual(moduleKeys.filter((k) => keys.includes(k)));
+    expect(keys).toEqual(moduleTabOrder.filter((k) => keys.includes(k)));
+    expect(keys.indexOf("submittals")).toBeLessThan(keys.indexOf("snag_list"));
     expect(marCard(d).bars.map((b) => b.bucket)).toEqual(["pending", "C", "A", "B", "D"]);
     expect(JSON.stringify(d)).not.toMatch(/time|date|due/i);
   });

@@ -2,7 +2,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
+import { projectOfFolder, protectedLaneReason } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
+import { folderDeletionRefusal, neverRemovedReason, outsideLockedRefusal, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
@@ -137,6 +139,8 @@ type ChooseInput = {
   only?: string[];
   /** The running and desktop Claude sessions (RP-956, RP-608): a worktree one holds is never removed, even with only. */
   holders: Holders;
+  /** COMPOSE_PROJECT_NAME of a worktree's .env (RP-1198: lane 7's is never removed); its own .env when absent. */
+  projectOf?: (path: string) => string | undefined;
   platform?: NodeJS.Platform;
 };
 
@@ -153,16 +157,18 @@ export const isNamed = (path: string, names: string[], platform?: NodeJS.Platfor
  * a commit of its own or nothing holding it), that have no uncommitted changes; with
  * includeEmpty also those with no commits yet that something still holds, unless they
  * have uncommitted changes. Everything else is skipped with its reason.
- * The caller passes agent worktrees only.
+ * The caller passes agent worktrees only. RP-1198: never one whose .env names lane 7, even with only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, holders, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, holders, projectOf = projectOfFolder, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
   const keepEmpty = includeEmpty || only !== undefined;
   for (const facts of worktrees) {
     const w: Worktree = { path: facts.path, head: facts.head, branch: facts.branch, locked: facts.locked };
     if (only && !isNamed(w.path, only, platform)) continue;
-    const reason = samePath(w.path, currentPath, platform) ? CURRENT_WORKTREE : (holdReason(w.path, holders) ?? cleanSkipReason(facts, keepEmpty));
+    const reason = samePath(w.path, currentPath, platform)
+      ? CURRENT_WORKTREE
+      : (protectedLaneReason(projectOf(w.path)) ?? holdReason(w.path, holders) ?? cleanSkipReason(facts, keepEmpty));
     if (reason) skipped.push({ worktree: w, reason });
     else remove.push(w);
   }
@@ -250,7 +256,8 @@ function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Live
   const exists = existsSync(w.path);
   const changes = exists ? gitChanges(w.path) : [];
   const dirty = changes.length > 0;
-  const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
+  // RP-1198: a branch that only merged the target in has nothing ahead of it.
+  const ahead = unlessMergesOnly(Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim()), w.head, mainRoot, target);
   // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
@@ -345,13 +352,14 @@ export function commandLineHolds(commandLine: string, folder: string, platform: 
 /**
  * Unlocks, removes and deletes one worktree: its folder (git leaves it behind on
  * Windows when node_modules is in it) and its branch. The branch is deleted with
- * `git branch -D` when it is an ancestor of the target branch; `git branch -d` would
+ * `git branch -D` when it is an ancestor of the target branch, or its only commits beyond
+ * the target are merges (mergesOnly, RP-1198); `git branch -d` would
  * check against the main folder's HEAD, not the target. The `worktree-agent-*` branch
  * the app created the worktree on (named after its folder) goes too when it is in the
  * target. Returns the branches kept, each with why.
  */
-export function removeWorktree(w: Worktree, mainRoot: string, target: string): Removal {
-  if (!isAgentWorktree(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: not an agent worktree`);
+export function removeWorktree(w: Worktree, mainRoot: string, target: string): Refused | Removal {
+  if (!isAgentWorktree(w.path, mainRoot)) return { refused: `Not removed: ${w.path} is not an agent worktree.` };
   return removeLinkedWorktree(w, mainRoot, target);
 }
 
@@ -361,11 +369,15 @@ export const longPath = (path: string): string => (path.startsWith("\\\\?\\") ? 
 /**
  * Deletes a Windows folder with `rd /s /q "\\?\<path>"` (RP-1101), which reaches past MAX_PATH where
  * git and rmSync stop. Verbatim arguments: Node would otherwise escape the quotes as \" and rd would get
- * an invalid path. Throws with rd's message when it fails.
+ * an invalid path. Throws with rd's message when it fails. RP-1198: refuses, running nothing, any folder
+ * removal-guard.ts folderDeletionRefusal refuses: the main checkout, lane 7's, or one outside .claude/worktrees/.
  */
-export function rdLongPath(path: string, spawn: typeof spawnSync = spawnSync): void {
+export function rdLongPath(path: string, spawn: typeof spawnSync = spawnSync): Refused | undefined {
+  const refused = folderDeletionRefusal(path);
+  if (refused !== undefined) return { refused };
   const result = spawn("cmd", ["/d", "/s", "/c", `"rd /s /q "${longPath(path)}""`], { encoding: "utf8", windowsVerbatimArguments: true });
   if (result.status !== 0) throw Object.assign(new Error(`rd failed (exit ${result.status})`), { stderr: `${result.stderr ?? ""}${result.error?.message ?? ""}`.trim() || `rd exited ${result.status}` });
+  return undefined;
 }
 
 /** What removeWorktree left: branches it kept, and why its folder is still there. Empty when it removed everything. */
@@ -378,41 +390,43 @@ export type Removal = { branchesKept?: { branch: string; reason: string }[]; fol
  * removal retries while Windows briefly locks node_modules, then tries `rd /s /q \\?\<path>`
  * on Windows; a folder still there afterwards is returned as folderLeft, with why. Once the worktree is removed,
  * a branch git will not delete is kept and named, not thrown.
+ *
+ * RP-1198: it refuses on its own first, reading git and the disk itself: never the main checkout, lane 7's
+ * worktree or the folder this runs in (removal-guard.ts), nor a folder git does not list. Outside
+ * .claude/worktrees/ it deletes no folder: only `git worktree remove` without --force, so git keeps a
+ * worktree with changes, which is refused with git's reason; a locked one there is refused and never unlocked.
  */
-export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Removal {
-  if (samePath(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: the main checkout`);
-  if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
-  try {
-    git(["-c", "core.longpaths=true", "worktree", "remove", "--force", w.path], mainRoot);
-  } catch (error) {
-    // "Directory not empty" leaves the worktree deregistered and its folder behind; a failure after git
-    // deleted its .git leaves a folder git can no longer read (`git worktree prune` drops the record);
-    // any other failure leaves it listed and readable.
-    const gitGone = existsSync(w.path) && !existsSync(join(w.path, ".git"));
-    if (!gitGone && listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
-  }
+export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Refused | Removal {
+  const neverRemoved = worktreeRemovalRefusal(w.path) ?? (samePath(w.path, mainRoot) ? `Not removed: ${w.path} is the main checkout.` : undefined);
+  if (neverRemoved !== undefined) return { refused: neverRemoved };
+  const listed = listWorktrees(mainRoot);
+  const entry = listed.find((x) => samePath(x.path, w.path));
+  if (entry === undefined) return { refused: `Not removed: ${w.path} is not a worktree git lists.` };
+  if (entry === listed[0]) return { refused: `Not removed: ${w.path} is the main checkout.` };
+  const outside = folderDeletionRefusal(w.path) !== undefined;
+  // Outside, an unlock would drop git's own guard (a locked worktree needs `remove -f -f`), and leave the
+  // worktree unlocked when git then refuses: a locked one there is kept (RP-1198 review S1).
+  if (outside && entry.locked !== undefined) return { refused: outsideLockedRefusal(w.path, entry.locked) };
+  if (entry.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   let folderLeft: string | undefined;
-  try {
-    if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  } catch (error) {
-    folderLeft = (error as { code?: string }).code ?? String(error);
-    if (process.platform === "win32") {
-      try {
-        rdLongPath(w.path);
-      } catch (rdError) {
-        folderLeft = `${folderLeft}; ${gitError(rdError)}`;
-      }
-      if (!existsSync(w.path)) folderLeft = undefined;
+  if (outside) {
+    try {
+      git(["-c", "core.longpaths=true", "worktree", "remove", w.path], mainRoot);
+    } catch (error) {
+      return { refused: `Kept ${w.path}: it is outside .claude/worktrees/, where only \`git worktree remove\` without --force removes a worktree, and git would not (${gitError(error)}).` };
     }
-  }
+    if (existsSync(w.path)) folderLeft = "it is outside .claude/worktrees/, so nothing here deletes what git left";
+  } else folderLeft = removeAppWorktree(w.path, mainRoot);
   const branchesKept: { branch: string; reason: string }[] = [];
   const deleteIfInTarget = (branch: string) => {
-    if (!inTarget(branch, target, mainRoot)) {
+    // RP-1198: a branch that only merged the target in is not its ancestor, but has nothing the target lacks.
+    if (!mergedInto(branch, target, mainRoot)) {
       branchesKept.push({ branch, reason: `${branch} has commits ${target} does not` });
       return;
     }
     try {
-      git(["branch", "-D", branch], mainRoot);
+      const refused = deleteBranch(branch, mainRoot);
+      if (refused !== undefined) branchesKept.push({ branch, reason: refused.refused });
     } catch (error) {
       branchesKept.push({ branch, reason: gitError(error) });
     }
@@ -421,6 +435,38 @@ export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: stri
   if (createdBranch !== w.branch && refExists(createdBranch, mainRoot)) deleteIfInTarget(createdBranch);
   if (w.branch) deleteIfInTarget(w.branch);
   return { ...(branchesKept.length > 0 ? { branchesKept } : {}), ...(folderLeft ? { folderLeft } : {}) };
+}
+
+/**
+ * removeLinkedWorktree's steps for a worktree under .claude/worktrees/ (the caller checked folderDeletionRefusal):
+ * `git worktree remove --force`, then rmSync and rd for what is left. Returns why its folder is still there.
+ */
+function removeAppWorktree(path: string, mainRoot: string): string | undefined {
+  try {
+    git(["-c", "core.longpaths=true", "worktree", "remove", "--force", path], mainRoot);
+  } catch (error) {
+    // "Directory not empty" leaves the worktree deregistered and its folder behind; a failure after git
+    // deleted its .git leaves a folder git can no longer read (`git worktree prune` drops the record);
+    // any other failure leaves it listed and readable.
+    const gitGone = existsSync(path) && !existsSync(join(path, ".git"));
+    if (!gitGone && listWorktrees(mainRoot).some((x) => samePath(x.path, path))) throw error;
+  }
+  let folderLeft: string | undefined;
+  try {
+    if (existsSync(path)) rmSync(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (error) {
+    folderLeft = (error as { code?: string }).code ?? String(error);
+    if (process.platform === "win32") {
+      try {
+        const refused = rdLongPath(path);
+        if (refused !== undefined) folderLeft = `${folderLeft}; ${refused.refused}`;
+      } catch (rdError) {
+        folderLeft = `${folderLeft}; ${gitError(rdError)}`;
+      }
+      if (!existsSync(path)) folderLeft = undefined;
+    }
+  }
+  return folderLeft;
 }
 
 /**
@@ -439,6 +485,8 @@ export type LocalBranch = {
   branch: string;
   /** Its tip is an ancestor of the target branch (merge-base --is-ancestor). */
   inTarget: boolean;
+  /** Not inTarget, but its only commits beyond the target are merges of it that add nothing (mergesOnly, RP-1198 review P2). */
+  mergesOnly: boolean;
   /** Its reflog shows a commit made on it (hasOwnCommit). */
   ownCommit: boolean;
   /** Its upstream was deleted on origin (after `git fetch --prune`). */
@@ -457,15 +505,50 @@ export function localBranches(target: string, cwd: string): LocalBranch[] {
     .map((line) => {
       const [ref = "", track = ""] = line.split("\t");
       const branch = ref.replace(/^refs\/heads\//, "");
-      return { branch, inTarget: inTarget(branch, target, cwd), ownCommit: hasOwnCommit(reflogSubjects(ref, cwd)), upstreamGone: track === "[gone]" };
+      const merged = inTarget(branch, target, cwd);
+      return { branch, inTarget: merged, mergesOnly: !merged && mergesOnly(ref, cwd, target), ownCommit: hasOwnCommit(reflogSubjects(ref, cwd)), upstreamGone: track === "[gone]" };
     });
 }
 
 /** Commits of head that no origin branch has. */
 export const unpushedCount = (head: string, cwd: string): number => Number(git(["rev-list", "--count", head, "--not", "--remotes=origin"], cwd).trim());
 
-/** Deletes a branch whose commits are all in the target (the caller checked). */
-export const deleteBranch = (branch: string, cwd: string) => git(["branch", "-D", branch], cwd);
+/**
+ * Whether every commit of head that upstream lacks is a merge (RP-1198): `git cherry <upstream> <head>`
+ * prints nothing, as it leaves merges out (worktrees.test.ts proves it on a throwaway repo). Such a branch
+ * only merged main in, so it has nothing unique. A commit whose change main has but not the commit (a
+ * squash merge or cherry-pick, cherry's "-" line) is not merges only, so those are judged as before.
+ * A merge commit's own content (an evil merge, or edits made during `merge --no-commit`) is invisible to
+ * cherry, so it also requires that merging head into upstream changes nothing: `git merge-tree --write-tree
+ * <upstream> <head>` prints upstream's own tree (RP-1198 review S2). False when git cannot tell (no such
+ * upstream, a git without --write-tree, a conflict), so the caller keeps the worktree.
+ */
+export function mergesOnly(head: string, cwd: string, upstream = "origin/main"): boolean {
+  try {
+    if (git(["cherry", upstream, head], cwd).trim() !== "") return false;
+    const merged = git(["merge-tree", "--write-tree", upstream, head], cwd).split(/\r?\n/)[0]!.trim();
+    return merged !== "" && merged === git(["rev-parse", `${upstream}^{tree}`], cwd).trim();
+  } catch {
+    return false;
+  }
+}
+
+/** A count of head's commits (unpushed, or ahead of upstream), or 0 when they are merges only (mergesOnly). */
+export const unlessMergesOnly = (count: number, head: string, cwd: string, upstream = "origin/main"): number => (count > 0 && mergesOnly(head, cwd, upstream) ? 0 : count);
+
+/**
+ * Deletes a branch whose commits are all in the target (the caller checked), with `git branch -D`. RP-1198: it
+ * refuses on its own first, reading git and the disk itself: never main, nor a branch checked out in the main
+ * checkout, in lane 7's worktree or in the folder this runs in (removal-guard.ts neverRemovedReason).
+ */
+export function deleteBranch(branch: string, cwd: string): Refused | undefined {
+  if (branch === "main") return { refused: "Branch main kept: it is main." };
+  const holder = listWorktrees(cwd).find((w) => w.branch === branch);
+  const reason = holder && neverRemovedReason(holder.path);
+  if (holder !== undefined && reason !== undefined) return { refused: `Branch ${branch} kept: it is checked out in ${holder.path}, ${reason}.` };
+  git(["branch", "-D", branch], cwd);
+  return undefined;
+}
 
 /** `git fetch --prune origin`. */
 export const fetchPrune = (cwd: string) => git(["fetch", "--prune", "origin"], cwd);
@@ -477,6 +560,12 @@ export function isAncestor(ancestor: string, commit: string, cwd: string, spawn:
 
 /** Whether every commit of the branch is in the target. */
 export const inTarget = (branch: string, target: string, cwd: string): boolean => isAncestor(`refs/heads/${branch}`, target, cwd);
+
+/**
+ * Whether deleting the branch loses nothing the target lacks: its tip is in the target (inTarget), or its only
+ * commits beyond it are merges of it that add nothing (mergesOnly). The one rule before every `git branch -D` (RP-1198).
+ */
+export const mergedInto = (branch: string, target: string, cwd: string): boolean => inTarget(branch, target, cwd) || mergesOnly(`refs/heads/${branch}`, cwd, target);
 
 export function pruneWorktrees(mainRoot: string): void {
   git(["worktree", "prune"], mainRoot);

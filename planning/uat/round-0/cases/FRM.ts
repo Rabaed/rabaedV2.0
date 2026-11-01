@@ -182,7 +182,8 @@ defineCase("FRM-06", async (t) => {
   const { page } = await pageAs("hafiz", { phone: true });
   await go(page, `/work-items/${id}`);
   await settle(page);
-  const take = page.getByRole("main").getByRole("button", { name: /Take a photo/ });
+  // "Take photo" since RP-1179 (the owner's Screen Board), "Take a photo" before.
+  const take = page.getByRole("main").getByRole("button", { name: /Take (a )?photo/ });
   await take.scrollIntoViewIfNeeded();
   t.check("On a phone Take a photo is offered beside Upload", (await take.count()) > 0 && (await page.getByRole("main").locator("input[type=file]").count()) > 0);
   await t.shot(page, "phone-sample-photo");

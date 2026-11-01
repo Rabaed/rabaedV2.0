@@ -36,6 +36,11 @@ on:
         default: true
 permissions:
   contents: read
+# An explicit bash adds -o pipefail (GitHub's default shell is `bash -e`, with none), so a failed aging or
+# job run fails its step instead of ending with tee's status (RP-1208).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   refused:
@@ -118,8 +123,8 @@ jobs:
           # Only the choice and the box: their values are fixed words. Free text is read from the event file.
           COMMAND: ${{ inputs.command }}
           DRY_RUN: ${{ inputs.dry_run }}
-        # The recipients' emails the tool might still print are masked by sed as well. GitHub's bash
-        # runs with pipefail, so the tool's exit code is the step's.
+        # The recipients' emails the tool might still print are masked by sed as well. The workflow's
+        # defaults set shell: bash, which runs with pipefail, so the tool's exit code is the step's.
         run: |
           input() { jq -r --arg k "$1" '.inputs[$k] // ""' "$GITHUB_EVENT_PATH"; }
           masked() { sed -E 's/[^[:space:]",:<>]+@[^[:space:]",:<>]+/<email>/g'; }

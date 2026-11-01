@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { demoPeople } from "./demo-session.ts";
-import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
+import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, PEOPLE_MAP, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
@@ -213,6 +213,21 @@ describe("the Who's who panel (RP-1204)", () => {
     for (const p of DEMO_PEOPLE) expect(Object.keys(p).some((k) => /pass|secret|token/i.test(k))).toBe(false);
     const html = renderSheet({ round: "R", cases: [], built: "x" });
     expect(html).not.toMatch(/DEMO_PASSWORD|\.env\.demo/);
+  });
+
+  it("puts every demo person on the map exactly once (RP-1206), and Omar and Sara as narrowed", () => {
+    const placed = [...PEOPLE_MAP.companies.flatMap((c) => c.people), ...PEOPLE_MAP.outside];
+    expect([...placed].sort()).toEqual(DEMO_PEOPLE.map((p) => p.key).sort());
+    expect(DEMO_PEOPLE.filter((p) => p.narrowed).map((p) => p.key).sort()).toEqual(["omar", "sara"]);
+    for (const [from, to] of PEOPLE_MAP.flow) for (const k of [from, to]) expect(PEOPLE_MAP.companies.map((c) => c.key)).toContain(k);
+    expect(DEMO_PEOPLE.every((p) => p.covers.en && p.covers.ar)).toBe(true);
+  });
+
+  it("draws the map in the page, and says what each person covers in the Markdown", () => {
+    const html = renderSheet({ round: "R", cases: [], built: "x" });
+    expect(html).toContain('id="peopleMap"');
+    expect(html).toContain('"peopleMap":{"project"');
+    expect(renderMarkdown({ round: "R", cases: [], built: "x" })).toContain("| Sara | `sara@designconsultants.demo.rabaed.test` | Design Consultants LLC | Consultant, Mechanical only | Engineer | ME only · all towers |");
   });
 
   it("is in the page in English and Arabic", () => {

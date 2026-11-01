@@ -22,6 +22,7 @@ import { getPathname } from "@/i18n/navigation";
 import { useSnagSwipe } from "@/components/snag-swipe";
 import { usePhotoUrls } from "@/components/use-documents";
 import { listSearchParams, snagListSort } from "@/lib/list-url";
+import { newItemHref } from "@/lib/new-item-route";
 
 /** The views' words, from the app's messages. */
 function useSnagLabels(tableLabel: string): SnagListLabels {
@@ -257,7 +258,7 @@ export function SnagListView(
         itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
         onQueryChange={(q) => router.push(hrefIn(view, q))}
         newTypes={newTypes}
-        newHref={(code) => getPathname({ href: `/projects/${projectId}/work-items/new?module=snag_list&type=${encodeURIComponent(code)}`, locale })}
+        newHref={(code) => getPathname({ href: newItemHref(projectId, "snag_list", code), locale })}
         // On a phone, "+" opens the camera-first New page (RP-630).
         phoneNewHref={(code) => getPathname({ href: `/projects/${projectId}/${moduleTabPaths.snag_list}/new?type=${encodeURIComponent(code)}`, locale })}
         swipe={swipe}

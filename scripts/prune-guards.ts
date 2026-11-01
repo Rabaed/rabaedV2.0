@@ -1,5 +1,5 @@
 import { holdReason, type Holders } from "./claude-sessions.ts";
-import { laneProject, protectedLaneReason, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
+import { freeableLane, laneProject, protectedLaneReason, type Container, type KeptProject, type StaleProject, type WorktreeLane } from "./lanes.ts";
 
 // RP-1101: the guards worktrees:prune and lanes:prune share, after 2026-10-29's prunes removed
 // live work. A session working in a stale project's folder keeps it; lane 7 (Main 7's harness
@@ -26,11 +26,19 @@ export const laneRefusal = (lane: number | undefined): string | undefined => {
   return reason === undefined ? undefined : `lanes:prune refused: ${reason}.`;
 };
 
-/** RP-1007: `lanes:prune --merged --yes` with no `--lane N` (and not a dry run) is refused. */
-export const bareMergedYesRefusal = (options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number }): string | undefined =>
-  options.merged && options.yes && !options.dryRun && options.lane === undefined
-    ? "lanes:prune refused: `--merged --yes` needs `--lane N` (RP-1007: a bare one removed other Mains' live stacks). Prune your own lane with `--lane N`, or drop `--yes` to see the list and confirm."
-    : undefined;
+/**
+ * RP-1007: `lanes:prune --merged --yes` with no `--lane` (and not a dry run) is refused. ownLane: the
+ * lane the current worktree's .env names, so the command it offers has the real number (RP-1198); never 7.
+ */
+export const bareMergedYesRefusal = (options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number; ownLane?: number | undefined }): string | undefined => {
+  if (!(options.merged && options.yes && !options.dryRun && options.lane === undefined)) return undefined;
+  const own = freeableLane(options.ownLane) ? options.ownLane : undefined;
+  const instead =
+    own === undefined
+      ? "Add `--lane` with your lane's number (`pnpm lanes:prune --stale` lists the stacks), or drop `--yes` to see the list and confirm."
+      : `Prune this worktree's lane with \`pnpm lanes:prune --merged --yes --lane ${own}\`, or drop \`--yes\` to see the list and confirm.`;
+  return `lanes:prune refused: \`--merged --yes\` needs \`--lane\` (RP-1007: a bare one removed other Mains' live stacks). ${instead}`;
+};
 
 /**
  * A stale project kept because a running or desktop Claude session works in one of its

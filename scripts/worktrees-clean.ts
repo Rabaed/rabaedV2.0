@@ -15,7 +15,8 @@
 // and a worktree a session opened after the prompt is kept and named. The dev servers each
 // removed worktree still runs (servers.ts, as `pnpm servers:stop` finds them) are listed
 // with it and stopped just before it is removed; one that cannot be stopped keeps its
-// worktree (RP-568). Each removed worktree's rabaed-stories-* volumes (test:stories:linux's
+// worktree (RP-568). Never one whose .env names lane 7 (Main 7's harness data), even with --only (RP-1198).
+// Each removed worktree's rabaed-stories-* volumes (test:stories:linux's
 // node_modules, stories-volumes.ts) go after it, never while a worktree with that path exists or a
 // container uses one; those are named (RP-1120). `pnpm worktrees:prune` removes the orphaned sets.
 //
@@ -192,7 +193,13 @@ async function main(): Promise<void> {
       continue;
     }
     try {
-      if (reportRemoval(w.path, removeWorktree(w, mainRoot, target))) failed++;
+      // RP-1198: removeWorktree refuses on its own (the main checkout, lane 7's, anything but an agent worktree).
+      const removal = removeWorktree(w, mainRoot, target);
+      if ("refused" in removal) {
+        console.log(removal.refused);
+        continue;
+      }
+      if (reportRemoval(w.path, removal)) failed++;
       removedPaths.push(w.path);
     } catch (error) {
       failed++;

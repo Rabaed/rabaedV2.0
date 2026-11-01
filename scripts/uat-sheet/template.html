@@ -56,6 +56,11 @@
   table.people tr:last-child td { border-bottom:0; }
   table.people tr.hl { background:#fff4ef; }
   .email { font-family:ui-monospace, Consolas, monospace; font-size:12px; white-space:nowrap; }
+  .peopleMap { border:1px solid var(--line); border-radius:12px; padding:8px; margin-bottom:12px; background:#fff; }
+  .peopleMap svg { display:block; width:100%; height:auto; font-family:inherit; }
+  .peopleMap a.person { text-decoration:none; cursor:pointer; }
+  .peopleMap a.person:hover rect { filter:brightness(.95); }
+  .peopleMap .t1 { font-size:14px; font-weight:700; } .peopleMap .t2 { font-size:12px; }
   .mini { padding:2px 8px; border:1px solid var(--line); border-radius:7px; background:#fff; font-size:12px; cursor:pointer; }
 
   /* Toolbar */
@@ -159,7 +164,7 @@
   </details>
   <details class="card info" id="people">
     <summary><span class="ico">👥</span><span data-t="peopleTitle"></span><span class="chev">›</span></summary>
-    <div class="body"><p class="help" data-t="peopleNote"></p><div class="tableWrap"><table class="people" id="peopleTable"></table></div></div>
+    <div class="body"><div id="peopleMap" class="peopleMap"></div><p class="help" data-t="peopleNote"></p><div class="tableWrap"><table class="people" id="peopleTable"></table></div></div>
   </details>
   <section class="card pad">
     <div class="toolbar">
@@ -202,6 +207,7 @@ const T = {
         ownerNote: "The UAT owner runs the cases in this section: they need the owner's machine, Rabaed Admin or a mailbox you can't read. Skip them unless the owner asks you to.",
         peopleTitle: "Who's who: the demo people you can sign in as",
         peopleNote: "Every case names who to sign in as under Sign in as: click a name to find them here. The owner gives you each sign-in; this sheet holds no passwords. Use one private window per person.",
+        mapTrades: "Trades", mapLocations: "Locations", mapContractors: "Contractors", mapConsultant: "Consultant", mapOwner: "Owner representative", mapCodes: "EL Electrical · ME Mechanical",
         pName: "Name", pEmail: "Sign-in email", pCompany: "Company", pRole: "On the Project", pPosition: "Position", pUse: "Used for", copy: "Copy", copied: "Copied",
         startTitle: "How to start",
         guide: [
@@ -227,6 +233,7 @@ const T = {
         ownerNote: "يشغّل مسؤول الاختبار حالات هذا القسم: تحتاج إلى جهازه أو إلى Rabaed Admin أو إلى بريد لا تستطيع قراءته. تخطّها إلا إذا طلب منك ذلك.",
         peopleTitle: "من هو من: الأشخاص التجريبيون الذين يمكنك الدخول باسمهم",
         peopleNote: "تذكر كل حالة من تسجّل الدخول باسمه تحت سجّل الدخول باسم: انقر الاسم لتجده هنا. يعطيك المسؤول بيانات الدخول لكل شخص؛ لا تحمل هذه الورقة كلمات مرور. استخدم نافذة خاصة لكل شخص.",
+        mapTrades: "التخصصات", mapLocations: "المواقع", mapContractors: "المقاولون", mapConsultant: "الاستشاري", mapOwner: "ممثل المالك", mapCodes: "EL كهرباء · ME ميكانيكا",
         pName: "الاسم", pEmail: "بريد الدخول", pCompany: "الشركة", pRole: "في المشروع", pPosition: "المنصب", pUse: "يُستخدم في", copy: "نسخ", copied: "نُسخ",
         startTitle: "كيف تبدأ",
         guide: [
@@ -403,6 +410,54 @@ function drawPeople() {
       <td><span class="email" dir="ltr">${esc(p.email)}</span> <button class="mini" type="button" data-copy="${esc(p.email)}">${esc(t("copy"))}</button></td>
       <td>${esc(L(p.company))}</td><td>${esc(L(p.role))}</td><td>${esc(L(p.position))}</td><td>${esc(L(p.usedFor))}</td></tr>`).join("") + "</tbody>";
 }
+// ---- The Who's who map (RP-1206): Companies side by side, their people under them, who is outside ----
+const TONES = { contractor: ["#E1F5EE", "#0F6E56", "#085041"], consultant: ["#EEEDFE", "#534AB7", "#3C3489"], owner: ["#FAECE7", "#993C1D", "#712B13"], gray: ["#F1EFE8", "#888780", "#444441"] };
+function drawMap() {
+  const M = DATA.peopleMap; if (!M) { $("peopleMap").style.display = "none"; return; }
+  const L = (b) => b?.[lang] ?? b?.en ?? "";
+  const byKeyP = new Map(PEOPLE.map((p) => [p.key, p]));
+  const W = 150, GAP = 5, X0 = 20, colX = (i) => X0 + i * (W + GAP), cx = (i) => colX(i) + W / 2;
+  const txt = (x, y, s, cls, fill, anchor = "middle") => `<text x="${x}" y="${y}" class="${cls}" fill="${fill}" text-anchor="${anchor}" dominant-baseline="central">${esc(s)}</text>`;
+  const box = (x, y, w, h, tone, lines, opts = {}) => {
+    const [bg, stroke, ink] = TONES[tone];
+    const inner = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${opts.dashed ? "none" : bg}" stroke="${stroke}" stroke-width="${opts.thick ? 2 : 0.8}"${opts.dashed ? ' stroke-dasharray="4 4"' : ""}/>` +
+      lines.map((s, i) => txt(x + w / 2, y + 17 + i * 17, s, i ? "t2" : "t1", i ? stroke : ink)).join("");
+    return opts.key ? `<a class="person" href="#p-${esc(opts.key)}"><title>${esc(lines[0])}</title>${inner}</a>` : inner;
+  };
+  let s = "", y = 16;
+  const rows = Math.max(...M.companies.map((c) => c.people.length));
+  const projH = 222 + rows * 74;
+  s += `<rect x="10" y="${y}" width="660" height="${projH}" rx="16" fill="none" stroke="#d9d4cb"/>`;
+  s += txt(28, 40, L(M.project), "t1", "#1c2230", "start");
+  s += box(28, 56, 300, 50, "gray", [t("mapTrades"), L(M.trades)]);
+  s += box(340, 56, 312, 50, "gray", [t("mapLocations"), L(M.locations)]);
+  const ci = (k) => M.companies.findIndex((c) => c.key === k);
+  M.flow.forEach(([a, b], n) => {
+    const x1 = cx(ci(a)) + (n ? 7 : 0), x2 = cx(ci(b)) - (n ? 0 : 7), top = n ? 140 : 150;
+    s += `<path d="M${x1} 168 L${x1} ${top} L${x2} ${top} L${x2} 164" fill="none" stroke="#888780" stroke-width="1.2"/><path d="M${x2 - 4} 159 L${x2} 166 L${x2 + 4} 159" fill="none" stroke="#888780" stroke-width="1.2"/>`;
+  });
+  M.companies.forEach((c, i) => {
+    s += box(colX(i), 168, W, 56, c.tone, [L(c.name), L(c.role)]);
+    c.people.forEach((k, r) => {
+      const p = byKeyP.get(k); if (!p) return;
+      s += box(colX(i), 236 + r * 74, W, 66, c.tone, [p.name, L(p.mapRole ?? p.position), L(p.covers)], { key: k, thick: p.narrowed });
+    });
+  });
+  y = 16 + projH + 18;
+  M.outside.forEach((k, i) => {
+    const p = byKeyP.get(k); if (!p) return;
+    s += box(20 + i * 315, y, 300, 50, "gray", [p.name, L(p.covers)], { key: k, dashed: true });
+  });
+  y += 72;
+  const legend = [["contractor", t("mapContractors")], ["consultant", t("mapConsultant")], ["owner", t("mapOwner")]];
+  legend.forEach(([tone, label], i) => {
+    const [bg, stroke] = TONES[tone], x = 20 + i * 150;
+    s += `<rect x="${x}" y="${y - 6}" width="12" height="12" rx="3" fill="${bg}" stroke="${stroke}"/>` + txt(x + 18, y, label, "t2", "#565f71", "start");
+  });
+  s += txt(470, y, t("mapCodes"), "t2", "#565f71", "start");
+  s += txt(20, y + 26, L(M.note), "t2", "#565f71", "start");
+  $("peopleMap").innerHTML = `<svg viewBox="0 0 680 ${y + 44}" role="img" aria-label="${esc(t("peopleTitle"))}" direction="ltr">${s}</svg>`;
+}
 // A case's "Sign in as" line with each demo person's first name linking to their row (whole words, Latin names).
 const linkPeople = (who) => {
   let html = esc(who);
@@ -454,7 +509,7 @@ function applyLang() {
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   $("lang").textContent = lang === "ar" ? "English" : "العربية";
-  fillFilters(); drawGuide(); drawPeople(); drawSections(); progress();
+  fillFilters(); drawGuide(); drawMap(); drawPeople(); drawSections(); progress();
 }
 function fillFilters() {
   const opt = (sel, values, label) => {

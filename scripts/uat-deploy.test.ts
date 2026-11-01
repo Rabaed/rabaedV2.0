@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyProject, automationBypass, PROJECTS, projectEnv, projectSettings, commandEnv, pnpmCommand, recordsContainerEnv, recordsSecretsImport, uatDatabase, type ProjectName } from "./uat-deploy.ts";
+import { applyProject, automationBypass, defaultsEnv, PROJECTS, projectEnv, projectSettings, commandEnv, pnpmCommand, recordsContainerEnv, recordsSecretsImport, uatDatabase, type ProjectName } from "./uat-deploy.ts";
 
 // The UAT deploy's helper (ADR 0026, RP-1043), run by deploy-uat.yml and reset-uat.yml
 // with environment `uat`'s secrets and variables. These values stand in for them.
@@ -361,11 +361,16 @@ describe("the pnpm commands the deploy runs", () => {
     expect(pnpmCommand("demo", "reset")).toEqual(["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", "reset"]);
   });
 
+  // RP-1205: the Rabaed Defaults, after the migrations, in the mode that prints counts and keys only.
+  it("runs the Rabaed Defaults publish in its CI mode", () => {
+    expect(pnpmCommand("defaults")).toEqual(["--filter", "@rabaed/admin", "run", "defaults:publish", "--ci"]);
+  });
+
   // `pnpm --filter @rabaed/db setup` ran pnpm's own `setup`, which refused the
   // --recursive that --filter implies (Deploy UAT run 40388707146): a package's
   // script goes through `run`, a binary through `exec`.
   it("names `run` or `exec` after the package, so no pnpm built-in shadows a script", () => {
-    for (const [command, argument] of [["migrate"], ["app-role-check"], ["demo", "ensure"], ["demo", "reset"]] as const) {
+    for (const [command, argument] of [["migrate"], ["app-role-check"], ["defaults"], ["demo", "ensure"], ["demo", "reset"]] as const) {
       const [filter, , word] = pnpmCommand(command, argument) ?? [];
       expect(filter).toBe("--filter");
       expect(["run", "exec"]).toContain(word);
@@ -375,6 +380,30 @@ describe("the pnpm commands the deploy runs", () => {
   it("has none for another command, and refuses another demo argument", () => {
     expect(pnpmCommand("project", "web")).toBeUndefined();
     expect(() => pnpmCommand("demo", "drop")).toThrow("demo ensure|reset");
+  });
+});
+
+describe("the Rabaed Defaults publish's environment (RP-1205)", () => {
+  const withEngineer = { ...env, DEFAULTS_ENGINEER_EMAIL: "engineer@rabaed.demo.rabaed.test" };
+  const sha = "4a0a58dd3fedcba9876543210fedcba987654321";
+
+  it("is UAT's session-pooler connections, the Engineer's email and a reason naming the deployed commit", () => {
+    expect(defaultsEnv(withEngineer, sha)).toMatchObject({
+      DATABASE_MIGRATOR_URL: uatDatabase(env).session.migrator,
+      DEFAULTS_ENGINEER_EMAIL: "engineer@rabaed.demo.rabaed.test",
+      DEFAULTS_REASON: "Deploy 4a0a58d: the Rabaed Default Workflows, Forms and Screens (RP-1205)",
+    });
+  });
+
+  it("holds none of the deploy's other secrets", () => {
+    const child = defaultsEnv(withEngineer, sha);
+    for (const name of ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "SENDGRID_API_KEY", "CRON_SECRET", "DEMO_PASSWORD", "PROJECT_FILES_BUCKET", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY"]) expect(child[name], name).toBeUndefined();
+  });
+
+  it("refuses without the Engineer's email, or with a version that is no commit", () => {
+    expect(() => defaultsEnv(env, sha)).toThrow(/^DEFAULTS_ENGINEER_EMAIL is required/);
+    expect(() => defaultsEnv(withEngineer, "main; echo $SECRET")).toThrow("VERSION must be a commit");
+    expect(() => defaultsEnv(withEngineer, "")).toThrow("VERSION must be a commit");
   });
 });
 
