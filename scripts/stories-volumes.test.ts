@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumes, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
-import { volumeName, worktreeHash } from "./test-stories-linux.ts";
+import { worktreeHash } from "./stories-hash.ts";
+import { volumeName } from "./test-stories-linux.ts";
 import { parseWorktrees } from "./worktrees.ts";
 
 // RP-1120: `pnpm test:stories:linux` keeps Linux node_modules in rabaed-stories-<hash>-<folder> volumes,
