@@ -142,7 +142,9 @@ jobs:
           lines=$(node scripts/uat-deploy.ts records-env)
           while IFS= read -r line; do
             value="${line#*=}"
-            if [ -n "$value" ]; then echo "::add-mask::$value"; fi
+            # Only from 8 characters: masking a short value ("2", "auto") would garble the public
+            # log. A short one is not a secret, and it is never printed either: no echo, no tee.
+            if [ "${#value}" -ge 8 ]; then echo "::add-mask::$value"; fi
           done <<<"$lines"
           printf '%s\n' "$lines" | flyctl secrets import --stage --app "$FLY_RECORDS_APP"
 

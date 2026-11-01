@@ -71,8 +71,10 @@ jobs:
               exit 1
             fi
           done
+          # A value is masked only from 8 characters: masking a short one ("2") would garble the
+          # public log. So a short value is never printed: no message below shows an input.
           member="$(jq -r '.inputs.member // ""' "$GITHUB_EVENT_PATH")"
-          if [ -n "$member" ]; then echo "::add-mask::$member"; fi
+          if [ "${#member}" -ge 8 ]; then echo "::add-mask::$member"; fi
           items="$(jq -r '.inputs.items // ""' "$GITHUB_EVENT_PATH")"
           trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
           refused=0
@@ -81,18 +83,18 @@ jobs:
             item="$(trim "$item")"
             if [ -z "$item" ]; then continue; fi
             if ! [[ "$item" =~ ^[A-Za-z0-9]+(-[A-Za-z0-9]+)+(\ [Rr]ev\ [0-9]+)?$ ]]; then
-              echo "::add-mask::$item"
+              if [ "${#item}" -ge 8 ]; then echo "::add-mask::$item"; fi
               refused=1
             fi
           done
           if [ "$refused" = "1" ]; then
-            echo "::add-mask::$items"
+            if [ "${#items}" -ge 8 ]; then echo "::add-mask::$items"; fi
             echo "::error::items takes Document Numbers only (the run log is public); nothing was changed."
             exit 1
           fi
           weeks="$(jq -r '.inputs.weeks // ""' "$GITHUB_EVENT_PATH")"
           if [ -n "$weeks" ] && ! [[ "$weeks" =~ ^[0-9]{1,2}$ ]]; then
-            echo "::add-mask::$weeks"
+            if [ "${#weeks}" -ge 8 ]; then echo "::add-mask::$weeks"; fi
             echo "::error::weeks is a whole number from 1 to 52; nothing was changed."
             exit 1
           fi
