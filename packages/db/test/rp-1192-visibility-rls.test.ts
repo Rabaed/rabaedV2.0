@@ -130,7 +130,7 @@ describe("scenario RP-1192-1: K1 holds C1's Submittal at one of K1's own Steps",
       it("app.step_as_seen gives C1 and the Owner Representative no Step, and K1 its own", async () => {
         await expectHiddenFrom({ read: stepAsSeen(item()), target, seenBy: k1(), hiddenFrom: outside(), name: named, label: "app.step_as_seen" });
         // Nothing of K1's Steps at all, not even the one C1's Submit reached.
-        for (const as of outside()) expect(await stepAsSeen(item())(as), named(as)).toEqual([]);
+        for (const as of outside()) expect(await stepAsSeen(item())(as), named(as)).toEqual([]); // not hidden-from: proved with K1 just above; this pins that no other K1 Step is read either
       });
 
       it("app.step_as_seen gives everyone the holding role, and the Stage", async () => {
@@ -142,7 +142,7 @@ describe("scenario RP-1192-1: K1 holds C1's Submittal at one of K1's own Steps",
 
       it("app.work_items_seen (the List row and the Kanban card) gives C1 and the Owner Representative no Step, and K1 its own", async () => {
         await expectHiddenFrom({ read: listStep(item()), target, seenBy: k1(), hiddenFrom: outside(), name: named, label: "app.work_items_seen" });
-        for (const as of outside()) expect(await listStep(item())(as), named(as)).toEqual([]);
+        for (const as of outside()) expect(await listStep(item())(as), named(as)).toEqual([]); // not hidden-from: proved with K1 just above; this pins that no other K1 Step is read either
       });
     });
   }

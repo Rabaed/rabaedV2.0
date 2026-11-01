@@ -185,6 +185,7 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
     for (const as of c1()) expect(await atStep(as), named(as)).toEqual([{ id: null }, { id: null }]);
   });
 
+  // Still granted (work_item_event.to_step_id): RP-1203 takes K1's Consultant review out of C1's reach here.
   it("C1 still reads where each shared move took the item: K1's Consultant review, and the close's Step", async () => {
     const closedStep = (await migrator.query("select current_step_id from work_item where id = $1", [closed])).rows[0].current_step_id as string;
     for (const as of [...c1(), ...k1()]) {

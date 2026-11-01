@@ -16,13 +16,15 @@
 --   join still reads the Step it is seen at, for the Owner's review label alone.
 -- * app.work_item_history: an event's `to_step_name` only where the Step it reached is the reader's own
 --   Participant's (the reader's Participant has an assignment at it on this item; step_assignment's policy
---   gives a reader only its own Participant's rows) or is terminal (no actor). So C1's Submit names
---   Consultant review to nobody outside K1, and K1's Send Back to C1's internal review names it to C1 only.
+--   gives a reader only its own Participant's rows) or is terminal (no actor), on an event of the reader's own
+--   Participant as before. So C1's Submit names Consultant review to nobody (K1 reads no Step on C1's events),
+--   and K1's Send Back names C1's internal review to nobody either: K1 has no assignment there.
 -- * app.take_step_age_report: reads the Step with a left join, so an item held by another Company stays in
 --   the report (with no Step name, which it showed only for the reader's own Steps).
 --
--- Not changed: work_item_event.to_step_id stays granted to the app role (the List's closed card finds its
--- closer by it; RP-1140); the api names no Step from it.
+-- Not changed here: work_item_event.to_step_id stays granted to the app role (the List's closed card finds its
+-- closer by it; RP-1140), so the id of the Step a shared move reached is still readable; the api names no Step
+-- from it. That is RP-1203.
 
 -- 1. ------------------------------------------------------------------------------------------------------
 -- From 20271019000000_reads_at_scale.sql.
@@ -43,10 +45,7 @@ create function app.step_as_seen(p_work_item_id uuid)
       return query
         select
           -- The holding Participant's own Step, or a closed item's terminal Step; never another Company's (V14).
-          case when w.closed_at is not null or exists (
-            select 1 from step_assignment a
-            where a.work_item_id = w.id and a.status in ('pooled', 'picked_up', 'vacant') and a.participant_id = any(v_mine)
-          ) then seen.step_id end,
+          case when w.closed_at is not null or app.holds_work_item(w.id) then seen.step_id end,
           seen.stage_key, seen.entered_at,
           app.actor_role(s.actor_rule, app.work_item_raiser_role(w.id))
         from app.step_as_seen_unchecked(p_work_item_id, v_mine) seen

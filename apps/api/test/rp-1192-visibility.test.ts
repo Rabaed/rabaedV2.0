@@ -117,7 +117,7 @@ describe("scenario RP-1192-1: K1 holds C1's Submittal at one of K1's own Steps",
     for (const [item, target] of held()) {
       await expectHiddenFrom({ read: stepsRead(item), target, seenBy: k1(), hiddenFrom: outside(), name: named, label: `K1's ${target}` });
       // Not even the Step C1's Submit reached.
-      for (const by of outside()) expect(await stepsRead(item)(by), `${named(by)} at ${target}`).toEqual([]);
+      for (const by of outside()) expect(await stepsRead(item)(by), `${named(by)} at ${target}`).toEqual([]); // not hidden-from: the expectHiddenFrom above proves this read with K1; this pins that no other K1 Step is read either
     }
   });
 

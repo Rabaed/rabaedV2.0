@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { editableAtProblem, sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
 import { defaultOutcomeSets } from "./outcome.ts";
-import { holderRole, withRaiserRole } from "./work-item-workflow.ts";
+import { withRaiserRole } from "./work-item-workflow.ts";
 import { stepEditsForm, workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import {
   actorHolder,
@@ -162,10 +162,8 @@ describe("Form Sections with the raiser as a holder", () => {
 
 describe("an item's map of a Workflow with the raiser as a holder", () => {
   it("holds the raiser's Steps by the item's raiser's role", () => {
+    // The map's holder role for another Company now comes from app.step_as_seen's holder_role (RP-1192).
     const consultantRaised = withRaiserRole(snag, "consultant");
-    expect(holderRole(consultantRaised, "verify")).toBe("consultant");
-    expect(holderRole(consultantRaised, "open")).toBe("contractor");
     expect(consultantRaised.steps[0]!.actor).toEqual({ role: "consultant", permission: "create" });
-    expect(holderRole(snag, "verify")).toBeNull();
   });
 });
