@@ -1,8 +1,10 @@
 // `pnpm lanes [--main N]` (RP-1170): every rabaed-* stack with its lane, Main, worktrees, PR and its
 // state, whether a verify runs, and how long it has been idle (lane-rows.ts), under a line with the
-// running stacks against the cap. It only reads: Docker, git, gh and the verify locks.
+// running stacks against the cap. It fetches origin main, then only reads: Docker, git, gh and the verify locks.
+// RP-1198: after its arguments, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { formatRows, laneRows, parseLanesArgs } from "./lane-rows.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readWorktreeEnv, type Volume } from "./lanes.ts";
 import { maxStacks, runningStacks } from "./machine-load.ts";
@@ -17,6 +19,7 @@ if ("error" in options) {
   console.error(options.error);
   process.exit(1);
 }
+stopIfBehindOrigin("pnpm lanes");
 
 const containers = listContainers(DOCKER_TIMEOUT_MS);
 let volumes: Volume[] | undefined;

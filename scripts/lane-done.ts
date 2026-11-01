@@ -27,11 +27,13 @@
 //     --lane N   the lane, when the PR's worktree is gone (or to check it is the one its .env names); never 7
 //     --force    removes worktrees with uncommitted or untracked files, or commits origin/main lacks
 //     --yes      skips the confirmation; --dry-run only lists, and removes nothing
+// RP-1198: after its arguments, before anything else, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fetchComments, readClaims } from "./claims.ts";
 import { holdReason, systemHolders } from "./claude-sessions.ts";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { aheadOf, branchPaths } from "./lane-done-git.ts";
 import { branchKey } from "./lane-claims.ts";
@@ -93,6 +95,7 @@ if ("error" in parsed) {
   process.exit(1);
 }
 const { force, yes, dryRun } = parsed;
+stopIfBehindOrigin("pnpm lane:done");
 const here = currentRoot();
 const projectOf = (path: string) => (existsSync(path) ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined);
 
