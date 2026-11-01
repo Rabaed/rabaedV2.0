@@ -28,13 +28,18 @@ describe("deploy-uat.yml's Rabaed Defaults step", () => {
   });
 
   it("runs after the migrations and the demo, which creates the Engineer, and before anything goes live", () => {
-    const run = (needle: string) => stepsOf(workflow).findIndex((step) => step.run?.includes(needle));
+    // A step that is not found is a failure of its own, not an index of -1 that sorts before everything.
+    const indexOf = (needle: string) => {
+      const index = stepsOf(workflow).findIndex((step) => step.run?.includes(needle));
+      expect(index, `a step that runs "${needle}"`).toBeGreaterThan(-1);
+      return index;
+    };
     const at = stepsOf(workflow).findIndex((step) => step.name === STEP);
-    expect(at).toBeGreaterThan(-1);
-    expect(run("uat-deploy.ts migrate")).toBeLessThan(at);
-    expect(run("uat-deploy.ts demo ensure")).toBeLessThan(at);
-    expect(at).toBeLessThan(run("vercel promote"));
-    expect(at).toBeLessThan(run("vercel deploy"));
+    expect(at, `the step "${STEP}"`).toBeGreaterThan(-1);
+    expect(indexOf("uat-deploy.ts migrate")).toBeLessThan(at);
+    expect(indexOf("uat-deploy.ts demo ensure")).toBeLessThan(at);
+    expect(at).toBeLessThan(indexOf("vercel promote"));
+    expect(at).toBeLessThan(indexOf("vercel deploy"));
   });
 
   it("calls the script that takes the Engineer from the environment", () => {
@@ -43,7 +48,12 @@ describe("deploy-uat.yml's Rabaed Defaults step", () => {
 });
 
 describe("the drift check itself", () => {
-  const swap = (from: string, to: string) => workflow.replace(`DEFAULTS_ENGINEER_EMAIL: ${from}`, `DEFAULTS_ENGINEER_EMAIL: ${to}`);
+  const swap = (from: string, to: string) => {
+    const changed = workflow.replace(`DEFAULTS_ENGINEER_EMAIL: ${from}`, `DEFAULTS_ENGINEER_EMAIL: ${to}`);
+    // Should the workflow and the constant drift, test 1 names it; this must not no-op beside it.
+    expect(changed, "the workflow carries the line this check changes").not.toBe(workflow);
+    return changed;
+  };
 
   it("sees a different address", () => {
     expect(engineerIn(swap(DEMO_ENGINEER_EMAIL, "engineer@rabaed.example.test"))).not.toBe(DEMO_ENGINEER_EMAIL);
