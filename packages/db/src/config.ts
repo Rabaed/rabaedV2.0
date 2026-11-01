@@ -1,3 +1,4 @@
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 import { ROLE_PASSWORDS_FLAG, rolePasswordModes, type RolePasswordMode } from "./task-flags.ts";
 
@@ -48,7 +49,7 @@ const parts = z.object({
   DATABASE_PORT: z.coerce.number().int().positive().default(5432),
   DATABASE_NAME: z.string().min(1),
   /** A CA bundle file: when set, TLS is required and the server's certificate verified. */
-  DATABASE_SSL_ROOT_CERT: z.string().min(1).optional(),
+  DATABASE_SSL_ROOT_CERT: optionalSecret,
   username: z.string().min(1),
 });
 

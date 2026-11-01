@@ -1,7 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-green.ts";
 import { BASELINE_BOT_EMAIL, type ReviewedGit } from "./reviewed-label.ts";
-import { needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
+import { fileAtVia, fileVersionsVia, needsVerify, requireVerified, stampLine, verifiedCommits, verifyGate, type GateSeam } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
 
 const steps = ["lint", "typecheck", "test:unit"];
@@ -275,5 +279,101 @@ describe("requireVerified", () => {
     const result = await requireVerified(prEvent, seam);
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("bad object abc1234");
+  });
+
+  it("fails, naming why, when git cannot read a changed package.json, however green CI is (RP-1196)", async () => {
+    const { seam } = fakeGate({
+      pull: async () => ({ body: "", headSha: "abc1234", labels: ["reviewed"] }),
+      changedFiles: () => ["apps/admin/package.json"],
+      packageJsonVersions: () => {
+        throw new Error("git ls-tree failed: fatal: Not a valid object name abc1234");
+      },
+    });
+    const result = await requireVerified(prEvent, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("Not a valid object name abc1234");
+  });
+});
+
+describe("fileVersionsVia (RP-1196: fail closed)", () => {
+  // A fake git: `trees` is what `ls-tree` lists at each ref, `blobs` each blob's text; any other ref is unknown.
+  function fakeGit({ base = "base777", trees = {}, blobs = {}, fail = {} }: { base?: string; trees?: Record<string, Record<string, string>>; blobs?: Record<string, string>; fail?: Record<string, string> }) {
+    const calls: string[][] = [];
+    const spawn = ((_command: string, args: string[]) => {
+      calls.push(args);
+      const failed = fail[args[0] ?? ""];
+      if (failed !== undefined) return { status: 128, stdout: "", stderr: failed };
+      if (args[0] === "merge-base") return { status: 0, stdout: `${base}\n`, stderr: "" };
+      if (args[0] === "ls-tree") {
+        const [ref, , file] = args.slice(-3);
+        const tree = trees[ref ?? ""];
+        if (tree === undefined) return { status: 128, stdout: "", stderr: `fatal: Not a valid object name ${ref}\n` };
+        const oid = tree[file ?? ""];
+        return { status: 0, stdout: oid === undefined ? "" : `100644 blob ${oid}\t${file}\0`, stderr: "" };
+      }
+      if (args[0] === "cat-file") {
+        const text = blobs[args[2] ?? ""];
+        return text === undefined ? { status: 128, stdout: "", stderr: `fatal: git cat-file ${args[2]}: bad file\n` } : { status: 0, stdout: text, stderr: "" };
+      }
+      return { status: 1, stdout: "", stderr: "unexpected" };
+    }) as unknown as typeof spawnSync;
+    return { calls, versions: fileVersionsVia("/work", spawn) };
+  }
+
+  it("reads a file at the merge base with origin/main and at the commit", () => {
+    const { versions, calls } = fakeGit({ trees: { base777: { "docs/a.txt": "o1" }, abc1234: { "docs/a.txt": "o2" } }, blobs: { o1: "OLD", o2: "NEW" } });
+    expect(versions("abc1234", "docs/a.txt")).toEqual({ before: "OLD", after: "NEW" });
+    expect(calls).toEqual([
+      ["merge-base", "origin/main", "abc1234"],
+      ["ls-tree", "-z", "--full-tree", "base777", "--", "docs/a.txt"],
+      ["cat-file", "blob", "o1"],
+      ["ls-tree", "-z", "--full-tree", "abc1234", "--", "docs/a.txt"],
+      ["cat-file", "blob", "o2"],
+    ]);
+  });
+
+  it("answers undefined for a path that does not exist at a commit: added, or deleted", () => {
+    const { versions } = fakeGit({ trees: { base777: {}, abc1234: { "apps/admin/package.json": "o2" } }, blobs: { o2: "{}" } });
+    expect(versions("abc1234", "apps/admin/package.json")).toEqual({ before: undefined, after: "{}" });
+    const deleted = fakeGit({ trees: { base777: { "package.json": "o1" }, abc1234: {} }, blobs: { o1: "{}" } });
+    expect(deleted.versions("abc1234", "package.json")).toEqual({ before: "{}", after: undefined });
+  });
+
+  it("throws on a commit git does not have (a bad ref, a shallow clone), never reading it as deleted", () => {
+    const { versions } = fakeGit({ trees: { base777: { "package.json": "o1" } }, blobs: { o1: "{}" } });
+    expect(() => versions("abc1234", "package.json")).toThrow("Not a valid object name abc1234");
+  });
+
+  it("throws when the merge base cannot be found, never reading the base side as missing", () => {
+    const { versions } = fakeGit({ trees: { abc1234: {} }, fail: { "merge-base": "fatal: Not a valid object name origin/main\n" } });
+    expect(() => versions("abc1234", "package.json")).toThrow("Not a valid object name origin/main");
+  });
+
+  it("with real git: a missing path is undefined, an unknown commit throws", () => {
+    const dir = mkdtempSync(join(tmpdir(), "file-at-"));
+    try {
+      const git = (...args: string[]) => {
+        const done = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: dir, encoding: "utf8" });
+        if (done.status !== 0) throw new Error(done.stderr);
+        return done.stdout.trim();
+      };
+      git("init", "-q");
+      mkdirSync(join(dir, "apps", "ä"), { recursive: true });
+      writeFileSync(join(dir, "apps", "ä", "package.json"), '{"name":"a"}\n');
+      git("add", ".");
+      git("commit", "-qm", "one");
+      const at = fileAtVia(dir, spawnSync);
+      expect(at("HEAD", "apps/ä/package.json")).toBe('{"name":"a"}\n');
+      expect(at("HEAD", "apps/ä/missing.json")).toBeUndefined();
+      expect(at("HEAD", "apps/ä")).toBeUndefined();
+      expect(() => at("0123456789abcdef0123456789abcdef01234567", "apps/ä/package.json")).toThrow(/ls-tree/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws when git lists the file but cannot read it", () => {
+    const { versions } = fakeGit({ trees: { base777: { "package.json": "o1" }, abc1234: { "package.json": "o2" } }, blobs: { o1: "{}" } });
+    expect(() => versions("abc1234", "package.json")).toThrow("bad file");
   });
 });

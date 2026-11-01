@@ -122,6 +122,15 @@ export default tseslint.config(
     rules: { "rabaed/no-buffer-slice": "error" },
   },
   {
+    // An env schema's optional string is optionalSecret: z.string().min(1).optional() refuses the empty `KEY=` line a .env
+    // holds for an unset value, which would have stopped the worker in every lane (#560, RP-1196). The rule itself finds
+    // the env schema files (process.env, or a *FromEnv reader), so every file is given to it.
+    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],
+    plugins: { rabaed },
+    rules: { "rabaed/env-optional-secret": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },

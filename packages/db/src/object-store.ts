@@ -1,3 +1,4 @@
+import { optionalSecret } from "@rabaed/domain";
 import { z } from "zod";
 
 // The S3-compatible object stores from the environment, read one way for the
@@ -41,10 +42,10 @@ export function objectStoreFromEnv(source: NodeJS.ProcessEnv = process.env, name
     .object({
       bucket: z.string().min(3),
       endpoint: z.url().optional(),
-      accessKeyId: z.string().min(1).optional(),
-      secretAccessKey: z.string().min(1).optional(),
-      region: z.string().min(1).optional(),
-      awsRegion: z.string().min(1).optional(),
+      accessKeyId: optionalSecret,
+      secretAccessKey: optionalSecret,
+      region: optionalSecret,
+      awsRegion: optionalSecret,
     })
     .parse({
       bucket: source[names.bucket],

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDoc } from "./reviewed-required.ts";
+import { fileAtVia } from "./verify-gate.ts";
 
 // Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR,
 // with at most docs. One definition for `pnpm queue` (scripts/queue-pr.ts), which
@@ -89,10 +90,8 @@ export function branchMix(repo: string, commit?: string): string[] | undefined {
   const base = must("merge-base", "origin/main", commit ?? "HEAD").trim();
   // --no-renames lists a rename's old path too, as `pnpm queue` does (RP-606).
   const files = [...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))];
-  const show = (ref: string, file: string) => {
-    const done = git("show", `${ref}:${file}`);
-    return done.status === 0 ? done.stdout : undefined;
-  };
+  // Undefined only where the path is not there; any other git failure throws (RP-1196).
+  const show = fileAtVia(repo, spawnSync);
   const onDisk = (file: string) => (existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : undefined);
   return sharedFilesMix(files, (file) => ({ before: show(base, file), after: commit ? show(commit, file) : onDisk(file) }));
 }

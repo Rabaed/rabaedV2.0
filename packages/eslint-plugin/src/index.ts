@@ -15,6 +15,7 @@ import {
 } from "./js-rules.ts";
 import { jsonNoDeadlineWords, jsonNoPluralPound } from "./json-rules.ts";
 import { noBufferSlice } from "./buffer-rules.ts";
+import { envOptionalSecret } from "./env-rules.ts";
 import { orderByTiebreaker } from "./order-rules.ts";
 
 /**
@@ -46,6 +47,7 @@ const plugin = {
     "json-no-plural-pound": jsonNoPluralPound,
     "no-buffer-slice": noBufferSlice,
     "order-by-tiebreaker": orderByTiebreaker,
+    "env-optional-secret": envOptionalSecret,
   },
 };
 
