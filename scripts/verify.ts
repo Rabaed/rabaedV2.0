@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
+import { probeDocker } from "./docker-probe.ts";
 import { composeProjectOfEnv, envValue, readWorktreeEnv } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { samePath } from "./paths.ts";
@@ -59,6 +60,10 @@ function stopEarly(message: string, code = 1): never {
   out.end(["pnpm verify stopped before its first step."], true);
   process.exit(code);
 }
+
+// RP-1197: Docker not answering stops the run here, before it queues for the lock, so a jammed Docker never holds a place in line (RP-1099).
+const dockerProbe = probeDocker();
+if (!dockerProbe.ok) stopEarly(dockerProbe.message);
 
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
