@@ -87,6 +87,7 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/design-strip-fonts.ts",
   "scripts/desktop-sessions.ts",
   "scripts/docs-only.ts",
+  "scripts/git-files.ts",
   "scripts/hidden-columns.ts",
   "scripts/lanes.ts",
   "scripts/migrations.ts",

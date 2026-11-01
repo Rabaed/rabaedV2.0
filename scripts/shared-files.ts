@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDoc } from "./reviewed-required.ts";
-import { fileAtVia } from "./verify-gate.ts";
+import { fileAtVia } from "./git-files.ts";
 
 // Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR,
 // with at most docs. One definition for `pnpm queue` (scripts/queue-pr.ts), which
