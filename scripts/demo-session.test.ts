@@ -1,11 +1,11 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { assertUatWebUrl, isLocalhostName, loopbackForLocalhost, parseArgs, parseDemoPassword, postJson, signInUat, storageState } from "./demo-session.ts";
+import { assertUatWebUrl, demoPeople, isLocalhostName, loopbackForLocalhost, parseArgs, parseDemoPassword, postJson, signInUat, storageState } from "./demo-session.ts";
 
 describe("signInUat (RP-1199)", () => {
   const FAKE = "fake-uat-password";
-  const email = "saeed.alqahtani@tmc.demo.rabaed.test";
+  const email = demoPeople.saeed!;
   const ok = { status: 204, setCookies: ["rabaed_session=tok123; Path=/; HttpOnly; Secure; SameSite=Lax"] };
 
   type Post = (url: string, body: unknown) => Promise<{ status: number; setCookies: string[] }>;
@@ -57,6 +57,32 @@ describe("signInUat (RP-1199)", () => {
     const { calls, post } = recorder(ok);
     const result = await run({ UAT_DEMO_PASSWORD: value }, post);
     expect(result.error?.message).toMatch(/UAT_DEMO_PASSWORD is not set/);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([demoPeople.saeed!, "someone@betabuild.demo.rabaed.test", "a.b@x.y.demo.rabaed.test"])("signs in the demo Member %s", async (member) => {
+    const { calls, post } = recorder(ok);
+    const result = await signInUat(member, { env: { UAT_DEMO_PASSWORD: FAKE }, postJson: post });
+    expect(result.cookies).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    "mohamed.alhalees@rabaedapp.com",
+    "someone@gmail.com",
+    "saeed.alqahtani@tmc.demo.rabaed.test.evil.test",
+    "saeed.alqahtani@demo.rabaed.test",
+    "saeed.alqahtani@evil.test@tmc.demo.rabaed.test",
+    "saeed.alqahtani",
+    "",
+  ])("refuses %j, which is not a demo Member, before reading the password or posting", async (notDemo) => {
+    const { calls, post } = recorder(ok);
+    const error = await signInUat(notDemo, { env: { UAT_DEMO_PASSWORD: FAKE }, postJson: post }).then(
+      () => undefined,
+      (caught: Error) => caught,
+    );
+    expect(error?.message).toMatch(/--uat signs in as a demo Member only: the email must end in \.demo\.rabaed\.test/);
+    expect(error?.message).not.toContain(FAKE);
     expect(calls).toEqual([]);
   });
 
@@ -129,17 +155,23 @@ describe("assertUatWebUrl (RP-1199: --uat signs in to the UAT web host only)", (
     ["http://lane2.localhost:3200", "a lane host"],
     ["rabaed-uat-web.vercel.app", "no scheme"],
     ["", "nothing"],
+    ["https://rabaed-prod-web.vercel.app", "any other Vercel project: the allowlist is exact"],
   ])("refuses %s (%s) with the one reason", (url) => {
     expect(() => assertUatWebUrl(url)).toThrow(/--uat signs in to the UAT web host only/);
   });
 
-  it.each(["https://app.rabaed.com", "https://rabaed.com", "https://www.rabaed.com", "https://rabaedapp.com", "https://app.rabaedapp.com", "https://rabaed-prod-web.vercel.app"])(
+  it.each(["https://app.rabaed.com", "https://rabaed.com", "https://www.rabaed.com", "https://rabaedapp.com", "https://app.rabaedapp.com"])(
     "refuses production %s by name, saying so",
     (url) => {
       expect(() => assertUatWebUrl(url)).toThrow(/production/);
       expect(() => assertUatWebUrl(url)).toThrow(/--uat signs in to the UAT web host only/);
     },
   );
+
+  it("does not call another host production", () => {
+    expect(() => assertUatWebUrl("https://rabaed-prod-web.vercel.app")).not.toThrow(/production/);
+    expect(() => assertUatWebUrl("https://evil.test")).not.toThrow(/production/);
+  });
 
   it("never repeats userinfo from the refused URL", () => {
     for (const url of ["https://user:fake-uat-password@evil.test", "https://user:fake-uat-password@rabaed-uat-web.vercel.app", "not a url fake-uat-password"]) {
@@ -169,13 +201,13 @@ describe("parseArgs", () => {
     expect(parseArgs(["--out=y.json", "ali"]).out).toBe("y.json");
   });
 
-  it("takes --uat as a switch, before or after the person, and keeps the same --out default", () => {
+  it("takes --uat as a switch, before or after the person, and writes <short>.uat.json so a UAT cookie never overwrites a local state file", () => {
     expect(parseArgs(["hafiz"]).uat).toBe(false);
     for (const argv of [["--uat", "hafiz"], ["hafiz", "--uat"]]) {
       const args = parseArgs(argv);
       expect(args.uat).toBe(true);
       expect(args.email).toBe("hafiz.hamdan@tmc.demo.rabaed.test");
-      expect(args.out.replace(/\\/g, "/")).toMatch(/\/\.demo-sessions\/hafiz\.json$/);
+      expect(args.out.replace(/\\/g, "/")).toMatch(/\/\.demo-sessions\/hafiz\.uat\.json$/);
     }
     expect(parseArgs(["--uat", "ali", "--out", "x.json"])).toMatchObject({ uat: true, out: "x.json" });
   });

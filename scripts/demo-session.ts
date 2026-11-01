@@ -18,7 +18,9 @@ import { fileURLToPath } from "node:url";
 // only). The password then comes only from the environment variable UAT_DEMO_PASSWORD,
 // which the owner sets in their own git-ignored environment; never from a file and never
 // printed. WEB_URL is ignored, and any host but the UAT web one (production included)
-// is refused (assertUatWebUrl).
+// is refused (assertUatWebUrl). Only a demo Member signs in (an email ending in
+// .demo.rabaed.test). The state file defaults to .demo-sessions/<short>.uat.json, so a UAT
+// session cookie never overwrites a local state file.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const passwordFile = resolve(root, ".env.demo");
@@ -64,7 +66,7 @@ export function parseArgs(argv: string[]): DemoSessionArgs {
   }
   if (!person) throw new Error(`Name a person: an email or one of ${Object.keys(demoPeople).join(", ")}.`);
   const { email, short } = resolvePerson(person);
-  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}.json`), uat };
+  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}${uat ? ".uat" : ""}.json`), uat };
 }
 
 /** A demo person's email and short name, from an email or one of demoPeople's short names. Throws a plain message on an unknown name. */
@@ -196,9 +198,14 @@ export const UAT_WEB_URL = `https://${UAT_WEB_HOST}`;
 
 const REFUSAL = "--uat signs in to the UAT web host only";
 
-/** Whether a host name is a production one: rabaed.com, rabaedapp.com (and any name under them), or any name with "prod" in it. */
+/** Whether a host name is a production one we know by name: rabaed.com or rabaedapp.com, or any name under them. Any other host is refused by the exact allowlist anyway. */
 function isProductionHost(host: string): boolean {
-  return /(^|\.)rabaed\.com$/.test(host) || /(^|\.)rabaedapp\.com$/.test(host) || host.includes("prod");
+  return /(^|\.)rabaed\.com$/.test(host) || /(^|\.)rabaedapp\.com$/.test(host);
+}
+
+/** Whether an email is a demo Member's: one address ending in `.demo.rabaed.test`. */
+function isDemoEmail(email: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.demo\.rabaed\.test$/.test(email);
 }
 
 /**
@@ -303,6 +310,7 @@ export type UatSignInOptions = {
  */
 export async function signInUat(email: string, options: UatSignInOptions = {}) {
   const webUrl = assertUatWebUrl(options.webUrl ?? UAT_WEB_URL);
+  if (!isDemoEmail(email)) throw new Error("--uat signs in as a demo Member only: the email must end in .demo.rabaed.test.");
   const env = options.env ?? process.env;
   return signInWith(email, webUrl, {
     getPassword: () => {

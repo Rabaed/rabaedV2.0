@@ -42,6 +42,7 @@ Everyone signs in with one password, generated the first time `pnpm demo` (or `p
 
 ```bash
 pnpm demo:session hafiz            # or a full email; --out <file> picks the path
+pnpm demo:session --uat hafiz      # UAT web host only, a demo Member only; password from UAT_DEMO_PASSWORD (never printed); writes .demo-sessions/hafiz.uat.json
 ```
 
 signs in as that person (`hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `noura`, `nasser`) and prints only the path of a Playwright storage-state file (default `.demo-sessions/<name>.json`, git-ignored), for example `browser.newContext({ storageState })`. It signs in at `WEB_URL` from `.env` (`http://127.0.0.1:3000` without one), and the cookies are for that host only. In a lane, that is `http://laneN.localhost:<port>`, so open the pages there, not on `127.0.0.1`. Node on Windows cannot resolve `*.localhost`, so the script connects to `127.0.0.1` itself and still sends the lane host. The password is read inside the script and never printed. Behind it, sign-in is `POST /api/v1/session` on the web origin with `{email, password}` (204 and the `rabaed_session` cookie). A Transition is `POST /api/v1/work-items/<id>/transitions` with `{transition, idempotencyKey, confirmed: true}` (`idempotencyKey` a UUID; without `confirmed: true` it is refused with `not_confirmed`). Column names for direct SQL are in `docs/data-model.md`.
