@@ -1,10 +1,11 @@
 import { withMember } from "@rabaed/db";
-import { appearance, bilingualText, defaultAppearance, signedInMember } from "@rabaed/domain";
+import { appearance, bilingualText, defaultAppearance, setLanguageRequest, signedInMember, type Locale } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, notSignedIn } from "../http-error.ts";
+import { setMemberLanguage } from "../notifications/settings.ts";
 
 const company = z.object({
   id: z.uuid(),
@@ -42,7 +43,11 @@ export const companyRoutes =
             const { rows } = await sql<{ theme: "grey" | "warm"; mode: "light" | "dark" | "system" }>`
               select theme, mode from member_appearance where member_id = app.current_member_id()
             `.execute(trx);
-            return member && { ...member, appearance: rows[0] ?? defaultAppearance };
+            // The language they chose with the switch (the one their emails follow), else the one they were invited in.
+            const { rows: chosen } = await sql<{ preferred_language: Locale | null }>`
+              select preferred_language from member_notification_preference where member_id = app.current_member_id()
+            `.execute(trx);
+            return member && { ...member, appearance: rows[0] ?? defaultAppearance, language: chosen[0]?.preferred_language ?? member.locale };
           }),
       );
       if (!row) throw notSignedIn();
@@ -52,6 +57,7 @@ export const companyRoutes =
           email: row.email,
           fullName: row.full_name,
           locale: row.locale,
+          language: row.language,
           isAuthorizedPerson: row.authorized_person_id === row.id,
           canCreateProjects: row.can_create_projects,
         },
@@ -70,6 +76,14 @@ export const companyRoutes =
       );
       if (outcome !== "set") throw notSignedIn();
       return { theme, mode };
+    });
+
+    // The Member's own language (owner decision 2026-11-01, RP-1174), from the language switch: the web
+    // app opens in it, whatever the browser asks for, and their emails follow it. Theirs alone (RLS).
+    app.put("/v1/me/language", { schema: { body: setLanguageRequest, response: { 200: setLanguageRequest } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      await setMemberLanguage(ctx.db, memberId, request.body.locale, ctx.now());
+      return { locale: request.body.locale };
     });
 
     app.get(

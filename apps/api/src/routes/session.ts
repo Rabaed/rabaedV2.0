@@ -1,11 +1,10 @@
 import { acceptInvitation } from "@rabaed/auth";
-import { acceptInvitationRequest, signInRequest, type Locale } from "@rabaed/domain";
+import { acceptInvitationRequest, signInRequest } from "@rabaed/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { AppContext } from "../app.ts";
 import { HttpError } from "../http-error.ts";
 import { endSession, signIn, startSession, type Session } from "../identity/sessions.ts";
-import { rememberBrowserLanguage } from "../notifications/settings.ts";
 
 /** Sets the new session cookie, ending whatever session the browser had before. */
 async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
@@ -14,11 +13,11 @@ async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: F
 }
 
 /**
- * Signs a Member in after an emailed link set their password (an invitation, a password reset):
- * remembers the browser's language as at sign-in, and replaces the browser's session.
+ * Signs a Member in after an emailed link set their password (an invitation, a password reset),
+ * replacing the browser's session. The browser's language plays no part (RP-1174): the Member's
+ * language is the one they were invited in, or chose.
  */
-export async function signInFromLink(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, memberId: string, locale: Locale | undefined, now: Date) {
-  if (locale) await rememberBrowserLanguage(ctx.db, memberId, locale, now);
+export async function signInFromLink(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, memberId: string, now: Date) {
   const session = await startSession(ctx.db, { kind: "member", memberId }, now, ctx.config.sessionTtlMs);
   await replaceSession(ctx, request, reply, session);
 }
@@ -28,11 +27,10 @@ export const sessionRoutes =
   async (app) => {
     // Sign-in for Members.
     app.post("/v1/session", { config: { public: true }, schema: { body: signInRequest } }, async (request, reply) => {
-      const { email, password, locale } = request.body;
+      const { email, password } = request.body;
       const session = await signIn(ctx.db, email, password, ctx.now(), ctx.config.sessionTtlMs);
       // Every failure is the same 401, so registered emails can't be discovered.
       if (!session) throw new HttpError(401, "invalid_credentials");
-      if (locale) await rememberBrowserLanguage(ctx.db, session.memberId, locale, ctx.now());
       await replaceSession(ctx, request, reply, session);
       return reply.code(204).send();
     });
@@ -49,7 +47,7 @@ export const sessionRoutes =
       const now = ctx.now();
       const memberId = await acceptInvitation(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_invitation");
-      await signInFromLink(ctx, request, reply, memberId, request.body.locale, now);
+      await signInFromLink(ctx, request, reply, memberId, now);
       return reply.code(204).send();
     });
   };

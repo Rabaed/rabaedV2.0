@@ -17,6 +17,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { saveMemberLanguage } from "@/lib/member-language";
 import { sidebarCookie, sidebarItemOf } from "@/lib/shell";
 import { NotificationBell } from "./notification-bell";
 
@@ -117,7 +118,9 @@ function Frame({ locale, memberName, companyName, unread, defaultCollapsed, appe
     },
   ];
 
-  const changeLocale = (next: Locale) => {
+  const changeLocale = async (next: Locale) => {
+    // Kept on the Member, so the next sign-in or visit opens in it (RP-1174).
+    await saveMemberLanguage(next);
     // Same page, same query: only the language changes.
     router.replace(`${pathname}${window.location.search}`, { locale: next });
   };
@@ -137,7 +140,7 @@ function Frame({ locale, memberName, companyName, unread, defaultCollapsed, appe
       label={t("memberMenu")}
       locale={locale}
       languageLabel={t("language")}
-      onLocaleChange={changeLocale}
+      onLocaleChange={(next) => void changeLocale(next)}
       appearance={{
         value: appearance,
         onChange: changeAppearance,

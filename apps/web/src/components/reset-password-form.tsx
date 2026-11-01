@@ -6,8 +6,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { buttonVariants, cn, Field, Input } from "@rabaed/ui";
 import { FormAlert, LeadingIcon, SubmitButton, tallButton, tallInput } from "@/components/sign-in-fields";
 import { Link, useRouter } from "@/i18n/navigation";
-import { browserLanguage } from "@/lib/browser-locale";
 import { tokenFromHash } from "@/lib/link-token";
+import { memberLanguage } from "@/lib/member-language";
 
 /** One plain message for an expired, used or made-up link, with the way to ask for a new one. */
 function ExpiredLink() {
@@ -54,10 +54,10 @@ export function ResetPasswordForm() {
       const res = await fetch("/api/v1/password-resets/complete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, password, locale: browserLanguage(locale) }),
+        body: JSON.stringify({ token, password }),
       });
       if (res.ok) {
-        router.replace("/");
+        router.replace("/", { locale: await memberLanguage(locale) });
         router.refresh();
         return;
       }
