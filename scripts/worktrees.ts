@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { holdReason, systemHolders, tryReadTimedProcessList, type Holders, type TimedProcessList } from "./claude-sessions.ts";
 import { composeProjectOfEnv, protectedLaneReason, readWorktreeEnv } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { folderDeletionRefusal, neverRemovedReason, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
+import { folderDeletionRefusal, neverRemovedReason, outsideLockedRefusal, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
 import { otherLiveSession, readCommandLines, sessionPidOf } from "./session-lock.ts";
 import { lockPid } from "./worktrees-stale.ts";
 
@@ -397,7 +397,7 @@ export type Removal = { branchesKept?: { branch: string; reason: string }[]; fol
  * RP-1198: it refuses on its own first, reading git and the disk itself: never the main checkout, lane 7's
  * worktree or the folder this runs in (removal-guard.ts), nor a folder git does not list. Outside
  * .claude/worktrees/ it deletes no folder: only `git worktree remove` without --force, so git keeps a
- * worktree with changes, which is refused with git's reason.
+ * worktree with changes, which is refused with git's reason; a locked one there is refused and never unlocked.
  */
 export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: string): Refused | Removal {
   const never = worktreeRemovalRefusal(w.path) ?? (samePath(w.path, mainRoot) ? `Not removed: ${w.path} is the main checkout.` : undefined);
@@ -406,9 +406,13 @@ export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: stri
   const entry = listed.find((x) => samePath(x.path, w.path));
   if (entry === undefined) return { refused: `Not removed: ${w.path} is not a worktree git lists.` };
   if (entry === listed[0]) return { refused: `Not removed: ${w.path} is the main checkout.` };
+  const outside = folderDeletionRefusal(w.path) !== undefined;
+  // Outside, an unlock would drop git's own guard (a locked worktree needs `remove -f -f`), and leave the
+  // worktree unlocked when git then refuses: a locked one there is kept (RP-1198 review S1).
+  if (outside && entry.locked !== undefined) return { refused: outsideLockedRefusal(w.path, entry.locked) };
   if (entry.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   let folderLeft: string | undefined;
-  if (folderDeletionRefusal(w.path) !== undefined) {
+  if (outside) {
     try {
       git(["-c", "core.longpaths=true", "worktree", "remove", w.path], mainRoot);
     } catch (error) {
@@ -514,12 +518,16 @@ export const unpushedCount = (head: string, cwd: string): number => Number(git([
  * prints nothing, as it leaves merges out (worktrees.test.ts proves it on a throwaway repo). Such a branch
  * only merged main in, so it has nothing unique. A commit whose change main has but not the commit (a
  * squash merge or cherry-pick, cherry's "-" line) is not merges only, so those are judged as before.
- * A merge whose conflict resolution added content of its own is invisible to cherry too: that content
- * would be lost. False when git cannot tell (no such upstream), so the caller keeps the worktree.
+ * A merge commit's own content (an evil merge, or edits made during `merge --no-commit`) is invisible to
+ * cherry, so it also requires that merging head into upstream changes nothing: `git merge-tree --write-tree
+ * <upstream> <head>` prints upstream's own tree (RP-1198 review S2). False when git cannot tell (no such
+ * upstream, a git without --write-tree, a conflict), so the caller keeps the worktree.
  */
 export function mergesOnly(head: string, cwd: string, upstream = "origin/main"): boolean {
   try {
-    return git(["cherry", upstream, head], cwd).trim() === "";
+    if (git(["cherry", upstream, head], cwd).trim() !== "") return false;
+    const merged = git(["merge-tree", "--write-tree", upstream, head], cwd).split(/\r?\n/)[0]!.trim();
+    return merged !== "" && merged === git(["rev-parse", `${upstream}^{tree}`], cwd).trim();
   } catch {
     return false;
   }

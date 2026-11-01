@@ -713,6 +713,19 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
       expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
     });
 
+    // RP-1198 review S2: cherry does not see a merge commit's own content (an evil merge, or edits made during `merge --no-commit`).
+    it("does not call it merges only when a merge commit adds content of its own, which git cherry does not see", () => {
+      run(["checkout", "-b", "RP-13-evil"]);
+      mergeMainInto("RP-13-evil", 1);
+      writeFileSync(join(clone, "only-in-the-merge.txt"), "mine");
+      run(["add", "only-in-the-merge.txt"]);
+      run(["commit", "--amend", "--no-edit"]);
+      const head = run(["rev-parse", "HEAD"]).trim();
+      expect(run(["cherry", "origin/main", head]).trim()).toBe("");
+      expect(mergesOnly(head, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
+    });
+
     it("does not call it merges only when git cannot tell (no such upstream)", () => {
       run(["checkout", "-b", "RP-10-merges"]);
       const head = mergeMainInto("RP-10-merges", 1);
@@ -745,6 +758,20 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     expect(result).toMatchObject({ refused: expect.stringMatching(/^Kept .*RP 6 dirty: it is outside \.claude\/worktrees\/, .*untracked files/) });
     expect(existsSync(join(dir, "notes.md"))).toBe(true);
     expect(refExists("RP-6-dirty", clone)).toBe(true);
+  });
+
+  // RP-1198 review S1: an unlock outside would drop git's own guard (a locked worktree needs `remove -f -f`)
+  // and, when git then refuses, leave the worktree there without its lock.
+  it("keeps a locked worktree outside .claude/worktrees, naming the lock and the folder, and its lock survives (RP-1198)", () => {
+    const dir = join(tmp, "RP 11 locked");
+    run(["worktree", "add", "-b", "RP-11-locked", dir]);
+    run(["worktree", "lock", "--reason", "held by hand", dir]);
+    const path = listed(dir).path;
+    const result = removeLinkedWorktree(listed(dir), clone, "origin/main");
+    expect(result).toEqual({ refused: `Kept ${path}: it is outside .claude/worktrees/ and locked (held by hand); unlock it yourself if it should go.` });
+    expect(existsSync(dir)).toBe(true);
+    expect(listed(dir).locked).toBe("held by hand");
+    expect(refExists("RP-11-locked", clone)).toBe(true);
   });
 
   it("refuses a folder outside .claude/worktrees that git does not list, and deletes nothing in it (RP-1198)", () => {

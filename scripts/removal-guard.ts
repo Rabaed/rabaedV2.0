@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { composeProjectOfEnv, protectedLaneReason, readWorktreeEnv } from "./lanes.ts";
 import { isMainCheckout, normalPath } from "./paths.ts";
@@ -18,6 +19,20 @@ export type Refused = { refused: string };
 export const isRefused = (result: unknown): result is Refused => typeof result === "object" && result !== null && typeof (result as Partial<Refused>).refused === "string";
 
 const notRemoved = (path: string, why: string) => `Not removed: ${path} is ${why}.`;
+
+/** Where the path's junction or symlink points, or undefined when it is none (or is not there). */
+function linkTarget(path: string): string | undefined {
+  try {
+    if (!lstatSync(path).isSymbolicLink()) return undefined;
+  } catch {
+    return undefined;
+  }
+  try {
+    return realpathSync(path);
+  } catch {
+    return "a folder that is not there";
+  }
+}
 
 /**
  * What the folder is that nothing removes, or undefined: a main checkout, the folder this process runs
@@ -46,13 +61,23 @@ export function worktreeRemovalRefusal(path: string, platform: NodeJS.Platform =
 }
 
 /**
+ * The refusal for a locked worktree outside .claude/worktrees/ (RP-1198 review S1): no helper unlocks one
+ * there, since `git worktree unlock` drops git's own guard (a locked worktree needs `remove -f -f`).
+ */
+export const outsideLockedRefusal = (path: string, lock: string): string =>
+  `Kept ${path}: it is outside .claude/worktrees/ and locked (${lock || "no reason given"}); unlock it yourself if it should go.`;
+
+/**
  * Why a helper may not delete this folder with rd, rm -rf or rmSync, or undefined: worktreeRemovalRefusal's
- * reasons, or it is not a folder directly inside a main checkout's .claude/worktrees/.
+ * reasons, or it is a junction or symlink, or it is not a folder directly inside a main checkout's .claude/worktrees/.
  */
 export function folderDeletionRefusal(path: string, platform: NodeJS.Platform = process.platform): string | undefined {
   const never = worktreeRemovalRefusal(path, platform);
   if (never !== undefined) return never;
   const full = resolve(path);
+  // A junction or symlink is no folder of its own: what it points at may be anywhere (review S4).
+  const link = linkTarget(full);
+  if (link !== undefined) return notRemoved(full, `a link (junction or symlink) to ${link}, not a folder; delete the link by hand if it should go`);
   const worktrees = dirname(full);
   const claude = dirname(worktrees);
   const named = (dir: string, name: string) => normalPath(basename(dir), platform) === name;

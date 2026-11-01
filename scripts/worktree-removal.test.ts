@@ -189,6 +189,15 @@ describe("removeWorktreeFolder", () => {
     expect(unlisted.ran).toEqual(["git worktree list --porcelain"]);
   });
 
+  it("outside .claude/worktrees/ keeps a locked worktree, naming the lock and the folder, and never unlocks it (RP-1198 review S1)", () => {
+    const outside = join(root, "RP 12 locked");
+    mkdirSync(outside, { recursive: true });
+    const s = shell("worktree", [], `worktree ${main}\nHEAD abc\nbranch refs/heads/main\n\nworktree ${outside}\nHEAD def\nbranch refs/heads/RP-12-locked\nlocked held by hand\n`);
+    const result = removeWorktreeFolder(target({ path: outside, registered: { path: outside, head: "def", branch: "RP-12-locked", locked: "held by hand" } }), steps(s));
+    expect(result).toEqual({ refused: `Kept ${outside}: it is outside .claude/worktrees/ and locked (held by hand); unlock it yourself if it should go.` });
+    expect(s.ran).toEqual(["git worktree list --porcelain"]);
+  });
+
   it("deletes what git left (Filename too long) with rd /s /q on the \\\\?\\ path, then prunes", () => {
     const s = shell("rd", ["worktree remove"]);
     const result = removeWorktreeFolder(target(), steps(s));

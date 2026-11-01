@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -17,7 +17,8 @@ import * as worktrees from "./worktrees.ts";
 // own: lane 7's (Main 7's harness data), the main checkout's, and a folder outside .claude/worktrees/.
 // It never trusts its caller to have checked: each case below passes the facts a careless caller
 // would (no project, a wrong main root, nothing held) and expects `{ refused }` with nothing run.
-// A new exported remover (by its name) that is in neither list below fails the first test.
+// A new exported remover, found by its name or by a removal call in its body (review S3), that is in
+// none of the lists below fails the first test.
 
 /** Exported names that sound like they remove something: whole camelCase words at the start, or one at the end. */
 const REMOVER = /^(remove|delete|rd|release|drop|prune|stop)(?![a-z])|(Remove|Delete|Prune|Drop)$/;
@@ -40,17 +41,71 @@ const REMOVES_NOTHING: Record<string, string> = {
   "queue-stack-stop.ts:stopAfterEnqueue": "calls stopQueuedStack",
 };
 
-/** Every `file:name` exported from a non-test script under scripts/ whose name matches REMOVER, read from the source. */
+/**
+ * The second net (RP-1198 review S3): calls that remove a folder, container, volume, network, branch,
+ * worktree or database, wherever they sit in an exported function's body or an exported object's methods.
+ */
+const REMOVAL_CALLS: RegExp[] = [
+  /\brmSync\b/,
+  /\brm -rf\b/,
+  /\brd \/s\b/i,
+  /["'`]rm["'`]/,
+  /["'`]-D["'`]|\bbranch -D\b/,
+  /\bworktree remove\b|["'`]worktree["'`],\s*["'`]remove["'`]/,
+  /\bdrop database\b/i,
+];
+
+/** The removers that sit in a top-level `export`, or behind a local declaration it calls, under no name REMOVER knows. */
+const REMOVES_ONLY_ITS_OWN: Record<string, string> = {
+  "merge-checks.ts:realMergeChecksSeam":
+    "its remove deletes a checkout it made itself under the OS tmpdir (mkdtempSync, merge-checks-*) for pnpm queue's checks, never a worktree of this clone",
+  "resolve-visibility.ts:mergeVisibility": "gitMergeFile's own temp folder under the OS tmpdir (rabaed-merge-file-*), made and deleted in one call",
+  "verify-pr-body.ts:realPrBodySeam": "setBody's own temp folder under the OS tmpdir (verify-pr-*), made and deleted in one call",
+  "lanes-lock.ts:acquireLaneLock": "its own lane lock file and the temp files beside it (removeStale's pid check)",
+  "verify-lock.ts:acquireLock": "its own verify lock file's temp and stale copies (create, removeStale)",
+  "verify-lock.ts:waitForLock": "calls acquireLock",
+  "removal-guard.ts:folderDeletionRefusal": "pure: its refusal text names `git worktree remove`; it runs nothing",
+};
+
+/** One top-level declaration: from a line at column 0 to the next one (formatted code puts only closers there). */
+type Declaration = { name: string | undefined; exported: boolean; body: string };
+
+const withoutComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+
+/** The source's top-level declarations, comments left out. */
+function declarations(source: string): Declaration[] {
+  const chunks: string[] = [];
+  for (const line of withoutComments(source).split(/\r?\n/)) {
+    if (/^[^\s})\]]/.test(line) || chunks.length === 0) chunks.push(line);
+    else chunks[chunks.length - 1] += `\n${line}`;
+  }
+  return chunks.map((body) => {
+    const m = /^(export\s+)?(?:default\s+)?(?:async\s+)?(?:function\*?\s*|const\s+|let\s+|class\s+)([A-Za-z0-9_$]+)/.exec(body);
+    return { name: m?.[2], exported: m?.[1] !== undefined, body };
+  });
+}
+
+/**
+ * The exported names in one script that remove something: by name (REMOVER), or by a removal call
+ * (REMOVAL_CALLS) in their own body or in a local declaration they call, however deep.
+ */
+function removersIn(source: string): string[] {
+  const all = declarations(source);
+  const local = new Map(all.filter((d) => d.name !== undefined).map((d) => [d.name!, d]));
+  /** Whether body calls the local declaration: `name(`, not `.name(` (a method of something else). */
+  const calls = (body: string, name: string) => new RegExp(`(?<![.\\w$])${name.replace(/\$/g, "\\$")}\\s*\\(`).test(body);
+  const removes = (d: Declaration, seen: Set<string>): boolean =>
+    REMOVAL_CALLS.some((call) => call.test(d.body)) ||
+    [...local.values()].some((other) => !seen.has(other.name!) && calls(d.body, other.name!) && removes(other, new Set([...seen, other.name!])));
+  return all.filter((d) => d.exported && d.name !== undefined && (REMOVER.test(d.name) || removes(d, new Set([d.name])))).map((d) => d.name!);
+}
+
+/** Every `file:name` removersIn finds in a non-test script under scripts/, read from the source. */
 function exportedRemovers(): string[] {
   const dir = import.meta.dirname;
   return readdirSync(dir)
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
-    .flatMap((file) =>
-      [...readFileSync(join(dir, file), "utf8").matchAll(/^export (?:async )?(?:function\*?\s*|const |let )([A-Za-z0-9_$]+)/gm)]
-        .map((m) => m[1]!)
-        .filter((name) => REMOVER.test(name))
-        .map((name) => `${file}:${name}`),
-    )
+    .flatMap((file) => removersIn(readFileSync(join(dir, file), "utf8")).map((name) => `${file}:${name}`))
     .sort();
 }
 
@@ -315,9 +370,33 @@ const HELPERS: Record<string, { module: Record<string, unknown>; cases: Cases }>
 };
 
 describe("delete helpers refuse on their own (RP-1198)", () => {
-  it("knows every exported remover in scripts/: each is tested below or listed as removing nothing, with why", () => {
-    const known = [...Object.keys(HELPERS), ...Object.keys(REMOVES_NOTHING)].sort();
+  it("knows every exported remover in scripts/, by name or by its body: each is tested below or listed with why", () => {
+    const known = [...Object.keys(HELPERS), ...Object.keys(REMOVES_NOTHING), ...Object.keys(REMOVES_ONLY_ITS_OWN)].sort();
     expect(exportedRemovers()).toEqual(known);
+  });
+
+  it("finds a remover by its body when its name says nothing: its own removal call, an exported object's method, or a local helper it calls", () => {
+    const source = [
+      'import { rmSync } from "node:fs";',
+      "/** Tidies up. */",
+      "export function tidy(path: string) {",
+      "  rmSync(path, { recursive: true });",
+      "}",
+      "export const seam = {",
+      '  wipe: (name: string) => run(["volume", "rm", name]),',
+      "};",
+      "function dropIt(name: string) {",
+      "  return psql(`DROP DATABASE ${name}`);",
+      "}",
+      "export const finish = (name: string) => dropIt(name);",
+      "// rmSync in a comment is no call",
+      "export function quiet() {",
+      "  // git branch -D here is a comment",
+      "  return 1;",
+      "}",
+      "export const removeNothing = () => 0;",
+    ].join("\n");
+    expect(removersIn(source)).toEqual(["tidy", "seam", "finish", "removeNothing"]);
   });
 
   it("names a real export for every helper it tests", () => {
@@ -336,6 +415,44 @@ describe("delete helpers refuse on their own (RP-1198)", () => {
     f = makeFixture();
   });
   afterAll(removeFixture);
+
+  // RP-1198 review S4 (CODING_STANDARDS › Tests): the inputs most likely to slip past a path check.
+  /** The folder helpers, each with a path a careless caller might pass. */
+  const folderHelpers = (path: string): Record<string, () => Outcome> => ({
+    "worktree-removal.ts:removeWorktreeFolder": () => folderRemoval(f, path),
+    "worktrees.ts:rdLongPath": () => rd(path),
+    "worktrees.ts:removeLinkedWorktree": () => withGit(() => worktrees.removeLinkedWorktree({ ...listedAt(f, path), path }, f.lane7, "main")),
+  });
+  const refusesAll = (path: string) => {
+    for (const [key, call] of Object.entries(folderHelpers(path))) {
+      const { result, ran } = call();
+      expect((result as { refused?: unknown } | undefined)?.refused, key).toEqual(expect.stringMatching(/\S/));
+      expect(ran, key).toEqual([]);
+      expect(intact(f), key).toBe(true);
+    }
+  };
+  const mixedCase = (path: string) => path.replace(/[a-z]/gi, (c, i: number) => (i % 2 === 0 ? c.toUpperCase() : c.toLowerCase()));
+
+  it.runIf(process.platform === "win32")("refuses the main checkout and lane 7's worktree spelled in upper or mixed case (Windows)", () => {
+    for (const path of [f.main.toUpperCase(), mixedCase(f.main), f.lane7.toUpperCase(), mixedCase(f.lane7)]) refusesAll(path);
+  });
+
+  it("refuses a junction or symlink under .claude/worktrees/ that points outside, and leaves its target intact", (ctx) => {
+    const link = join(f.main, ".claude", "worktrees", "link-out");
+    try {
+      symlinkSync(f.outside, link, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      ctx.skip(`a link cannot be made here: ${(error as Error).message}`);
+    }
+    try {
+      refusesAll(link);
+      // The real rd, too: it refuses the link before it runs.
+      if (process.platform === "win32") expect(worktrees.rdLongPath(link)).toEqual({ refused: expect.stringContaining("a link") });
+      expect(existsSync(join(f.outside, "keep.txt"))).toBe(true);
+    } finally {
+      unlinkSync(link);
+    }
+  });
 
   for (const [key, { cases }] of Object.entries(HELPERS)) {
     for (const [what, call] of Object.entries(cases) as [keyof Cases, Case][]) {

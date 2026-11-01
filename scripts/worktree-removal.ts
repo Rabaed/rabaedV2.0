@@ -2,7 +2,7 @@ import { protectedLaneReason } from "./lanes.ts";
 import { isAppWorktree } from "./worktrees-pruning.ts";
 import { samePath } from "./paths.ts";
 import { listedChanges } from "./prune-guards.ts";
-import { folderDeletionRefusal, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
+import { folderDeletionRefusal, outsideLockedRefusal, worktreeRemovalRefusal, type Refused } from "./removal-guard.ts";
 import { parseWorktrees, rdLongPath, type Worktree } from "./worktrees.ts";
 
 // `pnpm worktree:remove <path>` (RP-1101). On 2026-10-29 Main 4 three times had to finish by hand a
@@ -78,7 +78,8 @@ const stderrOf = (error: unknown) => (error as { stderr?: string }).stderr?.trim
  * RP-1198: it refuses on its own first, whatever the caller checked: removalRefusal's refusals that
  * --force does not lift, then the disk's own facts (removal-guard.ts): never the main checkout, lane 7's
  * worktree or the folder this runs in. Outside .claude/worktrees/ it deletes no folder: only
- * `git worktree remove` without --force, of a worktree git lists, so git keeps one with changes.
+ * `git worktree remove` without --force, of a worktree git lists and that is not locked, so git keeps one
+ * with changes; it unlocks only inside.
  */
 export function removeWorktreeFolder(t: RemoveTarget, { run, rd = rdLongPath, exists, platform = process.platform }: Steps): Refused | { removed: boolean; steps: string[] } {
   const refused = removalRefusal(t, { force: true, platform }) ?? worktreeRemovalRefusal(t.path, platform);
@@ -86,6 +87,8 @@ export function removeWorktreeFolder(t: RemoveTarget, { run, rd = rdLongPath, ex
   const inside = folderDeletionRefusal(t.path, platform) === undefined;
   const listed = inside ? t.registered : listedWorktree(run, t.path, platform);
   if (!inside && listed === undefined) return { refused: `Not removed: ${t.path} is not under .claude/worktrees/, and git does not list it as a worktree.` };
+  // Outside, no unlock (RP-1198 review S1): it drops git's own guard, and a refused remove would leave it unlocked.
+  if (!inside && listed?.locked !== undefined) return { refused: outsideLockedRefusal(t.path, listed.locked) };
   const steps: string[] = [];
   const step = (label: string, action: () => void) => {
     try {
@@ -95,7 +98,7 @@ export function removeWorktreeFolder(t: RemoveTarget, { run, rd = rdLongPath, ex
       steps.push(`${label}: ${stderrOf(error)}`);
     }
   };
-  if (listed?.locked !== undefined) {
+  if (inside && listed?.locked !== undefined) {
     try {
       run("git", ["worktree", "unlock", t.path]);
     } catch {
