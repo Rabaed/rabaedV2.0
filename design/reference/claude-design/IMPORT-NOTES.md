@@ -15,7 +15,7 @@ From the owner's new zip export (`Rabaed Design System.zip`, 582 files), diffed 
   `check-no-fonts` looks: `handoff/Inspections (WIR) Screen Board.html` and
   `handoff/submittal-panel/Submittal Panel Anatomy (standalone).html`. Their nested pages were stripped the same way.
 - **Two personal email addresses** in the access-settings mock (`ui_kits/app/ac/ac.js` and `_ds_bundle.js`) were
-  replaced with `mohamed@nama.example` and `ahmed@nama.example`. The repo is public.
+  replaced with `mohamed@nama.test` and `ahmed@nama.test`. The repo is public.
 
 ### What changed
 

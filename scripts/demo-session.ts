@@ -1,21 +1,52 @@
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { authorityFolderProblem, repoRootOf } from "../apps/worker/src/cli/uat-authority-folder.ts";
 
-// pnpm demo:session <email or short name> [--out <file>] (RP-543)
+// pnpm demo:session [--uat] <email or short name> [--out <file>] (RP-543, RP-1199)
 //
 // Signs in as a demo person against the local web app and writes a Playwright
 // storage-state file, so an agent or script can open pages signed in without ever
 // seeing the demo password. The password is read here, from .env.demo at the
 // repository root (this worktree's own, written by the first `pnpm demo`), and is
 // never printed. The only output is the path of the state file.
+//
+// With --uat it signs in to https://rabaed-uat-web.vercel.app instead (display checks
+// only). The password then comes only from the environment variable UAT_DEMO_PASSWORD,
+// which the owner sets in their own git-ignored environment; never from a file and never
+// printed. WEB_URL is ignored, and any host but the UAT web one (production included)
+// is refused (assertUatWebUrl). Only a demo Member signs in (an email ending in
+// .demo.rabaed.test). The UAT cookie is live, so the state file goes OUTSIDE the repo:
+// %LOCALAPPDATA%\rabaed\demo-sessions\<short>.uat.json on Windows, $XDG_STATE_HOME (else
+// ~/.local/state)/rabaed/demo-sessions/<short>.uat.json elsewhere. A --uat --out that is inside
+// a git checkout (relative, with .., or through a link) is refused before the password is read.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const passwordFile = resolve(root, ".env.demo");
+
+/** What decides where a UAT session file goes by default; a test passes its own. */
+export type StateWhere = { platform: NodeJS.Platform; env: Record<string, string | undefined>; home: string };
+
+const realWhere = (): StateWhere => ({ platform: process.platform, env: process.env, home: homedir() });
+
+/**
+ * The user's own folder for UAT session files, outside every repo: `%LOCALAPPDATA%\rabaed\demo-sessions` on
+ * Windows (`<home>\AppData\Local` when it is unset), `$XDG_STATE_HOME/rabaed/demo-sessions` elsewhere
+ * (`~/.local/state` when it is unset or blank).
+ */
+export function uatStateDir(where: StateWhere): string {
+  const set = (value: string | undefined) => (value !== undefined && value.trim() !== "" ? value : undefined);
+  const base =
+    where.platform === "win32"
+      ? (set(where.env.LOCALAPPDATA) ?? join(where.home, "AppData", "Local"))
+      : (set(where.env.XDG_STATE_HOME) ?? join(where.home, ".local", "state"));
+  return join(base, "rabaed", "demo-sessions");
+}
 
 /** Short names for the demo people the README lists. Anyone else: use the full email. */
 export const demoPeople: Record<string, string> = {
@@ -31,15 +62,18 @@ export const demoPeople: Record<string, string> = {
   nasser: "nasser.aldosari@betabuild.demo.rabaed.test",
 };
 
-export type DemoSessionArgs = { email: string; short: string; out: string };
+export type DemoSessionArgs = { email: string; short: string; out: string; uat: boolean };
 
-/** Reads the command line: one person (email or short name) and an optional --out file. Throws a plain message on bad input. */
-export function parseArgs(argv: string[]): DemoSessionArgs {
+/** Reads the command line: one person (email or short name), an optional --out file and the --uat switch. Throws a plain message on bad input. */
+export function parseArgs(argv: string[], where: StateWhere = realWhere()): DemoSessionArgs {
   let person: string | undefined;
   let out: string | undefined;
+  let uat = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === "--out") {
+    if (arg === "--uat") {
+      uat = true;
+    } else if (arg === "--out") {
       out = argv[++i];
       if (!out) throw new Error("--out needs a file path.");
     } else if (arg.startsWith("--out=")) {
@@ -55,7 +89,8 @@ export function parseArgs(argv: string[]): DemoSessionArgs {
   }
   if (!person) throw new Error(`Name a person: an email or one of ${Object.keys(demoPeople).join(", ")}.`);
   const { email, short } = resolvePerson(person);
-  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}.json`) };
+  const defaultOut = uat ? join(uatStateDir(where), `${short}.uat.json`) : resolve(root, ".demo-sessions", `${short}.json`);
+  return { email, short, out: out ?? defaultOut, uat };
 }
 
 /** A demo person's email and short name, from an email or one of demoPeople's short names. Throws a plain message on an unknown name. */
@@ -181,28 +216,82 @@ export function postJson(url: string, body: unknown): Promise<{ status: number; 
   });
 }
 
+/** The one host `--uat` signs in to (ADR 0026: the UAT web app on Vercel). */
+export const UAT_WEB_HOST = "rabaed-uat-web.vercel.app";
+export const UAT_WEB_URL = `https://${UAT_WEB_HOST}`;
+
+const REFUSAL = "--uat signs in to the UAT web host only";
+
+/** Whether a host name is a production one we know by name: rabaed.com or rabaedapp.com, or any name under them. Any other host is refused by the exact allowlist anyway. */
+function isProductionHost(host: string): boolean {
+  return /(^|\.)rabaed\.com$/.test(host) || /(^|\.)rabaedapp\.com$/.test(host);
+}
+
+/** Whether an email is a demo Member's: one address ending in `.demo.rabaed.test`. */
+function isDemoEmail(email: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.demo\.rabaed\.test$/.test(email);
+}
+
+/**
+ * The guard for `--uat`: returns the UAT web origin when `url` is exactly `https://rabaed-uat-web.vercel.app`
+ * (a trailing slash or the default port is fine), and throws a plain message for anything else: another host,
+ * a look-alike, http, userinfo, another port, a path, a query, localhost. Production is refused by name.
+ * The message names the host only, never the userinfo, path or query of what was passed.
+ */
+export function assertUatWebUrl(url: string): string {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    throw new Error(`Refused: the address is not a URL. ${REFUSAL}.`);
+  }
+  const host = target.hostname;
+  if (isProductionHost(host)) throw new Error(`Refused: ${host} is production. ${REFUSAL}.`);
+  const exact =
+    target.protocol === "https:" &&
+    host === UAT_WEB_HOST &&
+    target.username === "" &&
+    target.password === "" &&
+    target.port === "" &&
+    target.pathname === "/" &&
+    target.search === "" &&
+    target.hash === "";
+  if (!exact) throw new Error(`Refused: ${host || "that address"} is not the UAT web host (https://${UAT_WEB_HOST}). ${REFUSAL}.`);
+  return UAT_WEB_URL;
+}
+
 /** This worktree's web app address: WEB_URL from the environment (`.env`), without a trailing slash. */
 export const webUrlFromEnv = () => (process.env.WEB_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
 
+/** What differs between the local sign-in and the UAT one: where the password comes from, and what to say when it fails. */
+type SignInSource = {
+  /** Returns the password, or throws a plain message that does not hold it. Called only once the address is accepted. */
+  getPassword: () => string;
+  /** The advice after a 401, with no value in it. */
+  unauthorizedHint: string;
+  /** The advice when the address cannot be reached. */
+  unreachableHint: string;
+  postJson?: typeof postJson;
+};
+
 /**
- * Signs `email` in at `webUrl` with this worktree's demo password and returns the Playwright storage state.
- * The password is read here and goes only into the sign-in request: never into a message or the result.
+ * Signs `email` in at `webUrl` and returns the Playwright storage state. The password comes from
+ * `source.getPassword()` and goes only into the sign-in request: never into a message or the result,
+ * and a non-204 answer reports its status only, never the response.
  */
-export async function signIn(email: string, webUrl: string) {
-  if (!existsSync(passwordFile)) {
-    throw new Error("No .env.demo in this worktree yet: run `pnpm demo` here once (it creates the password), then try again.");
-  }
-  const password = parseDemoPassword(readFileSync(passwordFile, "utf8"));
-  if (!password) throw new Error(".env.demo has no DEMO_PASSWORD line.");
+async function signInWith(email: string, webUrl: string, source: SignInSource) {
+  const password = source.getPassword();
+  const post = source.postJson ?? postJson;
 
   // Through the web app's /api/v1 proxy, so the cookie is the browser's first-party one.
   // A lane's WEB_URL is http://laneN.localhost:<port>: postJson connects to 127.0.0.1 but keeps
   // that Host, and the cookies below are for laneN.localhost, the host the README says to open.
-  const response = await postJson(`${webUrl}/api/v1/session`, { email, password }).catch(() => {
-    throw new Error(`Could not reach ${webUrl}. Is the demo running (pnpm demo)?`);
+  // The transport error is dropped on purpose: it could echo the request.
+  const response = await post(`${webUrl}/api/v1/session`, { email, password }).catch(() => {
+    throw new Error(`Could not reach ${webUrl}. ${source.unreachableHint}`);
   });
   if (response.status !== 204) {
-    const hint = response.status === 401 ? " (wrong email, or the seed used another password: run pnpm demo again)" : "";
+    const hint = response.status === 401 ? ` ${source.unauthorizedHint}` : "";
     throw new Error(`Sign-in as ${email} failed with ${response.status}${hint}.`);
   }
   const cookies = response.setCookies;
@@ -210,12 +299,94 @@ export async function signIn(email: string, webUrl: string) {
   return storageState(cookies, webUrl);
 }
 
+/** Signs `email` in at `webUrl` with this worktree's demo password (.env.demo). */
+export async function signIn(email: string, webUrl: string) {
+  return signInWith(email, webUrl, {
+    getPassword: () => {
+      if (!existsSync(passwordFile)) {
+        throw new Error("No .env.demo in this worktree yet: run `pnpm demo` here once (it creates the password), then try again.");
+      }
+      const password = parseDemoPassword(readFileSync(passwordFile, "utf8"));
+      if (!password) throw new Error(".env.demo has no DEMO_PASSWORD line.");
+      return password;
+    },
+    unauthorizedHint: "(wrong email, or the seed used another password: run pnpm demo again)",
+    unreachableHint: "Is the demo running (pnpm demo)?",
+  });
+}
+
+/** `path` with its nearest existing folder made real (links followed), so a link into a repo shows up. */
+function throughLinks(path: string): string {
+  let dir = resolve(path);
+  const rest: string[] = [];
+  for (;;) {
+    if (existsSync(dir)) return join(realpathSync(dir), ...rest);
+    const up = dirname(dir);
+    if (up === dir) return resolve(path);
+    rest.unshift(basename(dir));
+    dir = up;
+  }
+}
+
+/**
+ * The guard for `--uat`'s state file (RP-1199): the session cookie is live, so it is never written inside a
+ * git checkout (this repo is public), however `--out` spells the path: relative, with `..`, or through a link.
+ * Reuses the worker's authority-folder check. Returns the resolved path; throws a plain message otherwise.
+ */
+export function assertUatOutPath(out: string): string {
+  const resolved = resolve(out);
+  if (authorityFolderProblem(dirname(throughLinks(resolved)), repoRootOf(root))) {
+    throw new Error("--uat won't write the session cookie inside a git checkout (the repo is public): choose a path outside it.");
+  }
+  return resolved;
+}
+
+/** The one place `--uat` gets its password: this variable, set by the owner in their own git-ignored environment. */
+export const UAT_PASSWORD_VARIABLE = "UAT_DEMO_PASSWORD";
+
+export type UatSignInOptions = {
+  /** Where the password variable is read from; the process environment unless a test passes its own. */
+  env?: Record<string, string | undefined>;
+  /** The sign-in request; a test passes a fake so nothing leaves the machine. */
+  postJson?: typeof postJson;
+  /** Defaults to the UAT web address; anything else is refused by assertUatWebUrl. */
+  webUrl?: string;
+  /** Where the caller will write the state; checked by assertUatOutPath before the password is read. */
+  out?: string;
+};
+
+/**
+ * Signs `email` in at the UAT web host (RP-1199) with the password in UAT_DEMO_PASSWORD and returns the
+ * Playwright storage state. The address is checked first and WEB_URL is never read. The password is
+ * never printed, logged or put in an error.
+ */
+export async function signInUat(email: string, options: UatSignInOptions = {}) {
+  const webUrl = assertUatWebUrl(options.webUrl ?? UAT_WEB_URL);
+  if (!isDemoEmail(email)) throw new Error("--uat signs in as a demo Member only: the email must end in .demo.rabaed.test.");
+  if (options.out !== undefined) assertUatOutPath(options.out);
+  const env = options.env ?? process.env;
+  return signInWith(email, webUrl, {
+    getPassword: () => {
+      const password = env[UAT_PASSWORD_VARIABLE];
+      if (password === undefined || password.trim() === "") {
+        throw new Error(`${UAT_PASSWORD_VARIABLE} is not set. Set it in your own git-ignored environment (see .env.example); this script never prints it.`);
+      }
+      return password;
+    },
+    unauthorizedHint: `(wrong email, or ${UAT_PASSWORD_VARIABLE} is not the UAT demo password)`,
+    unreachableHint: "Is the UAT deployed?",
+    ...(options.postJson ? { postJson: options.postJson } : {}),
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const state = await signIn(args.email, webUrlFromEnv());
-  mkdirSync(dirname(args.out), { recursive: true });
-  writeFileSync(args.out, JSON.stringify(state, null, 2));
-  console.log(args.out);
+  // The UAT cookie is live: its path was checked (outside any checkout) before the password was read, and the file is the user's alone.
+  const out = args.uat ? resolve(args.out) : args.out;
+  const state = args.uat ? await signInUat(args.email, { out }) : await signIn(args.email, webUrlFromEnv());
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, JSON.stringify(state, null, 2), args.uat ? { mode: 0o600 } : undefined);
+  console.log(out);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

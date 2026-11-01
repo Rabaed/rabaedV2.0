@@ -37,6 +37,9 @@
   .meta code { color:var(--ink); }
   ol.steps { margin:4px 0 6px; padding-inline-start:20px; }
   .exp { margin:4px 0; }
+  .note { margin:6px 0 0; padding:5px 8px; font-size:12px; color:var(--muted); background:#f3f4f7; border-inline-start:3px solid var(--line); border-radius:4px; }
+  .badge { border-radius:10px; padding:0 8px; font-weight:600; background:#eef0f4; color:var(--ink); }
+  .badge.owner { background:#fdeae4; color:#a8330f; } /* 5.7:1 on the pink; --accent is only 4.2:1 */
   .lbl { font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
   .status { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
   .status button { padding:4px 10px; font-size:13px; }
@@ -104,6 +107,8 @@ const T = {
         remove: "Remove", saved: "Saved", notSaved: "Could not save in this browser: use Save work (.json)", none: "No Test Case matches the filters.",
         exported: "Excel file downloaded.", savedJson: "Work saved as .json.", loaded: "Work loaded:", cases: "cases",
         badJson: "That file is not a work file from this sheet.",
+        needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run",
+        mailNote: "On the UAT the email goes to the real mailbox of the address, not to a catcher: you can read it only if the address is yours; otherwise ask the UAT owner.",
         howto: "Pick a status for each Test Case, write what you saw, and add screenshots (paste with Ctrl+V into the case you are on, drag them in, or pick files). Everything is kept in this browser as you go, so closing the tab loses nothing. When you finish, press Export to Excel and send the .xlsx back. To move to another computer, Save work (.json) there and Load it here. Demo data only: never type real names or documents." },
   ar: { title: "ورقة اختبار قبول رابض", intro: "أُنشئت في", tester: "اسمك", export: "تصدير إلى Excel", saveJson: "حفظ العمل (.json)",
         importJson: "تحميل العمل (.json)", part: "الجزء", round: "الجولة", status: "الحالة", search: "بحث", all: "الكل",
@@ -112,6 +117,8 @@ const T = {
         remove: "إزالة", saved: "حُفظ", notSaved: "تعذّر الحفظ في هذا المتصفح: استخدم حفظ العمل (.json)", none: "لا توجد حالة اختبار تطابق التصفية.",
         exported: "نُزّل ملف Excel.", savedJson: "حُفظ العمل بصيغة .json.", loaded: "حُمّل العمل:", cases: "حالة",
         badJson: "هذا الملف ليس ملف عمل من هذه الورقة.",
+        needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة",
+        mailNote: "في بيئة الاختبار يصل البريد إلى صندوق البريد الحقيقي لصاحب العنوان لا إلى أداة التقاط: لا تقرأه إلا إذا كان العنوان لك، وإلا فاطلب ذلك من مسؤول الاختبار.",
         howto: "اختر حالة لكل حالة اختبار، واكتب ما رأيت، وأضف لقطات الشاشة (الصقها بـ Ctrl+V في الحالة التي تعمل عليها، أو اسحبها، أو اختر ملفات). يُحفظ كل شيء في هذا المتصفح أولًا بأول، فإغلاق التبويب لا يُضيّع شيئًا. عند الانتهاء اضغط تصدير إلى Excel وأرسل ملف .xlsx. للانتقال إلى جهاز آخر احفظ العمل (.json) هناك وحمّله هنا. بيانات تجريبية فقط: لا تكتب أسماء أو مستندات حقيقية." },
 };
 let lang = "en";
@@ -234,10 +241,12 @@ function caseHtml(c) {
     <div class="body">
       <h3 dir="auto"><code>${esc(c.id)}</code> ${esc(c.title)}</h3>
       <div class="meta"><span><code>${esc(c.key)}</code></span><span>${esc(t("part"))} ${esc(c.part)}</span>${c.round ? `<span>${esc(t("round"))} ${esc(c.round)}</span>` : ""}
-        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))}</a></div>
+        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))}</a>
+        ${[["owner", "needsOwner"], ["setup", "needsSetup"], ["job", "needsJob"]].filter(([n]) => c.needs.includes(n)).map(([n, k]) => `<span class="badge ${n}">${esc(t(k))}</span>`).join("")}</div>
       ${c.who ? `<div><span class="lbl">${esc(t("who"))}</span> <span dir="auto">${esc(c.who)}</span></div>` : ""}
       ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
       ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}
+      ${c.needs.includes("mail") ? `<p class="note" dir="auto">${esc(t("mailNote"))}</p>` : ""}
     </div>
     <div class="rec">
       <div class="status" role="group">${STATUSES.map((s) => `<button type="button" class="${s}" data-s="${s}" aria-pressed="${e.status === s}">${esc(t(s))}</button>`).join("")}</div>
