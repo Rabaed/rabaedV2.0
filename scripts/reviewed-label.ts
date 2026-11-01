@@ -95,19 +95,38 @@ const MAX_CLEAN_COMMITS = 50;
  * `reviewed` label takes one step per push (`dropLabelOnPush`), and a bot commit only when a bot pushed it (RP-1121).
  */
 export function onlyCleanCommitsSince(base: string, head: string, git: ReviewedGit): boolean {
+  return cleanWalk(base, head, git).clean;
+}
+
+/**
+ * The walk `onlyCleanCommitsSince` takes, from `head` down first parents to `base`: `clean` when it gets there by clean
+ * commits only; otherwise `stoppedAt`, the newest commit that is not one, or undefined when git could not be read or the
+ * walk ran past `MAX_CLEAN_COMMITS`. `pnpm queue` names that commit up front when it is a merge of main (RP-1113).
+ */
+export function cleanWalk(base: string, head: string, git: ReviewedGit): { clean: true } | { clean: false; stoppedAt: string | undefined } {
   let current = head;
   for (let steps = 0; steps <= MAX_CLEAN_COMMITS; steps++) {
-    if (current.startsWith(base)) return true;
+    if (current.startsWith(base)) return { clean: true };
     let first: string | undefined;
     try {
       first = git.parents(current)[0];
     } catch {
-      return false;
+      return { clean: false, stoppedAt: undefined };
     }
-    if (first === undefined || !(keepsLabel(first, current, git) || isBaselineBotCommit(current, git))) return false;
+    if (first === undefined || !(keepsLabel(first, current, git) || isBaselineBotCommit(current, git))) return { clean: false, stoppedAt: current };
     current = first;
   }
-  return false;
+  return { clean: false, stoppedAt: undefined };
+}
+
+/** True when `commit` merges main in: two parents, the second on origin/main. Whether it is clean is `keepsLabel`'s. */
+export function isMergeOfMain(commit: string, git: ReviewedGit): boolean {
+  try {
+    const [, second, ...rest] = git.parents(commit);
+    return second !== undefined && rest.length === 0 && git.onMain(second);
+  } catch {
+    return false;
+  }
 }
 
 /** True when `after` is one baseline-only bot commit (`isBaselineBotCommit`) straight on top of `before` (RP-1121). */
