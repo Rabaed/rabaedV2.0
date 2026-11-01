@@ -13,11 +13,12 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 // entered the queue while auto-merge was on (#564: both, and it still merged).
 //
 // Run by .github/workflows/reviewed-required.yml, from the default branch's copy (a PR cannot edit
-// the script that checks it), on pull_request_target (opened, reopened, synchronize, labeled, unlabeled,
-// ready_for_review, converted_to_draft; pull_request until RP-1148 part A's workflow PR) and on merge_group,
-// as one job name in both so the merge queue runs it too. On pull_request_target GitHub runs main's copy of
-// the workflow file as well, so a PR cannot edit what judges it there; under merge_group it runs the merge
-// commit's copy. On both it names the gate's own files a PR changes (`isGatePath`, RP-1148). A draft PR passes with a note and is checked when marked ready (RP-1018: a
+// the script that checks it), on pull_request_target (opened, reopened, synchronize, labeled,
+// unlabeled, ready_for_review, converted_to_draft; pull_request until RP-1148 part A's workflow PR)
+// and on merge_group, as one job name in both so the merge queue runs it too. On pull_request_target
+// GitHub runs main's copy of the workflow file as well, so a PR cannot edit what judges it there;
+// under merge_group it runs the merge commit's copy. On both it names the gate's own files a PR
+// changes (`isGatePath`, RP-1148). A draft PR passes with a note and is checked when marked ready (RP-1018: a
 // check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot be
 // queued, but a queued PR turned back to draft stays in the queue). In the queue the PR number
 // comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the labels, the draft flag
@@ -143,7 +144,16 @@ export async function requireReviewed(
   if (event.kind === "pull_request" && event.draft) return { ...verdict, warnings: [] };
   const pr = event.kind === "merge_group" ? queuedPrNumber(event.headRef) : event.pr;
   if (pr === undefined) return { ...verdict, warnings: [] };
-  const found = gatePathFinding(pr, (await once.pull(pr)).changedFiles, await once.files(pr), blockGatePaths);
+  let listed: string[];
+  try {
+    listed = await once.files(pr);
+  } catch (error) {
+    // While the rule only warns, a list GitHub fails to give must not fail the check for it.
+    const why = `PR #${pr}: its files could not be listed (${error instanceof Error ? error.message : String(error)}), so whether it changes the merge gate's own files cannot be told`;
+    if (blockGatePaths) return { ok: false, summary: `${why}. Re-run this check.`, warnings: [] };
+    return { ...verdict, warnings: [`${why}.`] };
+  }
+  const found = gatePathFinding(pr, (await once.pull(pr)).changedFiles, listed, blockGatePaths);
   if (found === undefined) return { ...verdict, warnings: [] };
   if (blockGatePaths && verdict.ok) return { ok: false, summary: found, warnings: [] };
   return { ...verdict, warnings: [found] };
@@ -160,7 +170,7 @@ function gatePathFinding(pr: number, changedFiles: number, listed: string[], blo
       ? `PR #${pr} changes the merge gate's own files: ${paths.join(", ")}`
       : `PR #${pr} changes ${changedFiles} files, more than GitHub lists (${listed.length}), so whether it changes the merge gate's own files cannot be told`;
   return blocking
-    ? `${what}. Only the owner may merge such a PR, from the GitHub page (RP-1148).`
+    ? `${what}. Only the owner may merge such a PR, by bypassing the main ruleset from the GitHub page (RP-1148).`
     : `${what}. They decide what judges every PR, so a reviewer checks them closely; until RP-1148 part B the check only warns (GATE_PATHS_BLOCK in scripts/reviewed-required.ts).`;
 }
 
@@ -356,7 +366,8 @@ async function main() {
   (result.ok ? console.log : console.error)(result.summary);
   // An annotation on the run, and a line of its summary, for each warning (RP-1148: the gate paths a PR changes).
   for (const warning of result.warnings) console.log(`::warning title=Merge gate files::${warning.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, [result.summary, ...result.warnings.map((w) => `Warning: ${w}`)].map((line) => `${line}\n`).join(""));
+  // A blank line after each, so Markdown keeps the warnings apart from the verdict.
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, [result.summary, ...result.warnings.map((w) => `**Warning:** ${w}`)].map((line) => `${line}\n\n`).join(""));
   process.exit(result.ok ? 0 : 1);
 }
 

@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
-  GATE_PATHS_BLOCK,
   gatePathsIn,
   isGatePath,
   overHttp,
@@ -126,10 +125,6 @@ describe("isGatePath", () => {
     expect(gatePathsIn(["docs/a.md", "scripts/ci-green.ts", ".github/workflows/ci.yml", "scripts/ci-green.ts"])).toEqual(["scripts/ci-green.ts", ".github/workflows/ci.yml"]);
     expect(gatePathsIn(["apps/web/src/page.tsx"])).toEqual([]);
   });
-
-  it("warns only until the owner chooses (RP-1148 part B, or option 3)", () => {
-    expect(GATE_PATHS_BLOCK).toBe(false);
-  });
 });
 
 // RP-1148 part A: a PR that changes the gate's own files changes what judges PRs. Warn-only until the owner
@@ -181,6 +176,14 @@ describe("requireReviewed on a PR that changes the gate's own files", () => {
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("no 'reviewed' label");
     expect(result.warnings).toHaveLength(1);
+  });
+
+  it("keeps the verdict when the files cannot be listed, with a warning, unless blocking is on", async () => {
+    const { seam } = fakeSeam({ files: async () => Promise.reject(new Error("GitHub GET pulls/7/files answered 502")) });
+    const warned = await requireReviewed(onPr, seam);
+    expect(warned.ok).toBe(true);
+    expect(warned.warnings[0]).toContain("502");
+    expect((await requireReviewed(onPr, seam, { blockGatePaths: true })).ok).toBe(false);
   });
 
   it("reads no files for a draft, which passes and is checked when marked ready", async () => {
