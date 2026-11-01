@@ -315,16 +315,21 @@ describe("reading the answers as another Company on the item", () => {
           form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
       // Every column the app role reads: the hashes are not among them (RP-448 review), nor an event's
-      // Transition and the Step it left, which app.event_transitions gives (RP-1140), nor the Engineer (RP-1162).
+      // Transition and the Step it left, which app.event_transitions gives (RP-1140), nor the Step it reached,
+      // which app.event_steps_reached gives (RP-1203), nor the Engineer (RP-1162).
       await call(
         as,
         sql`select id, project_id, work_item_id, seq, type, actor_member_id, actor_participant_id,
-          to_step_id, payload, audience, audience_participant_id, created_at
+          payload, audience, audience_participant_id, created_at
           from work_item_event where work_item_id = ${a.itemId}::uuid`,
       ),
       await call(
         as,
         sql`select * from app.event_transitions(array(select id from work_item_event where work_item_id = ${a.itemId}::uuid))`,
+      ),
+      await call(
+        as,
+        sql`select * from app.event_steps_reached(array(select id from work_item_event where work_item_id = ${a.itemId}::uuid))`,
       ),
       await call(
         as,

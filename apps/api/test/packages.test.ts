@@ -375,6 +375,8 @@ describe("Submit Package", () => {
     expect(answer.submitted.map((i) => i.id).sort()).toEqual([...items].sort());
     for (const i of answer.submitted) expect(i.documentNumber).toBe((await detail(at.c1Pm, i.id)).documentNumber);
     const control = await asK1Reads(single);
+    // K1 holds it, so it reads its own Step: a null on both sides would pass the comparison below.
+    expect(control.step).toEqual(expect.any(String));
     for (const id of items) {
       expect((await detail(at.c1Pm, id)).documentNumber).toMatch(/\S/);
       expect(await asK1Reads(id)).toEqual(control);
@@ -646,6 +648,8 @@ describe("an In Progress Package", () => {
 
     expect(await detail(at.c1Pm, back)).toMatchObject({ step: { key: "internal_review" } });
     const where = (await detail(at.k1Manager, stays)).step?.key;
+    // K1 holds it, so it reads its own Step (null would pass both checks against `where`).
+    expect(where).toEqual(expect.any(String));
     expect(where).not.toBe("internal_review");
     // Still In Progress, with both; Submit Package has nothing to take (the Sent Back one was Submitted).
     const p = await getPackage(at.c1Pm, pkg.id);

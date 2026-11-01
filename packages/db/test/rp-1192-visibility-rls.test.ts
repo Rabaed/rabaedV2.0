@@ -53,6 +53,15 @@ const historySteps = (id: string) => async (as: string) =>
       (r) => [r.from_step_name, r.to_step_name],
     ),
   );
+/** The Steps app.event_steps_reached gives `as` for item `id`'s events (the Step each one took the item to), by key. */
+const reachedSteps = (id: string) => async (as: string) => {
+  const events = (await migrator.query("select id from work_item_event where work_item_id = $1", [id])).rows as { id: string }[];
+  return keyed(
+    (await t.call<{ to_step_id: string | null }>(as, sql`select to_step_id from app.event_steps_reached(${events.map((e) => e.id)}::uuid[])`)).map(
+      (r) => r.to_step_id,
+    ),
+  );
+};
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -162,5 +171,43 @@ describe("scenario RP-1192-1: K1 holds C1's Submittal at one of K1's own Steps",
       expect(await stepAsSeen(closed)(as), named(as)).toEqual([{ id: "revise_resubmit" }]);
       expect(await listStep(closed)(as), named(as)).toEqual([{ id: "revise_resubmit" }]);
     }
+  });
+
+  it("a closed item's holder_role is null: its terminal Step has no actor", async () => {
+    for (const as of [...outside(), ...k1()]) {
+      const read = await t.call<{ holder_role: string | null }>(as, sql`select holder_role from app.step_as_seen(${closed}::uuid)`);
+      expect(read, named(as)).toEqual([{ holder_role: null }]);
+    }
+  });
+
+  // RP-1203: the raw column of the Step an event reached gave C1 Consultant review's id on its own Submit.
+  it("work_item_event's Step columns are not the app role's to read", async () => {
+    for (const column of ["to_step_id", "from_step_id", "transition_id"]) {
+      await expect(t.call(t.c1.members.engineer, sql<{ id: string }>`select ${sql.ref(column)} from work_item_event where work_item_id = ${atReview}::uuid`), column).rejects.toThrow(
+        /permission denied/,
+      );
+    }
+  });
+
+  it("app.event_steps_reached gives C1 and the Owner Representative no K1 Step by id, and K1 its own", async () => {
+    for (const [item, target] of [
+      [atReview, "consultant_review"],
+      [atApproval, "consultant_review"],
+      [atApproval, "consultant_approval"],
+      [closed, "consultant_approval"],
+    ] as const) {
+      await expectHiddenFrom({ read: reachedSteps(item), target, seenBy: k1(), hiddenFrom: outside(), name: named, label: `app.event_steps_reached ${target}` });
+    }
+    // C1 reads its own internal review, where its Send for Review took it; K1 never does.
+    await expectHiddenFrom({
+      read: reachedSteps(atApproval),
+      target: "internal_review",
+      seenBy: [t.c1.members.engineer, t.c1.members.project_manager],
+      hiddenFrom: k1(),
+      name: named,
+      label: "C1's internal review",
+    });
+    // A closed item's terminal Step, where the shared close took it, is everyone's.
+    for (const as of [...outside(), ...k1()]) expect((await reachedSteps(closed)(as)).map((r) => r.id), named(as)).toContain("revise_resubmit");
   });
 });
