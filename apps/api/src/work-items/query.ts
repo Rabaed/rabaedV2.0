@@ -775,9 +775,11 @@ const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_n
 //   my own Project Role. project_member_position is read only for my own Participant (RLS), and
 //   nothing here is asked of another Company's items (V5, V14).
 const holderJoins = sql`left join lateral (
+    -- The Step each event reached, from app.event_steps_reached (RP-1203): a closed item's terminal Step is everyone's.
     select e.actor_participant_id, e.actor_member_id
     from work_item_event e
-    where r.closed and e.work_item_id = r.id and e.to_step_id = r.step_id
+    join app.event_steps_reached(array(select x.id from work_item_event x where r.closed and x.work_item_id = r.id)) rs on rs.event_id = e.id
+    where r.closed and e.work_item_id = r.id and rs.to_step_id = r.step_id
     order by e.seq desc
     limit 1
   ) ce on true

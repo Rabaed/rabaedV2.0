@@ -333,6 +333,16 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
     ]);
     expect(await seen(c2.member, id)).toEqual([]);
   });
+
+  it("app.step_as_seen's holder_role at K1's Verify, a Step held by the raiser, is the raiser's role, and null once closed (RP-1203)", async () => {
+    const id = await raised("Holder role at Verify");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "resolve", { resolution_note: "Done" })).toBe("applied");
+    const holderRole = async (as: string) => (await call<{ holder_role: string | null }>(as, sql`select holder_role from app.step_as_seen(${id}::uuid)`))[0]!.holder_role;
+    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBe("consultant");
+    expect(await take(k1.member, id, "close")).toBe("applied");
+    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBeNull();
+  });
 });
 
 // RP-625 (SNAG-3): the Snag's Version 3 Raise informs the Consultant. Every active Consultant
