@@ -43,6 +43,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# An explicit bash adds -o pipefail: GitHub's default shell is `bash -e`, where `a | b` ends with b's status (RP-1208).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   # Runs can start out of order, and an old run can be re-run: never deploy an
