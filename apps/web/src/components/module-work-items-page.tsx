@@ -6,6 +6,7 @@ import { PackagesBoardView } from "@/components/packages-board-view";
 import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
+import { newItemHref } from "@/lib/new-item-route";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
 import { ReadFailed } from "@/components/read-failed";
 import { pageOutcome, valueOf } from "@/lib/api-read";
@@ -94,8 +95,9 @@ export async function ModuleWorkItemsPage({
     view === "list" ? readWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? readWorkItemBoard(projectId, module, query) : null,
     // The Snag List's "+ New" offers only the Types the viewer may raise (RP-94); the Submittals'
-    // Import register only to a Member who may raise one of its Types (RP-637).
-    snags || module === "submittals" ? getRaisableTypes(projectId, module) : null,
+    // Import register only to a Member who may raise one of its Types (RP-637); the Inspections'
+    // New Inspection the same (RP-1179).
+    snags || module === "submittals" || module === "inspections" ? getRaisableTypes(projectId, module) : null,
     // The Submittals' Package filter (RP-662): only the Packages the Member sees.
     module === "submittals" ? readPackages(projectId) : null,
     // One import's Drafts (RP-954, "Open the Drafts"): the import named by its file name, from the
@@ -125,14 +127,21 @@ export async function ModuleWorkItemsPage({
     );
   }
 
-  // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
+  // The MAR's Draft Step is held by Contractors; the API refuses anyone else too. An Inspection
+  // (a WIR) is raised from its own tab, by a Member who may raise one of its Types, on the New
+  // WIR page, never the Submittals' New page (RP-1179).
+  const newLink = (to: "submittals" | "inspections", label: string) => (
+    <Link href={newItemHref(project.id, to)} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
+      <Icon name="plus" />
+      {label}
+    </Link>
+  );
   const action =
-    module === "submittals" && project.projectRole.baseRole === "contractor" ? (
-      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
-        <Icon name="plus" />
-        {t("addSubmittal")}
-      </Link>
-    ) : undefined;
+    module === "submittals" && project.projectRole.baseRole === "contractor"
+      ? newLink("submittals", t("addSubmittal"))
+      : module === "inspections" && (raisable?.types.length ?? 0) > 0
+        ? newLink("inspections", t("newInspection"))
+        : undefined;
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
   // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every
   // Member on the Project (story 32).

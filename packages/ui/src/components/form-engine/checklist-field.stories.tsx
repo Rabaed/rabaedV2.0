@@ -40,8 +40,8 @@ const field: ChecklistFieldSchema = {
 const copy = {
   formwork: { en: "Formwork is clean and tight", ar: "الشدة نظيفة ومحكمة" },
   permit: { en: "Pour permit is on site", ar: "تصريح الصب موجود في الموقع" },
-  pass: { en: "Pass", ar: "مقبول" },
-  fail: { en: "Fail", ar: "مرفوض" },
+  pass: { en: "Pass", ar: "مطابق" },
+  fail: { en: "Fail", ar: "غير مطابق" },
   no: { en: "No", ar: "لا" },
   raiseSnag: { en: "Raise a Snag", ar: "إنشاء عيب" },
   snagRaised: { en: "A Snag is raised with the code", ar: "يُنشأ عيب مع الرمز" },

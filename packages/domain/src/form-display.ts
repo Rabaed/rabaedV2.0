@@ -103,10 +103,10 @@ const rowCount = {
     n === 1 ? "صف واحد" : n === 2 ? "صفان" : n <= 10 ? `${formatNumber(n, "ar")} صفوف` : `${formatNumber(n, "ar")} صفًا`,
 } satisfies Record<Locale, (n: number) => string>;
 
-/** How a checklist item's answers read: the answer set's own words. */
+/** How a checklist item's answers read: the answer set's own words (Arabic Pass and Fail as the owner's Inspections Screen Board says them, RP-1179). */
 export const checklistAnswerLabels = {
   en: { yes: "Yes", no: "No", pass: "Pass", fail: "Fail", na: "N/A" },
-  ar: { yes: "نعم", no: "لا", pass: "مقبول", fail: "مرفوض", na: "لا ينطبق" },
+  ar: { yes: "نعم", no: "لا", pass: "مطابق", fail: "غير مطابق", na: "لا ينطبق" },
 } satisfies Record<Locale, Record<ChecklistAnswer, string>>;
 
 /**

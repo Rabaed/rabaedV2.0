@@ -242,8 +242,9 @@ export function PhotosField({ field, files, mode, locale, labels: text, label, o
                       focusRing,
                     )}
                   >
+                    {/* Loaded with CORS, as the viewer and the annotate view load it: a cached copy without CORS left both blank (RP-1179). */}
                     {url ? (
-                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <img src={url} alt="" crossOrigin="anonymous" className="h-full w-full object-cover" />
                     ) : (
                       <Icon name="photo" size={32} className="text-muted" />
                     )}
