@@ -226,14 +226,22 @@ function findFflate(): string {
 /** JSON safe inside a <script>: no "</" can close it. */
 const scriptJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(new RegExp("[\\u2028\\u2029]", "g"), (c) => `\\u${c.charCodeAt(0).toString(16)}`);
 
-/** The sheet's HTML: the template with the cases, fflate and the Excel writer inlined. */
-export function renderSheet({ round, cases, built }: { round: string; cases: SheetCase[]; built: string }): string {
+/**
+ * The order the sheet lists cases in: the scenarios file's own order is the strategy's, the order to run them in
+ * (RP-1201), so it is kept; cases read from Jira have no such order and are sorted by ID, numbers as numbers.
+ */
+export function orderCases(cases: SheetCase[], keepOrder: boolean): SheetCase[] {
+  return keepOrder ? [...cases] : [...cases].sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+}
+
+/** The sheet's HTML: the template with the cases, the UAT address its How to start names, fflate and the Excel writer inlined. */
+export function renderSheet({ round, cases, built, uatUrl = DEFAULT_UAT_URL }: { round: string; cases: SheetCase[]; built: string; uatUrl?: string }): string {
   const template = readFileSync(join(here, "uat-sheet", "template.html"), "utf8");
   const writer = readFileSync(join(here, "uat-sheet", "xlsx.mjs"), "utf8").replace(/^export /gm, "");
   return template
     .replace("/*__FFLATE__*/", () => findFflate())
     .replace("/*__XLSX__*/", () => writer)
-    .replace("/*__DATA__*/null", () => scriptJson({ round, built, cases }))
+    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), cases }))
     .replaceAll("__ROUND__", round.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!));
 }
 
@@ -287,10 +295,13 @@ async function main(): Promise<void> {
     ? casesFromScenarios(readFileSync(scenarios, "utf8"), uatUrl)
     : (file ? issuesFromFile(readFileSync(file, "utf8")) : await searchIssues(arg(argv, "--jql") ?? DEFAULT_JQL, credentialsFrom(process.env))).map((i) => caseFromIssue(i, uatUrl));
   const only = arg(argv, "--rounds")?.split(",").map((r) => r.trim());
-  const cases = unsorted.filter((c) => !only || only.includes(c.round)).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  const cases = orderCases(
+    unsorted.filter((c) => !only || only.includes(c.round)),
+    Boolean(scenarios),
+  );
   const out = arg(argv, "--out") ?? join(root, "planning", "uat", "sheet", `${slug(round)}.html`);
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, renderSheet({ round, cases, built: new Date().toISOString().slice(0, 10) }));
+  writeFileSync(out, renderSheet({ round, cases, built: new Date().toISOString().slice(0, 10), uatUrl }));
   console.log(`Wrote ${out}: ${cases.length} Test Cases.`);
 }
 
