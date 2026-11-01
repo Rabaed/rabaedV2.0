@@ -7,7 +7,7 @@ import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required
 import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
-import { needsVerify, packageJsonVersionsVia, VERIFY_CHECK, verifiedOrGreen, verifyFix } from "./verify-gate.ts";
+import { fileAtVia, needsVerify, packageJsonVersionsVia, VERIFY_CHECK, verifiedOrGreen, verifyFix } from "./verify-gate.ts";
 import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
@@ -201,6 +201,21 @@ function verifyState(pr: number, head: string, seam: QueueSeam, inputs: VerifyIn
   return { state: "refused", result: fail(`PR #${pr}: ${gate.reason}.`, `${verifyFix(pr, head)}, then run \`pnpm queue ${pr}\` again.`) };
 }
 
+/** `read`'s answer, or the refusal naming the git error that stopped it: a changed file git cannot read refuses (RP-1196). */
+function readOrRefuse<T>(pr: number, head: string, read: () => T): { ok: true; value: T } | { ok: false; result: QueueResult } {
+  try {
+    return { ok: true, value: read() };
+  } catch (error) {
+    return {
+      ok: false,
+      result: fail(
+        `PR #${pr}: could not read ${head}'s changed files: ${error instanceof Error ? error.message.trim() : String(error)}`,
+        "Fix: run `git fetch origin main` and check that this clone has the PR's head and its merge base with origin/main (not shallow), then run `pnpm queue` again.",
+      ),
+    };
+  }
+}
+
 /** The ruleset's required checks and the head's CI runs, any gh error as evidence the gate refuses. */
 const ciEvidence = (seam: QueueSeam, head: string) => ciEvidenceOf(() => ({ required: seam.requiredChecks(), runs: seam.ciRuns(head) }));
 
@@ -264,7 +279,9 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   let verify: VerifyInputs | undefined;
   let ciPending = false;
   if (needsVerify(labels, changed)) {
-    const inputs = { body: seam.body(pr), ownChanges: ciOwnChanges(changed, (file) => seam.packageJsonVersions(head, file)) };
+    const own = readOrRefuse(pr, head, () => ciOwnChanges(changed, (file) => seam.packageJsonVersions(head, file)));
+    if (!own.ok) return own.result;
+    const inputs = { body: seam.body(pr), ownChanges: own.value };
     const state = verifyState(pr, head, seam, inputs, ciEvidence(seam, head));
     if (state.state === "refused") return state.result;
     if (state.state === "running" && !options.waitForLabelRun) return state.result;
@@ -279,7 +296,9 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   }
 
   // The same rule as `pnpm verify` and the pre-push hook (RP-993), so a mix shows before the push.
-  const shared = sharedFilesMix(changed, (file) => seam.packageJsonVersions(head, file));
+  const mix = readOrRefuse(pr, head, () => sharedFilesMix(changed, (file) => seam.packageJsonVersions(head, file)));
+  if (!mix.ok) return mix.result;
+  const shared = mix.value;
   if (shared) {
     return fail(`PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`, ...shared, "Split it out, then run `pnpm queue` again.");
   }
@@ -579,7 +598,8 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     },
     labels: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "labels"])) as { labels: { name: string }[] }).labels.map((label) => label.name),
     body: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "body"])) as { body: string | null }).body ?? "",
-    labelWorkflowOnMain: () => run("git", ["cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"]).status === 0,
+    // Absent only when origin/main lacks it; a git error throws rather than skip the label check (RP-1196).
+    labelWorkflowOnMain: () => fileAtVia(cwd, spawn)("origin/main", ".github/workflows/reviewed-label.yml") !== undefined,
     labelRuns: (commit) => JSON.parse(must("gh", ["run", "list", "--workflow", "reviewed-label.yml", "--commit", commit, "--json", "status,conclusion"])) as { status: string; conclusion: string }[],
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
     removalReason: (id, since) => {
