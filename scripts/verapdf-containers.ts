@@ -13,7 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { protectedLaneReason } from "./lanes.ts";
 import { pathSpellings } from "./stories-volumes.ts";
-import { worktreeHash } from "./test-stories-linux.ts";
+import { worktreeHash } from "./stories-hash.ts";
 
 export const VERAPDF_LABEL = "rabaed.verapdf";
 

@@ -119,7 +119,7 @@ export const VERAPDF_SESSION_SECONDS = 3600;
  * The `docker run` arguments of a session's container (RP-1122). Its name and label let
  * `pnpm lanes:prune` (scripts/verapdf-containers.ts, which reads this name back) find it and
  * remove it once the process `pid` that started it is gone. `hash` names the worktree, as
- * scripts/test-stories-linux.ts's worktreeHash does; `n` is random, so two sessions never share a
+ * scripts/stories-hash.ts's worktreeHash does; `n` is random, so two sessions never share a
  * name (worker threads share one pid, and a killed run's pid may be reused).
  */
 export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string; dir: string; hash: string; pid: number; n: number }): string[] {
@@ -140,7 +140,7 @@ export function veraPdfSessionArgs({ image, dir, hash, pid, n }: { image: string
   ];
 }
 
-/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/test-stories-linux.ts; scripts/verapdf-containers.test.ts checks they agree). */
+/** This worktree's hash: the sha1 of its root, spelled as Node resolves it (worktreeHash in scripts/stories-hash.ts; scripts/verapdf-containers.test.ts checks they agree). */
 export const veraPdfWorktreeHash = (): string => createHash("sha1").update(resolve(import.meta.dirname, "../../../..")).digest("hex").slice(0, 8);
 
 /**
