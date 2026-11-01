@@ -1,7 +1,8 @@
 # The UAT deploy (RP-1043, ADR 0026): every merge to main reaches UAT on Vercel,
 # stopping at the first failure:
 #   1. migrate UAT's Supabase database over the session pooler, check rabaed_app
-#      cannot get round RLS, and seed the demo unless it is there;
+#      cannot get round RLS, seed the demo unless it is there, and publish the Rabaed
+#      Default Versions that differ (RP-1205); a refusal stops the deploy here;
 #   2. apply the api's and Rabaed Admin's Vercel settings and Sensitive variables,
 #      build them on the runner and deploy them, not yet live;
 #   3. smoke those deployments: the api (its version and database, visibility
@@ -176,6 +177,33 @@ jobs:
           FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
           FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
         run: node scripts/uat-deploy.ts demo ensure
+
+      # New Rabaed Default Versions (Forms, Workflows, Screens: apps/admin) reach UAT here, after
+      # the migrations and the demo (which creates the Engineer): only what differs from each
+      # latest published Version is published, so a second deploy publishes nothing (RP-1205).
+      # The Engineer it acts as is the demo's, a fixed public address (DEMO_ENGINEER_EMAIL in
+      # apps/api/src/demo/seed.ts, so not a secret); a real Engineer would need a new secret, as
+      # a variable's value shows in this step's log header. The repository's logs and summaries
+      # are public: the tool prints counts and keys only, and masked() takes any URL or email
+      # out of what it prints as well. A refusal (such as projects_lack_entries), an Engineer who
+      # is not active or any error fails the deploy here, before anything goes live; what was
+      # published before it stays (each publish is its own transaction). `shell: bash` makes a
+      # failure of the tool fail the pipe.
+      - name: Publish the Rabaed Defaults
+        shell: bash
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          DEFAULTS_ENGINEER_EMAIL: engineer@rabaed.demo.rabaed.test
+        run: |
+          masked() { sed -E -e 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#<url>#g' -e 's/[^[:space:]",:<>@]+@[^[:space:]",:<>@]+\.[^[:space:]",:<>@]+/<email>/g'; }
+          echo "### Rabaed Defaults on UAT (\`${VERSION:0:7}\`)" >> "$GITHUB_STEP_SUMMARY"
+          if ! node scripts/uat-deploy.ts defaults 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"; then
+            echo "::error::The Rabaed Defaults were not all published (a refusal, a demo Engineer who is not active, or an error): UAT keeps its earlier Versions and nothing goes live. See the lines above."
+            exit 1
+          fi
 
       - name: Vercel CLI
         run: npm install --global vercel@63.1.2
