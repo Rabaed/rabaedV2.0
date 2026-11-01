@@ -181,7 +181,14 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!settled) return { ok: false, added: false, summary: `PR #${pr}: the reviewed-label run for ${head} did not finish within ${timeoutMs / 1000} s. Re-run this workflow once it has.` };
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
-  const verify = verifiedOrGreen(pull.body, head, pr, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
+  let ownChanges: string[];
+  try {
+    ownChanges = ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file));
+  } catch (error) {
+    // A changed file git cannot read refuses, as in the verify gate (RP-1196).
+    return { ok: false, added: false, summary: `PR #${pr}: could not read ${head}'s changes: ${error instanceof Error ? error.message.trim() : String(error)}. Re-run this workflow.` };
+  }
+  const verify = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:
   // re-run its failed run now CI is green, so the required check shows it.
   let reran = "";

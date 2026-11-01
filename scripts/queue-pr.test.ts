@@ -359,6 +359,19 @@ describe("queuePr", () => {
   });
 
   // RP-1190: CI green on the exact head counts as the verify; the rule is scripts/ci-green.ts's, here only that the queue applies it.
+  it("refuses, naming why, when git cannot read a changed package.json, and queues nothing (RP-1196)", () => {
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["apps/admin/package.json"],
+      packageJsonVersions: () => {
+        throw new Error("git ls-tree failed: fatal: Not a valid object name abc1234");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("Not a valid object name abc1234");
+    expect(enqueued).toEqual([]);
+  });
+
   describe("CI green instead of the verify line (RP-1190)", () => {
     const ciRun = (status: string, conclusion: string | null, overrides: Partial<CiRun> = {}): CiRun => ({
       id: 88,
@@ -962,18 +975,25 @@ describe("realSeam", () => {
     expect(calls.every((call) => call.command === "gh" && call.args.slice(0, 2).join(" ") === "api graphql" && call.args.includes("id=PR_node"))).toBe(true);
   });
 
-  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where git show fails", () => {
+  it("reads a package.json at the merge base with origin/main and at the PR's commit, undefined where the path is not there", () => {
     const { calls, seam } = recorded((_command, args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base777\n" };
-      if (args[1] === "base777:apps/admin/package.json") return { status: 0, stdout: "OLD" };
-      return { status: 128, stderr: "fatal: path does not exist" };
+      if (args[0] === "ls-tree") return { status: 0, stdout: args[3] === "base777" ? "100644 blob o1\tapps/admin/package.json\0" : "" };
+      if (args[0] === "cat-file") return { status: 0, stdout: "OLD" };
+      return { status: 1 };
     });
     expect(seam.packageJsonVersions("abc1234", "apps/admin/package.json")).toEqual({ before: "OLD", after: undefined });
     expect(calls.map((call) => [call.command, ...call.args])).toEqual([
       ["git", "merge-base", "origin/main", "abc1234"],
-      ["git", "show", "base777:apps/admin/package.json"],
-      ["git", "show", "abc1234:apps/admin/package.json"],
+      ["git", "ls-tree", "-z", "--full-tree", "base777", "--", "apps/admin/package.json"],
+      ["git", "cat-file", "blob", "o1"],
+      ["git", "ls-tree", "-z", "--full-tree", "abc1234", "--", "apps/admin/package.json"],
     ]);
+  });
+
+  it("throws, never reading the file as deleted, when git cannot read the PR's commit (RP-1196)", () => {
+    const { seam } = recorded((_command, args) => (args[0] === "merge-base" ? { status: 0, stdout: "base777\n" } : { status: 128, stderr: "fatal: Not a valid object name abc1234" }));
+    expect(() => seam.packageJsonVersions("abc1234", "apps/admin/package.json")).toThrow("Not a valid object name abc1234");
   });
 
   it("runs the migration checks for the PR's commit against origin/main with node", () => {
@@ -1030,13 +1050,23 @@ describe("realSeam", () => {
   });
 
   it("lists the reviewed-label runs for a commit through gh run list, and checks the workflow file on origin/main", () => {
-    const { calls, seam } = recorded((command) => (command === "gh" ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' } : { status: 0 }));
+    const { calls, seam } = recorded((command, args) =>
+      command === "gh"
+        ? { status: 0, stdout: '[{"status":"completed","conclusion":"success"}]' }
+        : { status: 0, stdout: args[0] === "ls-tree" ? "100644 blob o1\t.github/workflows/reviewed-label.yml\0" : "on: pull_request\n" },
+    );
     expect(seam.labelRuns("abc1234")).toEqual([{ status: "completed", conclusion: "success" }]);
     expect(seam.labelWorkflowOnMain()).toBe(true);
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["gh", "run", "list", "--workflow", "reviewed-label.yml", "--commit", "abc1234", "--json", "status,conclusion"],
-      ["git", "cat-file", "-e", "origin/main:.github/workflows/reviewed-label.yml"],
+      ["git", "ls-tree", "-z", "--full-tree", "origin/main", "--", ".github/workflows/reviewed-label.yml"],
+      ["git", "cat-file", "blob", "o1"],
     ]);
+  });
+
+  it("says the workflow is not on main only when origin/main lacks it, and throws when git cannot read origin/main (RP-1196)", () => {
+    expect(recorded(() => ({ status: 0, stdout: "" })).seam.labelWorkflowOnMain()).toBe(false);
+    expect(() => recorded(() => ({ status: 128, stderr: "fatal: Not a valid object name origin/main" })).seam.labelWorkflowOnMain()).toThrow("Not a valid object name origin/main");
   });
 
   it("enqueues through gh api graphql, passing the PR id and the head to pin", () => {
