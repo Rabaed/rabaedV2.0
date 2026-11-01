@@ -2,7 +2,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { overHttp, queuedPrNumber, REQUIRED_CHECK, requiredEvent, requireReviewed, reviewGate, type PrEvent, type RequiredSeam } from "./reviewed-required.ts";
+import {
+  gatePathsIn,
+  isGatePath,
+  overHttp,
+  queuedPrNumber,
+  REQUIRED_CHECK,
+  requiredEvent,
+  requireReviewed,
+  reviewGate,
+  type PrEvent,
+  type RequiredSeam,
+} from "./reviewed-required.ts";
 
 // Each made-up event is one second after the one before, as GitHub lists them, oldest first.
 let clock = 0;
@@ -71,8 +82,115 @@ describe("requiredEvent", () => {
     expect(requiredEvent("merge_group", { merge_group: { head_ref: "refs/heads/gh-readonly-queue/main/pr-3-ab" } }, "r")).toEqual({ kind: "merge_group", headRef: "refs/heads/gh-readonly-queue/main/pr-3-ab" });
   });
 
+  it("reads a pull_request_target event as a pull_request one: the same payload, judged by main's copy (RP-1148)", () => {
+    const payload = { pull_request: { number: 7, draft: false, head: { sha: "h", repo: { full_name: "Rabaed/rabaedV2.0" } } } };
+    expect(requiredEvent("pull_request_target", payload, "Rabaed/rabaedV2.0")).toEqual(requiredEvent("pull_request", payload, "Rabaed/rabaedV2.0"));
+  });
+
   it("refuses any other event", () => {
     expect(() => requiredEvent("push", {}, "r")).toThrow();
+  });
+});
+
+describe("isGatePath", () => {
+  it("is every workflow, and the scripts that decide the gate", () => {
+    for (const file of [
+      ".github/workflows/reviewed-required.yml",
+      ".github/workflows/new-labeller.yml",
+      "scripts/reviewed-required.ts",
+      "scripts/reviewed-add.ts",
+      "scripts/reviewed-label.ts",
+      "scripts/reviewed-required.test.ts",
+      "scripts/verify-gate.ts",
+      "scripts/ci-green.ts",
+      "scripts/review-post.ts",
+    ])
+      expect(isGatePath(file), file).toBe(true);
+  });
+
+  it("is nothing else: other scripts, other folders, look-alikes", () => {
+    for (const file of [
+      "scripts/verify.ts",
+      "scripts/queue-pr.ts",
+      "scripts/verify-gate.test.ts",
+      "scripts/sub/reviewed-x.ts",
+      "apps/api/scripts/reviewed-required.ts",
+      ".github/CODEOWNERS",
+      "docs/workflows.md",
+    ])
+      expect(isGatePath(file), file).toBe(false);
+  });
+
+  it("lists the gate paths among a PR's files, each once, in their order", () => {
+    expect(gatePathsIn(["docs/a.md", "scripts/ci-green.ts", ".github/workflows/ci.yml", "scripts/ci-green.ts"])).toEqual(["scripts/ci-green.ts", ".github/workflows/ci.yml"]);
+    expect(gatePathsIn(["apps/web/src/page.tsx"])).toEqual([]);
+  });
+});
+
+// RP-1148 part A: a PR that changes the gate's own files changes what judges PRs. Warn-only until the owner
+// chooses part B (or option 3); `blockGatePaths` stands in for GATE_PATHS_BLOCK on main.
+describe("requireReviewed on a PR that changes the gate's own files", () => {
+  const onPr = { kind: "pull_request" as const, pr: 7, headSha: "h", sameRepo: true, draft: false };
+  const inQueue = { kind: "merge_group" as const, headRef: "refs/heads/gh-readonly-queue/main/pr-7-abc123" };
+  const touching = ["apps/web/src/page.tsx", ".github/workflows/reviewed-required.yml", "scripts/reviewed-add.ts"];
+
+  for (const [label, event] of [
+    ["on the PR", onPr],
+    ["in the merge queue", inQueue],
+  ] as const) {
+    it(`passes ${label} with a warning naming the paths, while blocking is off`, async () => {
+      const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 3 }), files: async () => touching });
+      const result = await requireReviewed(event, seam);
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings?.[0]).toContain(".github/workflows/reviewed-required.yml, scripts/reviewed-add.ts");
+      expect(result.warnings?.[0]).not.toContain("page.tsx");
+    });
+
+    it(`fails ${label}, naming the paths, once blocking is on`, async () => {
+      const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 3 }), files: async () => touching });
+      const result = await requireReviewed(event, seam, { blockGatePaths: true });
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain(".github/workflows/reviewed-required.yml, scripts/reviewed-add.ts");
+      expect(result.summary).toContain("owner");
+    });
+
+    it(`says nothing more ${label} about a PR that changes none of them`, async () => {
+      const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 1 }), files: async () => ["apps/web/src/page.tsx"] });
+      const result = await requireReviewed(event, seam, { blockGatePaths: true });
+      expect(result).toEqual({ ok: true, summary: "PR #7 has the 'reviewed' label: passes.", warnings: [] });
+    });
+  }
+
+  it("warns when the API lists fewer files than the PR changes, as a gate path may be among the rest", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: ["reviewed"], changedFiles: 4000 }), files: async () => ["apps/web/src/page.tsx"] });
+    const result = await requireReviewed(onPr, seam);
+    expect(result.ok).toBe(true);
+    expect(result.warnings?.[0]).toContain("4000");
+    expect((await requireReviewed(onPr, seam, { blockGatePaths: true })).ok).toBe(false);
+  });
+
+  it("adds the warning to a failing verdict too, and leaves the verdict as it was", async () => {
+    const { seam } = fakeSeam({ pull: async () => ({ labels: [], changedFiles: 3 }), files: async () => touching });
+    const result = await requireReviewed(onPr, seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("no 'reviewed' label");
+    expect(result.warnings).toHaveLength(1);
+  });
+
+  it("keeps the verdict when the files cannot be listed, with a warning, unless blocking is on", async () => {
+    const { seam } = fakeSeam({ files: async () => Promise.reject(new Error("GitHub GET pulls/7/files answered 502")) });
+    const warned = await requireReviewed(onPr, seam);
+    expect(warned.ok).toBe(true);
+    expect(warned.warnings[0]).toContain("502");
+    expect((await requireReviewed(onPr, seam, { blockGatePaths: true })).ok).toBe(false);
+  });
+
+  it("reads no files for a draft, which passes and is checked when marked ready", async () => {
+    let read = false;
+    const { seam } = fakeSeam({ files: async () => ((read = true), touching) });
+    expect(await requireReviewed({ ...onPr, draft: true }, seam, { blockGatePaths: true })).toMatchObject({ ok: true });
+    expect(read).toBe(false);
   });
 });
 
@@ -344,7 +462,7 @@ describe("requireReviewed on pull_request", () => {
       labelRuns: async () => expect.unreachable("a draft does not wait for the reviewed-label run"),
     });
     const result = await requireReviewed({ ...event, draft: true }, seam);
-    expect(result).toEqual({ ok: true, summary: "PR #7 is a draft: checked when marked ready." });
+    expect(result).toMatchObject({ ok: true, summary: "PR #7 is a draft: checked when marked ready." });
     expect(slept).toEqual([]);
   });
 
