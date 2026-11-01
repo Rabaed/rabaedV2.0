@@ -1,10 +1,12 @@
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { authorityFolderProblem, repoRootOf } from "../apps/worker/src/cli/uat-authority-folder.ts";
 
 // pnpm demo:session [--uat] <email or short name> [--out <file>] (RP-543, RP-1199)
 //
@@ -19,11 +21,32 @@ import { fileURLToPath } from "node:url";
 // which the owner sets in their own git-ignored environment; never from a file and never
 // printed. WEB_URL is ignored, and any host but the UAT web one (production included)
 // is refused (assertUatWebUrl). Only a demo Member signs in (an email ending in
-// .demo.rabaed.test). The state file defaults to .demo-sessions/<short>.uat.json, so a UAT
-// session cookie never overwrites a local state file.
+// .demo.rabaed.test). The UAT cookie is live, so the state file goes OUTSIDE the repo:
+// %LOCALAPPDATA%\rabaed\demo-sessions\<short>.uat.json on Windows, $XDG_STATE_HOME (else
+// ~/.local/state)/rabaed/demo-sessions/<short>.uat.json elsewhere. A --uat --out that is inside
+// a git checkout (relative, with .., or through a link) is refused before the password is read.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const passwordFile = resolve(root, ".env.demo");
+
+/** What decides where a UAT session file goes by default; a test passes its own. */
+export type StateWhere = { platform: NodeJS.Platform; env: Record<string, string | undefined>; home: string };
+
+const realWhere = (): StateWhere => ({ platform: process.platform, env: process.env, home: homedir() });
+
+/**
+ * The user's own folder for UAT session files, outside every repo: `%LOCALAPPDATA%\rabaed\demo-sessions` on
+ * Windows (`<home>\AppData\Local` when it is unset), `$XDG_STATE_HOME/rabaed/demo-sessions` elsewhere
+ * (`~/.local/state` when it is unset or blank).
+ */
+export function uatStateDir(where: StateWhere): string {
+  const set = (value: string | undefined) => (value !== undefined && value.trim() !== "" ? value : undefined);
+  const base =
+    where.platform === "win32"
+      ? (set(where.env.LOCALAPPDATA) ?? join(where.home, "AppData", "Local"))
+      : (set(where.env.XDG_STATE_HOME) ?? join(where.home, ".local", "state"));
+  return join(base, "rabaed", "demo-sessions");
+}
 
 /** Short names for the demo people the README lists. Anyone else: use the full email. */
 export const demoPeople: Record<string, string> = {
@@ -42,7 +65,7 @@ export const demoPeople: Record<string, string> = {
 export type DemoSessionArgs = { email: string; short: string; out: string; uat: boolean };
 
 /** Reads the command line: one person (email or short name), an optional --out file and the --uat switch. Throws a plain message on bad input. */
-export function parseArgs(argv: string[]): DemoSessionArgs {
+export function parseArgs(argv: string[], where: StateWhere = realWhere()): DemoSessionArgs {
   let person: string | undefined;
   let out: string | undefined;
   let uat = false;
@@ -66,7 +89,8 @@ export function parseArgs(argv: string[]): DemoSessionArgs {
   }
   if (!person) throw new Error(`Name a person: an email or one of ${Object.keys(demoPeople).join(", ")}.`);
   const { email, short } = resolvePerson(person);
-  return { email, short, out: out ?? resolve(root, ".demo-sessions", `${short}${uat ? ".uat" : ""}.json`), uat };
+  const defaultOut = uat ? join(uatStateDir(where), `${short}.uat.json`) : resolve(root, ".demo-sessions", `${short}.json`);
+  return { email, short, out: out ?? defaultOut, uat };
 }
 
 /** A demo person's email and short name, from an email or one of demoPeople's short names. Throws a plain message on an unknown name. */
@@ -291,6 +315,32 @@ export async function signIn(email: string, webUrl: string) {
   });
 }
 
+/** `path` with its nearest existing folder made real (links followed), so a link into a repo shows up. */
+function throughLinks(path: string): string {
+  let dir = resolve(path);
+  const rest: string[] = [];
+  for (;;) {
+    if (existsSync(dir)) return join(realpathSync(dir), ...rest);
+    const up = dirname(dir);
+    if (up === dir) return resolve(path);
+    rest.unshift(basename(dir));
+    dir = up;
+  }
+}
+
+/**
+ * The guard for `--uat`'s state file (RP-1199): the session cookie is live, so it is never written inside a
+ * git checkout (this repo is public), however `--out` spells the path: relative, with `..`, or through a link.
+ * Reuses the worker's authority-folder check. Returns the resolved path; throws a plain message otherwise.
+ */
+export function assertUatOutPath(out: string): string {
+  const resolved = resolve(out);
+  if (authorityFolderProblem(dirname(throughLinks(resolved)), repoRootOf(root))) {
+    throw new Error("--uat won't write the session cookie inside a git checkout (the repo is public): choose a path outside it.");
+  }
+  return resolved;
+}
+
 /** The one place `--uat` gets its password: this variable, set by the owner in their own git-ignored environment. */
 export const UAT_PASSWORD_VARIABLE = "UAT_DEMO_PASSWORD";
 
@@ -301,6 +351,8 @@ export type UatSignInOptions = {
   postJson?: typeof postJson;
   /** Defaults to the UAT web address; anything else is refused by assertUatWebUrl. */
   webUrl?: string;
+  /** Where the caller will write the state; checked by assertUatOutPath before the password is read. */
+  out?: string;
 };
 
 /**
@@ -311,6 +363,7 @@ export type UatSignInOptions = {
 export async function signInUat(email: string, options: UatSignInOptions = {}) {
   const webUrl = assertUatWebUrl(options.webUrl ?? UAT_WEB_URL);
   if (!isDemoEmail(email)) throw new Error("--uat signs in as a demo Member only: the email must end in .demo.rabaed.test.");
+  if (options.out !== undefined) assertUatOutPath(options.out);
   const env = options.env ?? process.env;
   return signInWith(email, webUrl, {
     getPassword: () => {
@@ -328,10 +381,12 @@ export async function signInUat(email: string, options: UatSignInOptions = {}) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const state = args.uat ? await signInUat(args.email) : await signIn(args.email, webUrlFromEnv());
-  mkdirSync(dirname(args.out), { recursive: true });
-  writeFileSync(args.out, JSON.stringify(state, null, 2));
-  console.log(args.out);
+  // The UAT cookie is live: its path was checked (outside any checkout) before the password was read, and the file is the user's alone.
+  const out = args.uat ? resolve(args.out) : args.out;
+  const state = args.uat ? await signInUat(args.email, { out }) : await signIn(args.email, webUrlFromEnv());
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, JSON.stringify(state, null, 2), args.uat ? { mode: 0o600 } : undefined);
+  console.log(out);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

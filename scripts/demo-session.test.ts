@@ -1,7 +1,77 @@
+import { mkdirSync, mkdtempSync, rmSync, rmdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
-import { assertUatWebUrl, demoPeople, isLocalhostName, loopbackForLocalhost, parseArgs, parseDemoPassword, postJson, signInUat, storageState } from "./demo-session.ts";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, describe, expect, it } from "vitest";
+import {
+  assertUatOutPath,
+  assertUatWebUrl,
+  demoPeople,
+  isLocalhostName,
+  loopbackForLocalhost,
+  parseArgs,
+  parseDemoPassword,
+  postJson,
+  signInUat,
+  storageState,
+  uatStateDir,
+} from "./demo-session.ts";
+
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const outside = mkdtempSync(join(tmpdir(), "rabaed-demo-session-test-"));
+afterAll(() => rmSync(outside, { recursive: true, force: true }));
+
+describe("uatStateDir (RP-1199: the UAT session cookie lives outside the repo)", () => {
+  it("is %LOCALAPPDATA%\\rabaed\\demo-sessions on Windows, under AppData\\Local of the home when it is unset", () => {
+    expect(uatStateDir({ platform: "win32", env: { LOCALAPPDATA: "D:\\Local" }, home: "C:\\Users\\u" })).toBe(join("D:\\Local", "rabaed", "demo-sessions"));
+    expect(uatStateDir({ platform: "win32", env: {}, home: "C:\\Users\\u" })).toBe(join("C:\\Users\\u", "AppData", "Local", "rabaed", "demo-sessions"));
+  });
+
+  it("is $XDG_STATE_HOME/rabaed/demo-sessions elsewhere, ~/.local/state when it is unset or blank", () => {
+    expect(uatStateDir({ platform: "linux", env: { XDG_STATE_HOME: "/x/state" }, home: "/home/u" })).toBe(join("/x/state", "rabaed", "demo-sessions"));
+    expect(uatStateDir({ platform: "darwin", env: {}, home: "/Users/u" })).toBe(join("/Users/u", ".local", "state", "rabaed", "demo-sessions"));
+    expect(uatStateDir({ platform: "linux", env: { XDG_STATE_HOME: "  " }, home: "/home/u" })).toBe(join("/home/u", ".local", "state", "rabaed", "demo-sessions"));
+  });
+});
+
+describe("assertUatOutPath (RP-1199: --uat never writes inside a git checkout)", () => {
+  it("accepts a path outside every checkout and returns it resolved", () => {
+    const out = join(outside, "deep", "hafiz.uat.json");
+    expect(assertUatOutPath(out)).toBe(out);
+  });
+
+  it.each([
+    ["an absolute path in the repo", join(repoRoot, "hafiz.uat.json")],
+    ["the old .demo-sessions folder", join(repoRoot, ".demo-sessions", "hafiz.uat.json")],
+    ["a relative path (the working folder is the repo)", "hafiz.uat.json"],
+    ["a .. path that comes back into the repo", join(repoRoot, "scripts", "..", "hafiz.uat.json")],
+    ["a relative .. path that comes back into the repo", join("..", basename(repoRoot.replace(/[\\/]+$/, "")), "hafiz.uat.json")],
+  ])("refuses %s", (_what, out) => {
+    expect(() => assertUatOutPath(out)).toThrow(/--uat won't write the session cookie inside a git checkout/);
+  });
+
+  it("refuses a path through a link that leads into the repo", () => {
+    const target = join(repoRoot, "node_modules", `.uat-out-target-${process.pid}`);
+    const link = join(outside, "link");
+    mkdirSync(target, { recursive: true });
+    try {
+      try {
+        symlinkSync(target, link, "junction");
+      } catch {
+        return; // This machine allows no links: the other cases still hold.
+      }
+      try {
+        expect(() => assertUatOutPath(join(link, "hafiz.uat.json"))).toThrow(/inside a git checkout/);
+      } finally {
+        unlinkSync(link);
+      }
+    } finally {
+      rmdirSync(target);
+    }
+  });
+});
 
 describe("signInUat (RP-1199)", () => {
   const FAKE = "fake-uat-password";
@@ -83,6 +153,37 @@ describe("signInUat (RP-1199)", () => {
     );
     expect(error?.message).toMatch(/--uat signs in as a demo Member only: the email must end in \.demo\.rabaed\.test/);
     expect(error?.message).not.toContain(FAKE);
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses an --out inside a git checkout before reading the password or posting, and accepts one outside", async () => {
+    const { calls, post } = recorder(ok);
+    const env = { UAT_DEMO_PASSWORD: FAKE };
+    const refused = await signInUat(email, { env, postJson: post, out: join(repoRoot, "hafiz.uat.json") }).then(
+      () => undefined,
+      (caught: Error) => caught,
+    );
+    expect(refused?.message).toMatch(/inside a git checkout/);
+    expect(refused?.message).not.toContain(FAKE);
+    // Blank password too: the --out refusal comes first.
+    const first = await signInUat(email, { env: {}, postJson: post, out: "hafiz.uat.json" }).then(
+      () => undefined,
+      (caught: Error) => caught,
+    );
+    expect(first?.message).toMatch(/inside a git checkout/);
+    expect(calls).toEqual([]);
+    await signInUat(email, { env, postJson: post, out: join(outside, "hafiz.uat.json") });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("checks the host, then the email, then --out, then the password", async () => {
+    const { calls, post } = recorder(ok);
+    const inRepo = join(repoRoot, "x.json");
+    const message = async (who: string, options: { webUrl?: string }) =>
+      (await signInUat(who, { env: {}, postJson: post, out: inRepo, ...options }).then(() => undefined, (caught: Error) => caught))?.message;
+    expect(await message("someone@gmail.com", { webUrl: "https://app.rabaed.com" })).toMatch(/production/);
+    expect(await message("someone@gmail.com", {})).toMatch(/demo Member only/);
+    expect(await message(email, {})).toMatch(/inside a git checkout/);
     expect(calls).toEqual([]);
   });
 
@@ -201,15 +302,24 @@ describe("parseArgs", () => {
     expect(parseArgs(["--out=y.json", "ali"]).out).toBe("y.json");
   });
 
-  it("takes --uat as a switch, before or after the person, and writes <short>.uat.json so a UAT cookie never overwrites a local state file", () => {
+  it("takes --uat as a switch, before or after the person, and writes <short>.uat.json outside the repo, in the user's state folder", () => {
     expect(parseArgs(["hafiz"]).uat).toBe(false);
+    const where = { platform: "win32" as const, env: { LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, home: "C:\\Users\\u" };
     for (const argv of [["--uat", "hafiz"], ["hafiz", "--uat"]]) {
-      const args = parseArgs(argv);
+      const args = parseArgs(argv, where);
       expect(args.uat).toBe(true);
       expect(args.email).toBe("hafiz.hamdan@tmc.demo.rabaed.test");
-      expect(args.out.replace(/\\/g, "/")).toMatch(/\/\.demo-sessions\/hafiz\.uat\.json$/);
+      expect(args.out).toBe(join(where.env.LOCALAPPDATA, "rabaed", "demo-sessions", "hafiz.uat.json"));
     }
-    expect(parseArgs(["--uat", "ali", "--out", "x.json"])).toMatchObject({ uat: true, out: "x.json" });
+    expect(parseArgs(["--uat", "ali", "--out", "x.json"], where)).toMatchObject({ uat: true, out: "x.json" });
+    // The local mode keeps its place under the repo.
+    expect(parseArgs(["hafiz"], where).out.replace(/\\/g, "/")).toMatch(/\/\.demo-sessions\/hafiz\.json$/);
+  });
+
+  it("puts the real default --uat file in no git checkout", () => {
+    const out = parseArgs(["--uat", "hafiz"]).out;
+    expect(out).toMatch(/hafiz\.uat\.json$/);
+    expect(() => assertUatOutPath(out)).not.toThrow();
   });
 
   it("refuses no person, two people, an unknown name, an unknown option, a bare --out", () => {
