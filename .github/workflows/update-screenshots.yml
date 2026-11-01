@@ -1,10 +1,12 @@
 # Commits story screenshot baselines, rendered on Linux, to a PR branch.
 #
-# Changed baselines: a PR whose changes touch a story (*.stories.tsx) or
-# packages/ui/src gets them on every push to it (opened, synchronize, reopened;
-# RP-362 retro). Any other PR: add the "update-screenshots" label (or, once
-# this file is on main, run
-#   gh workflow run update-screenshots.yml --ref <your-branch>).
+# Changed baselines: the "update-screenshots" label is the only way to ask for
+# them from a PR (or, once this file is on main, run
+#   gh workflow run update-screenshots.yml --ref <your-branch>
+# by hand). A push never starts a render (RP-1199). Before, a push started one
+# and the label another, and runs on the same PR cancelled each other; a baseline
+# commit could also land while the PR was being verified (#577). Now there is one
+# run per PR at a time (the concurrency group below), asked for on purpose.
 # The render job re-renders every baseline and the commit job commits them.
 # The render job renders every story twice: a story whose two renders differ
 # keeps its old baseline, and the unstable job fails naming it (RP-569).
@@ -17,8 +19,8 @@
 # token: an ordinary push, which starts every pull_request workflow on the new
 # head. The reviewed label and the verify line carry over that one baseline
 # commit (scripts/reviewed-label.ts: `baselineBotPush`, which needs the push's
-# sender to be a bot, and `onlyCleanCommitsSince`). ui-changed skips any bot's push,
-# so the bot's own commit never renders again.
+# sender to be a bot, and `onlyCleanCommitsSince`). The push starts no render, so
+# the bot's own commit never renders again.
 # The App: repository variable SCREENSHOTS_APP_CLIENT_ID and secret
 # SCREENSHOTS_APP_PRIVATE_KEY; the App has Contents read and write on this
 # repository only (setup steps on RP-1121).
@@ -51,53 +53,46 @@ name: Update screenshots
 on:
   workflow_dispatch:
   pull_request:
-    # No paths filter here: it would also apply to the label. ui-changed checks the files.
-    types: [labeled, opened, synchronize, reopened]
+    types: [labeled]
   workflow_run:
     workflows: [CI]
     types: [completed]
 permissions: {}
+# One group per PR, shared by the label and the workflow_run path (RP-1199): the
+# PR's number, or the branch name where there is none (workflow_dispatch, a fork's
+# CI run, a CI run of main). A missing field is empty, not an error, so an empty
+# pull_requests array falls through to the branch.
+# cancel-in-progress stays false: the commit job may be mid-push, and cancelling it
+# would leave a baseline commit half done or never made. A second trigger waits
+# instead, and replaces any other waiting run: at most one running and one waiting.
+# A run that would do nothing (any label but update-screenshots; a CI run that did
+# not fail) gets a group of its own, so it can never replace a waiting run that
+# matters; the jobs below skip it.
 concurrency:
-  group: update-screenshots-${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
+  group: >-
+    update-screenshots-${{
+    ((github.event_name == 'pull_request' && github.event.label.name != 'update-screenshots') ||
+    (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'failure'))
+    && format('skipped-{0}', github.run_id)
+    || github.event.pull_request.number
+    || github.event.workflow_run.pull_requests[0].number
+    || github.event.workflow_run.head_branch
+    || github.head_ref
+    || github.ref_name }}
+  cancel-in-progress: false
 
 env:
   BRANCH: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   SCREENSHOTS: packages/ui/test/__screenshots__
 
 jobs:
-  # A push to a PR in this repository (never a fork's, never the bot's) whose
-  # changes touch a story or packages/ui/src.
-  ui-changed:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.action != 'labeled' &&
-      !endsWith(github.actor, '[bot]') &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    outputs:
-      ui: ${{ steps.files.outputs.ui }}
-    steps:
-      - id: files
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' \
-              | grep -qE '(\.stories\.tsx$|^packages/ui/src/)'; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No story or packages/ui/src change: nothing to render."
-          fi
-
+  # By hand (workflow_dispatch), or the label on a PR from a branch in this
+  # repository: never a fork's PR, never main.
   render:
-    needs: [ui-changed]
     if: >-
-      !cancelled() &&
       github.ref != 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
-        ((github.event.label.name == 'update-screenshots' || needs.ui-changed.outputs.ui == 'true') &&
+        (github.event.label.name == 'update-screenshots' &&
           github.event.pull_request.head.repo.full_name == github.repository))
     # Must match the stories job in ci.yml.
     runs-on: ubuntu-24.04
