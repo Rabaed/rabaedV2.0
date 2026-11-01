@@ -51,6 +51,9 @@ const SAMPLE_PHOTO_JPEG =
 /** The MAR the seed ends with Code C and Remarks, after the Consultant's verification (RP-306). */
 export const CODE_C_TITLE = "Cable tray risers – Tower 1";
 
+/** The Position that holds Assign on Submittals, so the weekly Step Age report has recipients (RP-1186). */
+export const STEP_AGE_REPORT_POSITION = "step_age_report";
+
 /** The Draft the seed creates last: whether a seed finished can be told from it. */
 export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 
@@ -341,11 +344,36 @@ export async function seedDemo(
   await grantVisibility(participant.dcl, only(electrical, mechanical), all);
   await grantVisibility(participant.waha, only(electrical), all);
 
+  // The weekly Step Age report goes to the Members holding Assign on Submittals (NOT-07, RP-1186),
+  // and no Rabaed Default Position holds it. So the demo adds one, for the Contractor, that holds
+  // View and Assign and nothing else: the Members who also hold it (Ali, Yousef) keep their own
+  // Position's rights. Positions are shared by every Project, so TMC's and Beta Build's alike.
+  await sql`
+    insert into position (owner_kind, base_role, key, name, sort)
+    values ('rabaed', 'contractor', ${STEP_AGE_REPORT_POSITION}, ${JSON.stringify(bi("Step Age Report", "تقرير عمر الخطوة الأسبوعي"))}::jsonb, 3)
+    on conflict (base_role, key) do nothing
+  `.execute(databases.migrator);
+  await sql`
+    insert into position_permission (position_id, module_key, permission)
+    select p.id, 'submittals', x.permission
+    from position p cross join unnest(array['view', 'assign']) as x (permission)
+    where p.base_role = 'contractor' and p.key = ${STEP_AGE_REPORT_POSITION}
+    on conflict do nothing
+  `.execute(databases.migrator);
+
   /**
    * Invited by their Authorized Person, added to the Project with a Position and
-   * all of their Participant's Visibility, or only the Locations in `locations`.
+   * all of their Participant's Visibility, or only the Locations in `locations`
+   * and the Trades in `trades`.
    */
-  async function member(company: Onboarded, participantId: string, person: Person, positions: string[], locations: VisibilityGrant = all) {
+  async function member(
+    company: Onboarded,
+    participantId: string,
+    person: Person,
+    positions: string[],
+    locations: VisibilityGrant = all,
+    trades: VisibilityGrant = all,
+  ) {
     const address = email(person.local, company.domain);
     const invited = await company.caller<{ memberId: string }>("POST", "/v1/members", {
       email: address,
@@ -357,7 +385,7 @@ export async function seedDemo(
     await sign(memberCaller, invited.memberId);
     await company.caller("POST", `/v1/participants/${participantId}/members`, { memberId: invited.memberId });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/visibility`, {
-      trade: all,
+      trade: trades,
       location: locations,
     });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/positions`, { positions });
@@ -369,13 +397,15 @@ export async function seedDemo(
   // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position, as GLOSSARY.md's Position entry names it.
   const ali = { key: "tmc-pm", local: "ali.sonour", name: bi("Ali Sonour", "علي سنور"), label: "Contractor Project Manager" };
   // eslint-disable-next-line rabaed/no-avoid-terms -- the same Position's key.
-  await member(tmc, participant.tmc, ali, ["project_manager"]);
+  await member(tmc, participant.tmc, ali, ["project_manager", STEP_AGE_REPORT_POSITION]);
   const yousef = { key: "beta-engineer", local: "yousef.karim", name: bi("Yousef Karim", "يوسف كريم"), label: "Second Contractor Engineer" };
-  await member(beta, participant.beta, yousef, ["engineer"]);
+  await member(beta, participant.beta, yousef, ["engineer", STEP_AGE_REPORT_POSITION]);
   const ahmed = { key: "dcl-engineer-ahmed", local: "ahmed.binsaid", name: bi("Ahmed bin Said", "أحمد بن سعيد"), label: "Consultant Engineer" };
   await member(dcl, participant.dcl, ahmed, ["engineer"]);
-  const sara = { key: "dcl-engineer-sara", local: "sara", name: bi("Sara", "سارة"), label: "Consultant Engineer" };
-  await member(dcl, participant.dcl, sara, ["engineer"]);
+  // Works one Trade only (RP-1207): Mechanical Works at every Location, so she reads none of the
+  // seed's Electrical MARs and is not in their Consultant Engineer Step Pool. Ahmed covers both Trades.
+  const sara = { key: "dcl-engineer-sara", local: "sara", name: bi("Sara", "سارة"), label: "Consultant Engineer (Mechanical only)" };
+  await member(dcl, participant.dcl, sara, ["engineer"], all, only(mechanical));
   const mohammed = { key: "dcl-manager", local: "mohammed.alshamsi", name: bi("Mohammed Al Shamsi", "محمد الشامسي"), label: "Consultant Manager" };
   await member(dcl, participant.dcl, mohammed, ["manager"]);
   const faisal: Person = {

@@ -408,7 +408,8 @@ describe("Positions", () => {
     });
     await ok(c1.caller.request("PUT", path, { positions: ["engineer", "project_manager"] }));
     const members = (await c1.caller.get(`/v1/participants/${c1ParticipantId}/members`)).json();
-    expect(members.positions.map((p: { key: string }) => p.key)).toEqual(["engineer", "project_manager"]);
+    // The demo seed adds the Contractor Position that holds Assign (RP-1186) to the test database too.
+    expect(members.positions.map((p: { key: string }) => p.key).filter((key: string) => key !== "step_age_report")).toEqual(["engineer", "project_manager"]);
     expect(members.members.find((m: { id: string }) => m.id === member.id).positions).toEqual([
       "engineer",
       "project_manager",
