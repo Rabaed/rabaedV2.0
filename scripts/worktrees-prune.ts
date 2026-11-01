@@ -44,7 +44,9 @@
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
 //   pnpm worktrees:prune [--stale-days <n>] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists
+// RP-1198: after its arguments, before the fetch, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readProjectNow, readWorktreeEnv, removeProject } from "./lanes.ts";
@@ -94,6 +96,7 @@ for (let i = 0; i < args.length; i++) {
     process.exit(1);
   }
 }
+stopIfBehindOrigin("pnpm worktrees:prune");
 
 const mainRoot = listWorktrees()[0]!.path;
 const shallow = shallowRefusal(isShallowRepo(mainRoot), "worktrees:prune");
