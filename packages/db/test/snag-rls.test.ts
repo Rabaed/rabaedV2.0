@@ -244,6 +244,16 @@ describe("a Consultant's Snag reaches exactly K1 and C1", () => {
     expect(inside.entered_at.getTime()).toBeGreaterThan(atRaise.entered_at.getTime());
     expect(await stepAsSeen(k1.member, id)).toEqual(atRaise);
   });
+
+  it("app.step_as_seen's holder_role at K1's Verify, a Step held by the raiser, is the raiser's role, and null once closed (RP-1203)", async () => {
+    const id = await raised("Holder role at Verify");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "resolve", { resolution_note: "Done" })).toBe("applied");
+    const holderRole = async (as: string) => (await call<{ holder_role: string | null }>(as, sql`select holder_role from app.step_as_seen(${id}::uuid)`))[0]!.holder_role;
+    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBe("consultant");
+    expect(await take(k1.member, id, "close")).toBe("applied");
+    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBeNull();
+  });
 });
 
 // RP-622 (SNAG-2): the Snag's Draft and Verify are held by the raiser. C1 raises a Snag on
@@ -332,16 +342,6 @@ describe("a Contractor's Snag on itself reaches no other Company (RP-622)", () =
       { participant_id: participant.c1 },
     ]);
     expect(await seen(c2.member, id)).toEqual([]);
-  });
-
-  it("app.step_as_seen's holder_role at K1's Verify, a Step held by the raiser, is the raiser's role, and null once closed (RP-1203)", async () => {
-    const id = await raised("Holder role at Verify");
-    expect(await pickUp(c1Pm, id)).toBe("picked_up");
-    expect(await take(c1Pm, id, "resolve", { resolution_note: "Done" })).toBe("applied");
-    const holderRole = async (as: string) => (await call<{ holder_role: string | null }>(as, sql`select holder_role from app.step_as_seen(${id}::uuid)`))[0]!.holder_role;
-    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBe("consultant");
-    expect(await take(k1.member, id, "close")).toBe("applied");
-    for (const as of [c1.member, c1Pm, k1.member]) expect(await holderRole(as), as).toBeNull();
   });
 });
 
