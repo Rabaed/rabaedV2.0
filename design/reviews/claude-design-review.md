@@ -32,7 +32,7 @@ Paths below are relative to `design/reference/claude-design/`. Line numbers are 
 | 14 | Med | `snag/snag.js:78` (History) | History lists every Step move with the other company's people ("Nasser Al Kaabi · started work / put on hold"). | V5 (internal Step moves) | Filter History by audience. Other Participants see only hand-overs (Resolved → verify, Close, Re-open) and the signer. |
 | 15 | Low | `wf/view.js:57` (Approvals Log) | Under-disclosure: the Consultant viewer doesn't see the Contractor's **Submit ✍** hand-over, because entries inside the collapsed group are dropped. | V14 (hand-overs shown) | Always show the Submit entry with the signer. |
 | 16 | Low | `snag/snag.js:66`; `snag/data.js:14` (`sar012 by:'sara'`) | A Code B comment quote names the reviewer who wrote it. If that is the Consultant Engineer rather than the signer, an internal reviewer is named. | V14 | Attribute comments to the Issued Code signer, or show "Design Consultants LLC". |
-| 17 | Low | `shell/pages.js:64,71` | "Request To Join" shows people and emails from other companies (Arabtec, ALEC, Aldar, Meraas). Users lists `sarah@consult.ae` as a user of the Contractor. | Model and V4 | See §3. Show only own-company Members. |
+| 17 | Low | `shell/pages.js:64,71` | "Request To Join" shows people and emails from other companies (Arabtec, ALEC, Aldar, Meraas). Users lists `sarah@consult.test` as a user of the Contractor. | Model and V4 | See §3. Show only own-company Members. |
 | 18 | Low | `saas-shell.html:23-27`, `shell/pages.js:32` | ⌘K search and "Recent activity" are static samples. They need a note that results pass the same RLS and there is no "12 results, 3 shown". | Leak channel "Search", "Activity Feed" | Add an annotation or empty-result state. |
 
 **These parts already follow the rules:** Floor View (`floor.js:8` filter, company filter "Only your company", legend note), Map's per-role filter, the desktop Plan's `canSee`, Snag Kanban counts, and Workflow View grouping. In that grouping, the Recommended Code shows only to its own company (`wf/view.js:33`), the collapsed block has no names, and the Issued Code signer is shown.
@@ -67,7 +67,7 @@ Allowed and correct: "Missing" day and "Add it late / إضافته متأخرً�
 | 1 | `shell/pages.js:56-63` (+ `:59` "Roles apply to every project and module in the company") | Company-wide **Roles** with a View/Create/Approve/Edit/Delete matrix per module | Per-project **Position** (Function Permissions View, Create, Submit, Review, Approve, Assign, Close, Attach) held within a **Project Role**. Move it to Project → Settings → Positions. |
 | 2 | `shell/pages.js:56` "Company Admin"; `wf/wf.js:59` "Company admins" (notification recipient) | Company Admin | **Authorized Person** |
 | 3 | `shell/shell.js:12`, `pages.js:56,64` "Client Representative"; `pages.js:83` "Client"; `reports/data.js:9` "for the client" | Client / Client Representative | **Owner / Owner Representative** |
-| 4 | `shell/shell.js:7` "Users"; `pages.js:68-72` | Users | **Members** (a Member belongs to exactly one Company, so the external `sarah@consult.ae` shouldn't appear) |
+| 4 | `shell/shell.js:7` "Users"; `pages.js:68-72` | Users | **Members** (a Member belongs to exactly one Company, so the external `sarah@consult.test` shouldn't appear) |
 | 5 | `shell/shell.js:9,24`; `guidelines/shell-anatomy.html:46` | "Switch/Add workspace" across 3 companies | A Member belongs to one Company, so there is no company switcher. At most an **Instance** or project picker. |
 | 6 | `shell/pages.js:64-67` | "Request To Join" from other companies' people, with a Project Role | Companies are onboarded by Rabaed Engineers, and only the Authorized Person adds Members. Remove, or change to "Invite Member". |
 | 7 | `shell/pages.js:51` "Company type: Main contractor" | Fixed company type | Project Role is **per Project** ("Avoid: company role, company type") |
@@ -139,7 +139,7 @@ Allowed and correct: "Missing" day and "Add it late / إضافته متأخرً�
 10. **Thmanyah licence** (`assets/fonts/thmanyah/LICENSE.pdf`, read in full):
     - It allows commercial use in websites and apps. It allows embedding "only as part of a compiled, packaged, or obfuscated product".
     - It **prohibits** uploading, hosting or making the fonts available on any server. It also prohibits making them extractable by end users "including through web embedding". Modification is prohibited.
-    - Governed by KSA law; contact ask@thmanyah.com.
+    - Governed by KSA law; contact ask@thmanyah.test.
     - Plain `@font-face` `.woff2` files served by a web app (`tokens/thmanyah.css`) are downloadable. Storing them in Claude Design or the repo may also count as "upload/host".
     - Before shipping, get written permission from Thmanyah, or fall back to IBM Plex Sans Arabic.
 11. **Components.** The React primitives in `components/` (15) aren't used by the ui-kit screens, which are vanilla string templates. Table, Drawer, Modal, Popover, StagePill, CodeBadge, AgeDots, Pin, EmptyState, FilterPanel and ViewAs are missing as components.

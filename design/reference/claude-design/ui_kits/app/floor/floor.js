@@ -91,7 +91,7 @@ function bind(root,R){let tt;const flash=m=>{V.toast=m;R.inner();clearTimeout(tt
   if(d.wk){V.wk=Math.max(26,Math.min(39,V.wk+ +d.wk));return R.inner()}
   if(d.zoom!==undefined){const z=+d.zoom;V.z=z===0?1:Math.max(.75,Math.min(1.5,Math.round((V.z+z*.125)*1000)/1000));return R.inner()}
   if(d.tab2){V.tab=d.tab2;V.open=null;return R.inner()}
-  if(d.exp){V.menu=null;return flash(d.exp==='pdf'?L('Spotlights exported to PDF','تم تصدير أبرز المشكلات إلى PDF'):L('Spotlights emailed to mohamed@alfuttaim.ae','تم إرسال أبرز المشكلات إلى بريدك'))}
+  if(d.exp){V.menu=null;return flash(d.exp==='pdf'?L('Spotlights exported to PDF','تم تصدير أبرز المشكلات إلى PDF'):L('Spotlights emailed to mohamed@alfuttaim.test','تم إرسال أبرز المشكلات إلى بريدك'))}
   if(d.fl&&!b.closest('.sl')&&!b.classList.contains('sl')){V.sel=V.sel===d.fl?null:d.fl;V.open=null;return R.inner()}
   if(d.fl&&d.focus){V.sel=d.fl;R.inner();const row=document.querySelector(`[data-fl="${d.fl}"]`);const sc=document.getElementById('fvs');if(row&&sc)sc.scrollTop=row.offsetTop-80;after();return}
   if(d.sl){V.open=V.open===d.sl?null:d.sl;return R.inner()}

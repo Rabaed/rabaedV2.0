@@ -3232,7 +3232,7 @@ try { (() => {
     co: 'c1',
     f: 'Mohamed',
     l: 'Alhalees',
-    e: 'mohamed@nama.example',
+    e: 'mohamed@nama.test',
     r: 'r3',
     tr: [],
     on: 1,
@@ -3242,7 +3242,7 @@ try { (() => {
     co: 'c1',
     f: 'Ahmed',
     l: 'Ghareeb',
-    e: 'ahmed@nama.example',
+    e: 'ahmed@nama.test',
     r: 'r2',
     tr: ['SU', 'ME'],
     on: 1,
@@ -3252,7 +3252,7 @@ try { (() => {
     co: 'c1',
     f: '',
     l: '',
-    e: 'mohamed.alhalees@rabaedapp.com',
+    e: 'user1@rabaed.test',
     r: 'r3',
     tr: ['ME'],
     on: 1,
@@ -3263,7 +3263,7 @@ try { (() => {
     co: 'c2',
     f: 'Contractor',
     l: 'Dummy',
-    e: 'contractor-admin-dummy@rabaedapp.com',
+    e: 'user2@rabaed.test',
     r: 'r4',
     tr: [],
     on: 1,
@@ -3273,7 +3273,7 @@ try { (() => {
     co: 'c3',
     f: 'Nasser',
     l: 'Al Kaabi',
-    e: 'nasser@tmc-constructions.ae',
+    e: 'nasser@tmc-constructions.test',
     r: 'r4',
     tr: [],
     on: 1,
@@ -3283,7 +3283,7 @@ try { (() => {
     co: 'c3',
     f: 'Hafiz',
     l: 'Hamdan',
-    e: 'hafiz.h@tmc-constructions.ae',
+    e: 'hafiz.h@tmc-constructions.test',
     r: 'r5',
     tr: ['EL', 'ME'],
     on: 1,
@@ -3293,7 +3293,7 @@ try { (() => {
     co: 'c3',
     f: 'Omar',
     l: 'Rashed',
-    e: 'omar.r@tmc-constructions.ae',
+    e: 'omar.r@tmc-constructions.test',
     r: 'r5',
     tr: ['CV'],
     on: 0,
@@ -3303,7 +3303,7 @@ try { (() => {
     co: 'c4',
     f: 'Sara',
     l: 'Al Mansoori',
-    e: 'sara@designconsultants.ae',
+    e: 'sara@designconsultants.test',
     r: 'r2',
     tr: ['AR'],
     on: 1,
@@ -3313,7 +3313,7 @@ try { (() => {
     co: 'c5',
     f: 'Khalid',
     l: 'Bin Saeed',
-    e: 'k.binsaeed@marinadev.ae',
+    e: 'k.binsaeed@marinadev.test',
     r: 'r1',
     tr: [],
     on: 1,
@@ -3419,7 +3419,7 @@ try { (() => {
       const cs = COS.filter(x => x.t === k);
       return cs.length ? `<optgroup label="${tname(k)}">${cs.map(x => `<option value="${x.id}"${d.co === x.id ? ' selected' : ''}>${esc(x.n)}</option>`).join('')}</optgroup>` : '';
     }).join('')}</select>`}</label>
- <label class="fl">${L('Email', 'البريد الإلكتروني')}<input class="bin" id="ue" value="${esc(d.e)}" placeholder="name@company.com"${ed ? ' disabled' : ''}></label>
+ <label class="fl">${L('Email', 'البريد الإلكتروني')}<input class="bin" id="ue" value="${esc(d.e)}" placeholder="name@company.test"${ed ? ' disabled' : ''}></label>
  <div class="g2f"><label class="fl">${L('First name', 'الاسم الأول')} <small>${L('optional — they can fill it in', 'اختياري')}</small><input class="bin" id="uf" value="${esc(d.f)}"></label><label class="fl">${L('Last name', 'اسم العائلة')} <small>&nbsp;</small><input class="bin" id="ul" value="${esc(d.l)}"></label></div>
  <label class="fl">${L('Role', 'الدور')}${c ? rs.length ? `<select class="bsel" id="ur" style="height:36px"><option value="">${L('— choose role —', '— اختر الدور —')}</option>${rs.map(r => `<option value="${r.id}"${d.r === r.id ? ' selected' : ''}>${esc(r.n)}</option>`).join('')}</select><div class="lock"><i class="ti ti-filter"></i>${L(`Showing ${tname(c.t)} roles only (${rs.length}) — this company is a ${tname(c.t)}.`, `تظهر أدوار ${tname(c.t)} فقط (${rs.length}) — هذه الشركة من نوع ${tname(c.t)}.`)}</div>` : `<div class="lock amber"><i class="ti ti-alert-triangle"></i><span>${L(`No ${tname(c.t)} roles exist yet.`, `لا توجد أدوار ${tname(c.t)} بعد.`)} <a href="#" data-act="mkrole" data-t="${c.t}">${L(`Create a ${tname(c.t)} role`, `أنشئ دور ${tname(c.t)}`)}</a></span></div>` : `<select class="bsel" disabled style="height:36px"><option>${L('Choose a company first', 'اختر الشركة أولًا')}</option></select>`}</label>
  <div class="fl">${L('Trades', 'التخصصات')} <small>${L('Limits which items they’re assigned — leave empty for all trades.', 'يحدّد العناصر المسندة إليه — اتركه فارغًا لكل التخصصات.')}</small><div class="trc">${TRD.map(t => `<button class="${d.tr.includes(t[0]) ? 'on' : ''}" data-utr="${t[0]}">${t[0]}: ${L(t[1], t[2])}</button>`).join('')}</div></div>
@@ -5315,7 +5315,7 @@ try { (() => {
       }
       if (d.exp) {
         V.menu = null;
-        return flash(d.exp === 'pdf' ? L('Spotlights exported to PDF', 'تم تصدير أبرز المشكلات إلى PDF') : L('Spotlights emailed to mohamed@alfuttaim.ae', 'تم إرسال أبرز المشكلات إلى بريدك'));
+        return flash(d.exp === 'pdf' ? L('Spotlights exported to PDF', 'تم تصدير أبرز المشكلات إلى PDF') : L('Spotlights emailed to mohamed@alfuttaim.test', 'تم إرسال أبرز المشكلات إلى بريدك'));
       }
       if (d.fl && !b.closest('.sl') && !b.classList.contains('sl')) {
         V.sel = V.sel === d.fl ? null : d.fl;
@@ -5453,7 +5453,7 @@ try { (() => {
     hafiz: {
       n: ['Hafiz Hamdan', 'حافظ حمدان'],
       co: 'tmc',
-      em: 'hafiz@tmc.sa',
+      em: 'hafiz@tmc.test',
       c: '#3d6db5',
       role: ['Contractor Engineer', 'مهندس المقاول'],
       ty: ['MAR', 'SAR', 'DAR'],
@@ -5462,7 +5462,7 @@ try { (() => {
     faisal: {
       n: ['Faisal Al Harbi', 'فيصل الحربي'],
       co: 'tmc',
-      em: 'faisal@tmc.sa',
+      em: 'faisal@tmc.test',
       c: '#1aa3b8',
       role: ['Electrical Engineer', 'مهندس كهرباء'],
       ty: ['MAR', 'SAR', 'DAR'],
@@ -5471,7 +5471,7 @@ try { (() => {
     omar: {
       n: ['Omar Al Blooshi', 'عمر البلوشي'],
       co: 'tmc',
-      em: 'omar@tmc.sa',
+      em: 'omar@tmc.test',
       c: '#1fae66',
       role: ['MEP Engineer', 'مهندس كهروميكانيك'],
       ty: ['MAR', 'SAR', 'DAR'],
@@ -5480,7 +5480,7 @@ try { (() => {
     sami: {
       n: ['Sami Haddad', 'سامي حداد'],
       co: 'tmc',
-      em: 'sami@tmc.sa',
+      em: 'sami@tmc.test',
       c: '#e9a23b',
       role: ['Site Engineer', 'مهندس موقع'],
       ty: ['MAR', 'DAR'],
@@ -5489,7 +5489,7 @@ try { (() => {
     nasser: {
       n: ['Nasser Al Kaabi', 'ناصر الكعبي'],
       co: 'tmc',
-      em: 'nasser@tmc.sa',
+      em: 'nasser@tmc.test',
       c: '#e98b45',
       role: ['Contractor PM', 'مدير مشروع المقاول'],
       ty: ['MAR', 'SAR', 'DAR'],
@@ -5498,7 +5498,7 @@ try { (() => {
     kali: {
       n: ['Khalid Ali', 'خالد علي'],
       co: 'gdl',
-      em: 'k.ali@gulfdry.ae',
+      em: 'k.ali@gulfdry.test',
       c: '#7a5af0',
       role: ['Engineer', 'مهندس'],
       ty: ['MAR', 'DAR'],
@@ -5507,7 +5507,7 @@ try { (() => {
     rashed: {
       n: ['Rashed Al Mazrouei', 'راشد المزروعي'],
       co: 'gdl',
-      em: 'rashed@gulfdry.ae',
+      em: 'rashed@gulfdry.test',
       c: '#b5455a',
       role: ['Project Engineer', 'مهندس مشروع'],
       ty: ['MAR', 'SAR', 'DAR'],
@@ -5614,7 +5614,7 @@ try { (() => {
       nt = norm(tr),
       it = ITEMS[nt] || ITEMS.Arch;
     const loc = LRS[i % 9];
-    const email = nt === 'Electrical' && i % 3 === 0 ? 'faisal@tmc.sa' : (nt === 'Mechanical' || nt === 'Plumbing') && i % 4 === 0 ? 'omar@tmc.sa' : '';
+    const email = nt === 'Electrical' && i % 3 === 0 ? 'faisal@tmc.test' : (nt === 'Mechanical' || nt === 'Plumbing') && i % 4 === 0 ? 'omar@tmc.test' : '';
     const pkg = nt === 'Electrical' ? 'Electrical L1–L5' : nt === 'Mechanical' || nt === 'Plumbing' ? 'MEP coordination' : '';
     const lk = (SUG.loc[loc] || [])[0];
     ROWS.push({
@@ -5648,20 +5648,20 @@ try { (() => {
     type: ''
   });
   ov(58, {
-    email: 'k.ali@gulfdry.ae',
+    email: 'k.ali@gulfdry.test',
     trade: 'Arch',
     pkg: '',
     subject: 'Gypsum partitions – Floor 4'
   });
   ov(102, {
-    email: 'sami@tmc.sa',
+    email: 'sami@tmc.test',
     type: 'SAR',
     trade: 'Civil',
     pkg: '',
     subject: 'Waterproofing membrane – Basement'
   });
   ov(133, {
-    email: 'faisal@tmc.sa',
+    email: 'faisal@tmc.test',
     type: 'MAR',
     trade: 'Mechanical',
     pkg: 'MEP coordination',
@@ -26249,7 +26249,7 @@ try { (() => {
     sub: L('My Company · general information for all modules', 'شركتي · معلومات عامة لجميع الوحدات'),
     html: `<div class="pc" style="margin-bottom:18px"><div class="co-hd"><span class="co-lg">AF</span><div><h2>${L('Al Futtaim Construction Co.', 'شركة الفطيم للمقاولات')}</h2><p>${L('Main contractor · Dubai, UAE · Member since 2024', 'مقاول رئيسي · دبي، الإمارات · عضو منذ ٢٠٢٤')}</p></div><div style="margin-inline-start:auto;display:flex;gap:10px"><button class="bs"><i class="ti ti-edit"></i>${L('Edit profile', 'تعديل الملف')}</button></div></div></div>
  <div class="grid g21"><div class="pc"><div class="pc-hd"><h3>${L('Company information', 'معلومات الشركة')}</h3></div><div class="pc-bd"><div class="kv">
-  ${[['Legal name', 'الاسم القانوني', 'Al Futtaim Construction Co. LLC'], ['Trade licence', 'الرخصة التجارية', 'DED-704512'], ['TRN', 'الرقم الضريبي', '100 2345 6789 0003'], ['Company type', 'نوع الشركة', L('Main contractor', 'مقاول رئيسي')], ['Headquarters', 'المقر الرئيسي', L('Festival City, Dubai', 'دبي فستيفال سيتي')], ['Phone', 'الهاتف', '+971 4 213 4000'], ['Email', 'البريد الإلكتروني', 'projects@alfuttaim.ae'], ['Website', 'الموقع', 'alfuttaim.ae']].map(k => `<div><small>${L(k[0], k[1])}</small><b class="${/\d|@|\./.test(k[2]) ? 'num' : ''}">${esc(k[2])}</b></div>`).join('')}
+  ${[['Legal name', 'الاسم القانوني', 'Al Futtaim Construction Co. LLC'], ['Trade licence', 'الرخصة التجارية', 'DED-704512'], ['TRN', 'الرقم الضريبي', '100 2345 6789 0003'], ['Company type', 'نوع الشركة', L('Main contractor', 'مقاول رئيسي')], ['Headquarters', 'المقر الرئيسي', L('Festival City, Dubai', 'دبي فستيفال سيتي')], ['Phone', 'الهاتف', '+971 0 000 0000'], ['Email', 'البريد الإلكتروني', 'projects@alfuttaim.test'], ['Website', 'الموقع', 'alfuttaim.ae']].map(k => `<div><small>${L(k[0], k[1])}</small><b class="${/\d|@|\./.test(k[2]) ? 'num' : ''}">${esc(k[2])}</b></div>`).join('')}
  </div></div></div>
  <div class="pc"><div class="pc-hd"><h3>${L('Company documents', 'مستندات الشركة')}</h3><button class="ln">${L('Upload', 'رفع')}</button></div><div class="pc-bd" style="display:flex;flex-direction:column;gap:10px">
   ${[['Trade licence', 'الرخصة التجارية', 'PDF · 1.2 MB', 'ok', 'Valid', 'سارية'], ['VAT certificate', 'شهادة ضريبة القيمة المضافة', 'PDF · 640 KB', 'ok', 'Valid', 'سارية'], ['ISO 9001', 'ISO 9001', 'PDF · 2.1 MB', 'pend', 'Expires in 30d', 'تنتهي خلال ٣٠ يومًا']].map(d => `<div class="doc"><span class="ic"><i class="ti ti-file-text"></i></span><div><b>${L(d[0], d[1])}</b><small>${d[2]}</small></div>${pill(d[3], L(d[4], d[5]))}</div>`).join('')}
@@ -26273,7 +26273,7 @@ try { (() => {
  </tbody></table></div></div></div>`
     };
   };
-  RP._reqs = RP._reqs || [['Omar Al Blooshi', 'omar@arabtec.ae', '#1fae66', 'Consultant', 'الاستشاري', 'Arabtec', '2h'], ['Layla Al Qasimi', 'layla@alec.ae', '#b5455a', 'Contractor Engineer', 'مهندس المقاول', 'ALEC', '5h'], ['Hassan Al Marri', 'hassan@aldar.ae', '#3a3f4b', 'Client Representative', 'ممثل المالك', 'Aldar', '1d'], ['Fatima Al Mazrouei', 'fatima@alfuttaim.ae', '#e98b45', 'Contractor Engineer', 'مهندس المقاول', 'Al Futtaim', '2d'], ['Yousef Al Nuaimi', 'yousef@meraas.ae', '#3d6db5', 'Contractor Project Manager', 'مدير مشروع المقاول', 'Meraas', '3d']];
+  RP._reqs = RP._reqs || [['Omar Al Blooshi', 'omar@arabtec.test', '#1fae66', 'Consultant', 'الاستشاري', 'Arabtec', '2h'], ['Layla Al Qasimi', 'layla@alec.test', '#b5455a', 'Contractor Engineer', 'مهندس المقاول', 'ALEC', '5h'], ['Hassan Al Marri', 'hassan@aldar.test', '#3a3f4b', 'Client Representative', 'ممثل المالك', 'Aldar', '1d'], ['Fatima Al Mazrouei', 'fatima@alfuttaim.test', '#e98b45', 'Contractor Engineer', 'مهندس المقاول', 'Al Futtaim', '2d'], ['Yousef Al Nuaimi', 'yousef@meraas.test', '#3d6db5', 'Contractor Project Manager', 'مدير مشروع المقاول', 'Meraas', '3d']];
   RP.join = () => ({
     title: L('Request To Join', 'طلبات الانضمام'),
     sub: L('My Company · people asking to join your workspace', 'شركتي · أشخاص يطلبون الانضمام إلى مساحة العمل'),
@@ -26283,7 +26283,7 @@ try { (() => {
     title: L('Users', 'المستخدمون'),
     sub: L('My Company · 27 users', 'شركتي · ٢٧ مستخدمًا'),
     html: hd(L('Users', 'المستخدمون'), L('Everyone in your company workspace.', 'جميع أعضاء مساحة عمل شركتك.'), `<button class="bp"><i class="ti ti-user-plus"></i>${L('Invite user', 'دعوة مستخدم')}</button>`) + `<div class="pc"><div class="tbar"><label class="fin"><i class="ti ti-search"></i><input placeholder="${L('Search by name or email', 'ابحث بالاسم أو البريد')}"></label></div><div class="ovx"><table class="tbl"><thead><tr><th>${L('Name', 'الاسم')}</th><th>${L('Role', 'الدور')}</th><th>${L('Projects', 'المشاريع')}</th><th>${L('Status', 'الحالة')}</th><th>${L('Last active', 'آخر نشاط')}</th></tr></thead><tbody>
- ${[['Mohamed Al Hashimi', 'mohamed@alfuttaim.ae', '#6b5ad8', 0, 5, 'ok', 'Active', 'نشط', 'Now'], ['Ahmed bin Said', 'ahmed@alfuttaim.ae', '#3d6db5', 0, 3, 'ok', 'Active', 'نشط', '12m'], ['Abdullah Al Saadi', 'abdullah@alfuttaim.ae', '#7a5c3a', 1, 4, 'ok', 'Active', 'نشط', '1h'], ['Nasser Al Kaabi', 'nasser@alfuttaim.ae', '#e98b45', 0, 2, 'ok', 'Active', 'نشط', '3h'], ['Sarah Al Mansoori', 'sarah@consult.ae', '#b5455a', 2, 2, 'pend', 'Invited', 'مدعو', '—'], ['Khalid Al Dhaheri', 'khalid@alfuttaim.ae', '#6b5ad8', 0, 1, 'mut', 'Deactivated', 'معطّل', '30d']].map(u => `<tr><td><div class="who">${av(u[0], u[2], 36)}<div><b>${esc(u[0])}</b><small>${u[1]}</small></div></div></td><td>${L(ROLES[u[3]][0], ROLES[u[3]][1])}</td><td class="num">${u[4]}</td><td>${pill(u[5], L(u[6], u[7]))}</td><td class="num" style="color:var(--mut)">${u[8]}</td></tr>`).join('')}
+ ${[['Mohamed Al Hashimi', 'mohamed@alfuttaim.test', '#6b5ad8', 0, 5, 'ok', 'Active', 'نشط', 'Now'], ['Ahmed bin Said', 'ahmed@alfuttaim.test', '#3d6db5', 0, 3, 'ok', 'Active', 'نشط', '12m'], ['Abdullah Al Saadi', 'abdullah@alfuttaim.test', '#7a5c3a', 1, 4, 'ok', 'Active', 'نشط', '1h'], ['Nasser Al Kaabi', 'nasser@alfuttaim.test', '#e98b45', 0, 2, 'ok', 'Active', 'نشط', '3h'], ['Sarah Al Mansoori', 'sarah@consult.test', '#b5455a', 2, 2, 'pend', 'Invited', 'مدعو', '—'], ['Khalid Al Dhaheri', 'khalid@alfuttaim.test', '#6b5ad8', 0, 1, 'mut', 'Deactivated', 'معطّل', '30d']].map(u => `<tr><td><div class="who">${av(u[0], u[2], 36)}<div><b>${esc(u[0])}</b><small>${u[1]}</small></div></div></td><td>${L(ROLES[u[3]][0], ROLES[u[3]][1])}</td><td class="num">${u[4]}</td><td>${pill(u[5], L(u[6], u[7]))}</td><td class="num" style="color:var(--mut)">${u[8]}</td></tr>`).join('')}
  </tbody></table></div></div>`
   });
   RP.subs = () => ({
@@ -26521,7 +26521,7 @@ try { (() => {
  </header>`;
   }
   function meMenu(st) {
-    return `<div class="menu" style="width:260px"><div class="mhd">${av('Mohamed', '#6b5ad8', 40)}<div><b>Mohamed Al Hashimi</b><small>mohamed@alfuttaim.ae</small></div></div><div class="sep"></div>
+    return `<div class="menu" style="width:260px"><div class="mhd">${av('Mohamed', '#6b5ad8', 40)}<div><b>Mohamed Al Hashimi</b><small>mohamed@alfuttaim.test</small></div></div><div class="sep"></div>
  <button class="mi"><i class="ti ti-user"></i>${t('profileM')}</button><button class="mi"><i class="ti ti-settings"></i>${t('account')}</button><button class="mi"><i class="ti ti-help-circle"></i>${t('help')}</button>
  <div class="sep"></div><h6>${t('language')}</h6><div class="seg2"><button class="${st.lang === 'ar' ? 'on' : ''}" data-lang="ar">عربي</button><button class="${st.lang === 'en' ? 'on' : ''}" data-lang="en">English</button></div><h6>${t('appearance')}</h6><div class="seg2"><button class="${st.mode !== 'dark' ? 'on' : ''}" data-mode="light">${t('light')}</button><button class="${st.mode === 'dark' ? 'on' : ''}" data-mode="dark">${t('dark')}</button></div>${st.mode === 'dark' ? '' : `<h6>${t('theme')}</h6>`}${st.mode === 'dark' ? '' : `<div class="seg2"><button class="${st.theme === 'dark' ? 'on' : ''}" data-theme="dark">${t('dark')}</button><button class="${st.theme === 'light' ? 'on' : ''}" data-theme="light">${t('light')}</button></div>`}
  <div class="sep"></div><button class="mi danger"><i class="ti ti-logout"></i>${t('signout')}</button></div>`;
