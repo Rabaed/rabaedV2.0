@@ -32,7 +32,7 @@
 // whose kill got no exit event is tried again (lanes.ts removeProject); and while a verify runs
 // anywhere on the machine (verifies-running.ts) the containers go but every volume stays.
 //
-// RP-1198: first, in every mode, it stops when this checkout is over 50 commits behind origin/main, naming where to run from.
+// RP-1198: in every mode, after its arguments, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { existsSync } from "node:fs";
 import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
@@ -68,7 +68,6 @@ import { fetchPrune, gitChanges, gitError, isShallowRepo, judgeWorktree, listWor
 import { pidAlive } from "./lanes-lock.ts";
 import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
-stopIfBehindOrigin("pnpm lanes:prune");
 const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
 const argv = process.argv.slice(2);
 
@@ -78,6 +77,7 @@ if (argv.includes("--stale")) {
     console.error(`--stale is a report on its own.\n${usage}`);
     process.exit(1);
   }
+  stopIfBehindOrigin("pnpm lanes:prune");
   const listed = listContainers(DOCKER_TIMEOUT_MS);
   let volumes: Volume[] | undefined;
   try {
@@ -108,6 +108,7 @@ if (refused !== undefined) {
   console.error(refused);
   process.exit(1);
 }
+stopIfBehindOrigin("pnpm lanes:prune");
 const withMerged = options.merged;
 const lane = options.lane;
 

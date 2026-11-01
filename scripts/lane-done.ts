@@ -19,7 +19,7 @@
 //     --lane N   the lane, when the PR's worktree is gone (or to check it is the one its .env names); never 7
 //     --force    removes worktrees with uncommitted or untracked files, or commits origin/main lacks
 //     --yes      skips the confirmation; --dry-run only lists, and removes nothing
-// RP-1198: first, it stops when this checkout is over 50 commits behind origin/main, naming where to run from.
+// RP-1198: after its arguments, before anything else, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -51,7 +51,6 @@ import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./workt
 import { isAppWorktree } from "./worktrees-pruning.ts";
 import { currentRoot, fetchPrune, gitChanges, gitError, isAgentWorktree, isAncestor, isShallowRepo, listWorktrees, refExists, systemLiveness, unpushedCount, type Worktree } from "./worktrees.ts";
 
-stopIfBehindOrigin("pnpm lane:done");
 const TARGET = "origin/main";
 const parsed = parseLaneDoneArgs(process.argv.slice(2));
 if ("error" in parsed) {
@@ -59,6 +58,7 @@ if ("error" in parsed) {
   process.exit(1);
 }
 const { force, yes, dryRun } = parsed;
+stopIfBehindOrigin("pnpm lane:done");
 
 // Rule 8: the PR first.
 const pr = readPullRequest(parsed.pr);
