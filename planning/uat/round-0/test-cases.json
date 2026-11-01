@@ -49,7 +49,7 @@
   "title": "Send for Review numbers the item and Ali holds it at once",
   "who": "Hafiz (TMC engineer); Ali (TMC PM)",
   "steps": "1) Hafiz: Send for Review on the complete Draft. 2) Ali: open it from the bell.",
-  "expected": "The item gets a Document Number (first in a fresh seed: TWR-MAR-01-0004) shown left to right. Ali is TMC's only PM, so it is his at once: \"With Ali Sonour - TMC Constructions\", no Pick up button. Ali's bell shows \"Step reached\" within seconds. Nothing outside TMC.",
+  "expected": "The item gets the next Document Number in its sequence (for example TWR-MAR-01-0004), shown left to right. Ali is TMC's only PM, so it is his at once: \"With Ali Sonour - TMC Constructions\", no Pick up button. Ali's bell shows \"Step reached\" within seconds. Nothing outside TMC.",
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
@@ -3022,6 +3022,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: 61, 73, 74, 75, RP-392-1, RP-392-2, RP-399-1; Rules: Creation Date row"
  },
  {
@@ -3036,6 +3037,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: 35, RP-407-4; Rules: V14"
  },
  {
@@ -3657,6 +3659,7 @@
   "priority": "Highest",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["setup", "owner"],
   "covers": "Matrix: RP-515-1; Rules: Derived values row"
  },
  {

@@ -112,12 +112,13 @@ export function caseFromIssue(issue: JiraIssue, uatUrl: string): SheetCase {
  *   setup  needs a fixture, aged items or a seeded state that its own steps do not create.
  *   owner  needs the UAT owner (the person running the UAT): the lane's machine, pnpm, a port, a lane
  *          engineer, or a mailbox the tester cannot read.
+ * The needs come from the scenarios file only (test-cases.json): a Test Case read from Jira has none.
  */
 export const NEEDS = ["mail", "job", "setup", "owner"] as const;
 export type Need = (typeof NEEDS)[number];
 
 /** A scenario of planning/uat/<round>/test-cases.json, the source the Jira Test Cases were made from. */
-interface ScenarioRow {
+export interface ScenarioRow {
   id: string;
   jira: string;
   part: string;
@@ -140,21 +141,25 @@ export function vercelWording(text: string): string {
 }
 
 // What the text of a case implies it needs; a case that mentions one without declaring it is a false Blocked result on the UAT.
-const IMPLIED_NEEDS: { need: Need; pattern: RegExp; says: string }[] = [
-  { need: "mail", pattern: /\bmailpit\b/i, says: "Mailpit" },
+const IMPLIED_NEEDS: { need: Need; pattern: RegExp; says: string; inTitle?: false }[] = [
+  { need: "mail", pattern: /\bmailpit\b/i, says: "mentions Mailpit" },
   // Any job (run the job, the digest job, pnpm uat:run-job); a Member's "Daily digest" or "Weekly Step Age report" setting is not one.
-  { need: "job", pattern: /\bjobs?\b/i, says: "a job" },
-  { need: "owner", pattern: /\blane ?7\b|\bpnpm\b|\blane engineer\b|\.env\b|\bdatabase\b|\bports?\b/i, says: "the lane's own machine" },
+  { need: "job", pattern: /\bjobs?\b/i, says: "mentions a job" },
+  { need: "owner", pattern: /\blane ?7\b|\bpnpm\b|\blane engineer\b|\.env\b|\bdatabase\b|\bports?\b/i, says: "mentions the lane's own machine" },
+  // The AGE and FX-x fixtures, a fixture by name, or aged items. A case that builds a fixture names it in its title ("Fixture FX-C2: ..."), so the title is not read.
+  { need: "setup", pattern: /\bFX-[A-Z0-9]+\b|\bAGE\b|\b[Ff]ixture\b|\b[Aa]ged items?\b|\b[Aa]ge (?:the|two|an?|\d+) items?\b/, says: "needs a fixture or aged items", inTitle: false },
 ];
 
 /** The rows of a test-cases.json whose needs do not match their text: one message each. */
-export function tagProblems(rows: { id: string; title?: string; who?: string; steps?: string; expected?: string; needs?: string[] }[]): string[] {
+export function tagProblems(rows: (Pick<ScenarioRow, "id"> & Partial<ScenarioRow>)[]): string[] {
   const problems: string[] = [];
   for (const r of rows) {
     const unknown = unknownNeeds(r.needs);
     if (unknown.length) problems.push(`${r.id} declares an unknown need: ${unknown.join(", ")}`);
-    const text = [r.title, r.who, r.steps, r.expected].join("\n");
-    for (const { need, pattern, says } of IMPLIED_NEEDS) if (pattern.test(text) && !r.needs?.includes(need)) problems.push(`${r.id} mentions ${says}: add ${need} to its needs`);
+    const body = [r.who, r.steps, r.expected].join("\n");
+    for (const { need, pattern, says, inTitle } of IMPLIED_NEEDS) {
+      if (pattern.test(inTitle === false ? body : `${r.title ?? ""}\n${body}`) && !r.needs?.includes(need)) problems.push(`${r.id} ${says}: add ${need} to its needs`);
+    }
   }
   return problems;
 }

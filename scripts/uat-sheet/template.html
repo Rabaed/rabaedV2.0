@@ -39,7 +39,7 @@
   .exp { margin:4px 0; }
   .note { margin:6px 0 0; padding:5px 8px; font-size:12px; color:var(--muted); background:#f3f4f7; border-inline-start:3px solid var(--line); border-radius:4px; }
   .badge { border-radius:10px; padding:0 8px; font-weight:600; background:#eef0f4; color:var(--ink); }
-  .badge.owner { background:#fdeae4; color:var(--accent); }
+  .badge.owner { background:#fdeae4; color:#a8330f; } /* 5.7:1 on the pink; --accent is only 4.2:1 */
   .lbl { font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
   .status { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
   .status button { padding:4px 10px; font-size:13px; }
@@ -242,11 +242,11 @@ function caseHtml(c) {
       <h3 dir="auto"><code>${esc(c.id)}</code> ${esc(c.title)}</h3>
       <div class="meta"><span><code>${esc(c.key)}</code></span><span>${esc(t("part"))} ${esc(c.part)}</span>${c.round ? `<span>${esc(t("round"))} ${esc(c.round)}</span>` : ""}
         <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))}</a>
-        ${[["owner", "needsOwner"], ["setup", "needsSetup"], ["job", "needsJob"]].filter(([n]) => (c.needs || []).includes(n)).map(([n, k]) => `<span class="badge ${n}">${esc(t(k))}</span>`).join("")}</div>
+        ${[["owner", "needsOwner"], ["setup", "needsSetup"], ["job", "needsJob"]].filter(([n]) => c.needs.includes(n)).map(([n, k]) => `<span class="badge ${n}">${esc(t(k))}</span>`).join("")}</div>
       ${c.who ? `<div><span class="lbl">${esc(t("who"))}</span> <span dir="auto">${esc(c.who)}</span></div>` : ""}
       ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
       ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}
-      ${(c.needs || []).includes("mail") ? `<p class="note" dir="auto">${esc(t("mailNote"))}</p>` : ""}
+      ${c.needs.includes("mail") ? `<p class="note" dir="auto">${esc(t("mailNote"))}</p>` : ""}
     </div>
     <div class="rec">
       <div class="status" role="group">${STATUSES.map((s) => `<button type="button" class="${s}" data-s="${s}" aria-pressed="${e.status === s}">${esc(t(s))}</button>`).join("")}</div>

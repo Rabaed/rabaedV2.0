@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { caseFromIssue, casesFromScenarios, numberedSteps, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type SheetCase } from "./uat-sheet.ts";
+import { caseFromIssue, casesFromScenarios, numberedSteps, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
@@ -223,10 +223,51 @@ describe("tagProblems", () => {
     expect(tagProblems([{ id: "X-1", needs: ["mail", "mails"] }])).toEqual(["X-1 declares an unknown need: mails"]);
   });
 
-  it("passes every case of the real test-cases.json", () => {
-    const rows = JSON.parse(readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8")) as Parameters<typeof tagProblems>[0];
-    expect(rows.length).toBeGreaterThan(200);
+  it("fails a case that needs the AGE or FX fixtures or aged items without the setup need", () => {
+    expect(tagProblems([{ id: "VIS-17", steps: "1) Ali Submits. 2) Needs AGE: age the item 5 weeks inside TMC.", needs: ["owner"] }])).toEqual(["VIS-17 needs a fixture or aged items: add setup to its needs"]);
+    expect(tagProblems([{ id: "SNG-02", steps: "1) Needs FX-C2 (PAR-14).", needs: [] }])).toHaveLength(1);
+    expect(tagProblems([{ id: "VIS-61", steps: "1) Filter the List while TMC has a long-lived Draft and aged items.", needs: ["owner"] }])).toHaveLength(1);
+    expect(tagProblems([{ id: "WF-17", steps: "1) In the MAR Workflow (fixture FX-SB copy) add Assign to.", needs: [] }])).toHaveLength(1);
+    expect(tagProblems([{ id: "VIS-17", steps: "1) Needs AGE.", needs: ["setup", "owner"] }])).toEqual([]);
+  });
+
+  it("lets a case that builds a fixture name it in its title, and does not take Step Age for the AGE fixture", () => {
+    expect(tagProblems([{ id: "PAR-14", title: "Fixture FX-C2: narrow Beta Build to Tower 2", steps: "1) Set Beta Build to Tower 2 only.", needs: [] }])).toEqual([]);
+    expect(tagProblems([{ id: "SUB-29", steps: "1) Only Step Age dots show age.", expected: "Lighting Fixtures stay.", needs: [] }])).toEqual([]);
+  });
+
+  it("passes every case of the real test-cases.json, and the sheet reads every one of them", () => {
+    const text = readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8");
+    const rows = JSON.parse(text) as ScenarioRow[];
     expect(tagProblems(rows)).toEqual([]);
+    expect(casesFromScenarios(text, "https://uat.example")).toHaveLength(rows.length);
+  });
+});
+
+describe("the sheet's colours", () => {
+  // WCAG 2.x contrast of 12px text: at least 4.5:1.
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+  const css = readFileSync(resolve(import.meta.dirname, "uat-sheet/template.html"), "utf8");
+  const rule = (selector: string) => new RegExp(`${selector.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+  const accent = /--accent:\s*(#[0-9a-f]{6})/i.exec(css)![1]!;
+
+  it("reads the owner badge at 4.5:1 or better", () => {
+    const style = rule(".badge.owner");
+    const color = /color:\s*(#[0-9a-f]{6})/i.exec(style)?.[1] ?? accent;
+    const background = /background:\s*(#[0-9a-f]{6})/i.exec(style)![1]!;
+    expect(contrast(color, background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("reads the mail note and the other badges at 4.5:1 or better", () => {
+    expect(contrast("#5d6678", /background:\s*(#[0-9a-f]{6})/i.exec(rule(".note"))![1]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#1d2433", /background:\s*(#[0-9a-f]{6})/i.exec(rule(".badge"))![1]!)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
