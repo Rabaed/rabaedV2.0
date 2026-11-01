@@ -16,6 +16,11 @@ import { credentialsFrom, type Credentials } from "./jira-upload.ts";
 // round's local test-cases.json (the scenarios the Jira Test Cases were made from); otherwise it
 // asks Jira with JIRA_EMAIL and JIRA_API_TOKEN from the environment (never printed, never written).
 // The HTML holds Test Case text only: no secrets, no tokens, no customer data.
+// A scenario of test-cases.json may declare `"needs": ["mail", "job", "setup", "owner"]` (see NEEDS):
+// the sheet shows a "needs the UAT owner" badge for `owner`, a note under a `mail` case that on the UAT
+// the mail goes to the real mailbox (its Mailpit wording becomes "the mailbox"), and a badge for the rest.
+// tagProblems (run by uat-sheet.test.ts over the real file) fails a case that mentions Mailpit, a job or
+// the lane's own machine without the matching need.
 
 const JIRA = "https://rabaedsa.atlassian.net";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +42,8 @@ export interface SheetCase {
   who: string;
   steps: string[];
   expected: string;
+  /** What the case needs beyond the demo: see NEEDS. Empty for a case read from Jira. */
+  needs: Need[];
   url: string;
 }
 
@@ -94,8 +101,20 @@ export function caseFromIssue(issue: JiraIssue, uatUrl: string): SheetCase {
     .map(plain);
   // eslint-disable-next-line rabaed/no-avoid-terms -- the Test Case's own heading in Jira, read as written.
   const expected = plain(section(md, "Expected result"));
-  return { key: issue.key, id, title: rest.join(" "), part, round, who, steps, expected, url: startUrl(part, uatUrl) };
+  return { key: issue.key, id, title: rest.join(" "), part, round, who, steps, expected, needs: [], url: startUrl(part, uatUrl) };
 }
+
+/**
+ * What a case needs that a tester on the Vercel UAT (ADR 0026) may not have, declared in its `needs` list:
+ *   mail   reads or checks an email. On the UAT the mail goes through SendGrid to the real mailbox of the
+ *          address, so a demo Member's made-up .test address has no mailbox to read.
+ *   job    needs a background or scheduled job (the daily digest, the weekly Step Age report) to be run.
+ *   setup  needs a fixture, aged items or a seeded state that its own steps do not create.
+ *   owner  needs the UAT owner (the person running the UAT): the lane's machine, pnpm, a port, a lane
+ *          engineer, or a mailbox the tester cannot read.
+ */
+export const NEEDS = ["mail", "job", "setup", "owner"] as const;
+export type Need = (typeof NEEDS)[number];
 
 /** A scenario of planning/uat/<round>/test-cases.json, the source the Jira Test Cases were made from. */
 interface ScenarioRow {
@@ -108,6 +127,36 @@ interface ScenarioRow {
   expected?: string;
   round?: string;
   waits?: string;
+  needs?: string[];
+}
+
+const unknownNeeds = (needs: readonly string[] = []) => needs.filter((n) => !(NEEDS as readonly string[]).includes(n));
+
+/** A mail case as the Vercel UAT shows it: the mail goes to the real mailbox, so the tester reads "the mailbox", not Mailpit. */
+export function vercelWording(text: string): string {
+  return text
+    .replace(/Mailpit(?:\s*\(lane 7\))?/gi, (_m, offset: number) => (/(^|[.!?]\s+)$/.test(text.slice(0, offset)) ? "The mailbox" : "the mailbox"))
+    .replace(/\b([Tt]he) the mailbox/g, "$1 mailbox");
+}
+
+// What the text of a case implies it needs; a case that mentions one without declaring it is a false Blocked result on the UAT.
+const IMPLIED_NEEDS: { need: Need; pattern: RegExp; says: string }[] = [
+  { need: "mail", pattern: /\bmailpit\b/i, says: "Mailpit" },
+  // Any job (run the job, the digest job, pnpm uat:run-job); a Member's "Daily digest" or "Weekly Step Age report" setting is not one.
+  { need: "job", pattern: /\bjobs?\b/i, says: "a job" },
+  { need: "owner", pattern: /\blane ?7\b|\bpnpm\b|\blane engineer\b|\.env\b|\bdatabase\b|\bports?\b/i, says: "the lane's own machine" },
+];
+
+/** The rows of a test-cases.json whose needs do not match their text: one message each. */
+export function tagProblems(rows: { id: string; title?: string; who?: string; steps?: string; expected?: string; needs?: string[] }[]): string[] {
+  const problems: string[] = [];
+  for (const r of rows) {
+    const unknown = unknownNeeds(r.needs);
+    if (unknown.length) problems.push(`${r.id} declares an unknown need: ${unknown.join(", ")}`);
+    const text = [r.title, r.who, r.steps, r.expected].join("\n");
+    for (const { need, pattern, says } of IMPLIED_NEEDS) if (pattern.test(text) && !r.needs?.includes(need)) problems.push(`${r.id} mentions ${says}: add ${need} to its needs`);
+  }
+  return problems;
 }
 
 // The round a case first runs, as its Jira label uat-round-N says (planning/uat/strategy.md 10.1):
@@ -123,17 +172,24 @@ export const roundFromWaits = (waits = ""): string => (/^\s*now\b/i.test(waits) 
 
 /** The round's local test-cases.json as rows of the sheet; "1) a 2) b" steps split into a list. */
 export function casesFromScenarios(text: string, uatUrl: string): SheetCase[] {
-  return (JSON.parse(text) as ScenarioRow[]).map((p) => ({
-    key: p.jira,
-    id: p.id,
-    title: p.title,
-    part: p.part,
-    round: p.round ?? roundFromWaits(p.waits),
-    who: plain(p.who ?? ""),
-    steps: numberedSteps(p.steps ?? ""),
-    expected: plain(p.expected ?? ""),
-    url: startUrl(p.part, uatUrl),
-  }));
+  return (JSON.parse(text) as ScenarioRow[]).map((p) => {
+    const unknown = unknownNeeds(p.needs);
+    if (unknown.length) throw new Error(`${p.id} declares an unknown need: ${unknown.join(", ")}`);
+    const needs = (p.needs ?? []) as Need[];
+    const words = needs.includes("mail") ? vercelWording : (s: string) => s;
+    return {
+      key: p.jira,
+      id: p.id,
+      title: words(p.title),
+      part: p.part,
+      round: p.round ?? roundFromWaits(p.waits),
+      who: plain(p.who ?? ""),
+      steps: numberedSteps(p.steps ?? "").map(words),
+      expected: words(plain(p.expected ?? "")),
+      needs,
+      url: startUrl(p.part, uatUrl),
+    };
+  });
 }
 
 /** "1) a 2) b" as ["a", "b"]: only the numbers in order split it, so "port 4750) on" stays inside its step. */

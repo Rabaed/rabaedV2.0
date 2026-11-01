@@ -1,8 +1,9 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { caseFromIssue, casesFromScenarios, numberedSteps, renderSheet, roundFromWaits, searchIssues, startUrl, type JiraIssue, type SheetCase } from "./uat-sheet.ts";
+import { caseFromIssue, casesFromScenarios, numberedSteps, renderSheet, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
@@ -62,6 +63,7 @@ const expected: Omit<SheetCase, "url"> = {
   who: "Hafiz (TMC Engineer); Ali (TMC PM)",
   steps: ["Open Submittals and choose Add Submittal.", "Fill the Form and Send for Review."],
   expected: "The Draft moves to Internal Review with Ali.",
+  needs: [],
 };
 
 describe("caseFromIssue", () => {
@@ -93,6 +95,30 @@ describe("casesFromScenarios", () => {
       "Read the code.",
     ]);
     expect(numberedSteps("Open the Packages view.")).toEqual(["Open the Packages view."]);
+  });
+
+  it("carries the needs a scenario declares in needs, and refuses a need it does not know", () => {
+    const row = { id: "NOT-03", jira: "RP-1", part: "NOT", title: "Email", steps: "1) Open the mailbox.", expected: "It arrived.", round: "0" };
+    expect(casesFromScenarios(JSON.stringify([{ ...row, needs: ["mail", "owner"] }]), "https://uat.example")[0]!.needs).toEqual(["mail", "owner"]);
+    expect(casesFromScenarios(JSON.stringify([row]), "https://uat.example")[0]!.needs).toEqual([]);
+    expect(() => casesFromScenarios(JSON.stringify([{ ...row, needs: ["mails"] }]), "https://uat.example")).toThrow(/NOT-03.*mails/);
+  });
+
+  it("words a mail case for the Vercel UAT, where the mail goes to the real mailbox, not Mailpit", () => {
+    const row = {
+      id: "NOT-03", jira: "RP-1", part: "NOT", title: "Immediate email via Mailpit", round: "0", needs: ["mail", "owner"],
+      steps: "1) Open Mailpit (lane 7). 2) Find the email for Step reached. 3) Read Mailpit again.", expected: "Mailpit shows one email, in Mailpit only once.",
+    };
+    const [c] = casesFromScenarios(JSON.stringify([row]), "https://uat.example");
+    expect(c!.title).toBe("Immediate email via the mailbox");
+    expect(c!.steps).toEqual(["Open the mailbox.", "Find the email for Step reached.", "Read the mailbox again."]);
+    expect(c!.expected).toBe("The mailbox shows one email, in the mailbox only once.");
+  });
+
+  it("leaves the wording of a case without the mail need as written", () => {
+    expect(vercelWording("Open Mailpit (lane 7).")).toBe("Open the mailbox.");
+    const [c] = casesFromScenarios(JSON.stringify([{ id: "X-1", jira: "RP-1", part: "X", title: "t", steps: "1) Open Mailpit.", round: "0" }]), "https://uat.example");
+    expect(c!.steps).toEqual(["Open Mailpit."]);
   });
 
   it("takes the round from what a case waits for, as the Jira labels do", () => {
@@ -143,6 +169,64 @@ describe("renderSheet", () => {
   it("escapes a case's text so it can't close the script", () => {
     const html = renderSheet({ round: "R", cases: [{ ...cases[0]!, title: "</script><b>x" }], built: "x" });
     expect(html).not.toContain("</script><b>x");
+  });
+
+  it("hands each case needs to the page, with the owner badge and the mail note in English and Arabic", () => {
+    const html = renderSheet({ round: "R", cases: [{ ...cases[0]!, needs: ["mail", "owner"] }], built: "x" });
+    expect(html).toContain('"needs":["mail","owner"]');
+    expect(html).toContain("Needs the UAT owner");
+    expect(html).toContain("يحتاج إلى مسؤول الاختبار");
+    expect(html).toContain("goes to the real mailbox");
+    expect(html).toContain("يصل البريد إلى صندوق البريد الحقيقي");
+  });
+
+  it("is a page whose script still parses", () => {
+    const html = renderSheet({ round: "R", cases, built: "x" });
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const code of scripts) expect(() => new vm.Script(code)).not.toThrow();
+  });
+});
+
+describe("tagProblems", () => {
+  const good = { id: "NOT-03", title: "Immediate email via Mailpit", steps: "1) Open Mailpit.", expected: "The email arrived.", needs: ["mail"] };
+
+  it("passes a case that declares what it mentions", () => {
+    expect(tagProblems([good])).toEqual([]);
+    expect(tagProblems([{ id: "NOT-06", title: "Digest", steps: "1) Ask the lane engineer to run the digest job. 2) Read Mailpit.", needs: ["mail", "job", "owner"] }])).toEqual([]);
+    expect(tagProblems([{ id: "SUB-01", title: "Lighting Fixtures", steps: "1) Save Draft." }])).toEqual([]);
+  });
+
+  it("fails a case that mentions Mailpit without the mail need", () => {
+    expect(tagProblems([{ ...good, needs: [] }])).toEqual(["NOT-03 mentions Mailpit: add mail to its needs"]);
+    expect(tagProblems([{ ...good, needs: undefined }])).toHaveLength(1);
+    expect(tagProblems([{ id: "ADM-01", steps: "1) Read the code from MAILPIT.", needs: ["owner"] }])).toEqual(["ADM-01 mentions Mailpit: add mail to its needs"]);
+  });
+
+  it("fails a case that mentions a job without the job need", () => {
+    expect(tagProblems([{ id: "NOT-07", expected: "Needs the job run first.", needs: ["owner"] }])).toEqual(["NOT-07 mentions a job: add job to its needs"]);
+    expect(tagProblems([{ id: "NOT-06", steps: "1) Run pnpm uat:run-job digest.", needs: ["owner"] }])).toEqual(["NOT-06 mentions a job: add job to its needs"]);
+  });
+
+  it("does not take the digest or weekly report settings of a Member for a job", () => {
+    expect(tagProblems([{ id: "NOT-04", steps: "1) Set Step reached to Daily digest. 2) Open Weekly Step Age report.", needs: [] }])).toEqual([]);
+  });
+
+  it("fails a case that mentions lane 7, pnpm, a port or the lane engineer without the owner need", () => {
+    expect(tagProblems([{ id: "PAR-01", steps: "1) Open lane 7 /en/sign-in.", needs: [] }])).toEqual(["PAR-01 mentions the lane's own machine: add owner to its needs"]);
+    expect(tagProblems([{ id: "WF-15", steps: "1) Ask the lane engineer to age two items.", needs: ["setup"] }])).toHaveLength(1);
+    expect(tagProblems([{ id: "ADM-09", steps: "1) Open an Admin URL on the web port.", needs: [] }])).toHaveLength(1);
+    expect(tagProblems([{ id: "SUB-12", expected: "The report is sent.", steps: "1) Support the claim." }])).toEqual([]);
+  });
+
+  it("fails a need the sheet does not know", () => {
+    expect(tagProblems([{ id: "X-1", needs: ["mail", "mails"] }])).toEqual(["X-1 declares an unknown need: mails"]);
+  });
+
+  it("passes every case of the real test-cases.json", () => {
+    const rows = JSON.parse(readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8")) as Parameters<typeof tagProblems>[0];
+    expect(rows.length).toBeGreaterThan(200);
+    expect(tagProblems(rows)).toEqual([]);
   });
 });
 
