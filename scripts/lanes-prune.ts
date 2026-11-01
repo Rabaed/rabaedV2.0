@@ -31,7 +31,10 @@
 // it names every worktree that keeps the lane at once (mergedBlockers, keptByClaims); a container
 // whose kill got no exit event is tried again (lanes.ts removeProject); and while a verify runs
 // anywhere on the machine (verifies-running.ts) the containers go but every volume stays.
+//
+// RP-1198: first, in every mode, it stops when this checkout is over 50 commits behind origin/main, naming where to run from.
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import {
@@ -65,6 +68,7 @@ import { fetchPrune, gitChanges, gitError, isShallowRepo, judgeWorktree, listWor
 import { pidAlive } from "./lanes-lock.ts";
 import { chooseVeraPdfContainers, listVeraPdfContainers, protectedHashes, removeVeraPdfContainer, type GoneContainer } from "./verapdf-containers.ts";
 
+stopIfBehindOrigin("pnpm lanes:prune");
 const usage = `Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run], or pnpm lanes:prune --stale   (--lane N: only rabaed-laneN; ${LANE_SCHEME})`;
 const argv = process.argv.slice(2);
 

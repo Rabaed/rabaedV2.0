@@ -1,8 +1,10 @@
 // `pnpm lanes [--main N]` (RP-1170): every rabaed-* stack with its lane, Main, worktrees, PR and its
 // state, whether a verify runs, and how long it has been idle (lane-rows.ts), under a line with the
 // running stacks against the cap. It only reads: Docker, git, gh and the verify locks.
+// RP-1198: first, it stops when this checkout is over 50 commits behind origin/main, naming where to run from.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { formatRows, laneRows, parseLanesArgs } from "./lane-rows.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, readWorktreeEnv, type Volume } from "./lanes.ts";
 import { maxStacks, runningStacks } from "./machine-load.ts";
@@ -12,6 +14,7 @@ import { liveHolder, lockFile, type LockHolder, type Processes } from "./verify-
 import { isRunning, readActivity } from "./worktrees-stale.ts";
 import { listWorktrees } from "./worktrees.ts";
 
+stopIfBehindOrigin("pnpm lanes");
 const options = parseLanesArgs(process.argv.slice(2));
 if ("error" in options) {
   console.error(options.error);
