@@ -38,11 +38,26 @@ export type ListColumnLayout = z.infer<typeof listColumnLayout>;
 
 export const defaultListColumns: ListColumnLayout = listColumnKeys.map((key) => ({ key, shown: !hiddenByDefault.includes(key) }));
 
+/** Moved right after the Status below 1600 wide (RP-1177): the Code and the holder ("With"). */
+const besideStatus: readonly ListColumnKey[] = ["outcome", "owner"];
+
+/**
+ * The first layout below 1600 wide (RP-1177, UX-04, the owner's answer of 2026-11-02): the design's 12 columns do
+ * not fit at 1366, so the Code and the holder come right after the Status, where they show without scrolling.
+ */
+const narrowListColumns: ListColumnLayout = (() => {
+  const rest = defaultListColumns.filter((c) => !besideStatus.includes(c.key));
+  const at = rest.findIndex((c) => c.key === "stage") + 1;
+  return [...rest.slice(0, at), ...defaultListColumns.filter((c) => besideStatus.includes(c.key)), ...rest.slice(at)];
+})();
+
 /**
  * A layout as the List shows it: the locked columns first and shown, then the others in the saved
  * order, and any column the saved layout lacks (one added since) in its first place, as it starts.
+ * With no saved layout, `narrow` (a window under 1600 wide) starts from the narrow first order.
  */
-export function listColumns(saved: ListColumnLayout | null | undefined): ListColumnLayout {
+export function listColumns(saved: ListColumnLayout | null | undefined, { narrow = false }: { narrow?: boolean } = {}): ListColumnLayout {
+  if ((saved ?? []).length === 0 && narrow) return narrowListColumns.map((c) => ({ ...c }));
   const given = (saved ?? []).filter((c) => !lockedListColumns.includes(c.key));
   const out: ListColumnLayout = lockedListColumns.map((key) => ({ key, shown: true }));
   for (const column of defaultListColumns) {

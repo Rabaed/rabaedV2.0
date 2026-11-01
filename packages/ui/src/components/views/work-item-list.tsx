@@ -31,6 +31,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dia
 import { exportFile, saveFile, shownColumns, wholeTableColumns, type WholeTableLabels } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
 import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
@@ -377,8 +378,12 @@ function WorkItemListBody({
     const { cursor: _cursor, page: _page, ...rest } = query;
     onQueryChange({ ...rest, ...next });
   };
-  // The columns as the Member arranges them now; "Save as my default" keeps them.
-  const [columns, setColumns] = useState(() => initialColumns ?? listColumns(list.columnLayout));
+  // Under 1600 wide the first layout puts the Code and "With" right after the Status, so they show at 1366 (RP-1177).
+  // The server draws the narrow one, the usual laptop width; a wider window takes the design's order after hydration.
+  const narrow = useMediaQuery("(max-width: 1599.98px)");
+  // The columns as the Member arranges them now (null: the first layout); "Save as my default" keeps them.
+  const [arranged, setColumns] = useState<ListColumnLayout | null>(null);
+  const columns = arranged ?? initialColumns ?? listColumns(list.columnLayout, { narrow });
   const showToast = useToast();
   const setToast = (title: string) => showToast({ title, tone: "success" });
   const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
@@ -837,7 +842,7 @@ function WorkItemListBody({
                       labels={labels.columnSettings}
                       number={n}
                       onChange={setColumns}
-                      onReset={() => setColumns(listColumns(null))}
+                      onReset={() => setColumns(listColumns(null, { narrow }))}
                       onSave={() => {
                         void onSaveColumns(columns).then((saved) => {
                           if (saved) setToast(labels.columnSettings.saved);

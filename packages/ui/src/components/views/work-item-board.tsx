@@ -716,7 +716,11 @@ export type WorkItemViewSwitchProps<V extends ModuleView = WorkItemView> = {
   linkAs?: ElementType;
 };
 
-/** Kanban / List (and on the Submittals, Packages), as links (the View is part of the URL): the active one filled tomato. */
+/**
+ * Kanban / List (and on the Submittals, Packages), as links (the View is part of the URL): the active one filled tomato.
+ * Below 1440 wide each shows its icon only, its name kept for screen readers and as a tooltip, so the List's toolbar
+ * stays one row at 1366 (RP-1177, UX-04, the owner's answer of 2026-11-02).
+ */
 export function WorkItemViewSwitch<V extends ModuleView = WorkItemView>({
   view,
   labels,
@@ -731,14 +735,15 @@ export function WorkItemViewSwitch<V extends ModuleView = WorkItemView>({
           key={v}
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
+          title={labels[v]}
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 px-3 text-[13.5px] font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
+            "inline-flex h-8 items-center gap-1.5 px-2.5 text-[13.5px] font-semibold text-text-secondary hover:bg-hover min-[1440px]:px-3 pointer-coarse:min-h-11",
             "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
             focusRing,
           )}
         >
           <Icon name={viewIcons[v]} size={16} />
-          {labels[v]}
+          <span className="sr-only min-[1440px]:not-sr-only">{labels[v]}</span>
         </Link>
       ))}
     </nav>

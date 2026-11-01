@@ -26,6 +26,31 @@ describe("the List's columns (RP-409)", () => {
     expect(shown(defaultListColumns)).not.toContain("stepAge");
   });
 
+  // RP-1177 (UX-04, the owner's answer of 2026-11-02): below 1600 wide the first order puts the Code and the holder
+  // ("With") right after the Status, so they fit at 1366 without scrolling; a Member's saved layout stays theirs.
+  it("start narrow with the Code and the holder right after the Status, and keep a saved layout as it is", () => {
+    expect(listColumns(null, { narrow: true }).map((c) => c.key)).toEqual([
+      "documentNumber",
+      "subject",
+      "revision",
+      "trade",
+      "type",
+      "stage",
+      "outcome",
+      "owner",
+      "locationLevel1",
+      "locationLevel2",
+      "locationLevel3",
+      "contractor",
+      "created",
+      "stepAge",
+    ]);
+    expect(shown(listColumns(null, { narrow: true }))).toHaveLength(12);
+    expect(listColumns(null, { narrow: false })).toEqual(listColumns(null));
+    const saved = listColumns(null).map((c) => (c.key === "locationLevel1" ? { ...c, shown: false } : c));
+    expect(listColumns(saved, { narrow: true })).toEqual(listColumns(saved));
+  });
+
   it("keep a Member's order and switches, the Document Number and Subject always first and shown", () => {
     const saved = [
       { key: "owner" as const, shown: true },
