@@ -2011,6 +2011,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "RP-589: Register Import by a Rabaed Engineer (RP-645)",
+  "needs": ["owner"],
   "covers": "Rules: V9"
  },
  {
@@ -2068,6 +2069,7 @@
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["mail", "owner"],
   "covers": "Matrix: 68"
  },
  {
@@ -2329,6 +2331,7 @@
   "priority": "Medium",
   "mode": "Automate",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: Company (GLOSSARY)"
  },
  {
@@ -2343,6 +2346,7 @@
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: 31, 38; Rules: ADR 0009, RP-252"
  },
  {
@@ -2357,6 +2361,7 @@
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Rules: Option List (GLOSSARY)"
  },
  {
@@ -2371,6 +2376,7 @@
   "priority": "Low",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-412-1"
  },
  {
@@ -2385,6 +2391,7 @@
   "priority": "High",
   "mode": "Both",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-443-1"
  },
  {
@@ -2399,6 +2406,7 @@
   "priority": "Medium",
   "mode": "Manual",
   "waits": "Now",
+  "needs": ["owner"],
   "covers": "Matrix: RP-566-1"
  },
  {
@@ -2428,6 +2436,7 @@
   "priority": "High",
   "mode": "Manual",
   "waits": "Not scheduled: no admin item commands are built (Admin has companies, numbering, option lists and Workflows only)",
+  "needs": ["owner"],
   "covers": "Matrix: 20; Rules: V9"
  },
  {
