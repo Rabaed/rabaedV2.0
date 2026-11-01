@@ -14,6 +14,9 @@ export type SaveToLibraryActionProps = {
   name: BilingualText;
   /** Whether the viewer is their Company's Authorized Person: only they save to the Library (V18, WF-4). Without it the action is not shown. */
   isAuthorizedPerson: boolean;
+  /** Opened from elsewhere, such as a row's menu (RP-1178): the dialog alone, with no button. Mount it only while open, so each opening starts afresh. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   className?: string;
@@ -26,17 +29,19 @@ export type SaveToLibraryActionProps = {
  * under the name the Authorized Person confirms, in English and in Arabic
  * (`POST /v1/workflows/:id/save-to-library`), then offers the Library.
  */
-export function SaveToLibraryAction({ workflowId, name, isAuthorizedPerson, variant = "secondary", size = "sm", className }: SaveToLibraryActionProps) {
+export function SaveToLibraryAction({ workflowId, name, isAuthorizedPerson, open: controlled, onOpenChange, variant = "secondary", size = "sm", className }: SaveToLibraryActionProps) {
   const t = useTranslations("saveToLibrary");
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
+  const [own, setOwn] = useState(false);
+  const open = controlled ?? own;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<(SavedToLibrary & { name: string }) | null>(null);
   if (!isAuthorizedPerson) return null;
 
   const change = (next: boolean) => {
-    setOpen(next);
+    setOwn(next);
+    onOpenChange?.(next);
     if (next) {
       setError(null);
       setSaved(null);
@@ -63,12 +68,14 @@ export function SaveToLibraryAction({ workflowId, name, isAuthorizedPerson, vari
 
   return (
     <Dialog open={open} onOpenChange={change}>
-      <DialogTrigger asChild>
-        <Button variant={variant} size={size} className={className}>
-          <Icon name="folder" />
-          {t("action")}
-        </Button>
-      </DialogTrigger>
+      {controlled === undefined && (
+        <DialogTrigger asChild>
+          <Button variant={variant} size={size} className={className}>
+            <Icon name="folder" />
+            {t("action")}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent title={t("title")} description={t("description", { name: name[locale === "ar" ? "ar" : "en"] })} closeLabel={t("close")}>
         {saved ? (
           <div className="flex flex-col gap-4">
