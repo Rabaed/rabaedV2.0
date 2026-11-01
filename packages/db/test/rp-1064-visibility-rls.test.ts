@@ -2,7 +2,7 @@
 // the item, as the app role (visibility.md V14, ADR 0022; scenarios RP-1064-1 and RP-1093-1). The
 // item's map read (RP-438) takes it from app.step_as_seen, app.work_item_holder and
 // app.with_owner_review: inside the reader's own Participant, the current Step; anyone else gets
-// only the Step it arrived at in the holder's Participant and that Company's name, so K1's move
+// no Step, only the holder's role and that Company's name (RP-1192), so K1's move
 // from its Engineer to its Manager reaches C1 as nothing; at the Owner's review, "Owner review" to
 // all but its holder and the recommending Consultant. Seam 1: apps/api/test/rp-1064-visibility.test.ts.
 import { randomInt } from "node:crypto";
@@ -23,7 +23,7 @@ let app: Db;
 const towerOptions = { projectCode: "RSS", k1Manager: true } as const;
 let tower: SeamTwoTower<typeof towerOptions>;
 
-type Seen = { id: string; step_key: string; holder_mine: boolean | null; holder_name: { en: string; ar: string } | null };
+type Seen = { id: string; step_key: string | null; holder_role: string | null; holder_mine: boolean | null; holder_name: { en: string; ar: string } | null };
 /**
  * Where `as` reads item `item`, from what the map read reads: the Step as seen, whether its holder is the reader's own
  * Participant (null when no holder reaches them; the map takes "Owner review" as not their own), and the holder's name.
@@ -31,11 +31,11 @@ type Seen = { id: string; step_key: string; holder_mine: boolean | null; holder_
 const seen = async (as: string, item: string) =>
   tower.call<Seen>(
     as,
-    sql`select w.id, s.key as step_key, a.participant_id in (select app.current_participant_ids()) as holder_mine,
+    sql`select w.id, s.key as step_key, seen.holder_role, a.participant_id in (select app.current_participant_ids()) as holder_mine,
         coalesce(app.with_owner_review(w.id), holder.legal_name) as holder_name
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
-      join workflow_step s on s.id = seen.step_id
+      left join workflow_step s on s.id = seen.step_id
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
       where w.id = ${item}::uuid`,
@@ -121,11 +121,11 @@ describe("scenarios RP-1064-1 and RP-1093-1: C1's Submitted item, which K1's Eng
   });
 
   it("gives C1 its own Step while C1 holds it (the positive control)", () => {
-    expect(inReview).toEqual([{ id, step_key: "internal_review", holder_mine: true, holder_name: bilingual("C1") }]);
+    expect(inReview).toEqual([{ id, step_key: "internal_review", holder_role: "contractor", holder_mine: true, holder_name: bilingual("C1") }]);
   });
 
-  it("gives C1 K1's whole stop, by K1's name and the Step it arrived at, the same before and after K1's internal move", () => {
-    expect(atManager).toEqual([{ id, step_key: "consultant_review", holder_mine: false, holder_name: bilingual("K1") }]);
+  it("gives C1 K1's whole stop, by K1's name and role and no Step, the same before and after K1's internal move (RP-1192)", () => {
+    expect(atManager).toEqual([{ id, step_key: null, holder_role: "consultant", holder_mine: false, holder_name: bilingual("K1") }]);
     expect(atManager).toEqual(atEngineer);
   });
 
@@ -168,7 +168,7 @@ describe("scenario RP-1064-1: later the item waits at the Owner's review", () =>
 
   it("reads to C1 as with Owner review, not as the Owner's Company", async () => {
     // No holder reaches C1 (RP-1138), so whether it is C1's own reads as nothing.
-    expect(await seen(tower.c1.members.project_manager, id)).toEqual([{ id, step_key: "owner_review", holder_mine: null, holder_name: OWNER_REVIEW }]);
+    expect(await seen(tower.c1.members.project_manager, id)).toEqual([{ id, step_key: null, holder_role: "owner", holder_mine: null, holder_name: OWNER_REVIEW }]);
   });
 
   it("gives the Owner's Step to the Owner only", async () => {

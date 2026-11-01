@@ -14,6 +14,8 @@ import { isDoc } from "./reviewed-required.ts";
 const ROOT_SHARED = { files: ["package.json", "pnpm-lock.yaml"], prefixes: [".github/workflows/"] };
 const isRootShared = (file: string) => ROOT_SHARED.files.includes(file) || ROOT_SHARED.prefixes.some((prefix) => file.startsWith(prefix));
 const rootSharedList = [...ROOT_SHARED.files, ...ROOT_SHARED.prefixes.map((prefix) => `${prefix}*`)].join(", ");
+/** A workflow file: under `.github/workflows/` and not a doc, as check:claims counts one. */
+const isWorkflow = (file: string) => file.startsWith(".github/workflows/") && !isDoc(file);
 const isWorkspacePackageJson = (file: string) => file.endsWith("/package.json");
 
 interface Breach {
@@ -75,7 +77,7 @@ export function sharedFilesMix(files: string[], versions: PackageJsonVersions): 
 }
 
 /**
- * RP-993: `sharedFilesMix` for this branch, against where it left origin/main: at `commit` (the pre-push hook),
+ * RP-993: `sharedFilesMix` for this branch (workflow files apart, see below), against where it left origin/main: at `commit` (the pre-push hook),
  * or, without one, in the working tree with uncommitted and untracked files (`pnpm verify`). Throws when git fails.
  */
 export function branchMix(repo: string, commit?: string): string[] | undefined {
@@ -88,7 +90,10 @@ export function branchMix(repo: string, commit?: string): string[] | undefined {
   const lines = (text: string) => text.split("\n").filter(Boolean);
   const base = must("merge-base", "origin/main", commit ?? "HEAD").trim();
   // --no-renames lists a rename's old path too, as `pnpm queue` does (RP-606).
-  const files = [...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))];
+  // Workflow files are left out (RP-1199): a workflow mix is named once, with the two-PR split, by check:claims
+  // (scripts/check-claims.ts, which the hook and verify print too), so this warning stays for package.json and the
+  // lockfile. `pnpm queue` still refuses a workflow mix: it calls `sharedFilesMix` on every file.
+  const files = [...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))].filter((file) => !isWorkflow(file));
   const show = (ref: string, file: string) => {
     const done = git("show", `${ref}:${file}`);
     return done.status === 0 ? done.stdout : undefined;

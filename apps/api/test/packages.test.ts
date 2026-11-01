@@ -355,7 +355,7 @@ async function readyForPm(title: string, trade = at.electrical): Promise<string>
 async function asK1Reads(id: string) {
   const d = await detail(at.k1Manager, id);
   const history = (await ok(at.k1Manager.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory;
-  return { step: d.step.key, numbered: d.documentNumber !== null, events: history.events.map((e) => e.type) };
+  return { step: d.step?.key, numbered: d.documentNumber !== null, events: history.events.map((e) => e.type) };
 }
 
 describe("Submit Package", () => {
@@ -645,7 +645,7 @@ describe("an In Progress Package", () => {
     await take(at.k1Manager, back, "send_back");
 
     expect(await detail(at.c1Pm, back)).toMatchObject({ step: { key: "internal_review" } });
-    const where = (await detail(at.k1Manager, stays)).step.key;
+    const where = (await detail(at.k1Manager, stays)).step?.key;
     expect(where).not.toBe("internal_review");
     // Still In Progress, with both; Submit Package has nothing to take (the Sent Back one was Submitted).
     const p = await getPackage(at.c1Pm, pkg.id);
@@ -654,8 +654,8 @@ describe("an In Progress Package", () => {
     // It is re-Submitted alone.
     await ok(at.c1Pm.post(`/v1/work-items/${back}/pick-up`));
     await take(at.c1Pm, back, "submit");
-    expect((await detail(at.k1Manager, back)).step.key).toBe(where);
-    expect((await detail(at.k1Manager, stays)).step.key).toBe(where);
+    expect((await detail(at.k1Manager, back)).step?.key).toBe(where);
+    expect((await detail(at.k1Manager, stays)).step?.key).toBe(where);
   });
 });
 

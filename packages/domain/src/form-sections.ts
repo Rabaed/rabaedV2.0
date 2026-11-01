@@ -39,7 +39,8 @@ export function editableAtProblem(
 }
 
 /** Where the item is, and whether the acting Member may save its answers at all (app.can_save_answers). */
-export type SectionEditContext = { step: string; canSave: boolean };
+/** `step`: the Step the Member sees the item at; null when another Company holds it (V14), which no section matches. */
+export type SectionEditContext = { step: string | null; canSave: boolean };
 
 /**
  * The sections, by key in Form order, whose fields the acting Member may change
@@ -52,7 +53,7 @@ export function editableSections(
   steps: readonly WorkflowStepHolder[],
   { step, canSave }: SectionEditContext,
 ): Set<string> {
-  if (!canSave) return new Set();
+  if (!canSave || step === null) return new Set();
   return new Set(schema.sections.filter((s) => sectionSteps(s, steps).includes(step)).map((s) => s.key));
 }
 

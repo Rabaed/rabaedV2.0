@@ -103,7 +103,7 @@ describe('"Assign to"', () => {
       bodies.push(res.json());
     }
     expect(bodies).toEqual(Array(3).fill({ error: "assignee_not_offered" }));
-    expect((await detail(engineer.caller, id)).step.key).toBe("draft");
+    expect((await detail(engineer.caller, id)).step?.key).toBe("draft");
   });
 
   it("never offers another Company's Members: K1's manager is offered K1's, from K1's own Step", async () => {

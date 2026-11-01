@@ -176,7 +176,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const after = await draft(at, at.c1Engineer, "After the binding");
     expect((await detail(at.c1Engineer, after)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });
     expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
-    expect((await detail(at.c1Engineer, after)).step.name.en).toBe("Prepare");
+    expect((await detail(at.c1Engineer, after)).step?.name.en).toBe("Prepare");
   });
 
   it("publishes a second Version from a new draft, for items created after it", async () => {

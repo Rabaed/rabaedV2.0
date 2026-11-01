@@ -268,7 +268,8 @@ jobs:
           ADMIN_DEPLOYMENT: ${{ steps.admin.outputs.url }}
         run: |
           bypass=$(node scripts/uat-deploy.ts bypass admin)
-          if [ -n "$bypass" ]; then echo "::add-mask::$bypass"; fi
+          # Masked from 8 characters (a short value would garble the log); a real secret is longer.
+          if [ "${#bypass}" -ge 8 ]; then echo "::add-mask::$bypass"; fi
           SMOKE_API_URL="$API_DEPLOYMENT" SMOKE_ADMIN_URL="$ADMIN_DEPLOYMENT" SMOKE_ADMIN_BYPASS="$bypass" SMOKE_VERSION="$VERSION" \
             pnpm --filter @rabaed/infra smoke
 
@@ -311,7 +312,7 @@ jobs:
           WEB_DEPLOYMENT: ${{ steps.web.outputs.url }}
         run: |
           bypass=$(node scripts/uat-deploy.ts bypass admin)
-          if [ -n "$bypass" ]; then echo "::add-mask::$bypass"; fi
+          if [ "${#bypass}" -ge 8 ]; then echo "::add-mask::$bypass"; fi
           SMOKE_URL="$WEB_DEPLOYMENT" SMOKE_ADMIN_URL="$UAT_ADMIN_URL" SMOKE_ADMIN_BYPASS="$bypass" SMOKE_VERSION="$VERSION" SMOKE_ARABIC_FONT="$ARABIC_FONT" \
             pnpm --filter @rabaed/infra smoke
 

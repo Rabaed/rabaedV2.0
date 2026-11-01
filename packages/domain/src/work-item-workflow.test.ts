@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closedStepKey, holderRole } from "./work-item-workflow.ts";
+import { closedStepKey } from "./work-item-workflow.ts";
 import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
 
 const name = (en: string) => ({ en, ar: en });
@@ -59,16 +59,5 @@ describe("closedStepKey", () => {
     const split = { ...mar, steps: [...mar.steps, step("approved_2", "approved", null)], transitions: [...mar.transitions, transition("a2", "consultant_engineer", "approved_2", "close", "A")] };
     expect(closedStepKey(split, "A")).toBeNull();
     expect(closedStepKey(mar, "D")).toBeNull();
-  });
-});
-
-describe("holderRole", () => {
-  it("is the Participant role of the Step the item arrived at, not where it is now", () => {
-    expect(holderRole(mar, "consultant_engineer")).toBe("consultant");
-  });
-
-  it("is null for a terminal or unknown Step", () => {
-    expect(holderRole(mar, "approved")).toBeNull();
-    expect(holderRole(mar, "nope")).toBeNull();
   });
 });

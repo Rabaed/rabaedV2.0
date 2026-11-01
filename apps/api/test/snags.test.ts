@@ -91,7 +91,7 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
     const seen = await detail(at.c1Pm, id);
     expect(seen.type.code).toBe("SNG");
     expect(seen.documentNumber).toMatch(/-SNG-/);
-    expect(seen.step.key).toBe("open");
+    expect(seen.step?.key).toBe("open");
     expect(seen.stage.key).toBe("open");
     expect(seen.actions.pickUp).toBe(true); // In C1's Step Pool.
     expect(seen.answers).toMatchObject({ description: "Cable tray not bonded: see the photos", trade: at.electrical, location: at.buildingA });
@@ -114,7 +114,7 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
     expect(noNote.statusCode, noNote.body).toBe(422);
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Bonded and tested" } });
     const atVerify = await detail(at.k1Manager, id);
-    expect(atVerify.step.key).toBe("verify");
+    expect(atVerify.step?.key).toBe("verify");
     expect(atVerify.stage.key).toBe("resolved");
     expect((await history(at.k1Manager, id)).filter((e) => e.answers).at(-1)!.answers).toEqual({ resolution_note: "Bonded and tested" });
 
@@ -123,7 +123,7 @@ describe("a Consultant's Snag on the one Contractor covering it (seam 1)", () =>
     expect(noReason.statusCode, noReason.body).toBe(422);
     await take(at.k1Manager, id, "return_to_open", { reason: "The bonding jumper is missing at the riser" });
     const back = await detail(at.c1Pm, id);
-    expect(back.step.key).toBe("open");
+    expect(back.step?.key).toBe("open");
     // Back with C1, held again by the PM who held Open before (§3.3 rule 1), not pooled.
     expect(back.actions.pickUp).toBe(false);
     expect(back.heldBy?.memberName).not.toBeNull();
@@ -297,7 +297,7 @@ describe("K1's Return to Open (scenario RP-622-3)", () => {
     await take(at.k1Manager, id, "return_to_open", { reason: "Not done" });
 
     const back = await detail(at.c1Pm, id);
-    expect(back.step.key).toBe("open");
+    expect(back.step?.key).toBe("open");
     expect(back.actions.pickUp).toBe(false);
     expect(back.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["start_work", "resolve"]));
     expect((await detail(at.k1Manager, id)).actions.transitions).toEqual([]);
