@@ -44,7 +44,9 @@ import { parseDocument } from "yaml";
 // 10. A run: script with a pipe sets shell: bash on the step, or defaults: run: shell: bash on the job
 //     or the workflow. GitHub's default shell is `bash -e {0}`, with no pipefail, so `tool | tee` ends
 //     with tee's status and a failed tool shows green; `shell: bash` adds -o pipefail. A `|` inside
-//     quotes, a comment, a heredoc body or `||` is not a pipe; PowerShell, cmd and Python steps are left alone.
+//     quotes, a comment, a heredoc body or `||` is not a pipe; PowerShell, cmd and Python steps are left alone,
+//     and so is a step with no shell on a windows runner (its default is pwsh). A bash template that sets
+//     pipefail itself (`bash -eo pipefail {0}`) is accepted too.
 //
 // Out of scope for rules 6 to 9: string inputs in a step name:, container or services env, and a
 // reusable workflow's with:; a `>> "$GITHUB_STEP_SUMMARY"` redirect of tool output; tee through a variable.
@@ -271,6 +273,8 @@ const definesMasked = (script: string) => /(?:^|[\s;{(&|])(?:function\s+masked\b
 
 /** Shells whose `|` is not bash's: they have no pipefail to ask for. */
 const nonBashShell = /^(?:pwsh|powershell|python|cmd)\b/;
+/** A bash command template that asks for pipefail itself, such as `bash --noprofile --norc -eo pipefail {0}`. */
+const bashWithPipefail = /^bash\b.*\s-[A-Za-z]*o\s+pipefail\b/;
 
 const MIN_MASK = 8;
 // The parts of an ::add-mask:: value: ${{ }}, $(...), ${...}, $name, $1 or $@, or a plain character.
@@ -515,7 +519,9 @@ export function lintWorkflow(file: string, source: string): Finding[] {
     steps.forEach((step, index) => {
       if (!isObj(step) || typeof step.run !== "string") return;
       const shell = typeof step.shell === "string" ? step.shell : (defaultShell(job) ?? defaultShell(root));
-      if (shell === "bash" || (shell !== undefined && nonBashShell.test(shell))) return;
+      if (shell === "bash" || (shell !== undefined && (bashWithPipefail.test(shell) || nonBashShell.test(shell)))) return;
+      // No shell on a windows runner: the default there is pwsh, whose pipe is not bash's.
+      if (shell === undefined && typeof job?.["runs-on"] === "string" && /windows/i.test(job["runs-on"])) return;
       if (!hasPipe(step.run)) return;
       add(
         stepLabel(where, step, index),

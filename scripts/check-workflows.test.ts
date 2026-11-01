@@ -578,6 +578,28 @@ describe("rule 10: a run: script with a pipe sets shell: bash", () => {
     }
   });
 
+  it("accepts a bash template that sets pipefail, and still flags one that does not", () => {
+    for (const shell of ["bash -eo pipefail {0}", "bash --noprofile --norc -eo pipefail {0}", "bash -e -o pipefail {0}"]) {
+      expect(messages(wf(runOf(piped, `shell: ${JSON.stringify(shell)}\n        `))), shell).toEqual([]);
+      expect(messages(wf(runOf(piped), { top: `defaults: { run: { shell: ${JSON.stringify(shell)} } }\n` })), shell).toEqual([]);
+    }
+    for (const shell of ["bash -e {0}", "bash {0}", "bash --noprofile --norc -e {0}", "sh -eo pipefail {0}", "/bin/bash -eo pipefail {0}", "bashful -o pipefail {0}", "bash +o pipefail {0}"]) {
+      expect(messages(wf(runOf(piped, `shell: ${JSON.stringify(shell)}\n        `))), shell).toHaveLength(1);
+    }
+  });
+
+  it("leaves a step on a windows runner with no shell alone: its default is pwsh, not bash", () => {
+    const onWindows = (runsOn: string, step: string) => wf(step).replace("runs-on: ubuntu-latest", `runs-on: ${runsOn}`);
+    expect(messages(onWindows("windows-latest", runOf("Get-ChildItem | Select-Object -First 1")))).toEqual([]);
+    expect(messages(onWindows("windows-2022", runOf(piped)))).toEqual([]);
+    // An explicit shell is judged as anywhere else.
+    expect(messages(onWindows("windows-latest", runOf(piped, "shell: sh\n        ")))).toHaveLength(1);
+    expect(messages(onWindows("windows-latest", runOf(piped, "shell: bash\n        ")))).toEqual([]);
+    // Only a windows runner gets this: a linux job, or a runner that is not a plain string, does not.
+    expect(messages(onWindows("ubuntu-24.04", runOf(piped)))).toHaveLength(1);
+    expect(messages(onWindows("[self-hosted, windows]", runOf(piped)))).toHaveLength(1);
+  });
+
   it("leaves a PowerShell, cmd or Python step alone: its pipe is not bash's", () => {
     for (const shell of ["pwsh", "powershell", "python", "cmd"]) {
       expect(messages(wf(runOf("Get-ChildItem | Select-Object -First 1", `shell: ${shell}\n        `))), shell).toEqual([]);
