@@ -55,6 +55,16 @@ export const volumesKeptReason = (check: VerifyCheck): string | undefined => {
   return [check.runs.length > 0 ? describeRuns(check.runs) : undefined, waiting.length > 0 ? describeWaiting(waiting) : undefined].filter(Boolean).join("; ");
 };
 
+/**
+ * A run with a place in the machine-wide line is waiting, not verifying, though it already holds its
+ * worktree's lock (verify.ts takes that first): readLine's waiting leaves out the line's holder.
+ */
+export function splitWaiting(runs: VerifyRun[], lineWaiting: LockHolder[]): VerifyCheck {
+  const waitingPids = new Set(lineWaiting.map((w) => w.pid));
+  const verifying = runs.filter((r) => !waitingPids.has(r.holder.pid));
+  return lineWaiting.length === 0 ? { runs: verifying } : { runs: verifying, waiting: lineWaiting.map((holder) => ({ where: "the machine-wide verify line", holder })) };
+}
+
 /** The running verifies of this clone, read now; `unknown` when git or the lock folder could not be read. */
 export function verifiesRunningNow(cwd: string = process.cwd()): VerifyCheck {
   try {
@@ -64,8 +74,7 @@ export function verifiesRunningNow(cwd: string = process.cwd()): VerifyCheck {
     const self: LockHolder = { pid: process.pid, started: new Date(), command: "a clean-up" };
     const dir = machineDir();
     const runs = runningVerifies(verifyLockFiles(worktrees, common, readdirSync(common), dir), (file) => liveHolder(file, self, processes));
-    const queued = readLine(dir, self, processes).waiting.filter((w) => !runs.some((r) => r.holder.pid === w.pid));
-    return queued.length === 0 ? { runs } : { runs, waiting: queued.map((holder) => ({ where: "the machine-wide verify line", holder })) };
+    return splitWaiting(runs, readLine(dir, self, processes).waiting);
   } catch (error) {
     return { unknown: ((error as { stderr?: string }).stderr || (error as Error).message || String(error)).split("\n")[0]!.trim() };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRuns, runningVerifies, verifyLockFiles, volumesKeptReason } from "./verifies-running.ts";
+import { describeRuns, runningVerifies, splitWaiting, verifyLockFiles, volumesKeptReason } from "./verifies-running.ts";
 import type { LockHolder } from "./verify-lock.ts";
 
 // RP-1170, rule 4: bulk `docker volume rm` while lanes ran `pnpm verify` hung Docker's volume API twice
@@ -28,6 +28,22 @@ describe("verifyLockFiles, machine-wide (RP-1197)", () => {
       ["the machine-wide verify line", "T:/rabaed-verify/verify.lock"],
       ["G:/r", "G:/r/.verify.lock"],
     ]);
+  });
+});
+
+describe("splitWaiting (RP-1197)", () => {
+  it("counts a run with a place in the line as waiting, though it holds its worktree's lock; an old-code run with no place stays running", () => {
+    const runs = [
+      { where: "G:/wt/old", holder: run(32128) },
+      { where: "G:/wt/mine", holder: run(25156) },
+    ];
+    const check = splitWaiting(runs, [run(25156)]);
+    expect("runs" in check && check.runs.map((r) => r.holder.pid)).toEqual([32128]);
+    expect("runs" in check && check.waiting?.map((r) => [r.where, r.holder.pid])).toEqual([["the machine-wide verify line", 25156]]);
+  });
+
+  it("with no place in the line, every run is running and nothing waits", () => {
+    expect(splitWaiting([{ where: "G:/a", holder: run(11) }], [])).toEqual({ runs: [{ where: "G:/a", holder: run(11) }] });
   });
 });
 
