@@ -300,31 +300,40 @@ defineCase("I18N-04", async (t) => {
 
 defineCase("I18N-05", async (t) => {
   const c = tracker(t);
+  // The owner's rule (RP-1174, #612): Rabaed opens in Arabic for every Member; a Member's switch to English is
+  // kept on the Member and used next time; the browser's language never decides. Each "browser" here is a fresh
+  // Playwright context (no cookies of the last one), so "next time" is a new visit, not the same tab.
+  const rootPath = async (who: "faisal" | "noura", locale: "en" | "ar") => {
+    const v = await pageAs(who, { locale });
+    await v.page.goto(`${webUrl}/`, { waitUntil: "networkidle" });
+    await settle(v.page);
+    return { ...v, path: new URL(v.page.url()).pathname };
+  };
   for (const who of ["faisal", "noura"] as const) {
-    // A browser set to English: the page's language follows the browser, not the Member's stored language.
-    const en = await pageAs(who, { locale: "en" });
-    await en.page.goto(`${webUrl}/`, { waitUntil: "networkidle" });
-    const enPath = new URL(en.page.url()).pathname;
-    c.check(`${who}: with an English browser the app opens in Arabic because the Member's language is Arabic`, enPath.startsWith("/ar"), `opened ${enPath}`);
-    const me = await en.page.evaluate(async () => (await (await fetch("/api/v1/me")).json()) as { member: { locale: string; fullName: { ar: string } } });
-    c.check(`${who}: the Member's stored language is ar`, me.member.locale === "ar", me.member.locale);
-    if (who === "faisal") await t.shot(en.page, "faisal-english-browser");
-    await en.context.close();
-    // A browser set to Arabic: opens in Arabic, name in Arabic, can switch.
-    const ar = await pageAs(who, { locale: "ar" });
-    await ar.page.goto(`${webUrl}/`, { waitUntil: "networkidle" });
-    await settle(ar.page);
-    const arPath = new URL(ar.page.url()).pathname;
-    const html = await overflowOf(ar.page);
-    c.check(`${who}: with an Arabic browser the app opens in Arabic, right to left`, arPath.startsWith("/ar") && html.dir === "rtl", `${arPath} dir=${html.dir}`);
-    const names = (await ar.page.getByRole("button").allInnerTexts()).join(" ");
+    // 1. A browser set to English: opens in Arabic, right to left, the name in Arabic.
+    const first = await rootPath(who, "en");
+    const html = await overflowOf(first.page);
+    c.check(`${who}: with an English browser Rabaed opens in Arabic, right to left`, first.path.startsWith("/ar") && html.dir === "rtl", `opened ${first.path} dir=${html.dir}`);
+    const me = await first.page.evaluate(async () => (await (await fetch("/api/v1/me")).json()) as { member: { fullName: { ar: string } } });
+    const names = (await first.page.getByRole("button").allInnerTexts()).join(" ");
     c.check(`${who}: the name shows in Arabic`, new RegExp(me.member.fullName.ar.split(" ")[0]!).test(names), names.slice(0, 80));
-    await switchLanguage(ar.page, "en", /[؀-ۿ]{2,}/);
-    c.check(`${who}: can switch to English`, new URL(ar.page.url()).pathname.startsWith("/en"), ar.page.url());
-    await ar.context.close();
+    if (who === "faisal") await t.shot(first.page, "faisal-english-browser-opens-arabic");
+    // 2. Switch to English.
+    await switchLanguage(first.page, "en", /[؀-ۿ]{2,}/);
+    c.check(`${who}: can switch to English`, new URL(first.page.url()).pathname.startsWith("/en"), first.page.url());
+    await first.context.close();
+    // 3. Next time, even in an Arabic browser: English, as the Member chose.
+    const next = await rootPath(who, "ar");
+    c.check(`${who}: next time (an Arabic browser) opens in English, as switched`, next.path.startsWith("/en"), `opened ${next.path}`);
+    if (who === "faisal") await t.shot(next.page, "faisal-next-visit-english");
+    // Leave the Member as found: back to Arabic, then a new visit opens in Arabic again.
+    await switchLanguage(next.page, "ar", who === "faisal" ? /Faisal/ : /Noura/);
+    await next.context.close();
+    const back = await rootPath(who, "en");
+    c.check(`${who}: after switching back, a new visit opens in Arabic again`, back.path.startsWith("/ar"), `opened ${back.path}`);
+    await back.context.close();
   }
-  t.note("FAIL (I18N-05): steps: sign in as Faisal (or Noura) with the browser language set to English (the harness's demo session; a Playwright context with locale en-US) and open the site root. Expected (Test Case I18N-05; strategy 5.11 'Their language is Arabic from sign-in (locale set at onboarding)'; CLAUDE.md 'Arabic and English from day one'): the app opens in Arabic for an Arabic-first Member. Actual: it opens /en, and Faisal's and Noura's stored language ar only sets the language of their emails; with an Arabic browser it opens /ar. Screenshot: evidence/I18N-05-1-faisal-english-browser.jpg.");
-  t.note("Sign-in itself needs a password, so the harness uses each person's demo session. The app opens in the browser's language (the URL decides; next-intl negotiates it): the Member's stored language 'ar' only sets the language of their emails (apps/web/src/lib/browser-locale.ts, data-model member_notification_preference). The plan's expectation 'Arabic from sign-in' holds only for an Arabic browser.");
+  t.note("Sign-in itself needs a password, so the harness uses each person's demo session, and a fresh browser context stands for a new visit. Rule checked: Rabaed opens in Arabic for every Member, a switch to English is kept on the Member, and the browser's language is ignored (RP-1174, #612). Each Member is switched back to Arabic at the end, so the data is left as found.");
 });
 
 // -------------------------------------------------------------------------------------------------
