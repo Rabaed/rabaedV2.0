@@ -148,7 +148,7 @@ describe("scenario RP-580-1: an item Sent Back to a \"Comment only\" Step", () =
 
   it("is held by the engineer again, read-only, and the page says why to C1 only", async () => {
     const mine = await detail(engineer, id);
-    expect(mine.step.key).toBe("draft");
+    expect(mine.step?.key).toBe("draft");
     expect(mine.heldBy?.companyName).toBeDefined();
     expect(mine.actions.saveAnswers).toBe(false);
     expect(mine.sentBackForComment).toBe(true);
@@ -180,7 +180,7 @@ describe("scenario RP-580-1: an item Sent Back to a \"Comment only\" Step", () =
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await take(pm, id, "submit", { internalNote: "Submitted again unchanged" });
     const now = await detail(k1Pm, id);
-    expect(now.step.key).toBe("consultant_review");
+    expect(now.step?.key).toBe("consultant_review");
     const was = k1Before as { detail: typeof now; documents: DocumentList; links: string[] };
     expect(now.answers).toEqual(was.detail.answers);
     expect(now.scopes).toEqual(was.detail.scopes);
@@ -196,7 +196,7 @@ describe("the \"Comment only\" of the Step the Send Back led to holds until the 
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     expect((await detail(pm, id)).sentBackForComment).toBe(true);
     await take(pm, id, "return");
-    expect((await detail(engineer, id)).step.key).toBe("draft");
+    expect((await detail(engineer, id)).step?.key).toBe("draft");
     expect((await detail(engineer, id)).actions.saveAnswers).toBe(false);
     await refused(save(engineer, id, { model: "CMT-2a" }));
   });

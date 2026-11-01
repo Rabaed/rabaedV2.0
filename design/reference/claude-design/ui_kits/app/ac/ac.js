@@ -27,15 +27,15 @@ const COS=[
  {id:'c4',n:'Design Consultants LLC',t:'consultant'},
  {id:'c5',n:'Marina Developments',t:'client'}];
 const USERS=[
- {id:'u1',co:'c1',f:'Mohamed',l:'Alhalees',e:'mohamed@nama.example',r:'r3',tr:[],on:1,la:'Wed, Sep 23, 2026'},
- {id:'u2',co:'c1',f:'Ahmed',l:'Ghareeb',e:'ahmed@nama.example',r:'r2',tr:['SU','ME'],on:1,la:'Sat, Jan 24, 2026'},
- {id:'u3',co:'c1',f:'',l:'',e:'mohamed.alhalees@rabaedapp.com',r:'r3',tr:['ME'],on:1,la:'Thu, Oct 15, 2026',inv:1},
- {id:'u4',co:'c2',f:'Contractor',l:'Dummy',e:'contractor-admin-dummy@rabaedapp.com',r:'r4',tr:[],on:1,la:'Tue, Sep 8, 2026'},
- {id:'u5',co:'c3',f:'Nasser',l:'Al Kaabi',e:'nasser@tmc-constructions.ae',r:'r4',tr:[],on:1,la:'Thu, Oct 15, 2026'},
- {id:'u6',co:'c3',f:'Hafiz',l:'Hamdan',e:'hafiz.h@tmc-constructions.ae',r:'r5',tr:['EL','ME'],on:1,la:'Wed, Oct 14, 2026'},
- {id:'u7',co:'c3',f:'Omar',l:'Rashed',e:'omar.r@tmc-constructions.ae',r:'r5',tr:['CV'],on:0,la:'Sun, Aug 2, 2026'},
- {id:'u8',co:'c4',f:'Sara',l:'Al Mansoori',e:'sara@designconsultants.ae',r:'r2',tr:['AR'],on:1,la:'Tue, Oct 13, 2026'},
- {id:'u9',co:'c5',f:'Khalid',l:'Bin Saeed',e:'k.binsaeed@marinadev.ae',r:'r1',tr:[],on:1,la:'Mon, Oct 12, 2026'}];
+ {id:'u1',co:'c1',f:'Mohamed',l:'Alhalees',e:'mohamed@nama.test',r:'r3',tr:[],on:1,la:'Wed, Sep 23, 2026'},
+ {id:'u2',co:'c1',f:'Ahmed',l:'Ghareeb',e:'ahmed@nama.test',r:'r2',tr:['SU','ME'],on:1,la:'Sat, Jan 24, 2026'},
+ {id:'u3',co:'c1',f:'',l:'',e:'user1@rabaed.test',r:'r3',tr:['ME'],on:1,la:'Thu, Oct 15, 2026',inv:1},
+ {id:'u4',co:'c2',f:'Contractor',l:'Dummy',e:'user2@rabaed.test',r:'r4',tr:[],on:1,la:'Tue, Sep 8, 2026'},
+ {id:'u5',co:'c3',f:'Nasser',l:'Al Kaabi',e:'nasser@tmc-constructions.test',r:'r4',tr:[],on:1,la:'Thu, Oct 15, 2026'},
+ {id:'u6',co:'c3',f:'Hafiz',l:'Hamdan',e:'hafiz.h@tmc-constructions.test',r:'r5',tr:['EL','ME'],on:1,la:'Wed, Oct 14, 2026'},
+ {id:'u7',co:'c3',f:'Omar',l:'Rashed',e:'omar.r@tmc-constructions.test',r:'r5',tr:['CV'],on:0,la:'Sun, Aug 2, 2026'},
+ {id:'u8',co:'c4',f:'Sara',l:'Al Mansoori',e:'sara@designconsultants.test',r:'r2',tr:['AR'],on:1,la:'Tue, Oct 13, 2026'},
+ {id:'u9',co:'c5',f:'Khalid',l:'Bin Saeed',e:'k.binsaeed@marinadev.test',r:'r1',tr:[],on:1,la:'Mon, Oct 12, 2026'}];
 const V={page:'roles',rt:'all',rs:1,q:'',fr:'',ft:'all',cl:{},ov:null,dr:null,toast:null,sort:{k:'f',d:1}};
 const role=id=>ROLES.find(r=>r.id===id),co=id=>COS.find(c=>c.id===id);
 const nUsers=id=>USERS.filter(u=>u.r===id&&u.on).length,anyUsers=id=>USERS.filter(u=>u.r===id).length;
@@ -73,7 +73,7 @@ function users(){const q=V.q.trim().toLowerCase();const s=V.sort;
 function userModal(){const o=V.ov,d=V.dr;const c=d.co&&co(d.co);const rs=c?ROLES.filter(r=>r.t===c.t):[];const ed=!!o.uid;
  return `<div class="scrim" data-ovx="1"><div class="modal" data-stop style="width:min(600px,calc(100vw - 32px))"><div class="md-bd"><h3>${ed?L('Edit user','تعديل المستخدم'):L('Add user','إضافة مستخدم')}</h3>
  <label class="fl">${L('Company','الشركة')}${o.fixed||ed?`<div class="fchip" style="padding:8px 10px"><span class="acco-ic ${TYPES[c.t][2]}" style="width:28px;height:28px;font-size:15px"><i class="ti ${TYPES[c.t][3]}"></i></span><b>${esc(c.n)}</b>${tpill(c.t)}</div>`:`<select class="bsel" id="uco" style="height:36px"><option value="">${L('— choose company —','— اختر الشركة —')}</option>${TK.map(k=>{const cs=COS.filter(x=>x.t===k);return cs.length?`<optgroup label="${tname(k)}">${cs.map(x=>`<option value="${x.id}"${d.co===x.id?' selected':''}>${esc(x.n)}</option>`).join('')}</optgroup>`:''}).join('')}</select>`}</label>
- <label class="fl">${L('Email','البريد الإلكتروني')}<input class="bin" id="ue" value="${esc(d.e)}" placeholder="name@company.com"${ed?' disabled':''}></label>
+ <label class="fl">${L('Email','البريد الإلكتروني')}<input class="bin" id="ue" value="${esc(d.e)}" placeholder="name@company.test"${ed?' disabled':''}></label>
  <div class="g2f"><label class="fl">${L('First name','الاسم الأول')} <small>${L('optional — they can fill it in','اختياري')}</small><input class="bin" id="uf" value="${esc(d.f)}"></label><label class="fl">${L('Last name','اسم العائلة')} <small>&nbsp;</small><input class="bin" id="ul" value="${esc(d.l)}"></label></div>
  <label class="fl">${L('Role','الدور')}${c?(rs.length?`<select class="bsel" id="ur" style="height:36px"><option value="">${L('— choose role —','— اختر الدور —')}</option>${rs.map(r=>`<option value="${r.id}"${d.r===r.id?' selected':''}>${esc(r.n)}</option>`).join('')}</select><div class="lock"><i class="ti ti-filter"></i>${L(`Showing ${tname(c.t)} roles only (${rs.length}) — this company is a ${tname(c.t)}.`,`تظهر أدوار ${tname(c.t)} فقط (${rs.length}) — هذه الشركة من نوع ${tname(c.t)}.`)}</div>`:`<div class="lock amber"><i class="ti ti-alert-triangle"></i><span>${L(`No ${tname(c.t)} roles exist yet.`,`لا توجد أدوار ${tname(c.t)} بعد.`)} <a href="#" data-act="mkrole" data-t="${c.t}">${L(`Create a ${tname(c.t)} role`,`أنشئ دور ${tname(c.t)}`)}</a></span></div>`):`<select class="bsel" disabled style="height:36px"><option>${L('Choose a company first','اختر الشركة أولًا')}</option></select>`}</label>
  <div class="fl">${L('Trades','التخصصات')} <small>${L('Limits which items they’re assigned — leave empty for all trades.','يحدّد العناصر المسندة إليه — اتركه فارغًا لكل التخصصات.')}</small><div class="trc">${TRD.map(t=>`<button class="${d.tr.includes(t[0])?'on':''}" data-utr="${t[0]}">${t[0]}: ${L(t[1],t[2])}</button>`).join('')}</div></div>

@@ -55,7 +55,7 @@ function header(st,ctx){st=st||S;ctx=ctx||{};
   <button class="bell"><i class="ti ti-bell"></i></button>
   <div class="me"><button class="me-btn" data-menu="me">${av('Mohamed','#6b5ad8',36)}<span class="nm">Mohamed</span><i class="ti ti-chevron-down"></i></button>${st.menu==='me'?meMenu(st):''}</div>
  </header>`}
-function meMenu(st){return `<div class="menu" style="width:260px"><div class="mhd">${av('Mohamed','#6b5ad8',40)}<div><b>Mohamed Al Hashimi</b><small>mohamed@alfuttaim.ae</small></div></div><div class="sep"></div>
+function meMenu(st){return `<div class="menu" style="width:260px"><div class="mhd">${av('Mohamed','#6b5ad8',40)}<div><b>Mohamed Al Hashimi</b><small>mohamed@alfuttaim.test</small></div></div><div class="sep"></div>
  <button class="mi"><i class="ti ti-user"></i>${t('profileM')}</button><button class="mi"><i class="ti ti-settings"></i>${t('account')}</button><button class="mi"><i class="ti ti-help-circle"></i>${t('help')}</button>
  <div class="sep"></div><h6>${t('language')}</h6><div class="seg2"><button class="${st.lang==='ar'?'on':''}" data-lang="ar">عربي</button><button class="${st.lang==='en'?'on':''}" data-lang="en">English</button></div><h6>${t('appearance')}</h6><div class="seg2"><button class="${st.mode!=='dark'?'on':''}" data-mode="light">${t('light')}</button><button class="${st.mode==='dark'?'on':''}" data-mode="dark">${t('dark')}</button></div>${st.mode==='dark'?'':`<h6>${t('theme')}</h6>`}${st.mode==='dark'?'':`<div class="seg2"><button class="${st.theme==='dark'?'on':''}" data-theme="dark">${t('dark')}</button><button class="${st.theme==='light'?'on':''}" data-theme="light">${t('light')}</button></div>`}
  <div class="sep"></div><button class="mi danger"><i class="ti ti-logout"></i>${t('signout')}</button></div>`}

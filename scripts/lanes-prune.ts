@@ -41,6 +41,7 @@ import {
   keptByClaims,
   laneKeptByClaim,
   LANE_SCHEME,
+  laneOfProject,
   laneProject,
   listContainers,
   mergedBlockers,
@@ -100,7 +101,8 @@ if (!options) {
   console.error(usage);
   process.exit(1);
 }
-const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal(options);
+// RP-1198: the refusal offers this worktree's own lane by its number.
+const refused = laneRefusal(options.lane) ?? bareMergedYesRefusal({ ...options, ownLane: laneOfProject(composeProjectOfEnv(readWorktreeEnv(".") ?? "") ?? "") });
 if (refused !== undefined) {
   console.error(refused);
   process.exit(1);

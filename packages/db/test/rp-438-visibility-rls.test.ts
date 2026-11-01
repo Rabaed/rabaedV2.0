@@ -112,12 +112,13 @@ describe("scenario RP-438-1: View workflow", () => {
 
     const before = new Map<string, Awaited<ReturnType<typeof whereAs>>>();
     for (const reader of outside) before.set(reader, await whereAs(reader));
-    for (const reader of outside) expect(before.get(reader), named(reader)).toEqual({ step_id: stepId.consultant_review, holder_mine: false, holder: k1.participantId });
+    // No K1 Step for them, not even the one C1's Submit reached (RP-1192-1): K1 by its Participant only.
+    for (const reader of outside) expect(before.get(reader), named(reader)).toEqual({ step_id: null, holder_mine: false, holder: k1.participantId });
     expect(await whereAs(k1.members.engineer)).toEqual({ step_id: stepId.consultant_review, holder_mine: true, holder: k1.participantId });
 
     expect(await tower.take(k1.members.engineer, item, "send_to_manager")).toBe("applied");
 
-    // K1's Members read the manager's Step marked; the others still the Step it arrived at with K1, exactly as before.
+    // K1's Members read the manager's Step marked; the others still no Step, exactly as before.
     for (const reader of inside) expect((await whereAs(reader))?.step_id, named(reader)).toBe(stepId.consultant_approval);
     for (const reader of outside) expect(await whereAs(reader), named(reader)).toEqual(before.get(reader));
     const seenStep = async (as: string) => {

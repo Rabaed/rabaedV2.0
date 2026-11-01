@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as lanes from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import * as storiesVolumes from "./stories-volumes.ts";
-import { STORIES_VOLUME_PREFIX, worktreeHash } from "./test-stories-linux.ts";
+import { STORIES_VOLUME_PREFIX, worktreeHash } from "./stories-hash.ts";
 import * as veraPdf from "./verapdf-containers.ts";
 import * as worktreeRemoval from "./worktree-removal.ts";
 import type { RemoveTarget } from "./worktree-removal.ts";

@@ -27,7 +27,7 @@ interface Job {
 }
 interface Workflow {
   on: Record<string, { branches?: string[] } | null>;
-  concurrency: { group: string };
+  concurrency: { group: string; "cancel-in-progress"?: boolean };
   jobs: Record<string, Job>;
 }
 const repo = join(dirname(import.meta.filename), "..");
@@ -126,5 +126,94 @@ describe("update-screenshots.yml", () => {
   it("never commits to a queue branch", () => {
     expect(job(wf, "commit").if).toMatch(notQueueBranch);
     expect(step(job(wf, "commit"), "Commit changed baselines").run).toMatch(/gh-readonly-queue\/\*\)/);
+  });
+
+  // RP-1199: one run per PR, and a run that is mid-push is never cancelled.
+  describe("concurrency", () => {
+    // Each check returns what is wrong. A test runs it on the real text (nothing wrong)
+    // and on a copy with one mutation (something wrong), so the check is known to bite.
+    // There is no evaluator for the expression: these read its text.
+    const squash = (text: string) => text.replace(/\s+/g, " ").trim();
+    const mutate = (text: string, from: string, to: string) => {
+      if (!text.includes(from)) throw new Error(`the mutation target is not in the text: ${from}`);
+      return text.replace(from, to);
+    };
+    const group = squash(wf.concurrency.group);
+    const findNewIf = job(wf, "find-new").if;
+
+    // A render starts from a PR only on the label. A leftover ui-changed job (it picked a
+    // PR's pushes by their files) would mean a push path is back.
+    const triggerProblems = (on: Record<string, unknown>, jobIds: string[]) => {
+      const problems: string[] = [];
+      if ("push" in on) problems.push("a push trigger");
+      if (JSON.stringify(on.pull_request) !== JSON.stringify({ types: ["labeled"] })) problems.push("pull_request is not [labeled] only");
+      if (jobIds.includes("ui-changed")) problems.push("a ui-changed job");
+      return problems;
+    };
+
+    // The skip clause is `workflow_run && !(` find-new's other conditions, in order `)`, so a
+    // run find-new would skip gets a group of its own. A deleted find-new `if` is a problem.
+    const skipProblems = (text: string, ifText: string | undefined) => {
+      if (!ifText) return ["find-new has no if to mirror"];
+      const [event, ...rest] = squash(ifText).split(" && ");
+      const problems: string[] = [];
+      if (event !== "github.event_name == 'workflow_run'") problems.push("find-new does not start with the workflow_run event check");
+      if (!text.includes(`${event} && !( ${rest.join(" && ")})`)) problems.push("the skip clause is not the event check and the negation of find-new's conditions");
+      if (!text.includes("format('skipped-{0}', github.run_id)")) problems.push("no skipped- group");
+      if (!text.includes("github.event.label.name != 'update-screenshots'")) problems.push("no skip for other labels");
+      return problems;
+    };
+
+    // The order of the fallbacks matters: the PR number first, then the branch.
+    const keyProblems = (text: string) =>
+      [
+        "github.event.pull_request.number || github.head_ref || github.ref_name",
+        "format('new-{0}', github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_branch)",
+      ].filter((key) => !text.includes(key));
+
+    it("never cancels a run in progress", () => {
+      expect(wf.concurrency["cancel-in-progress"]).toBe(false);
+    });
+
+    it("starts a render from a PR only on the label, never on a push", () => {
+      expect(triggerProblems(wf.on, Object.keys(wf.jobs))).toEqual([]);
+      expect(wf.on.push).toBeUndefined();
+    });
+
+    it("catches a push trigger, more pull_request types and a ui-changed job", () => {
+      expect(triggerProblems({ ...wf.on, push: { branches: ["main"] } }, [])).toContain("a push trigger");
+      expect(triggerProblems({ ...wf.on, push: null }, [])).toContain("a push trigger");
+      expect(triggerProblems({ pull_request: { types: ["labeled", "synchronize"] } }, [])).toContain("pull_request is not [labeled] only");
+      expect(triggerProblems(wf.on, ["ui-changed", "render"])).toContain("a ui-changed job");
+    });
+
+    it("gives a run that find-new would skip a group of its own, so it cannot replace a waiting run", () => {
+      expect(skipProblems(group, findNewIf)).toEqual([]);
+    });
+
+    it("catches a skip clause that no longer mirrors find-new", () => {
+      expect(skipProblems(group, undefined)).toEqual(["find-new has no if to mirror"]);
+      expect(skipProblems(mutate(group, "&& !( ", "&& ( "), findNewIf)).toHaveLength(1);
+      expect(skipProblems(mutate(group, "(github.event_name == 'workflow_run' && !(", "(!("), findNewIf)).toHaveLength(1);
+      expect(skipProblems(mutate(group, " && github.event.workflow_run.event == 'pull_request'", ""), findNewIf)).toHaveLength(1);
+      expect(skipProblems(mutate(group, "format('skipped-{0}', github.run_id)", "format('{0}', github.run_id)"), findNewIf)).toHaveLength(1);
+      expect(skipProblems(mutate(group, "github.event.label.name != 'update-screenshots'", "true"), findNewIf)).toHaveLength(1);
+    });
+
+    it("keeps the new-baselines run out of the label's group, so it can never replace a waiting label run", () => {
+      expect(group).toMatch(/github\.event_name == 'workflow_run' && format\('new-\{0\}', /);
+    });
+
+    it("keys the label and the new-baselines run by the PR number, else the branch, in that order", () => {
+      expect(keyProblems(group)).toEqual([]);
+    });
+
+    it("catches a reordered or dropped fallback", () => {
+      const label = "github.event.pull_request.number || github.head_ref || github.ref_name";
+      expect(keyProblems(mutate(group, label, "github.head_ref || github.event.pull_request.number || github.ref_name"))).toEqual([label]);
+      expect(keyProblems(mutate(group, label, "github.event.pull_request.number || github.ref_name"))).toEqual([label]);
+      expect(keyProblems(mutate(group, "pull_requests[0].number || github.event.workflow_run.head_branch", "pull_requests[0].number"))).toHaveLength(1);
+      expect(keyProblems(mutate(group, "pull_requests[0].number || github.event.workflow_run.head_branch", "head_branch || github.event.workflow_run.pull_requests[0].number"))).toHaveLength(1);
+    });
   });
 });

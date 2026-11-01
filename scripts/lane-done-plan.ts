@@ -3,7 +3,7 @@ import { isValidLane, laneOfProject, laneProject, protectedLaneReason, type Cont
 import { samePath } from "./paths.ts";
 import { listedChanges } from "./prune-guards.ts";
 
-// `pnpm lane:done <pr>` (RP-1170): one command for what a finished lane took about eight steps
+// `pnpm lane:done 580` (RP-1170): one command for what a finished lane took about eight steps
 // (archive, a failing `git worktree remove`, a scratch rd, `branch -D`, lanes:prune twice, a hand
 // RELEASE). The decisions are here, on facts lane-done.ts gathers, so the safety rules are unit-tested:
 //   1. never lane 7 (Main 7's harness data): `--lane 7`, or a worktree whose .env names it, refuses all;
@@ -16,13 +16,15 @@ import { listedChanges } from "./prune-guards.ts";
 //   6. uncommitted or untracked files, or commits origin/main lacks, keep a worktree unless --force;
 //   8. the PR must be merged before anything else, and the last line is the RP-603 RELEASE text.
 
-export type LaneDoneArgs = { pr: number; lane: number | undefined; force: boolean; yes: boolean; dryRun: boolean };
+/** pr: undefined when none was given, so lane-done.ts finds it from the current branch (RP-1198). */
+export type LaneDoneArgs = { pr: number | undefined; lane: number | undefined; force: boolean; yes: boolean; dryRun: boolean };
 
-export const LANE_DONE_USAGE = "Usage: pnpm lane:done <pr> [--lane N] [--force] [--yes] [--dry-run]";
+// RP-1198: no `<…>` placeholder; PowerShell reads `<` as a redirect when the line is copied.
+export const LANE_DONE_USAGE = "Usage: pnpm lane:done [pr number] [--lane N] [--force] [--yes] [--dry-run]   (no number: the current branch's merged PR, or a list of the merged PRs left here)";
 
 /** lane:done's arguments, or why they are refused (`--lane 7` among them). */
 export function parseLaneDoneArgs(args: string[]): LaneDoneArgs | { error: string } {
-  const parsed: LaneDoneArgs = { pr: 0, lane: undefined, force: false, yes: false, dryRun: false };
+  const parsed: LaneDoneArgs = { pr: undefined, lane: undefined, force: false, yes: false, dryRun: false };
   const prs: number[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
@@ -38,8 +40,8 @@ export function parseLaneDoneArgs(args: string[]): LaneDoneArgs | { error: strin
     } else if (/^#?\d+$/.test(a)) prs.push(Number(a.replace(/^#/, "")));
     else return { error: LANE_DONE_USAGE };
   }
-  if (prs.length !== 1) return { error: LANE_DONE_USAGE };
-  parsed.pr = prs[0]!;
+  if (prs.length > 1) return { error: LANE_DONE_USAGE };
+  parsed.pr = prs[0];
   return parsed;
 }
 
@@ -130,14 +132,17 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const laneNumber = (project: string | undefined): number | undefined => laneOfProject(project ?? "");
 export const describeWorktree = (c: Pick<Candidate, "path" | "branch">) => `${c.path} (${c.branch ?? "detached HEAD"})`;
 
+/** RP-1198: a hand-off command with its real numbers, ready to paste ("pnpm lane:done 580 --yes"). */
+export const laneDoneCommand = (pr: number, ...flags: string[]) => ["pnpm lane:done", String(pr), ...flags].join(" ");
+
 /** Why the candidate stays, or undefined when it goes. Only rule 6's reasons give way to --force. */
 function keepReason(c: Candidate, pr: PullRequest, force: boolean): string | undefined {
   if (c.isMain) return "the main checkout";
-  if (c.isCurrent) return "the current worktree: run pnpm lane:done from another worktree (the Main's or the Orchestrator's)";
+  if (c.isCurrent) return `the current worktree: run \`${laneDoneCommand(pr.number, "--yes")}\` from another worktree (the Main's or the Orchestrator's)`;
   // A checkout elsewhere on the PR's branch or head (a reviewer's, a hand-made one) is never lane:done's to remove.
-  if (!c.appWorktree) return `not under .claude/worktrees: remove it by hand with \`pnpm worktree:remove ${c.path}\``;
+  if (!c.appWorktree) return `not under .claude/worktrees: remove it by hand with \`pnpm worktree:remove "${c.path}"\``;
   if (c.held !== undefined) return `held: ${c.held}`;
-  if (c.heldByProcess) return `a running process holds its folder (a dev server?): \`pnpm servers:stop --yes --worktree ${c.path}\`, then re-run`;
+  if (c.heldByProcess) return `a running process holds its folder (a dev server?): \`pnpm servers:stop --yes --worktree "${c.path}"\`, then re-run`;
   if (c.kind === "lane" && !c.onPr) return `its HEAD ${c.head} is not on PR #${pr.number}'s commits, so its own commits are not known to be merged`;
   if (c.kind === "agent") {
     if (c.lockLive) return "locked by a running session (its subagent may still run)";
@@ -154,7 +159,7 @@ function keepReason(c: Candidate, pr: PullRequest, force: boolean): string | und
         ...(c.changes!.length > 0 ? [`uncommitted changes${listedChanges(c.changes)}`] : []),
         ...(c.kind === "lane" && c.ahead! > 0 ? [`${plural(c.ahead!, "commit")} origin/main does not have`] : []),
       ];
-  return parts.length === 0 ? undefined : `${parts.join("; ")}; \`--force\` removes it anyway`;
+  return parts.length === 0 ? undefined : `${parts.join("; ")}; \`${laneDoneCommand(pr.number, "--force")}\` removes it anyway`;
 }
 
 /** What lane:done does: which worktrees go, which stay (all listed at once, with why), and the stack. */
@@ -184,13 +189,23 @@ export function decideLaneDone({ pr, lane, candidates, claims, containers, volum
   }
 
   if (laneOf === undefined) {
-    for (const c of own) remarks.push(`${c.path}'s .env has no lane stack: pass \`--lane N\` to free one.`);
+    for (const c of own) {
+      // RP-1198: the lanes whose containers come from its folder, so the command has a real number (never 7's).
+      const lanes = [...new Set(containers.filter((x) => samePath(x.workingDir, c.path, platform)).map((x) => laneOfProject(x.project)))]
+        .filter((n): n is number => n !== undefined && protectedLaneReason(laneProject(n)) === undefined)
+        .sort((a, b) => a - b);
+      remarks.push(
+        lanes.length === 0
+          ? `${c.path}'s .env has no lane stack and no container comes from its folder, so lane:done frees none; \`pnpm lanes:prune --stale\` lists the stacks.`
+          : `${c.path}'s .env has no lane stack, but containers of ${lanes.map((n) => `lane ${n}`).join(", ")} come from its folder: ${lanes.map((n) => `\`${laneDoneCommand(pr.number, "--lane", String(n))}\``).join(", ")} frees ${lanes.length === 1 ? "it" : "one"}.`,
+      );
+    }
     return { remove, kept, stack: undefined, remarks };
   }
   const project = laneProject(laneOf);
   const goes = (dir: string) => remove.some((c) => samePath(c.path, dir, platform));
   const why: string[] = [];
-  if (currentProject === project) why.push("this worktree's .env has it: run pnpm lane:done from another worktree");
+  if (currentProject === project) why.push(`this worktree's .env has it: run \`${laneDoneCommand(pr.number, "--yes")}\` from another worktree`);
   for (const c of candidates) if (c.project === project && !goes(c.path)) why.push(`${c.path} is kept (above)`);
   for (const claim of claims) if (claim.project === project) why.push(`the .env of ${claim.path} (on ${claim.branch ?? "a detached HEAD"}) has it`);
   const mine = containers.filter((c) => c.project === project);
@@ -215,6 +230,61 @@ export function decideLaneDone({ pr, lane, candidates, claims, containers, volum
   return { remove, kept, stack: { project, action, containers: names, volumes: vols, why }, remarks };
 }
 
+/**
+ * RP-1198: the last line when lane:done runs in the lane's own worktree, which it keeps with its stack:
+ * the exact command for the rest. The RELEASE waits for that run, which prints it.
+ */
+export const restLine = (pr: Pick<PullRequest, "number">) =>
+  `This worktree and its stack stay: for the rest, run \`${laneDoneCommand(pr.number, "--yes")}\` from the Main's worktree, then post the RELEASE it prints.`;
+
+/** A merged PR as `gh pr list --state merged --json number,headRefName,headRefOid` gives it. */
+export type MergedPrRef = Pick<PullRequest, "number" | "headRefName" | "headRefOid">;
+
+/** A worktree of this clone, with COMPOSE_PROJECT_NAME from its .env. */
+export type CloneWorktree = { path: string; branch: string | undefined; head: string; project: string | undefined };
+
+/**
+ * RP-1198: `pnpm lane:done` with no number where the current branch has no merged PR (the Main's own
+ * worktree): every merged PR that still has a worktree in this clone (on its branch, or a detached HEAD
+ * at its head), oldest first, each with its exact command. It only lists: lane:done removes nothing then.
+ * merged: the last `limit` merged PRs; the main checkout and a `main` branch are never a PR's.
+ */
+export function mergedLeftovers({
+  worktrees,
+  merged,
+  mainRoot,
+  currentBranch,
+  limit,
+  platform,
+}: {
+  worktrees: CloneWorktree[];
+  merged: MergedPrRef[];
+  mainRoot: string;
+  currentBranch: string | undefined;
+  limit: number;
+  platform?: NodeJS.Platform;
+}): string[] {
+  const where = currentBranch === undefined ? "The current worktree is on a detached HEAD with no merged PR" : `The current branch ${currentBranch} has no merged PR`;
+  const found = new Map<number, { pr: MergedPrRef; worktrees: CloneWorktree[] }>();
+  for (const w of worktrees) {
+    if (samePath(w.path, mainRoot, platform) || w.branch === "main") continue;
+    const pr = merged.find((p) => p.headRefName !== "main" && (w.branch === undefined ? p.headRefOid === w.head : p.headRefName === w.branch));
+    if (pr === undefined) continue;
+    const entry = found.get(pr.number) ?? { pr, worktrees: [] };
+    entry.worktrees.push(w);
+    found.set(pr.number, entry);
+  }
+  if (found.size === 0) return [`${where}, so lane:done removes nothing here. No merged PR (of the last ${limit}) still has a worktree in this clone.`];
+  const lines = [`${where}, so lane:done removes nothing here. Merged PRs (of the last ${limit}) that still have a worktree in this clone:`];
+  for (const { pr, worktrees: here } of [...found.values()].sort((a, b) => a.pr.number - b.pr.number)) {
+    const folders = here.map((w) => `"${w.path}"${w.project === undefined ? "" : ` with stack ${w.project}`}`).join(", ");
+    const harness = here.map((w) => protectedLaneReason(w.project)).find((r) => r !== undefined);
+    lines.push(`  PR #${pr.number} (${pr.headRefName}): ${folders}: ${harness === undefined ? laneDoneCommand(pr.number) : `not lane:done's: ${harness}`}`);
+  }
+  lines.push("Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.");
+  return lines;
+}
+
 /** "Main 4, lane-4a (lane 41)", "Main 3 (lane 30)", or a legacy "lane 5". */
 export function laneLabel(lane: number | undefined): string {
   if (lane === undefined) return "lane unknown";
@@ -222,6 +292,16 @@ export function laneLabel(lane: number | undefined): string {
   const main = Math.floor(lane / 10);
   const l = lane % 10;
   return l === 0 ? `Main ${main} (lane ${lane})` : `Main ${main}, lane-${main}${"abcd"[l - 1]} (lane ${lane})`;
+}
+
+/**
+ * RP-1198: the open RP-603 claims (claims.ts readClaims) of a PR whose branch has no RP key: those
+ * that name `PR #580` or the branch, whole.
+ */
+export function claimIdsFor(claims: { id: number; text: string; releasedBy: number | undefined }[], pr: Pick<PullRequest, "number" | "headRefName">): number[] {
+  const branch = new RegExp(`(?<![\\w./-])${pr.headRefName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w/-])`);
+  const number = new RegExp(`#${pr.number}(?!\\d)`);
+  return claims.filter((c) => c.releasedBy === undefined && (number.test(c.text) || branch.test(c.text))).map((c) => c.id);
 }
 
 /** "2026-10-31 16:54 UTC". */
@@ -232,10 +312,16 @@ const utc = (iso: string | undefined) => (iso === undefined ? "at an unknown tim
  * RELEASE naming a key releases every claim under it (check-claims), so when the key still has open
  * PRs (openSiblings) a line before it says to CLAIM their files again.
  */
-export function releaseLines({ pr, lane, openSiblings }: { pr: PullRequest; lane: number | undefined; openSiblings: number[] }): string[] {
+export function releaseLines({ pr, lane, openSiblings, claimIds }: { pr: PullRequest; lane: number | undefined; openSiblings: number[]; claimIds?: number[] | undefined }): string[] {
   const key = branchKey(pr.headRefName);
   const merged = `merged ${utc(pr.mergedAt)}${pr.mergeCommit ? ` as ${pr.mergeCommit.slice(0, 9)}` : ""}`;
-  if (key === undefined) return [`RELEASE <claim comment id> — PR #${pr.number} (branch ${pr.headRefName} has no RP key; ${merged}). ${laneLabel(lane)}.`];
+  if (key === undefined) {
+    // RP-1198: the claims' real comment ids (claimIdsFor), or no placeholder at all: `<…>` breaks a PowerShell paste.
+    const tail = `PR #${pr.number} (branch ${pr.headRefName} has no RP key; ${merged}). ${laneLabel(lane)}.`;
+    if (claimIds !== undefined && claimIds.length > 0) return [`RELEASE ${claimIds.join(", ")} — ${tail}`];
+    const why = claimIds === undefined ? "RP-603's claims could not be read (JIRA_EMAIL and JIRA_API_TOKEN not set, or Jira did not answer)" : `No open RP-603 claim mentions PR #${pr.number} or branch ${pr.headRefName}`;
+    return [`${why}: after RELEASE, add the number of each claim comment this PR made; \`pnpm claims --open\` lists them.`, `RELEASE — ${tail}`];
+  }
   const release = `RELEASE all ${key} claims — ${key} (PR #${pr.number}, ${merged}). ${laneLabel(lane)}.`;
   if (openSiblings.length === 0) return [release];
   const prs = openSiblings.map((n) => `#${n}`).join(", ");

@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseDocument } from "yaml";
+import { STORIES_VOLUME_PREFIX, worktreeHash } from "./stories-hash.ts";
 
 // Runs @rabaed/ui's story suite in a Linux container, with the screenshot
 // comparison on, exactly as CI's `stories` job does (RP-388).
@@ -64,12 +64,6 @@ export function runnerCodename(workflow: string): string {
 }
 
 export const playwrightImage = (version: string, codename: string) => `mcr.microsoft.com/playwright:v${version}-${codename}`;
-
-/** What every stories volume's name starts with. */
-export const STORIES_VOLUME_PREFIX = "rabaed-stories-";
-
-/** The 8 hex digits naming one worktree's stories volumes: the sha1 of its root, spelled as Node resolved it. */
-export const worktreeHash = (root: string): string => createHash("sha1").update(root).digest("hex").slice(0, 8);
 
 /** The Docker volume holding one workspace folder's Linux node_modules, per worktree. */
 export function volumeName(root: string, folder: string): string {

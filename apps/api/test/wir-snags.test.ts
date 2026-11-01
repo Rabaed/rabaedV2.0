@@ -178,7 +178,7 @@ describe("the code raises a Snag from each ticked failed item (seam 1)", () => {
     const source = await detail(hafiz.caller, wir);
     expect(snag.type.code).toBe("SNG");
     expect(snag.title).toBe("Formwork tight"); // A bilingual Project's record language: English first.
-    expect(snag.step.key).toBe("open");
+    expect(snag.step?.key).toBe("open");
     // C1's Step Pool, which C1 reads by name; nobody of C1 picked it up yet.
     expect(snag.heldBy?.memberName).toBeNull();
     expect(snag.heldBy?.pool?.names).toEqual(expect.arrayContaining([bilingual("Ali Sonour")]));
@@ -392,7 +392,7 @@ describe("a Snag Type that can't take them refuses the code (seam 1)", () => {
     expect(refused.statusCode).toBe(500);
     const after = await detail(mohammed.caller, wir);
     expect(after.outcome).toBeNull();
-    expect(after.step.key).toBe("consultant_manager");
+    expect(after.step?.key).toBe("consultant_manager");
     expect((await history(mohammed.caller, wir)).map((e) => e.type)).not.toContain("issue_code"); // not hidden-from: the refused code wrote no event, for its Manager either
     expect(await raisedFrom(mohammed.caller, wir, "SNG")).toEqual([]); // not hidden-from: and raised no Snag
   });

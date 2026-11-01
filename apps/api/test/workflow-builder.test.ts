@@ -129,7 +129,7 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     await take(at.c1Pm, id, "submit");
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_to_owner_rep");
-    expect((await detail(ownerRep, id)).step.name.en).toBe("Owner Representative approval");
+    expect((await detail(ownerRep, id)).step?.name.en).toBe("Owner Representative approval");
     await ok(ownerRep.post(`/v1/work-items/${id}/pick-up`));
     await take(ownerRep, id, "owner_approve_code_a");
     expect(await detail(at.c1Engineer, id)).toMatchObject({ outcome: "A", step: { name: { en: "Approved" } } });
