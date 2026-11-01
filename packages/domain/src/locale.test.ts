@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatHijriDate, formatNumber, isLocale, riyadhDay, sortedByName } from "./locale.ts";
+import { defaultLocale, directionOf, formatDate, formatDayMonthYear, formatHijriDate, formatNumber, isLocale, riyadhDay, sortedByName } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -8,22 +8,8 @@ describe("locale", () => {
     expect(isLocale("fr")).toBe(false);
   });
 
-  describe("the browser's language", () => {
-    it("is the first of the browser's languages that is Arabic or English, region or not", () => {
-      expect(browserLocale(["ar-SA", "en-US"], "en")).toBe("ar");
-      expect(browserLocale(["en-GB", "ar"], "ar")).toBe("en");
-      expect(browserLocale(["fr-FR", "AR"], "en")).toBe("ar");
-    });
-
-    it("falls back to the page's language when the browser asks for neither", () => {
-      expect(browserLocale(["fr-FR", "de"], "ar")).toBe("ar");
-      expect(browserLocale([], "en")).toBe("en");
-    });
-
-    it("never takes a language that only starts with the same letters", () => {
-      expect(browserLocale(["arn", "eno"], "ar")).toBe("ar");
-      expect(browserLocale(["arn", "eno"], "en")).toBe("en");
-    });
+  it("opens in Arabic until a Member switches (RP-1174)", () => {
+    expect(defaultLocale).toBe("ar");
   });
 
   it("lays Arabic out right-to-left and English left-to-right", () => {

@@ -17,6 +17,7 @@ describe("accepting an invitation", () => {
         email: company.authorizedPerson.email,
         fullName: { en: "Test Person", ar: "شخص الاختبار" },
         locale: "en",
+        language: "en",
         isAuthorizedPerson: true,
         canCreateProjects: false,
       },

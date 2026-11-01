@@ -5,8 +5,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
-import { browserLanguage } from "@/lib/browser-locale";
 import { tokenFromHash } from "@/lib/link-token";
+import { memberLanguage } from "@/lib/member-language";
 
 export function AcceptInvitationForm() {
   const t = useTranslations("acceptInvitation");
@@ -31,10 +31,10 @@ export function AcceptInvitationForm() {
       const res = await fetch("/api/v1/invitations/accept", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, password, locale: browserLanguage(locale) }),
+        body: JSON.stringify({ token, password }),
       });
       if (res.ok) {
-        router.replace("/");
+        router.replace("/", { locale: await memberLanguage(locale) });
         router.refresh();
         return;
       }

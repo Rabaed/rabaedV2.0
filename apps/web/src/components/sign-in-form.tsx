@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Field, Icon, IconButton, Input } from "@rabaed/ui";
 import { emailInput, FormAlert, LeadingIcon, signInLink, SubmitButton, tallInput } from "@/components/sign-in-fields";
 import { Link, useRouter } from "@/i18n/navigation";
-import { browserLanguage } from "@/lib/browser-locale";
+import { memberLanguage } from "@/lib/member-language";
 import { signInFieldError, type SignInField } from "@/lib/sign-in-page";
 
 export function SignInForm() {
@@ -36,10 +36,11 @@ export function SignInForm() {
       const res = await fetch("/api/v1/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, locale: browserLanguage(locale) }),
+        body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        router.replace("/");
+        // Signed in, the app opens in the Member's language, not the page's or the browser's (RP-1174).
+        router.replace("/", { locale: await memberLanguage(locale) });
         router.refresh();
         return;
       }

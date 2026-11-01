@@ -11,7 +11,7 @@ export const newPassword = z.string().min(PASSWORD_MIN_LENGTH).max(256);
 export const signInRequest = z.object({
   email,
   password: z.string().min(1).max(256),
-  /** The browser's language: at the first sign-in that tells it, the language of the Member's emails. */
+  /** Not read since RP-1174 (the browser's language no longer sets the Member's); accepted so an older page still signs in. */
   locale: z.enum(locales).optional(),
 });
 export type SignInRequest = z.infer<typeof signInRequest>;
@@ -19,7 +19,7 @@ export type SignInRequest = z.infer<typeof signInRequest>;
 export const acceptInvitationRequest = z.object({
   token: z.string().min(1).max(200),
   password: newPassword,
-  /** The browser's language, as at sign-in. */
+  /** Not read since RP-1174, as at sign-in. */
   locale: z.enum(locales).optional(),
 });
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequest>;
@@ -45,7 +45,7 @@ export type PasswordResetRequest = z.infer<typeof passwordResetRequest>;
 export const resetPasswordRequest = z.object({
   token: z.string().min(1).max(200),
   password: newPassword,
-  /** The browser's language, as at sign-in. */
+  /** Not read since RP-1174, as at sign-in. */
   locale: z.enum(locales).optional(),
 });
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequest>;
@@ -56,7 +56,10 @@ export const signedInMember = z.object({
     id: z.uuid(),
     email: z.string(),
     fullName: bilingualText,
+    /** The language they were invited in. */
     locale: z.enum(locales),
+    /** Their language: what they chose with the language switch, else the one they were invited in. The web app opens in it, and their emails are written in it (RP-1174). */
+    language: z.enum(locales),
     isAuthorizedPerson: z.boolean(),
     canCreateProjects: z.boolean(),
   }),
@@ -65,3 +68,7 @@ export const signedInMember = z.object({
   appearance,
 });
 export type SignedInMember = z.infer<typeof signedInMember>;
+
+/** PUT /v1/me/language: the language the signed-in Member switched to (RP-1174). */
+export const setLanguageRequest = z.object({ locale: z.enum(locales) });
+export type SetLanguageRequest = z.infer<typeof setLanguageRequest>;
