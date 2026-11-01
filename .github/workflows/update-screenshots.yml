@@ -63,9 +63,13 @@ on:
     workflows: [CI]
     types: [completed]
 permissions: {}
-# Concurrency (RP-1199). The label and workflow_dispatch share the group
-# update-screenshots-<PR number, or the branch where there is none>; the
-# workflow_run path (new baselines) has its own, update-screenshots-new-<same key>.
+# Concurrency (RP-1199). A label run is keyed by the PR number,
+# update-screenshots-<PR number>; a manual workflow_dispatch has no PR number, so
+# it is keyed by the branch, update-screenshots-<branch>. The two can therefore run
+# at once on one PR. That is safe: both re-render the same files, and a push to a
+# branch that has moved is rejected, not forced. Manual runs are for branches
+# without a PR. The workflow_run path (new baselines) has its own group,
+# update-screenshots-new-<PR number, or the branch where there is none>.
 # cancel-in-progress stays false: the commit job may be mid-push, and cancelling it
 # would leave a baseline commit half done or never made. A second trigger waits
 # instead, and replaces any other waiting run: at most one running and one waiting.
