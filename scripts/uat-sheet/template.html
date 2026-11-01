@@ -5,99 +5,181 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rabaed UAT – __ROUND__</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --muted:#5d6678; --line:#dde1e8; --accent:#c8431f; --navy:#16213a;
-          --pass:#1e7e45; --fail:#b42318; --blocked:#6941c6; --notrun:#5d6678; }
+  :root {
+    --bg:#f4f1ec; --card:#fff; --ink:#1c2230; --muted:#626b7d; --line:#e4e0d8; --soft:#faf8f5;
+    --accent:#c8431f; --accent-ink:#a8330f; --accent-soft:#fdeee8; --navy:#1b2540; --navy-2:#2a3760;
+    --pass:#1e7e45; --pass-soft:#e6f4ec; --fail:#b42318; --fail-soft:#fdecea; --blocked:#6941c6; --blocked-soft:#f0ebfb;
+    --notrun:#5d6678; --notrun-soft:#eef0f4; --shadow:0 1px 2px rgba(28,34,48,.06), 0 4px 14px rgba(28,34,48,.06); --r:14px;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, "Segoe UI", Tahoma, Arial, sans-serif; }
-  header { background:var(--navy); color:#fff; padding:14px 20px; display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; }
-  header h1 { margin:0; font-size:19px; flex:1 1 auto; }
-  header p { margin:0; color:#c9d2e3; font-size:13px; width:100%; }
-  header button { background:transparent; color:#fff; border-color:#3b4a6b; }
-  main { padding:14px 20px 80px; max-width:1400px; margin:0 auto; }
-  .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
-  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
-  label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
-  input, select, textarea, button { font:inherit; }
-  input[type=text], input[type=search], select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; min-width:130px; }
-  button { padding:7px 12px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; color:inherit; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button:hover { filter:brightness(.96); }
-  .counts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .count { border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:13px; }
-  .count b { font-size:16px; margin-inline-end:4px; }
-  .help { font-size:13px; color:var(--muted); margin:6px 0 0; }
-  .case { background:var(--card); border:1px solid var(--line); border-inline-start:4px solid var(--line); border-radius:8px; margin-bottom:10px;
-          display:grid; grid-template-columns:minmax(0,1fr) 360px; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Segoe UI", system-ui, -apple-system, Tahoma, Arial, sans-serif; }
+  a { color:var(--accent-ink); }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 20px; }
+
+  /* Header with the overall progress */
+  header.top { background:linear-gradient(135deg, var(--navy), var(--navy-2)); color:#fff; padding:22px 0 18px; }
+  .brand { display:flex; align-items:center; gap:14px; }
+  .logo { width:42px; height:42px; border-radius:11px; background:var(--accent); display:grid; place-items:center; font-weight:800; font-size:20px; box-shadow:0 4px 12px rgba(200,67,31,.35); }
+  .brand h1 { margin:0; font-size:21px; line-height:1.25; }
+  .brand .sub { color:#c7cfe2; font-size:13px; }
+  .brand .grow { flex:1; }
+  .ghost { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.22); color:#fff; border-radius:10px; padding:7px 14px; cursor:pointer; }
+  .ghost:hover { background:rgba(255,255,255,.16); }
+  .overall { margin-top:16px; display:flex; align-items:center; gap:12px; font-size:13px; color:#dfe5f2; }
+  .bar { flex:1; height:8px; border-radius:99px; background:rgba(255,255,255,.14); overflow:hidden; display:flex; }
+  .bar span { height:100%; }
+  .bar .p { background:#3fbf7f; } .bar .f { background:#ef6b5b; } .bar .b { background:#9b7bea; } .bar .n { background:#aab3c5; }
+
+  main { padding:20px 0 90px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:14px; }
+  .pad { padding:16px 18px; }
+
+  /* Collapsible info cards (guide, people) */
+  details.info > summary { list-style:none; cursor:pointer; padding:14px 18px; display:flex; align-items:center; gap:12px; font-weight:700; font-size:16px; }
+  details.info > summary::-webkit-details-marker { display:none; }
+  details.info > summary .ico { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; background:var(--accent-soft); color:var(--accent-ink); font-size:15px; }
+  details.info > summary .chev { margin-inline-start:auto; color:var(--muted); transition:transform .15s; }
+  details.info[open] > summary .chev { transform:rotate(90deg); }
+  [dir=rtl] .chev { display:inline-block; transform:scaleX(-1); }
+  [dir=rtl] details.info[open] > summary .chev { transform:rotate(90deg); }
+  .info .body { padding:0 18px 16px; }
+  ol.guide { margin:0; padding:0; list-style:none; counter-reset:g; display:grid; gap:8px; }
+  ol.guide li { counter-increment:g; display:grid; grid-template-columns:28px 1fr; gap:10px; align-items:start; padding:9px 12px; background:var(--soft); border-radius:10px; }
+  ol.guide li::before { content:counter(g); width:24px; height:24px; border-radius:50%; background:var(--navy); color:#fff; font-size:12px; font-weight:700; display:grid; place-items:center; margin-top:1px; }
+  .help { font-size:13px; color:var(--muted); margin:0 0 10px; }
+  .tableWrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  table.people { border-collapse:collapse; width:100%; font-size:13px; }
+  table.people th, table.people td { padding:8px 10px; text-align:start; vertical-align:top; border-bottom:1px solid var(--line); }
+  table.people th { background:var(--soft); color:var(--muted); font-weight:600; font-size:12px; white-space:nowrap; }
+  table.people tr:last-child td { border-bottom:0; }
+  table.people tr.hl { background:#fff4ef; }
+  .email { font-family:ui-monospace, Consolas, monospace; font-size:12px; white-space:nowrap; }
+  .mini { padding:2px 8px; border:1px solid var(--line); border-radius:7px; background:#fff; font-size:12px; cursor:pointer; }
+
+  /* Toolbar */
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  .field { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); font-weight:600; }
+  .field input, .field select { padding:8px 11px; border:1px solid var(--line); border-radius:10px; background:#fff; min-width:150px; font-weight:400; color:var(--ink); }
+  .field input:focus, .field select:focus, textarea:focus { outline:2px solid #f3b6a3; outline-offset:0; border-color:var(--accent); }
+  .btn { padding:9px 15px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:600; font-size:14px; }
+  .btn:hover { background:var(--soft); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(200,67,31,.25); }
+  .btn.primary:hover { background:var(--accent-ink); }
+  .spacer { flex:1; }
+  #msg { font-size:13px; color:var(--pass); font-weight:600; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:99px; font-size:13px; background:var(--notrun-soft); }
+  .chip b { font-size:15px; }
+  .chip.pass { background:var(--pass-soft); color:var(--pass); } .chip.fail { background:var(--fail-soft); color:var(--fail); }
+  .chip.blocked { background:var(--blocked-soft); color:var(--blocked); } .chip.owner { background:var(--accent-soft); color:var(--accent-ink); }
+
+  /* Sections */
+  details.section { background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:12px; overflow:hidden; }
+  details.section > summary { list-style:none; cursor:pointer; padding:14px 18px; display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; }
+  details.section > summary::-webkit-details-marker { display:none; }
+  details.section[open] > summary { border-bottom:1px solid var(--line); background:var(--soft); }
+  .num { width:38px; height:38px; border-radius:11px; background:var(--navy); color:#fff; display:grid; place-items:center; font-weight:800; font-size:16px; }
+  .section.owner .num { background:var(--accent); font-size:13px; }
+  .section.done .num { background:var(--pass); }
+  .stitle { font-weight:700; font-size:16px; }
+  .smeta { font-size:12.5px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:2px; }
+  .sbar { height:6px; border-radius:99px; background:#ece8e1; overflow:hidden; display:flex; margin-top:7px; max-width:420px; }
+  .sbar span { height:100%; } .sbar .p { background:var(--pass); } .sbar .f { background:var(--fail); } .sbar .b { background:var(--blocked); } .sbar .n { background:var(--notrun); }
+  .sright { text-align:end; font-size:13px; color:var(--muted); white-space:nowrap; }
+  .sright b { font-size:18px; color:var(--ink); }
+  .scases { padding:14px; display:grid; gap:12px; background:#fbfaf8; }
+  .snote { margin:0 4px; font-size:13px; color:var(--accent-ink); background:var(--accent-soft); padding:9px 12px; border-radius:10px; }
+
+  /* A case */
+  .case { background:#fff; border:1px solid var(--line); border-inline-start:5px solid #d9d4cb; border-radius:12px; display:grid; grid-template-columns:minmax(0,1fr) 360px; overflow:hidden; }
   .case.st-pass { border-inline-start-color:var(--pass); } .case.st-fail { border-inline-start-color:var(--fail); }
-  .case.st-blocked { border-inline-start-color:var(--blocked); } .case.active { box-shadow:0 0 0 2px #f1b9a8; }
-  .case .body { padding:10px 14px; min-width:0; }
-  .case .rec { padding:10px 14px; border-inline-start:1px solid var(--line); background:#fafbfc; }
-  .case h3 { margin:0 0 4px; font-size:15px; }
-  .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 12px; margin-bottom:6px; }
-  .meta code { color:var(--ink); }
-  ol.steps { margin:4px 0 6px; padding-inline-start:20px; }
-  .exp { margin:4px 0; }
-  .note { margin:6px 0 0; padding:5px 8px; font-size:12px; color:var(--muted); background:#f3f4f7; border-inline-start:3px solid var(--line); border-radius:4px; }
-  .badge { border-radius:10px; padding:0 8px; font-weight:600; background:#eef0f4; color:var(--ink); }
-  .badge.owner { background:#fdeae4; color:#a8330f; } /* 5.7:1 on the pink; --accent is only 4.2:1 */
-  .lbl { font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
-  .status { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
-  .status button { padding:4px 10px; font-size:13px; }
+  .case.st-blocked { border-inline-start-color:var(--blocked); } .case.st-notrun { border-inline-start-color:var(--notrun); }
+  .case.active { box-shadow:0 0 0 3px #f6c7b8; }
+  .case .body { padding:14px 16px; min-width:0; }
+  .case .rec { padding:14px 16px; border-inline-start:1px solid var(--line); background:var(--soft); }
+  .case h3 { margin:0 0 6px; font-size:15.5px; line-height:1.4; }
+  .cid { display:inline-block; font-family:ui-monospace, Consolas, monospace; font-size:12px; background:var(--navy); color:#fff; border-radius:6px; padding:1px 7px; margin-inline-end:6px; vertical-align:1px; }
+  .meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; font-size:12px; }
+  .tag { padding:2px 8px; border-radius:6px; background:#eef0f4; color:#565f71; }
+  .tag.need { background:#fdeee8; color:#a8330f; font-weight:600; } /* 6.2:1 */
+  .tag a { color:inherit; }
+  .lbl { font-weight:700; font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:8px 0 3px; }
+  .who { font-size:14px; }
+  ol.steps { margin:2px 0 4px; padding-inline-start:22px; }
+  ol.steps li { margin:3px 0; }
+  .exp { margin:2px 0 0; padding:9px 12px; background:var(--pass-soft); border-radius:9px; font-size:14px; }
+  .note { margin:8px 0 0; padding:8px 11px; font-size:12.5px; color:#565f71; background:#faf8f5; border-inline-start:3px solid var(--line); border-radius:6px; }
+  a.person { color:inherit; text-decoration:underline dotted; text-underline-offset:3px; }
+  .status { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:10px; }
+  .status button { padding:7px 4px; font-size:13px; font-weight:600; border:1px solid var(--line); border-radius:9px; background:#fff; cursor:pointer; }
+  .status button:hover { background:var(--soft); }
   .status button[aria-pressed=true].pass { background:var(--pass); color:#fff; border-color:var(--pass); }
   .status button[aria-pressed=true].fail { background:var(--fail); color:#fff; border-color:var(--fail); }
   .status button[aria-pressed=true].blocked { background:var(--blocked); color:#fff; border-color:var(--blocked); }
   .status button[aria-pressed=true].notrun { background:var(--notrun); color:#fff; border-color:var(--notrun); }
-  .rec textarea { width:100%; min-height:80px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
-  .drop { margin-top:8px; border:1px dashed #b8c0cc; border-radius:6px; padding:8px; font-size:12px; color:var(--muted); text-align:center; outline:none; }
-  .drop:focus, .drop.over { border-color:var(--accent); background:#fff6f3; }
-  .shots { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .rec label { font-size:12px; color:var(--muted); font-weight:600; display:block; }
+  .rec textarea { width:100%; min-height:84px; margin-top:4px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; resize:vertical; background:#fff; font-size:14px; }
+  .drop { margin-top:9px; border:1.5px dashed #c9c2b6; border-radius:10px; padding:10px; font-size:12.5px; color:var(--muted); text-align:center; outline:none; cursor:pointer; background:#fff; }
+  .drop:focus, .drop.over { border-color:var(--accent); background:#fff6f2; color:var(--accent-ink); }
+  .shots { display:flex; flex-wrap:wrap; gap:8px; margin-top:9px; }
   .shot { position:relative; }
-  .shot img { height:72px; max-width:120px; object-fit:cover; border:1px solid var(--line); border-radius:4px; display:block; cursor:zoom-in; }
-  .shot button { position:absolute; top:-6px; inset-inline-end:-6px; padding:0 6px; border-radius:10px; font-size:12px; line-height:18px; background:#fff; }
-  .saved { font-size:11px; color:var(--muted); margin-top:6px; min-height:14px; }
-  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; z-index:9; }
-  #lightbox img { max-width:94vw; max-height:88vh; background:#fff; }
-  #lightbox p { position:absolute; bottom:10px; color:#fff; font-size:13px; }
-  .empty { padding:30px; text-align:center; color:var(--muted); }
-  .guide summary { cursor:pointer; font-weight:700; font-size:15px; }
-  .guide ol { margin:8px 0 2px; padding-inline-start:22px; }
-  .guide li { margin:4px 0; }
-  .case.by-owner { opacity:.82; }
-  @media (max-width: 900px) { .case { grid-template-columns:1fr; } .case .rec { border-inline-start:0; border-top:1px solid var(--line); } }
+  .shot img { height:68px; max-width:118px; object-fit:cover; border:1px solid var(--line); border-radius:8px; display:block; cursor:zoom-in; }
+  .shot button { position:absolute; top:-7px; inset-inline-end:-7px; width:22px; height:22px; border-radius:50%; border:1px solid var(--line); background:#fff; font-size:13px; line-height:18px; cursor:pointer; }
+  .saved { font-size:11.5px; color:var(--muted); margin-top:8px; min-height:15px; }
+  .empty { padding:28px; text-align:center; color:var(--muted); }
+  #lightbox { position:fixed; inset:0; background:rgba(15,19,30,.86); display:none; align-items:center; justify-content:center; z-index:9; cursor:zoom-out; }
+  #lightbox img { max-width:94vw; max-height:86vh; background:#fff; border-radius:8px; }
+  #lightbox p { position:absolute; bottom:14px; color:#fff; font-size:13px; }
+  @media (max-width: 920px) {
+    .case { grid-template-columns:1fr; } .case .rec { border-inline-start:0; border-top:1px solid var(--line); }
+    details.section > summary { grid-template-columns:auto 1fr; } .sright { grid-column:1 / -1; text-align:start; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1><span data-t="title"></span> – __ROUND__</h1>
-  <button id="lang" type="button">العربية</button>
-  <p><span data-t="intro"></span> <span id="built"></span></p>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div class="grow">
+        <h1><span data-t="title"></span></h1>
+        <div class="sub">__ROUND__ · <span data-t="intro"></span> <span id="built"></span></div>
+      </div>
+      <button class="ghost" id="lang" type="button">العربية</button>
+    </div>
+    <div class="overall"><span id="overallText"></span><div class="bar" id="overallBar"></div></div>
+  </div>
 </header>
-<main>
-  <details class="panel guide" id="guide" open>
-    <summary data-t="startTitle"></summary>
-    <ol id="guideList"></ol>
+<main class="wrap">
+  <details class="card info" id="guide" open>
+    <summary><span class="ico">?</span><span data-t="startTitle"></span><span class="chev">›</span></summary>
+    <div class="body"><ol class="guide" id="guideList"></ol></div>
   </details>
-  <section class="panel">
-    <div class="row">
-      <label><span data-t="tester"></span><input type="text" id="tester" dir="auto"></label>
-      <button class="primary" id="export" type="button" data-t="export"></button>
-      <button id="saveJson" type="button" data-t="saveJson"></button>
-      <button id="importBtn" type="button" data-t="importJson"></button>
+  <details class="card info" id="people">
+    <summary><span class="ico">👥</span><span data-t="peopleTitle"></span><span class="chev">›</span></summary>
+    <div class="body"><p class="help" data-t="peopleNote"></p><div class="tableWrap"><table class="people" id="peopleTable"></table></div></div>
+  </details>
+  <section class="card pad">
+    <div class="toolbar">
+      <label class="field"><span data-t="tester"></span><input type="text" id="tester" dir="auto"></label>
+      <button class="btn primary" id="export" type="button" data-t="export"></button>
+      <button class="btn" id="saveJson" type="button" data-t="saveJson"></button>
+      <button class="btn" id="importBtn" type="button" data-t="importJson"></button>
+      <button class="btn" id="mdBtn" type="button" data-t="mdBtn"></button>
       <input type="file" id="importFile" accept=".json" hidden>
-      <span id="msg" class="help" role="status"></span>
+      <span class="spacer"></span>
+      <span id="msg" role="status"></span>
     </div>
-  </section>
-  <section class="panel">
-    <div class="row">
-      <label><span data-t="part"></span><select id="fPart"></select></label>
-      <label><span data-t="round"></span><select id="fRound"></select></label>
-      <label><span data-t="runs"></span><select id="fWho"></select></label>
-      <label><span data-t="status"></span><select id="fStatus"></select></label>
-      <label style="flex:1 1 220px"><span data-t="search"></span><input type="search" id="fText" dir="auto" style="width:100%"></label>
+    <div class="toolbar" style="margin-top:12px">
+      <label class="field"><span data-t="status"></span><select id="fStatus"></select></label>
+      <label class="field"><span data-t="round"></span><select id="fRound"></select></label>
+      <label class="field" style="flex:1 1 240px"><span data-t="search"></span><input type="search" id="fText" dir="auto" style="width:100%"></label>
     </div>
-    <div class="counts" id="counts"></div>
+    <div class="chips" id="counts"></div>
   </section>
-  <div id="list"></div>
+  <div id="sections"></div>
 </main>
 <div id="lightbox"><img alt=""><p></p></div>
 <input type="file" id="pick" accept="image/*" multiple hidden>
@@ -108,49 +190,55 @@
 const DATA = /*__DATA__*/null;
 const STATUSES = ["pass", "fail", "blocked", "notrun"];
 const T = {
-  en: { title: "Rabaed UAT test sheet", intro: "Built on", tester: "Your name", export: "Export to Excel", saveJson: "Save work (.json)",
-        importJson: "Load work (.json)", part: "Part", round: "Round", status: "Status", search: "Search", all: "All",
+  en: { title: "Rabaed UAT test sheet", intro: "built", tester: "Your name", export: "Export to Excel", saveJson: "Save work (.json)",
+        importJson: "Load work (.json)", mdBtn: "Download for an AI (.md)", round: "Round", status: "Status", search: "Search the cases", all: "All",
         pass: "Pass", fail: "Fail", blocked: "Blocked", notrun: "Not run", unset: "Not set", who: "Sign in as", steps: "Steps", expected: "Expected result",
-        open: "Open on UAT", comment: "Comment", drop: "Paste a screenshot here (Ctrl+V), drop images, or click to pick files",
-        remove: "Remove", saved: "Saved", notSaved: "Could not save in this browser: use Save work (.json)", none: "No Test Case matches the filters.",
-        exported: "Excel file downloaded.", savedJson: "Work saved as .json.", loaded: "Work loaded:", cases: "cases",
-        badJson: "That file is not a work file from this sheet.",
-        needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run",
+        open: "Open on UAT", comment: "Comment", drop: "Paste a screenshot (Ctrl+V), drop images here, or click to pick files",
+        remove: "Remove", saved: "Saved", notSaved: "Could not save in this browser: use Save work (.json)", none: "No case in this section matches the filters.",
+        exported: "Excel file downloaded.", savedJson: "Work saved as .json.", loaded: "Work loaded:", cases: "cases", mdDone: "Markdown downloaded.",
+        badJson: "That file is not a work file from this sheet.", done: "done", of: "of", section: "Section", yourCases: "your cases", ownerSection: "UAT owner",
+        overall: "Your progress", needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run", needsMail: "Reads an email",
         mailNote: "On the UAT the email goes to the real mailbox of the address, not to a catcher: you can read it only if the address is yours; otherwise ask the UAT owner.",
-        howto: "Pick a status for each Test Case, write what you saw, and add screenshots (paste with Ctrl+V into the case you are on, drag them in, or pick files). Everything is kept in this browser as you go, so closing the tab loses nothing. When you finish, press Export to Excel and send the .xlsx back. To move to another computer, Save work (.json) there and Load it here. Demo data only: never type real names or documents.",
-        startTitle: "How to start", runs: "Who runs it", runsTester: "You", runsOwner: "Owner runs", yourCases: "Your cases",
-        ownerNote: "The UAT owner runs this case (it needs their machine, Rabaed Admin or a mailbox you can't read). Skip it unless they ask you to; leave its status Not set.",
+        ownerNote: "The UAT owner runs the cases in this section: they need the owner's machine, Rabaed Admin or a mailbox you can't read. Skip them unless the owner asks you to.",
+        peopleTitle: "Who's who: the demo people you can sign in as",
+        peopleNote: "Every case names who to sign in as under Sign in as: click a name to find them here. The owner gives you each sign-in; this sheet holds no passwords. Use one private window per person.",
+        pName: "Name", pEmail: "Sign-in email", pCompany: "Company", pRole: "On the Project", pPosition: "Position", pUse: "Used for", copy: "Copy", copied: "Copied",
+        startTitle: "How to start",
         guide: [
           "Open the UAT: {url} (English) or {urlAr} (Arabic). Rabaed works in both; switch with /en and /ar in the address.",
-          "Sign in with the account the owner prepared for you. When a case says Sign in as someone else (Hafiz, Ali, Mohammed…), the owner gives you that demo person's sign-in. Use one private window per person, so each sees only their own Company's work.",
-          "Work down the list in order: it follows the test plan. The list starts on Your cases; the Who runs it filter also shows the cases the UAT owner runs.",
+          "Sign in with the account the owner prepared for you. When a case says Sign in as someone else (Hafiz, Ali, Mohammed…), see Who's who below: the owner gives you that demo person's sign-in. Use one private window per person, so each sees only their own Company's work.",
+          "Work section by section: open section 1, run its cases in order, then section 2, and so on. Each section shows how many of its cases you have done.",
           "For each case: read Steps, do them, compare with Expected result, then press Pass, Fail, Blocked (you could not test it) or Not run.",
           "On Fail or Blocked, write what you saw in Comment (English or Arabic) and add a screenshot: click into the case and press Ctrl+V, drag the image in, or click the box to pick a file. Add as many as you need.",
           "Your work saves in this browser as you go (Saved hh:mm under each case). Use the same browser each time. To change computer, Save work (.json) and Load it on the other one.",
           "When you finish, or at the end of each day, write your name at the top, press Export to Excel and send the .xlsx to the owner. It holds every status, comment and screenshot.",
-          "Demo data only: never type real names, phone numbers or documents. If something looks broken or the data looks wrong, mark Blocked, say so in Comment and tell the owner.",
+          "Working with an AI? Download for an AI (.md) gives the same cases as a Markdown file, and the JSON format to hand back; Load work (.json) reads that JSON into this sheet.",
+          "Demo data only: never type real names, phone numbers or documents. The last section is for the UAT owner: skip it unless they ask you to.",
         ] },
   ar: { title: "ورقة اختبار قبول رابض", intro: "أُنشئت في", tester: "اسمك", export: "تصدير إلى Excel", saveJson: "حفظ العمل (.json)",
-        importJson: "تحميل العمل (.json)", part: "الجزء", round: "الجولة", status: "الحالة", search: "بحث", all: "الكل",
+        importJson: "تحميل العمل (.json)", mdBtn: "تنزيل للذكاء الاصطناعي (.md)", round: "الجولة", status: "الحالة", search: "ابحث في الحالات", all: "الكل",
         pass: "ناجح", fail: "فاشل", blocked: "متعذّر", notrun: "لم يُنفَّذ", unset: "لم تُحدَّد", who: "سجّل الدخول باسم", steps: "الخطوات", expected: "النتيجة المتوقعة",
-        open: "افتح على بيئة الاختبار", comment: "ملاحظة", drop: "الصق لقطة شاشة هنا (Ctrl+V)، أو اسحب الصور، أو انقر لاختيار ملفات",
-        remove: "إزالة", saved: "حُفظ", notSaved: "تعذّر الحفظ في هذا المتصفح: استخدم حفظ العمل (.json)", none: "لا توجد حالة اختبار تطابق التصفية.",
-        exported: "نُزّل ملف Excel.", savedJson: "حُفظ العمل بصيغة .json.", loaded: "حُمّل العمل:", cases: "حالة",
-        badJson: "هذا الملف ليس ملف عمل من هذه الورقة.",
-        needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة",
+        open: "افتح على بيئة الاختبار", comment: "ملاحظة", drop: "الصق لقطة شاشة (Ctrl+V)، أو أفلت الصور هنا، أو انقر لاختيار ملفات",
+        remove: "إزالة", saved: "حُفظ", notSaved: "تعذّر الحفظ في هذا المتصفح: استخدم حفظ العمل (.json)", none: "لا توجد حالة في هذا القسم تطابق التصفية.",
+        exported: "نُزّل ملف Excel.", savedJson: "حُفظ العمل بصيغة .json.", loaded: "حُمّل العمل:", cases: "حالة", mdDone: "نُزّل ملف Markdown.",
+        badJson: "هذا الملف ليس ملف عمل من هذه الورقة.", done: "منجزة", of: "من", section: "القسم", yourCases: "حالاتك", ownerSection: "مسؤول الاختبار",
+        overall: "تقدّمك", needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة", needsMail: "يقرأ بريدًا",
         mailNote: "في بيئة الاختبار يصل البريد إلى صندوق البريد الحقيقي لصاحب العنوان لا إلى أداة التقاط: لا تقرأه إلا إذا كان العنوان لك، وإلا فاطلب ذلك من مسؤول الاختبار.",
-        howto: "اختر حالة لكل حالة اختبار، واكتب ما رأيت، وأضف لقطات الشاشة (الصقها بـ Ctrl+V في الحالة التي تعمل عليها، أو اسحبها، أو اختر ملفات). يُحفظ كل شيء في هذا المتصفح أولًا بأول، فإغلاق التبويب لا يُضيّع شيئًا. عند الانتهاء اضغط تصدير إلى Excel وأرسل ملف .xlsx. للانتقال إلى جهاز آخر احفظ العمل (.json) هناك وحمّله هنا. بيانات تجريبية فقط: لا تكتب أسماء أو مستندات حقيقية.",
-        startTitle: "كيف تبدأ", runs: "من يشغّلها", runsTester: "أنت", runsOwner: "يشغّلها مسؤول الاختبار", yourCases: "حالاتك",
-        ownerNote: "يشغّل مسؤول الاختبار هذه الحالة (تحتاج إلى جهازه أو إلى Rabaed Admin أو إلى بريد لا تستطيع قراءته). تخطّها إلا إذا طلب منك ذلك، واترك حالتها لم تُحدَّد.",
+        ownerNote: "يشغّل مسؤول الاختبار حالات هذا القسم: تحتاج إلى جهازه أو إلى Rabaed Admin أو إلى بريد لا تستطيع قراءته. تخطّها إلا إذا طلب منك ذلك.",
+        peopleTitle: "من هو من: الأشخاص التجريبيون الذين يمكنك الدخول باسمهم",
+        peopleNote: "تذكر كل حالة من تسجّل الدخول باسمه تحت سجّل الدخول باسم: انقر الاسم لتجده هنا. يعطيك المسؤول بيانات الدخول لكل شخص؛ لا تحمل هذه الورقة كلمات مرور. استخدم نافذة خاصة لكل شخص.",
+        pName: "الاسم", pEmail: "بريد الدخول", pCompany: "الشركة", pRole: "في المشروع", pPosition: "المنصب", pUse: "يُستخدم في", copy: "نسخ", copied: "نُسخ",
+        startTitle: "كيف تبدأ",
         guide: [
           "افتح بيئة الاختبار: {urlAr} (العربية) أو {url} (الإنجليزية). يعمل رابض باللغتين؛ بدّل بينهما بـ /ar و/en في العنوان.",
-          "سجّل الدخول بالحساب الذي أعدّه لك المسؤول. وإذا قالت الحالة سجّل الدخول باسم شخص آخر (حافظ، علي، محمد…) فسيعطيك المسؤول بيانات دخول ذلك الشخص التجريبي. استخدم نافذة خاصة لكل شخص، حتى لا يرى كل منهم إلا عمل شركته.",
-          "اعمل على القائمة بالترتيب: فهي تتبع خطة الاختبار. تبدأ القائمة بحالاتك، ويُظهر مرشّح من يشغّلها أيضًا الحالات التي يشغّلها مسؤول الاختبار.",
+          "سجّل الدخول بالحساب الذي أعدّه لك المسؤول. وإذا قالت الحالة سجّل الدخول باسم شخص آخر (حافظ، علي، محمد…) فانظر من هو من أدناه: يعطيك المسؤول بيانات دخول ذلك الشخص التجريبي. استخدم نافذة خاصة لكل شخص، حتى لا يرى كل منهم إلا عمل شركته.",
+          "اعمل قسمًا قسمًا: افتح القسم 1 ونفّذ حالاته بالترتيب، ثم القسم 2، وهكذا. يُظهر كل قسم عدد ما أنجزته من حالاته.",
           "في كل حالة: اقرأ الخطوات ونفّذها، وقارن بالنتيجة المتوقعة، ثم اضغط ناجح أو فاشل أو متعذّر (لم تستطع اختبارها) أو لم يُنفَّذ.",
           "عند فاشل أو متعذّر اكتب ما رأيت في الملاحظة (بالعربية أو الإنجليزية) وأضف لقطة شاشة: انقر داخل الحالة واضغط Ctrl+V، أو اسحب الصورة، أو انقر المربع لاختيار ملف. أضف ما تحتاج من لقطات.",
           "يُحفظ عملك في هذا المتصفح أولًا بأول (حُفظ hh:mm تحت كل حالة). استخدم المتصفح نفسه كل مرة. للانتقال إلى جهاز آخر احفظ العمل (.json) وحمّله هناك.",
           "عند الانتهاء، أو في نهاية كل يوم، اكتب اسمك في الأعلى واضغط تصدير إلى Excel وأرسل ملف .xlsx إلى المسؤول. فيه كل حالة وملاحظة ولقطة شاشة.",
-          "بيانات تجريبية فقط: لا تكتب أسماء أو أرقام هواتف أو مستندات حقيقية. إذا بدا شيء معطّلًا أو البيانات خاطئة فاختر متعذّر واذكر ذلك في الملاحظة وأخبر المسؤول.",
+          "تعمل مع ذكاء اصطناعي؟ يعطيك تنزيل للذكاء الاصطناعي (.md) الحالات نفسها في ملف Markdown مع صيغة JSON المطلوبة للنتائج؛ ويقرأ تحميل العمل (.json) ذلك الملف في هذه الورقة.",
+          "بيانات تجريبية فقط: لا تكتب أسماء أو أرقام هواتف أو مستندات حقيقية. القسم الأخير لمسؤول الاختبار: تخطّه إلا إذا طلب منك ذلك.",
         ] },
 };
 let lang = "en";
@@ -160,6 +248,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const now = () => new Date().toLocaleString("en-GB", { hour12: false });
 const cases = DATA.cases;
 const byKey = new Map(cases.map((c) => [c.key, c]));
+const PEOPLE = DATA.people ?? [];
+const PARTS = DATA.parts ?? {};
 
 // ---- Storage: IndexedDB, as screenshots are large. One database per round. ----
 const DB_NAME = "rabaed-uat-sheet:" + DATA.round;
@@ -190,7 +280,7 @@ async function saveEntry(key, e) {
   const card = document.querySelector(`.case[data-key="${key}"] .saved`);
   try { if (!db) throw new Error("no db"); await tx("entries", "readwrite", (s) => s.put(e, key)); if (card) card.textContent = t("saved") + " " + e.at; }
   catch { if (card) card.textContent = t("notSaved"); }
-  counts();
+  progress();
 }
 
 // ---- Images: PNG or JPEG kept as is; anything else is redrawn as PNG. ----
@@ -237,62 +327,111 @@ async function removeShotNow(key, id) {
   await saveEntry(key, e); drawShots(key);
 }
 
-// ---- Page ----
-function applyLang() {
-  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
-  $("lang").textContent = lang === "ar" ? "English" : "العربية";
-  fillFilters(); drawGuide(); render();
+// ---- Sections (RP-1204): the tester's cases by Part, numbered; the owner's cases last ----
+const isOwner = (c) => c.needs.includes("owner");
+const SECTIONS = (() => {
+  const list = [];
+  for (const c of cases.filter((x) => !isOwner(x))) {
+    let s = list.find((x) => x.part === c.part);
+    if (!s) { s = { id: "s-" + c.part, n: list.length + 1, part: c.part, name: PARTS[c.part] ?? { en: c.partName, ar: c.partName }, cases: [] }; list.push(s); }
+    s.cases.push(c);
+  }
+  const owner = cases.filter(isOwner);
+  if (owner.length) list.push({ id: "s-owner", n: 0, part: "OWNER", name: { en: "Cases the UAT owner runs", ar: "حالات يشغّلها مسؤول الاختبار" }, cases: owner });
+  return list;
+})();
+const openSections = new Set();
+const statusOf = (c) => entry(c.key).status || "unset";
+function matches(c) {
+  const r = $("fRound").value, s = $("fStatus").value, q = $("fText").value.trim().toLowerCase();
+  return (!r || c.round === r) && (!s || statusOf(c) === s) &&
+    (!q || [c.key, c.id, c.title, c.who, c.expected, ...c.steps, entry(c.key).comment].join(" ").toLowerCase().includes(q));
 }
-function fillFilters() {
-  const opt = (sel, values, label) => {
-    const cur = sel.value;
-    sel.innerHTML = `<option value="">${esc(t("all"))}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(label ? label(v) : v)}</option>`).join("");
-    sel.value = cur;
-  };
-  opt($("fPart"), [...new Set(cases.map((c) => c.part))].sort());
-  opt($("fRound"), [...new Set(cases.map((c) => c.round).filter(Boolean))].sort());
-  opt($("fStatus"), [...STATUSES, "unset"], (s) => t(s));
-  // Who runs it: the tester's cases first (the default), or the ones the UAT owner runs (needs: owner, RP-1199).
-  const who = $("fWho"), cur = who.options.length ? who.value : "tester";
-  who.innerHTML = [["tester", t("runsTester")], ["owner", t("runsOwner")], ["", t("all")]].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
-  who.value = cur;
+const filtering = () => Boolean($("fRound").value || $("fStatus").value || $("fText").value.trim());
+const barHtml = (list, cls) => {
+  const n = (s) => list.filter((c) => statusOf(c) === s).length, total = list.length || 1;
+  return `<div class="${cls}">${[["p", "pass"], ["f", "fail"], ["b", "blocked"], ["n", "notrun"]].map(([k, s]) => `<span class="${k}" style="width:${(100 * n(s)) / total}%"></span>`).join("")}</div>`;
+};
+function sectionHead(s) {
+  const done = s.cases.filter((c) => statusOf(c) !== "unset").length;
+  const n = (st) => s.cases.filter((c) => statusOf(c) === st).length;
+  const shown = filtering() ? s.cases.filter(matches).length : s.cases.length;
+  const L = s.name[lang] ?? s.name.en;
+  return `<div class="num">${s.n ? s.n : "👤"}</div>
+    <div><div class="stitle">${s.n ? `${esc(t("section"))} ${s.n} · ` : ""}${esc(L)}</div>
+      <div class="smeta"><span>${s.part === "OWNER" ? esc(t("ownerSection")) : esc(s.part)}</span><span>${s.cases.length} ${esc(t("cases"))}</span>
+        ${filtering() ? `<span><b>${shown}</b> ${esc(t("search").toLowerCase())}</span>` : ""}
+        ${["pass", "fail", "blocked"].filter((st) => n(st)).map((st) => `<span style="color:var(--${st})">${n(st)} ${esc(t(st))}</span>`).join("")}</div>
+      ${barHtml(s.cases, "sbar")}</div>
+    <div class="sright"><b>${done}</b> ${esc(t("of"))} ${s.cases.length} ${esc(t("done"))} <span class="chev">›</span></div>`;
 }
-const runsBy = (c) => (c.needs.includes("owner") ? "owner" : "tester");
+function drawSections() {
+  $("sections").innerHTML = SECTIONS.map((s) => {
+    const open = openSections.has(s.id) || (filtering() && s.cases.some(matches));
+    const done = s.cases.every((c) => statusOf(c) !== "unset");
+    return `<details class="section${s.n ? "" : " owner"}${done ? " done" : ""}" id="${s.id}"${open ? " open" : ""}><summary>${sectionHead(s)}</summary><div class="scases"></div></details>`;
+  }).join("");
+  for (const s of SECTIONS) if ($(s.id).open) fillSection(s);
+}
+function fillSection(s) {
+  const box = $(s.id).querySelector(".scases");
+  const list = filtering() ? s.cases.filter(matches) : s.cases;
+  box.innerHTML = (s.n ? "" : `<p class="snote">${esc(t("ownerNote"))}</p>`) + (list.length ? list.map(caseHtml).join("") : `<div class="empty">${esc(t("none"))}</div>`);
+  list.forEach((c) => drawShots(c.key));
+}
+function progress() {
+  // Header bar and chips: the tester's part; each open section's header too.
+  const mine = cases.filter((c) => !isOwner(c));
+  const n = (s) => mine.filter((c) => statusOf(c) === s).length;
+  const done = mine.length - n("unset");
+  $("overallText").textContent = `${t("overall")}: ${done} ${t("of")} ${mine.length}`;
+  $("overallBar").outerHTML = barHtml(mine, "bar").replace('class="bar"', 'class="bar" id="overallBar"');
+  $("counts").innerHTML = [...STATUSES, "unset"].map((s) => `<span class="chip ${s}"><b>${n(s)}</b>${esc(t(s))}</span>`).join("") +
+    `<span class="chip owner"><b>${cases.length - mine.length}</b>${esc(t("ownerSection"))}</span>`;
+  for (const s of SECTIONS) {
+    const el = $(s.id); if (!el) continue;
+    el.querySelector("summary").innerHTML = sectionHead(s);
+    el.classList.toggle("done", s.cases.every((c) => statusOf(c) !== "unset"));
+  }
+}
+
+// ---- Who's who (RP-1204): the demo people, emails only ----
+function drawPeople() {
+  const L = (b) => b[lang] ?? b.en;
+  $("peopleTable").innerHTML = `<thead><tr>${["pName", "pEmail", "pCompany", "pRole", "pPosition", "pUse"].map((k) => `<th>${esc(t(k))}</th>`).join("")}</tr></thead><tbody>` +
+    PEOPLE.map((p) => `<tr id="p-${esc(p.key)}"><td><b>${esc(p.name)}</b></td>
+      <td><span class="email" dir="ltr">${esc(p.email)}</span> <button class="mini" type="button" data-copy="${esc(p.email)}">${esc(t("copy"))}</button></td>
+      <td>${esc(L(p.company))}</td><td>${esc(L(p.role))}</td><td>${esc(L(p.position))}</td><td>${esc(L(p.usedFor))}</td></tr>`).join("") + "</tbody>";
+}
+// A case's "Sign in as" line with each demo person's first name linking to their row (whole words, Latin names).
+const linkPeople = (who) => {
+  let html = esc(who);
+  for (const p of PEOPLE) {
+    if (p.key === "engineer") { html = html.replace(/\bRabaed Engineer\b/, `<a class="person" href="#p-engineer">Rabaed Engineer</a>`); continue; }
+    const first = p.name.split(" ")[0];
+    html = html.replace(new RegExp(`\\b${first}\\b(?![^<]*</a>)`), `<a class="person" href="#p-${p.key}">${first}</a>`);
+  }
+  return html;
+};
 function drawGuide() {
   const url = DATA.uatUrl + "/en", urlAr = DATA.uatUrl + "/ar";
   const link = (u) => `<a href="${esc(u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}</a>`;
-  $("guideList").innerHTML = t("guide").map((line) => `<li>${esc(line).replace("{url}", link(url)).replace("{urlAr}", link(urlAr))}</li>`).join("");
+  $("guideList").innerHTML = t("guide").map((line) => `<li><span>${esc(line).replace("{url}", link(url)).replace("{urlAr}", link(urlAr))}</span></li>`).join("");
 }
-function visible() {
-  const p = $("fPart").value, r = $("fRound").value, s = $("fStatus").value, w = $("fWho").value, q = $("fText").value.trim().toLowerCase();
-  return cases.filter((c) => {
-    const st = entry(c.key).status || "unset";
-    return (!p || c.part === p) && (!r || c.round === r) && (!s || st === s) && (!w || runsBy(c) === w) &&
-      (!q || [c.key, c.id, c.title, c.who, c.expected, ...c.steps, entry(c.key).comment].join(" ").toLowerCase().includes(q));
-  });
-}
-function counts() {
-  // The counts are the tester's part: the cases the UAT owner runs are counted apart.
-  const mine = cases.filter((c) => runsBy(c) === "tester");
-  const n = (s) => mine.filter((c) => (entry(c.key).status || "unset") === s).length;
-  $("counts").innerHTML = `<span class="count"><b>${mine.length}</b>${esc(t("yourCases"))}</span>` +
-    [...STATUSES, "unset"].map((s) => `<span class="count"><b>${n(s)}</b>${esc(t(s))}</span>`).join("") +
-    `<span class="count"><b>${cases.length - mine.length}</b>${esc(t("runsOwner"))}</span>`;
-}
+
+// ---- A case ----
 function caseHtml(c) {
   const e = entry(c.key);
-  return `<article class="case st-${e.status || "unset"}${runsBy(c) === "owner" ? " by-owner" : ""}" data-key="${esc(c.key)}">
+  const needTags = [["owner", "needsOwner"], ["setup", "needsSetup"], ["job", "needsJob"], ["mail", "needsMail"]].filter(([n]) => c.needs.includes(n)).map(([, k]) => `<span class="tag need">${esc(t(k))}</span>`).join("");
+  return `<article class="case st-${e.status || "unset"}" data-key="${esc(c.key)}">
     <div class="body">
-      <h3 dir="auto"><code>${esc(c.id)}</code> ${esc(c.title)}</h3>
-      <div class="meta"><span><code>${esc(c.key)}</code></span><span>${esc(t("part"))} ${esc(c.part)}</span>${c.round ? `<span>${esc(t("round"))} ${esc(c.round)}</span>` : ""}
-        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))}</a>
-        ${[["owner", "needsOwner"], ["setup", "needsSetup"], ["job", "needsJob"]].filter(([n]) => c.needs.includes(n)).map(([n, k]) => `<span class="badge ${n}">${esc(t(k))}</span>`).join("")}</div>
-      ${c.who ? `<div><span class="lbl">${esc(t("who"))}</span> <span dir="auto">${esc(c.who)}</span></div>` : ""}
+      <h3 dir="auto"><span class="cid">${esc(c.id)}</span>${esc(c.title)}</h3>
+      <div class="meta"><span class="tag">${esc(c.key)}</span>${c.round ? `<span class="tag">${esc(t("round"))} ${esc(c.round)}</span>` : ""}
+        <span class="tag"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))} ↗</a></span>${needTags}</div>
+      ${c.who ? `<div class="lbl">${esc(t("who"))}</div><div class="who" dir="auto">${linkPeople(c.who)}</div>` : ""}
       ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
       ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}
       ${c.needs.includes("mail") ? `<p class="note" dir="auto">${esc(t("mailNote"))}</p>` : ""}
-      ${runsBy(c) === "owner" ? `<p class="note" dir="auto">${esc(t("ownerNote"))}</p>` : ""}
     </div>
     <div class="rec">
       <div class="status" role="group">${STATUSES.map((s) => `<button type="button" class="${s}" data-s="${s}" aria-pressed="${e.status === s}">${esc(t(s))}</button>`).join("")}</div>
@@ -309,12 +448,28 @@ function drawShots(key) {
   box.innerHTML = entry(key).shots.map((id) => shots.get(id)).filter(Boolean)
     .map((s) => `<span class="shot"><img src="${s.url}" alt="${esc(s.name)}" title="${esc(s.name)}" data-id="${esc(s.id)}"><button type="button" data-rm="${esc(s.id)}" aria-label="${esc(t("remove"))}">×</button></span>`).join("");
 }
-function render() {
-  const list = visible();
-  $("list").innerHTML = list.length ? list.map(caseHtml).join("") : `<div class="empty">${esc(t("none"))}</div>`;
-  list.forEach((c) => drawShots(c.key));
-  counts();
+
+// ---- Page ----
+function applyLang() {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
+  $("lang").textContent = lang === "ar" ? "English" : "العربية";
+  fillFilters(); drawGuide(); drawPeople(); drawSections(); progress();
 }
+function fillFilters() {
+  const opt = (sel, values, label) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${esc(t("all"))}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(label ? label(v) : v)}</option>`).join("");
+    sel.value = cur;
+  };
+  opt($("fRound"), [...new Set(cases.map((c) => c.round).filter(Boolean))].sort());
+  opt($("fStatus"), [...STATUSES, "unset"], (s) => t(s));
+}
+$("sections").addEventListener("toggle", (ev) => {
+  const d = ev.target; if (!d.matches?.("details.section")) return;
+  const s = SECTIONS.find((x) => x.id === d.id); if (!s) return;
+  if (d.open) { openSections.add(d.id); if (!d.querySelector(".case, .empty")) fillSection(s); } else openSections.delete(d.id);
+}, true);
 
 let activeKey = "";
 const setActive = (key) => {
@@ -322,8 +477,8 @@ const setActive = (key) => {
   document.querySelector(".case.active")?.classList.remove("active");
   activeKey = key; document.querySelector(`.case[data-key="${key}"]`)?.classList.add("active");
 };
-$("list").addEventListener("focusin", (ev) => { const a = ev.target.closest(".case"); if (a) setActive(a.dataset.key); });
-$("list").addEventListener("click", async (ev) => {
+$("sections").addEventListener("focusin", (ev) => { const a = ev.target.closest(".case"); if (a) setActive(a.dataset.key); });
+$("sections").addEventListener("click", async (ev) => {
   const art = ev.target.closest(".case"); if (!art) return;
   const key = art.dataset.key; setActive(key);
   const sb = ev.target.closest("[data-s]");
@@ -341,14 +496,14 @@ $("list").addEventListener("click", async (ev) => {
 $("pick").addEventListener("change", async () => { const key = $("pick").dataset.key; if (key) await addShots(key, [...$("pick").files]); $("pick").value = ""; });
 // A timer per case: typing in the next case never cancels this one's save.
 const typing = new Map();
-$("list").addEventListener("input", (ev) => {
+$("sections").addEventListener("input", (ev) => {
   const art = ev.target.closest(".case"); if (!art || ev.target.dataset.f !== "comment") return;
   const key = art.dataset.key, e = entry(key); e.comment = ev.target.value; entries.set(key, e);
   clearTimeout(typing.get(key)); typing.set(key, setTimeout(() => { typing.delete(key); saveEntry(key, e); }, 400));
 });
-$("list").addEventListener("dragover", (ev) => { const d = ev.target.closest(".drop"); if (d) { ev.preventDefault(); d.classList.add("over"); } });
-$("list").addEventListener("dragleave", (ev) => ev.target.closest(".drop")?.classList.remove("over"));
-$("list").addEventListener("drop", async (ev) => {
+$("sections").addEventListener("dragover", (ev) => { const d = ev.target.closest(".drop"); if (d) { ev.preventDefault(); d.classList.add("over"); } });
+$("sections").addEventListener("dragleave", (ev) => ev.target.closest(".drop")?.classList.remove("over"));
+$("sections").addEventListener("drop", async (ev) => {
   const d = ev.target.closest(".drop"); if (!d) return;
   ev.preventDefault(); d.classList.remove("over");
   const key = d.closest(".case").dataset.key; setActive(key); await addShots(key, [...ev.dataTransfer.files]);
@@ -356,14 +511,27 @@ $("list").addEventListener("drop", async (ev) => {
 document.addEventListener("paste", async (ev) => {
   const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
   if (!files.length) return;
-  // The case the paste is in, else the last one clicked if it is still on screen (not filtered away).
+  // The case the paste is in, else the last one clicked if it is still on screen (not in a closed section or filtered away).
   const key = ev.target.closest?.(".case")?.dataset.key || (document.querySelector(`.case[data-key="${activeKey}"]`) ? activeKey : "");
   if (!key) return;
   ev.preventDefault(); await addShots(key, files);
 });
+document.addEventListener("click", async (ev) => {
+  const copy = ev.target.closest?.("[data-copy]");
+  if (copy) { try { await navigator.clipboard.writeText(copy.dataset.copy); copy.textContent = t("copied"); setTimeout(() => (copy.textContent = t("copy")), 1500); } catch {} return; }
+  const a = ev.target.closest?.("a.person");
+  if (a) {
+    ev.preventDefault();
+    $("people").open = true;
+    const row = document.querySelector(a.getAttribute("href"));
+    document.querySelectorAll("table.people tr.hl").forEach((r) => r.classList.remove("hl"));
+    if (row) { row.classList.add("hl"); row.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  }
+});
 $("lightbox").addEventListener("click", () => ($("lightbox").style.display = "none"));
-["fPart", "fRound", "fStatus", "fWho"].forEach((id) => $(id).addEventListener("change", render));
-$("fText").addEventListener("input", render);
+["fRound", "fStatus"].forEach((id) => $(id).addEventListener("change", () => { drawSections(); progress(); }));
+let searching;
+$("fText").addEventListener("input", () => { clearTimeout(searching); searching = setTimeout(() => { drawSections(); progress(); }, 200); });
 $("lang").addEventListener("click", () => { lang = lang === "en" ? "ar" : "en"; try { localStorage.setItem("rabaed-uat-sheet-lang", lang); } catch {} applyLang(); });
 $("tester").addEventListener("input", () => { if (db) tx("meta", "readwrite", (s) => s.put($("tester").value, "tester")).catch(() => {}); });
 
@@ -375,21 +543,24 @@ function download(name, blob) {
 const stamp = () => new Date().toISOString().slice(0, 10);
 const fileTag = () => { const n = $("tester").value.trim(); return n ? n.replace(/[^\p{L}\p{N}]+/gu, "-") + "-" : ""; };
 const roundTag = DATA.round.replace(/[^\p{L}\p{N}]+/gu, "-");
+const sectionOf = (c) => SECTIONS.find((s) => s.cases.includes(c));
+const sectionLabel = (c) => { const s = sectionOf(c); return s ? (s.n ? `${s.n}. ${s.name.en}` : s.name.en) : ""; };
 
 // ---- Excel: Test Cases, Screenshots (pictures in their row), Summary ----
 const EN = (s) => T.en[s || "unset"];
 $("export").addEventListener("click", async () => {
   const tester = $("tester").value.trim(), when = now();
-  const head = ["Key", "ID", "Part", "Round", "Title", "Sign in as", "Steps", "Expected result", "Needs", "Runs it", "UAT link", "Status", "Comment", "Screenshots", "Tester", "Updated"];
-  const table = [head, ...cases.map((c) => {
+  const head = ["Section", "Key", "ID", "Part", "Round", "Title", "Sign in as", "Steps", "Expected result", "Needs", "Runs it", "UAT link", "Status", "Comment", "Screenshots", "Tester", "Updated"];
+  const ordered = SECTIONS.flatMap((s) => s.cases);
+  const table = [head, ...ordered.map((c) => {
     const e = entry(c.key);
     const names = e.shots.map((id) => shots.get(id)?.name).filter(Boolean);
-    return [c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected,
-      c.needs.join(", "), runsBy(c) === "owner" ? "UAT owner" : "Tester", c.url,
+    return [sectionLabel(c), c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected,
+      c.needs.join(", "), isOwner(c) ? "UAT owner" : "Tester", c.url,
       EN(e.status), e.comment, names.length ? `${names.length} on the Screenshots sheet: ${names.join(", ")}` : "", e.status || e.comment || names.length ? tester : "", e.at];
   })];
   const shotRows = [["Key", "ID", "File", "Screenshot"]], images = [], heights = {};
-  for (const c of cases) for (const id of entry(c.key).shots) {
+  for (const c of ordered) for (const id of entry(c.key).shots) {
     const s = shots.get(id); if (!s) continue;
     const scale = Math.min(1, 480 / s.w, 360 / s.h), w = Math.round(s.w * scale), h = Math.round(s.h * scale);
     const row = shotRows.length;
@@ -400,16 +571,23 @@ $("export").addEventListener("click", async () => {
   const n = (st) => cases.filter((c) => (entry(c.key).status || "") === st).length;
   const summary = [["Item", "Value"], ["Round", DATA.round], ["Tester", tester], ["Exported", when], ["Sheet built", DATA.built], ["Test Cases", cases.length],
     ["Pass", n("pass")], ["Fail", n("fail")], ["Blocked", n("blocked")], ["Not run", n("notrun")], ["Not set", n("")], ["Screenshots", images.length]];
+  for (const s of SECTIONS) summary.push([s.n ? `Section ${s.n}: ${s.name.en}` : s.name.en, `${s.cases.filter((c) => statusOf(c) !== "unset").length} of ${s.cases.length} done`]);
   const bytes = buildXlsx([
-    { name: "Test Cases", table, widths: [9, 9, 6, 7, 40, 24, 60, 50, 16, 11, 28, 9, 50, 30, 14, 18] },
+    { name: "Test Cases", table, widths: [22, 9, 9, 6, 7, 40, 24, 60, 50, 16, 11, 28, 9, 50, 30, 14, 18] },
     { name: "Screenshots", table: shotRows, widths: [9, 9, 26, 70], rowHeights: heights, images },
-    { name: "Summary", table: summary, widths: [16, 40] },
+    { name: "Summary", table: summary, widths: [40, 40] },
   ], fflate);
   download(`Rabaed-UAT-${roundTag}-${fileTag()}${stamp()}.xlsx`, new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   flash(t("exported"));
 });
 
-// ---- JSON: the work and its screenshots, to move between machines ----
+// ---- Markdown for an AI: the same cases, and the JSON to hand back (made by the generator) ----
+$("mdBtn").addEventListener("click", () => {
+  download(`Rabaed-UAT-${roundTag}.md`, new Blob([DATA.markdown ?? ""], { type: "text/markdown;charset=utf-8" }));
+  flash(t("mdDone"));
+});
+
+// ---- JSON: the work and its screenshots, to move between machines (and what an AI hands back) ----
 const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 $("saveJson").addEventListener("click", async () => {
@@ -424,16 +602,21 @@ $("importFile").addEventListener("change", async () => {
   const f = $("importFile").files[0]; $("importFile").value = ""; if (!f) return;
   let data;
   try { data = JSON.parse(await f.text()); if (data.sheet !== "rabaed-uat-sheet") throw new Error(); } catch { flash(t("badJson")); return; }
+  const known = new Set();
   for (const s of data.shots ?? []) {
-    if (!byKey.has(s.key)) continue;
-    const blob = new Blob([fromB64(s.data)], { type: s.type });
-    const rec = { id: s.id, key: s.key, name: s.name, type: s.type, w: s.w, h: s.h, blob };
-    if (db) await tx("shots", "readwrite", (st) => st.put(rec));
-    shots.set(s.id, { ...rec, url: URL.createObjectURL(blob) });
+    if (!byKey.has(s.key) || !s.id || !s.data) continue;
+    try {
+      const blob = new Blob([fromB64(s.data)], { type: s.type || "image/png" });
+      const rec = { id: s.id, key: s.key, name: s.name || `${byKey.get(s.key).id}.png`, type: s.type || "image/png", w: s.w || 800, h: s.h || 600, blob };
+      if (db) await tx("shots", "readwrite", (st) => st.put(rec));
+      shots.set(s.id, { ...rec, url: URL.createObjectURL(blob) }); known.add(s.id);
+    } catch { /* bad base64: skipped */ }
   }
   let n = 0;
-  for (const [k, e] of Object.entries(data.entries ?? {})) {
+  for (const [k, raw] of Object.entries(data.entries ?? {})) {
     if (!byKey.has(k)) continue;
+    // Only the four statuses; a hand-made or AI-made file may hold anything.
+    const e = { status: STATUSES.includes(raw.status) ? raw.status : "", comment: String(raw.comment ?? ""), shots: (raw.shots ?? []).filter((id) => shots.has(id) || known.has(id)), at: raw.at || now() };
     // Screenshots of the entry being replaced that the loaded one doesn't keep are removed, not left orphaned.
     for (const old of entry(k).shots) if (!e.shots.includes(old)) {
       const s = shots.get(old); if (s) URL.revokeObjectURL(s.url); shots.delete(old);
@@ -443,7 +626,7 @@ $("importFile").addEventListener("change", async () => {
     if (db) await tx("entries", "readwrite", (st) => st.put(e, k));
   }
   if (data.tester && !$("tester").value) $("tester").value = data.tester;
-  render(); flash(`${t("loaded")} ${n} ${t("cases")}`);
+  drawSections(); progress(); flash(`${t("loaded")} ${n} ${t("cases")}`);
 });
 
 // ---- Start ----

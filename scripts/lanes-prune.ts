@@ -31,7 +31,10 @@
 // it names every worktree that keeps the lane at once (mergedBlockers, keptByClaims); a container
 // whose kill got no exit event is tried again (lanes.ts removeProject); and while a verify runs
 // anywhere on the machine (verifies-running.ts) the containers go but every volume stays.
+//
+// RP-1198: in every mode, after its arguments, it stops when this checkout is too far behind origin/main (behind-origin.ts).
 import { existsSync } from "node:fs";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
 import { confirmOrExit } from "./confirm.ts";
 import { systemHolders } from "./claude-sessions.ts";
 import {
@@ -76,6 +79,7 @@ if (argv.includes("--stale")) {
     console.error(`--stale is a report on its own.\n${usage}`);
     process.exit(1);
   }
+  stopIfBehindOrigin("pnpm lanes:prune");
   const listed = listContainers(DOCKER_TIMEOUT_MS);
   let volumes: Volume[] | undefined;
   try {
@@ -107,6 +111,7 @@ if (refused !== undefined) {
   console.error(refused);
   process.exit(1);
 }
+stopIfBehindOrigin("pnpm lanes:prune");
 const withMerged = options.merged;
 const lane = options.lane;
 

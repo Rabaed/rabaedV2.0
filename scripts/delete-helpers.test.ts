@@ -36,6 +36,7 @@ const REMOVES_NOTHING: Record<string, string> = {
   "worktrees-pruning.ts:choosePrune": "pure: worktrees:prune's choice",
   "servers.ts:stopCommand": "pure: the command that stops a dev server",
   "servers.ts:stopServers": "stops this clone's dev server processes; deletes nothing",
+  "behind-origin.ts:stopIfBehindOrigin": "stops the script it runs in (exit 1) when this checkout is far behind origin/main; deletes nothing",
   "queue-stack-stop.ts:stopQueuedStack": "stops (never removes) a lane's containers, never lane 7's",
   "queue-stack-stop.ts:stopAfterEnqueue": "calls stopQueuedStack",
 };
