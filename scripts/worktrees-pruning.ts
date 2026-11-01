@@ -4,6 +4,7 @@ import {
   chooseMerged,
   claimOf,
   keptByClaims,
+  keptStackReason,
   projectInUseNow,
   protectedLaneReason,
   staleProjects,
@@ -110,7 +111,7 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
   const removed = (path: string) => remove.some((w) => samePath(w.path, path, platform));
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b) => b !== undefined));
   const branchesToDelete = branches
-    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inTarget &&(b.ownCommit || b.upstreamGone))
+    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && (b.inTarget || b.mergesOnly) && (b.ownCommit || b.upstreamGone))
     .map((b) => b.branch);
 
   const projectChoice = docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, holders, platform }) : { chosen: [], kept: [] };
@@ -142,10 +143,17 @@ type RemoveProjectsInput = {
  * only once that worktree is removed (orphans go regardless). Then each is judged again just
  * before it goes (RP-1073: removing the worktrees can take minutes, and a session may run
  * lane:env or start the lane meanwhile): projectInUseNow on what readNow reads now keeps it.
+ * RP-1198: lane 7's and the main checkout's stacks (lanes.ts keptStackReason) are refused first, never passed
+ * to remove, and logged.
  */
 export function removeProjectsNow({ projects, removedPaths, listed, readNow, exists, remove, log, platform }: RemoveProjectsInput): void {
   const removed = (path: string) => removedPaths.some((r) => samePath(r, path, platform));
   for (const p of projects) {
+    const kept = keptStackReason(p.project);
+    if (kept !== undefined) {
+      log(`Kept compose project ${p.project}: ${kept}.`);
+      continue;
+    }
     const waiting = p.waitsFor.filter((path) => !removed(path));
     if (waiting.length > 0) {
       log(`Kept compose project ${p.project}: ${waiting.join(", ")} was not removed.`);

@@ -28,7 +28,7 @@ const wt = (path: string, w: Partial<PruneWorktree> = {}): PruneWorktree => ({
 const mainCheckout = wt(main, { branch: "main", project: "rabaed" });
 const current = wt(here, { branch: "RP-1-current", ahead: 2, project: "rabaed-lane2" });
 const container = (name: string, project: string, workingDir: string, state = "running"): Container => ({ name, state, project, workingDir, ports: [] });
-const merged = (branch: string, b: Partial<LocalBranch> = {}): LocalBranch => ({ branch, inTarget: true, ownCommit: true, upstreamGone: false, ...b });
+const merged = (branch: string, b: Partial<LocalBranch> = {}): LocalBranch => ({ branch, inTarget: true, mergesOnly: false, ownCommit: true, upstreamGone: false, ...b });
 const none: Holders = { runningSession: () => undefined, desktopSession: () => undefined };
 const volume = (project: string): Volume => ({ name: `${project}_db`, project });
 
@@ -197,9 +197,11 @@ describe("choosePrune", () => {
         merged("RP-3-gone", { ownCommit: false, upstreamGone: true }),
         merged("RP-4-just-created", { ownCommit: false }),
         merged("RP-5-open", { inTarget: false, upstreamGone: true }),
+        // RP-1198 review P2: no worktree, and its only commits beyond origin/main are merges of it.
+        merged("RP-7-merges", { inTarget: false, mergesOnly: true, upstreamGone: true }),
       ],
     });
-    expect(p.branches).toEqual(["RP-2-merged", "RP-3-gone"]);
+    expect(p.branches).toEqual(["RP-2-merged", "RP-3-gone", "RP-7-merges"]);
   });
 
   it("keeps a removed worktree's compose project while a kept worktree names it in its .env", () => {

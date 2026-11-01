@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { chooseStoriesVolumes, parseRemoval, parseVolumeMounts, pathSpellings, removeStoriesVolumes, removeStoriesVolumesNow, storiesHashOf, storiesSets, storiesVolumesIn, storiesVolumesOf, type StoriesDocker } from "./stories-volumes.ts";
-import { volumeName, worktreeHash } from "./test-stories-linux.ts";
+import { isRefused } from "./removal-guard.ts";
+import { worktreeHash } from "./stories-hash.ts";
+import { volumeName } from "./test-stories-linux.ts";
 import { parseWorktrees } from "./worktrees.ts";
 
 // RP-1120: `pnpm test:stories:linux` keeps Linux node_modules in rabaed-stories-<hash>-<folder> volumes,
@@ -100,8 +102,9 @@ describe("removeStoriesVolumesNow", () => {
       mountedBy: () => noMounts,
       remove: (list) => {
         asked.push(list);
-        return { removed: list, refused: [] };
+        return { removed: list, refusedVolumes: [] };
       },
+      guarded: () => new Map(),
       ...over,
     };
     return { docker, asked };
@@ -118,7 +121,7 @@ describe("removeStoriesVolumesNow", () => {
     const busy = volumeName(gone, ".");
     const { docker } = fakeDocker({
       mountedBy: () => new Map([[busy, ["rabaed-stories-run (running)"]]]),
-      remove: (list) => ({ removed: list.slice(1), refused: [{ volume: list[0]!, reason: "volume is in use - [abc]" }] }),
+      remove: (list) => ({ removed: list.slice(1), refusedVolumes: [{ volume: list[0]!, reason: "volume is in use - [abc]" }] }),
     });
     const result = removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32");
     expect(result.kept).toEqual([`Kept stories volume ${busy}: used by rabaed-stories-run (running).`, `Kept stories volume ${volumeName(gone, "packages/ui")}: volume is in use - [abc].`]);
@@ -127,13 +130,49 @@ describe("removeStoriesVolumesNow", () => {
   });
 
   it("reports any other refusal as an error", () => {
-    const { docker } = fakeDocker({ remove: (list) => ({ removed: [], refused: list.map((volume) => ({ volume, reason: "no space" })) }) });
+    const { docker } = fakeDocker({ remove: (list) => ({ removed: [], refusedVolumes: list.map((volume) => ({ volume, reason: "no space" })) }) });
     expect(removeStoriesVolumesNow({ gone: [gone] }, existing, docker, "win32").errors).toHaveLength(3);
   });
 
   it("removes nothing when Docker does not answer", () => {
     const { docker, asked } = fakeDocker({ list: () => undefined });
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").kept).toEqual(["Docker did not answer: stories volumes not removed (run `pnpm worktrees:prune` later)."]);
+    expect(asked).toEqual([]);
+  });
+
+  it("removes none, and says why, when one it would remove is of a guarded worktree (lane 7's or the main checkout's, RP-1198)", () => {
+    const { docker, asked } = fakeDocker({ guarded: () => new Map([[worktreeHash(gone), "it is the main checkout's"]]) });
+    const result = removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32");
+    const refused = `No stories volume removed: ${setOf(gone)
+      .map((v) => `${v}: it is the main checkout's`)
+      .join("; ")}.`;
+    expect(result).toEqual({ removed: [], kept: [refused], errors: [], refused });
+    expect(asked).toEqual([]);
+  });
+
+  // RP-1198 review T3: the worktrees are listed once per removal, not again inside it.
+  it("reads the guarded worktrees once and hands them to the removal", () => {
+    const hashes = new Map<string, string>();
+    let reads = 0;
+    const handed: (Map<string, string> | undefined)[] = [];
+    const { docker } = fakeDocker({
+      guarded: () => (reads++, hashes),
+      remove: (list, guarded) => (handed.push(guarded), { removed: list, refusedVolumes: [] }),
+    });
+    removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32");
+    expect(reads).toBe(1);
+    expect(handed).toEqual([hashes]);
+  });
+
+  it("removes none when the worktrees cannot be listed, saying so in one shared line", () => {
+    const { docker, asked } = fakeDocker({
+      guarded: () => {
+        throw new Error("not a git repository");
+      },
+    });
+    expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").refused).toBe(
+      "No stories volume removed: the worktrees could not be listed (not a git repository), so lane 7's and the main checkout's are not known.",
+    );
     expect(asked).toEqual([]);
   });
 });
@@ -170,18 +209,18 @@ describe("parseVolumeMounts", () => {
 describe("parseRemoval", () => {
   it("splits `docker volume rm` output into removed and refused, never forcing", () => {
     const stderr = "Error response from daemon: remove v2: volume is in use - [abc123]\n";
-    expect(parseRemoval(["v1", "v2"], "v1\n", stderr)).toEqual({ removed: ["v1"], refused: [{ volume: "v2", reason: "volume is in use - [abc123]" }] });
+    expect(parseRemoval(["v1", "v2"], "v1\n", stderr)).toEqual({ removed: ["v1"], refusedVolumes: [{ volume: "v2", reason: "volume is in use - [abc123]" }] });
   });
 
   it("names Docker's whole message when it names no volume", () => {
-    expect(parseRemoval(["v1"], "", "Cannot connect to the Docker daemon\n")).toEqual({ removed: [], refused: [{ volume: "v1", reason: "Cannot connect to the Docker daemon" }] });
+    expect(parseRemoval(["v1"], "", "Cannot connect to the Docker daemon\n")).toEqual({ removed: [], refusedVolumes: [{ volume: "v1", reason: "Cannot connect to the Docker daemon" }] });
   });
 });
 
 describe("stories volumes and running verifies (RP-1170: 361 of 372 removals timed out during verifies and hung Docker's volume API)", () => {
   it("removes none while a verify runs anywhere, and says so", () => {
     const asked: string[][] = [];
-    const docker: StoriesDocker = { list: () => volumes, mountedBy: () => noMounts, remove: (list) => (asked.push(list), { removed: list, refused: [] }), busy: () => "a verify runs (pid 7, in G:/x)" };
+    const docker: StoriesDocker = { list: () => volumes, mountedBy: () => noMounts, remove: (list) => (asked.push(list), { removed: list, refusedVolumes: [] }), busy: () => "a verify runs (pid 7, in G:/x)", guarded: () => new Map() };
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32")).toEqual({
       removed: [],
       kept: ["Stories volumes not removed: a verify runs (pid 7, in G:/x); run `pnpm worktrees:prune` again once no verify runs."],
@@ -199,12 +238,13 @@ describe("stories volumes and running verifies (RP-1170: 361 of 372 removals tim
       if (calls.length === 2) throw Object.assign(new Error("spawnSync docker ETIMEDOUT"), { code: "ETIMEDOUT" });
       return args.slice(2).join("\n");
     };
-    const result = removeStoriesVolumes(sets, { run, wait: (ms) => waits.push(ms) });
+    const result = removeStoriesVolumes(sets, { run, wait: (ms) => waits.push(ms), guarded: new Map() });
+    if (isRefused(result)) throw new Error(result.refused);
     expect(calls).toHaveLength(2);
     expect(waits).toEqual([2000]);
     expect(result.removed).toHaveLength(3);
-    expect(result.refused).toHaveLength(3);
-    expect(result.refused[0]!.reason).toBe("Docker did not answer (spawnSync docker ETIMEDOUT)");
+    expect(result.refusedVolumes).toHaveLength(3);
+    expect(result.refusedVolumes[0]!.reason).toBe("Docker did not answer (spawnSync docker ETIMEDOUT)");
     expect(result.notTried).toHaveLength(3);
   });
 
@@ -212,8 +252,9 @@ describe("stories volumes and running verifies (RP-1170: 361 of 372 removals tim
     const docker: StoriesDocker = {
       list: () => volumes,
       mountedBy: () => noMounts,
-      remove: (list) => ({ removed: [], refused: [{ volume: list[0]!, reason: "Docker did not answer (ETIMEDOUT)" }], notTried: list.slice(1) }),
+      remove: (list) => ({ removed: [], refusedVolumes: [{ volume: list[0]!, reason: "Docker did not answer (ETIMEDOUT)" }], notTried: list.slice(1) }),
       busy: () => undefined,
+      guarded: () => new Map(),
     };
     expect(removeStoriesVolumesNow({ orphans: true }, existing, docker, "win32").errors).toEqual([
       `Could not remove stories volume ${volumeName(gone, ".")}: Docker did not answer (ETIMEDOUT)`,

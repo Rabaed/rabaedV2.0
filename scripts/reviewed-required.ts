@@ -13,9 +13,12 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 // entered the queue while auto-merge was on (#564: both, and it still merged).
 //
 // Run by .github/workflows/reviewed-required.yml, from the default branch's copy (a PR cannot edit
-// the script that checks it), on pull_request (opened, reopened, synchronize, labeled, unlabeled,
-// ready_for_review, converted_to_draft) and on merge_group, as one job name in both so the merge
-// queue runs it too. A draft PR passes with a note and is checked when marked ready (RP-1018: a
+// the script that checks it), on pull_request_target (opened, reopened, synchronize, labeled,
+// unlabeled, ready_for_review, converted_to_draft; pull_request until RP-1148 part A's workflow PR)
+// and on merge_group, as one job name in both so the merge queue runs it too. On pull_request_target
+// GitHub runs main's copy of the workflow file as well, so a PR cannot edit what judges it there;
+// under merge_group it runs the merge commit's copy. On both it names the gate's own files a PR
+// changes (`isGatePath`, RP-1148). A draft PR passes with a note and is checked when marked ready (RP-1018: a
 // check red until the final review woke Auto-fix about 15 times on one draft; a draft cannot be
 // queued, but a queued PR turned back to draft stays in the queue). In the queue the PR number
 // comes from the queue ref, gh-readonly-queue/main/pr-<n>-<sha>, and the labels, the draft flag
@@ -25,6 +28,31 @@ import { REVIEWED_LABEL } from "./reviewed-label.ts";
 
 /** The check's name, as the main ruleset requires it (the job's `name:` in reviewed-required.yml). */
 export const REQUIRED_CHECK = "reviewed-required";
+
+// The merge gate's own files (RP-1148 part A): the workflows GitHub runs, and the scripts that decide
+// `reviewed-required`, `verify-gate` and the `reviewed` label. A PR that changes one changes what judges
+// PRs, so it needs the owner's approval, which RP-1148 part B is to define (a separate GitHub identity
+// for sessions, or a marker only the owner can post). Until then this check names such paths in a
+// warning and passes. It blocks once GATE_PATHS_BLOCK is true on main: the check runs main's copy of
+// this file, so a PR cannot turn it off for itself.
+
+/**
+ * Whether the check fails a PR that changes a gate path. Off: blocking before part B is the owner's
+ * option 3 (the owner merges such PRs from the GitHub page), which the owner hasn't chosen (RP-1148
+ * comment 15414).
+ */
+export const GATE_PATHS_BLOCK = false;
+
+/** The scripts the gate runs, by exact path; `scripts/reviewed-*.ts` is matched on its own. */
+const GATE_SCRIPTS = new Set(["scripts/verify-gate.ts", "scripts/ci-green.ts", "scripts/review-post.ts"]);
+
+/** Whether `file` is one of the gate's own files: `.github/workflows/**`, `scripts/reviewed-*.ts`, `verify-gate.ts`, `ci-green.ts` or `review-post.ts`. */
+export function isGatePath(file: string): boolean {
+  return file.startsWith(".github/workflows/") || /^scripts\/reviewed-[^/]*\.ts$/.test(file) || GATE_SCRIPTS.has(file);
+}
+
+/** The gate paths among `files`, each once, in the order they come. */
+export const gatePathsIn = (files: string[]): string[] => [...new Set(files.filter(isGatePath))];
 
 /** The label that lets a PR changing only docs merge without a /code-review (RP-606). */
 export const DOCS_ONLY_LABEL = "docs-only";
@@ -85,9 +113,68 @@ export type RequiredEvent = { kind: "merge_group"; headRef: string } | { kind: "
 export interface RequiredResult {
   ok: boolean;
   summary: string;
+  /** What the check reports without failing on it: the gate paths a PR changes, while GATE_PATHS_BLOCK is off (RP-1148). */
+  warnings: string[];
 }
 
-export async function requireReviewed(event: RequiredEvent, seam: RequiredSeam, options: { pollMs?: number; timeoutMs?: number } = {}): Promise<RequiredResult> {
+/** One answer per PR for `pull` and `files`, however many times the check asks. */
+function readOnce(seam: RequiredSeam): RequiredSeam {
+  const pulls = new Map<number, ReturnType<RequiredSeam["pull"]>>();
+  const files = new Map<number, ReturnType<RequiredSeam["files"]>>();
+  return {
+    ...seam,
+    pull: (pr) => pulls.get(pr) ?? (pulls.set(pr, seam.pull(pr)), pulls.get(pr)!),
+    files: (pr) => files.get(pr) ?? (files.set(pr, seam.files(pr)), files.get(pr)!),
+  };
+}
+
+/**
+ * The check: the review verdict, then the gate-path rule (RP-1148 part A). A PR that changes one of the
+ * gate's own files (`isGatePath`) is named in a warning, or fails when `blockGatePaths` is on
+ * (GATE_PATHS_BLOCK on main). A draft passes as before and is checked when marked ready.
+ */
+export async function requireReviewed(
+  event: RequiredEvent,
+  seam: RequiredSeam,
+  options: { pollMs?: number; timeoutMs?: number; blockGatePaths?: boolean } = {},
+): Promise<RequiredResult> {
+  const { blockGatePaths = GATE_PATHS_BLOCK, ...waits } = options;
+  const once = readOnce(seam);
+  const verdict = await reviewVerdict(event, once, waits);
+  if (event.kind === "pull_request" && event.draft) return { ...verdict, warnings: [] };
+  const pr = event.kind === "merge_group" ? queuedPrNumber(event.headRef) : event.pr;
+  if (pr === undefined) return { ...verdict, warnings: [] };
+  let listed: string[];
+  try {
+    listed = await once.files(pr);
+  } catch (error) {
+    // While the rule only warns, a list GitHub fails to give must not fail the check for it.
+    const why = `PR #${pr}: its files could not be listed (${error instanceof Error ? error.message : String(error)}), so whether it changes the merge gate's own files cannot be told`;
+    if (blockGatePaths) return { ok: false, summary: `${why}. Re-run this check.`, warnings: [] };
+    return { ...verdict, warnings: [`${why}.`] };
+  }
+  const found = gatePathFinding(pr, (await once.pull(pr)).changedFiles, listed, blockGatePaths);
+  if (found === undefined) return { ...verdict, warnings: [] };
+  if (blockGatePaths && verdict.ok) return { ok: false, summary: found, warnings: [] };
+  return { ...verdict, warnings: [found] };
+}
+
+/** What the check says of PR `pr`'s gate paths; undefined when it changes none (and all its files are listed). */
+function gatePathFinding(pr: number, changedFiles: number, listed: string[], blocking: boolean): string | undefined {
+  const paths = gatePathsIn(listed);
+  // The API stops listing at 3000 files: a gate path may be among those it left out.
+  const unlisted = listed.length < changedFiles;
+  if (paths.length === 0 && !unlisted) return undefined;
+  const what =
+    paths.length > 0
+      ? `PR #${pr} changes the merge gate's own files: ${paths.join(", ")}`
+      : `PR #${pr} changes ${changedFiles} files, more than GitHub lists (${listed.length}), so whether it changes the merge gate's own files cannot be told`;
+  return blocking
+    ? `${what}. Only the owner may merge such a PR, by bypassing the main ruleset from the GitHub page (RP-1148).`
+    : `${what}. They decide what judges every PR, so a reviewer checks them closely; until RP-1148 part B the check only warns (GATE_PATHS_BLOCK in scripts/reviewed-required.ts).`;
+}
+
+async function reviewVerdict(event: RequiredEvent, seam: RequiredSeam, options: { pollMs?: number; timeoutMs?: number }): Promise<Omit<RequiredResult, "warnings">> {
   let pr: number;
   if (event.kind === "merge_group") {
     const queued = queuedPrNumber(event.headRef);
@@ -213,11 +300,12 @@ export function requiredEvent(eventName: string, payload: unknown, repository: s
     merge_group?: { head_ref: string };
   };
   if (eventName === "merge_group" && event.merge_group) return { kind: "merge_group", headRef: event.merge_group.head_ref };
-  if (eventName === "pull_request" && event.pull_request) {
+  // pull_request_target has the same payload; GitHub runs main's copy of the workflow for it (RP-1148).
+  if ((eventName === "pull_request" || eventName === "pull_request_target") && event.pull_request) {
     const { number, draft, head } = event.pull_request;
     return { kind: "pull_request", pr: number, headSha: head.sha, sameRepo: head.repo?.full_name === repository, draft: draft === true };
   }
-  throw new Error(`reviewed-required runs on pull_request and merge_group, not ${eventName}`);
+  throw new Error(`reviewed-required runs on pull_request_target (or pull_request) and merge_group, not ${eventName}`);
 }
 
 const PER_PAGE = 100;
@@ -276,7 +364,10 @@ async function main() {
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
   const result = await requireReviewed(event, { ...overHttp(repository, token), sleep });
   (result.ok ? console.log : console.error)(result.summary);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${result.summary}\n`);
+  // An annotation on the run, and a line of its summary, for each warning (RP-1148: the gate paths a PR changes).
+  for (const warning of result.warnings) console.log(`::warning title=Merge gate files::${warning.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
+  // A blank line after each, so Markdown keeps the warnings apart from the verdict.
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, [result.summary, ...result.warnings.map((w) => `**Warning:** ${w}`)].map((line) => `${line}\n\n`).join(""));
   process.exit(result.ok ? 0 : 1);
 }
 
