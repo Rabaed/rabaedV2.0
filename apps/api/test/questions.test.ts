@@ -112,13 +112,13 @@ describe("a Contractor's Question to Consultant (seam 1)", () => {
   it("is asked, answered, asked again with a reason, answered again and closed", async () => {
     const id = await draftQuestion(at.c1Engineer, "QSN", "Slab level at the riser");
     const draft = await detail(at.c1Engineer, id);
-    expect(draft.step.key).toBe("draft");
+    expect(draft.step?.key).toBe("draft");
     expect(draft.type.code).toBe("QSN");
 
     await take(at.c1Engineer, id, "ask");
     const open = await detail(at.k1Manager, id);
     expect(open.documentNumber).toMatch(/-QSN-/);
-    expect(open.step.key).toBe("open");
+    expect(open.step?.key).toBe("open");
     expect(open.stage.key).toBe("open");
     // Asked of the Consultant, the Contractor that asked it holds nothing.
     expect(await offered(at.c1Engineer, id)).toEqual([]); // not hidden-from: no Transition offered on an item it reads
@@ -131,7 +131,7 @@ describe("a Contractor's Question to Consultant (seam 1)", () => {
     await take(at.k1Manager, id, "answer", { answers: { answer: "Plus 150 above the finished floor" } });
 
     const answered = await detail(at.c1Engineer, id);
-    expect(answered.step.key).toBe("answered");
+    expect(answered.step?.key).toBe("answered");
     expect(answered.stage.key).toBe("resolved");
     expect((await history(at.c1Engineer, id)).filter((e) => e.answers).at(-1)!.answers).toEqual({ answer: "Plus 150 above the finished floor" });
     // The asker's Company holds Answered, in its Step Pool: its Member picks it up, then Close, or Ask again; the Consultant, nothing.
@@ -143,7 +143,7 @@ describe("a Contractor's Question to Consultant (seam 1)", () => {
     expect(noReason.statusCode, noReason.body).toBe(422);
     await take(at.c1Engineer, id, "ask_again", { reason: "Above which floor, the ground or the first?" });
     const again = await detail(at.k1Manager, id);
-    expect(again.step.key).toBe("open");
+    expect(again.step?.key).toBe("open");
     expect(again.actions.transitions.map((t) => t.key)).toContain("answer");
 
     await take(at.k1Manager, id, "answer", { answers: { answer: "The finished ground floor" } });
@@ -167,13 +167,13 @@ describe("a Consultant's Question to Contractor (seam 1)", () => {
     const id = await asked(at.k1Manager, "QSC", "Where is the fire damper?");
     const open = await detail(at.c1Pm, id);
     expect(open.documentNumber).toMatch(/-QSC-/);
-    expect(open.step.key).toBe("open");
+    expect(open.step?.key).toBe("open");
     expect(open.actions.pickUp).toBe(true); // In C1's Step Pool.
     expect(await offered(at.k1Manager, id)).toEqual([]); // not hidden-from: no Transition offered on an item it reads
 
     await pickUp(at.c1Pm, id);
     await take(at.c1Pm, id, "answer", { answers: { answer: "Behind the ceiling access panel" } });
-    expect((await detail(at.k1Manager, id)).step.key).toBe("answered");
+    expect((await detail(at.k1Manager, id)).step?.key).toBe("answered");
     expect(await offered(at.k1Manager, id)).toEqual(expect.arrayContaining(["close", "ask_again"]));
     expect(await offered(at.c1Pm, id)).toEqual([]); // not hidden-from: no Transition offered on an item it reads
 
@@ -227,9 +227,12 @@ describe("C2 reads neither Company's open Question (scenario RP-626-3)", () => {
   it("RP-626-3: with C1's QSN and K1's QSC both Open, C2 reads neither in the Snag List or its Step Age, by id, history, Links or Documents", async () => {
     const qsn = await asked(at.c1Engineer, "QSN", "C1's open question");
     const qsc = await asked(at.k1Manager, "QSC", "K1's open question");
-    // Each is Open with the asked role, so both C1 and K1 read both, Step Age included.
-    for (const id of [qsn, qsc]) {
-      expect((await detail(at.k1Manager, id)).step.key).toBe("open");
+    // Each is Open with the asked role, so both C1 and K1 read both, Step Age included; the Step to its holder only (RP-1192).
+    for (const [id, holder] of [
+      [qsn, at.k1Manager],
+      [qsc, at.c1Pm],
+    ] as const) {
+      expect((await detail(holder, id)).step?.key).toBe("open");
       for (const by of [at.c1Pm, at.k1Manager]) expect((await snags(by)).items.find((i) => i.id === id)?.stepAgeWeeks, who(by)).toBeGreaterThan(0);
     }
     await hiddenEverywhere(qsn, [at.c1Engineer, at.k1Manager], c2Engineer, "QSN");

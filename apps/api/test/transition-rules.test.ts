@@ -120,17 +120,17 @@ describe("Restrict: a field value picks among Transitions sharing a label", () =
     const sends = (await detail(k1Engineer, small)).actions.transitions.filter((t) => t.label.en === "Send to Manager");
     expect(sends).toEqual([expect.objectContaining({ label: { en: "Send to Manager", ar: "إرسال للمدير" } })]);
     await take(k1Engineer, small, sends[0]!.key);
-    expect((await detail(k1Engineer, small)).step.key).toBe("consultant_approval");
+    expect((await detail(k1Engineer, small)).step?.key).toBe("consultant_approval");
 
     const big = await atConsultant("Big cost", k1Engineer, { cost: 750_000 });
     await take(k1Engineer, big, sends[0]!.key);
-    expect((await detail(k1Engineer, big)).step.key).toBe("senior_approval");
+    expect((await detail(k1Engineer, big)).step?.key).toBe("senior_approval");
   });
 
   it("routes whichever of the label's keys is asked for", async () => {
     const big = await atConsultant("Big cost, other key", k1Engineer, { cost: 750_000 });
     await take(k1Engineer, big, "send_to_manager");
-    expect((await detail(k1Engineer, big)).step.key).toBe("senior_approval");
+    expect((await detail(k1Engineer, big)).step?.key).toBe("senior_approval");
   });
 });
 

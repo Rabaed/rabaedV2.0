@@ -145,7 +145,8 @@ export function useSubmittalPanelLog({
       key: "workflow",
       icon: "route",
       title: t("section"),
-      summary: t("summary", { step: item.step.name[locale], count, n: formatNumber(count, locale) }),
+      // Another Company's Step is never named (V14): its name, else the Stage, in its place.
+      summary: t("summary", { step: (item.step?.name ?? item.heldBy?.companyName ?? item.stage.name)[locale], count, n: formatNumber(count, locale) }),
       children: <SubmittalPanelWorkflowAndLog labels={railLabels} workflow={workflow} onOpenMap={openMap} log={log} />,
       inflowOnly: true,
     },

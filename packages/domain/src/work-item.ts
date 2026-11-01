@@ -741,7 +741,12 @@ export const workItemDetail = workItemSummary.extend({
   sentBackForComment: z.boolean(),
   /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
   scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
-  step: z.object({ key: z.string(), name: bilingualText }),
+  /**
+   * The Step the item is at: only for a Member of the Participant that holds it, or once it
+   * has closed (its terminal Step). Null while another Company holds it: a Step is internal
+   * to its Participant, the one the item arrived at included (visibility.md V14; RP-1192).
+   */
+  step: z.object({ key: z.string(), name: bilingualText }).nullable(),
   raisedBy: z.object({ companyName: bilingualText }),
   /**
    * Who holds the current Step. Another Company is shown by its name only; a

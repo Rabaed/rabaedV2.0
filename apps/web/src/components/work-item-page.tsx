@@ -247,8 +247,9 @@ export function WorkItemPage(props: WorkItemPageProps) {
     <WorkItemTransitionsCard
       title={t("actions.title")}
       with={{
-        step: item.outcome ? `${outcomeName} · ${item.outcome}` : item.step.name[locale],
-        holder: item.outcome ? t("actions.ended") : holderText,
+        // Another Company's Step is never named (V14): the card then reads the Company alone.
+        step: item.outcome ? `${outcomeName} · ${item.outcome}` : item.step ? item.step.name[locale] : (holderText ?? ""),
+        holder: item.outcome ? t("actions.ended") : item.step ? holderText : null,
         ...(item.outcome ? { code: item.outcome, look: lookOf(item.outcome) } : held?.memberName ? { avatar: held.memberName[locale] } : {}),
         ...(pool ? { unclaimed: true } : {}),
         ...(item.actions.returnToPool
@@ -420,7 +421,7 @@ export function WorkItemPage(props: WorkItemPageProps) {
             with={item.outcome ? null : submittalPanelWith(item.heldBy, locale)}
             stepAgeWeeks={null}
             place={item.location ? [item.location.name[locale]] : []}
-            step={{ label: tItems("fields.step"), name: item.outcome ? null : item.step.name[locale] }}
+            step={{ label: tItems("fields.step"), name: item.outcome || !item.step ? null : item.step.name[locale] }}
           />
         }
         lead={

@@ -100,7 +100,7 @@ describe('RP-431-2: "Assign to" offers the taker\'s own Members only (seam 1)', 
       bodies.push({ status: res.statusCode, body: res.json() });
     }
     expect(bodies).toEqual(Array(5).fill({ status: 422, body: { error: "assignee_not_offered" } }));
-    expect((await detail(engineer.caller, id)).step.key).toBe("draft");
+    expect((await detail(engineer.caller, id)).step?.key).toBe("draft");
     expect(await history(engineer, id)).toEqual(before);
 
     // At Submit, whose next Step is K1's, any pick is refused alike.
@@ -113,7 +113,7 @@ describe('RP-431-2: "Assign to" offers the taker\'s own Members only (seam 1)', 
       picks.push({ status: res.statusCode, body: res.json() });
     }
     expect(picks).toEqual(Array(3).fill({ status: 422, body: { error: "assignee_not_offered" } }));
-    expect((await detail(pm.caller, id)).step.key).toBe("internal_review");
+    expect((await detail(pm.caller, id)).step?.key).toBe("internal_review");
     expect(await history(pm, id)).toEqual(atReview);
   });
 });

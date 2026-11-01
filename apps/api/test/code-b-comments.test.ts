@@ -126,7 +126,7 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     const first = await detail(at.c1Pm, raised.find((c) => c.title.startsWith("Add the fire"))!.id);
     expect(first.answers).toMatchObject({ comment: "Add the fire rating to the datasheet", reference: "Datasheet p.2", trade: at.electrical, location: at.buildingA });
     expect(first.workflow.name.en).toBe("Comment");
-    expect(first.step.key).toBe("open");
+    expect(first.step?.key).toBe("open");
     expect(first.heldBy?.memberName).toBeNull(); // C1's Step Pool, notPickedUp.
     expect(await counts(at.c1Pm, source)).toEqual({ open: 3, closed: 0 });
     expect(await counts(at.k1Manager, source)).toEqual({ open: 3, closed: 0 });
@@ -146,7 +146,7 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
 
     await resolve(lux, "Lux levels recalculated");
     const resolved = await detail(at.k1Manager, lux);
-    expect(resolved.step.key).toBe("resolved");
+    expect(resolved.step?.key).toBe("resolved");
     // The note is shared with the Resolve: K1 reads it in the history, never in the Form.
     expect(resolved.answers).not.toHaveProperty("resolution_note");
     const resolveEvent = ((await ok(at.k1Manager.get(`/v1/work-items/${lux}/history`), 200)).json().events as { answers: Record<string, unknown> | null }[]).filter((e) => e.answers).at(-1);
@@ -160,7 +160,7 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     await ok(at.k1Manager.post(`/v1/work-items/${emergency}/pick-up`));
     await take(at.k1Manager, emergency, "return_to_open", { reason: "Not on the drawing yet" });
     const back = await detail(at.c1Pm, emergency);
-    expect(back.step.key).toBe("open");
+    expect(back.step?.key).toBe("open");
     // Back with C1, the Contractor that resolved it, which may resolve it again.
     expect(back.heldBy?.companyName).toEqual((await detail(at.c1Pm, source)).raisedBy.companyName);
     expect(back.actions.transitions.map((t) => t.key)).toContain("resolve");

@@ -101,7 +101,7 @@ describe("a Consultant's Site Observation on General (seam 1)", () => {
     await take(at.c1Pm, id, "resolve", { answers: { resolution_note: "Cleared and swept" } });
 
     const atVerify = await detail(at.k1Manager, id);
-    expect(atVerify.step.key).toBe("verify");
+    expect(atVerify.step?.key).toBe("verify");
     expect(atVerify.actions.transitions.map((t) => t.key)).toEqual(expect.arrayContaining(["close", "return_to_open"]));
     const { documents } = (await ok(at.k1Manager.get(`/v1/work-items/${id}/documents`), 200)).json();
     expect(documents.filter((d: { fieldKey: string }) => d.fieldKey === "after_photos").map((d: { id: string }) => d.id)).toEqual([after]);

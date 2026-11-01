@@ -560,8 +560,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.type.code}
             </bdi>
           </dd>
-          <dt className="text-muted">{t("fields.step")}</dt>
-          <dd>{item.step.name[locale]}</dd>
+          {/* Another Company's Step is never named (V14). */}
+          {item.step && (
+            <>
+              <dt className="text-muted">{t("fields.step")}</dt>
+              <dd>{item.step.name[locale]}</dd>
+            </>
+          )}
           {item.outcome && (
             <>
               <dt className="text-muted">{t("fields.issuedCode")}</dt>

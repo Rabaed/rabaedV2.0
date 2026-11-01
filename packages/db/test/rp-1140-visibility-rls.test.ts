@@ -180,9 +180,9 @@ describe("scenario RP-1140-1: K1 moves C1's Submittal inside K1 and closes it fr
     await expectHiddenFrom({ read: historySteps, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "the history's Steps" });
   });
 
-  it("the List, the Kanban and the item read C1 the Step its Submit reached, K1 its own Step", async () => {
+  it("the List, the Kanban and the item read C1 no K1 Step, not even the one its Submit reached (RP-1192-1), and K1 its own", async () => {
     await expectHiddenFrom({ read: atStep, target: step("consultant_approval"), seenBy: k1(), hiddenFrom: c1(), name: named, label: "the Step it is at" });
-    for (const as of c1()) expect((await atStep(as)).map((r) => r.id), named(as)).toEqual([step("consultant_review"), step("consultant_review")]);
+    for (const as of c1()) expect(await atStep(as), named(as)).toEqual([{ id: null }, { id: null }]);
   });
 
   it("C1 still reads where each shared move took the item: K1's Consultant review, and the close's Step", async () => {
