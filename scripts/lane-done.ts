@@ -3,8 +3,9 @@
 //   0. With no number (RP-1198): in the lane's own worktree, the current branch's merged PR (`gh pr list
 //      --head`); lane:done then removes what it safely can (its subagent worktrees), keeps this worktree
 //      and its stack, and ends with the exact `pnpm lane:done 580 --yes` to run from the Main's worktree.
-//      Elsewhere (no merged PR on this branch) it lists every merged PR that still has a worktree in this
-//      clone, each with its command (lane-done-plan.ts mergedLeftovers), and removes nothing.
+//      Elsewhere (no merged PR on this branch) it lists every merged PR that still has a worktree or a lane
+//      stack in this clone, and the lane stacks whose worktree is gone, each with its command
+//      (lane-done-plan.ts startWithoutNumber, mergedLeftovers), and removes nothing.
 //   1. Checks the PR merged, before anything else (gh pr view); then refuses a shallow clone, fetches
 //      origin (`git fetch --prune origin`) and checks the PR's head is in origin/main.
 //   2. Finds the lane's worktree (on the PR's branch, or a detached HEAD at its head) and the subagent
@@ -40,14 +41,14 @@ import { branchKey } from "./lane-claims.ts";
 import {
   claimIdsFor,
   describeWorktree,
-  mergedLeftovers,
+  laneStacks,
+  lastLines,
   notMergedRefusal,
   parseLaneDoneArgs,
   decideLaneDone,
   releaseLines,
-  restLine,
+  startWithoutNumber,
   type Candidate,
-  type MergedPrRef,
   type PullRequest,
 } from "./lane-done-plan.ts";
 import {
@@ -80,7 +81,7 @@ import {
   isAncestor,
   isShallowRepo,
   listWorktrees,
-  mergesOnly,
+  mergedInto,
   refExists,
   systemLiveness,
   unlessMergesOnly,
@@ -99,17 +100,34 @@ stopIfBehindOrigin("pnpm lane:done");
 const here = currentRoot();
 const projectOf = (path: string) => (existsSync(path) ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined);
 
-// RP-1198: no number. The current branch's merged PR, or else a list of the merged PRs left here.
-const MERGED_LIMIT = 200;
+// RP-1198: no number. The current branch's merged PR, or else a list of the merged PRs left here (lane-done-plan.ts startWithoutNumber).
 const listed = listWorktrees();
-const currentBranch = listed.find((w) => samePath(w.path, here))?.branch;
-const prNumber = parsed.pr ?? mergedPrOf(currentBranch);
-if (prNumber === undefined) {
-  const merged = ghJson<MergedPrRef[]>(["pr", "list", "--state", "merged", "--limit", String(MERGED_LIMIT), "--json", "number,headRefName,headRefOid"]);
-  const clone = listed.map((w) => ({ path: w.path, branch: w.branch, head: w.head, project: projectOf(w.path) }));
-  for (const line of mergedLeftovers({ worktrees: clone, merged, mainRoot: listed[0]!.path, currentBranch, limit: MERGED_LIMIT })) console.log(line);
+const start =
+  parsed.pr !== undefined
+    ? { pr: parsed.pr }
+    : startWithoutNumber({
+        currentBranch: listed.find((w) => samePath(w.path, here))?.branch,
+        gh: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+        worktrees: () => listed.map((w) => ({ path: w.path, branch: w.branch, head: w.head, project: projectOf(w.path) })),
+        mainRoot: listed[0]!.path,
+        stacks: () => {
+          try {
+            const running = listContainers(DOCKER_TIMEOUT_MS);
+            return running && laneStacks(running, listVolumes(DOCKER_TIMEOUT_MS));
+          } catch {
+            return undefined;
+          }
+        },
+      });
+if ("error" in start) {
+  console.error(start.error);
+  process.exit(1);
+}
+if ("list" in start) {
+  for (const line of start.list) console.log(line);
   process.exit(0);
 }
+const prNumber = start.pr;
 
 // Rule 8: the PR first.
 const pr = readPullRequest(prNumber);
@@ -199,10 +217,9 @@ const printKept = () => {
   for (const line of keptLast(kept, logged)) console.log(line);
 };
 // RP-1198: run in the lane's own worktree, which stays with its stack, the last line is the command for the rest.
-const insideLane = candidates.some((c) => c.isCurrent);
-const release = insideLane
-  ? [restLine(pr)]
-  : releaseLines({ pr, lane: laneNumber, openSiblings: openSiblings(), claimIds: branchKey(pr.headRefName) === undefined ? await keylessClaimIds() : undefined });
+// Jira is read only when the RELEASE is printed (not from inside the lane) and the branch names no key.
+const claimIds = !candidates.some((c) => c.isCurrent) && branchKey(pr.headRefName) === undefined ? await keylessClaimIds() : undefined;
+const release = lastLines({ pr, candidates, release: () => releaseLines({ pr, lane: laneNumber, openSiblings: openSiblings(), claimIds }) });
 const printRelease = () => {
   for (const line of release) console.log(line);
 };
@@ -346,7 +363,7 @@ function deleteBranches(c: Candidate): void {
   if (c.kind === "agent" && created !== c.branch && refExists(`refs/heads/${created}`, mainRoot)) branches.push(created);
   for (const branch of branches) {
     // RP-1198: a tip that only merged origin/main in is not its ancestor, but has nothing it lacks.
-    const merged = isAncestor(`refs/heads/${branch}`, TARGET, mainRoot) || mergesOnly(`refs/heads/${branch}`, mainRoot, TARGET);
+    const merged = mergedInto(branch, TARGET, mainRoot);
     if (!merged && !(c.kind === "agent" && branch === c.branch)) {
       logged.push(`Branch ${branch} kept: it has commits ${TARGET} does not.`);
       continue;
@@ -376,26 +393,6 @@ function readPullRequest(number: number): PullRequest {
   }
   const raw = JSON.parse(out) as { number: number; state: string; mergedAt: string | null; headRefName: string; headRefOid: string; mergeCommit: { oid: string } | null; commits: { oid: string }[] };
   return { number: raw.number, state: raw.state, mergedAt: raw.mergedAt ?? undefined, headRefName: raw.headRefName, headRefOid: raw.headRefOid, mergeCommit: raw.mergeCommit?.oid, commits: raw.commits.map((c) => c.oid) };
-}
-
-/** gh's JSON answer; exits, touching nothing, when gh cannot tell. */
-function ghJson<T>(args: string[]): T {
-  try {
-    return JSON.parse(execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) as T;
-  } catch (error) {
-    console.error(`lane:done refused: \`gh ${args.join(" ")}\` failed (${gitError(error)}). Nothing was touched.`);
-    process.exit(1);
-  }
-}
-
-/**
- * RP-1198: the newest merged PR of the current branch, or undefined (a detached HEAD, `main`, or none
- * merged). `gh pr list --head … --state merged`: it asks for a merged one by name, so an open or
- * closed PR of a reused branch name is not taken for it.
- */
-function mergedPrOf(branch: string | undefined): number | undefined {
-  if (branch === undefined || branch === "main") return undefined;
-  return ghJson<{ number: number }[]>(["pr", "list", "--head", branch, "--state", "merged", "--limit", "1", "--json", "number"])[0]?.number;
 }
 
 /** RP-1198: the open RP-603 claims of a branch with no RP key, or undefined when they cannot be read. */

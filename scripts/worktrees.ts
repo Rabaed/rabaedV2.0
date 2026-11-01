@@ -423,7 +423,7 @@ export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: stri
   const branchesKept: { branch: string; reason: string }[] = [];
   const deleteIfInTarget = (branch: string) => {
     // RP-1198: a branch that only merged the target in is not its ancestor, but has nothing the target lacks.
-    if (!inTarget(branch, target, mainRoot) && !mergesOnly(`refs/heads/${branch}`, mainRoot, target)) {
+    if (!mergedInto(branch, target, mainRoot)) {
       branchesKept.push({ branch, reason: `${branch} has commits ${target} does not` });
       return;
     }
@@ -488,6 +488,8 @@ export type LocalBranch = {
   branch: string;
   /** Its tip is an ancestor of the target branch (merge-base --is-ancestor). */
   inTarget: boolean;
+  /** Not inTarget, but its only commits beyond the target are merges of it that add nothing (mergesOnly, RP-1198 review P2). */
+  mergesOnly: boolean;
   /** Its reflog shows a commit made on it (hasOwnCommit). */
   ownCommit: boolean;
   /** Its upstream was deleted on origin (after `git fetch --prune`). */
@@ -506,7 +508,8 @@ export function localBranches(target: string, cwd: string): LocalBranch[] {
     .map((line) => {
       const [ref = "", track = ""] = line.split("\t");
       const branch = ref.replace(/^refs\/heads\//, "");
-      return { branch, inTarget: inTarget(branch, target, cwd), ownCommit: hasOwnCommit(reflogSubjects(ref, cwd)), upstreamGone: track === "[gone]" };
+      const merged = inTarget(branch, target, cwd);
+      return { branch, inTarget: merged, mergesOnly: !merged && mergesOnly(ref, cwd, target), ownCommit: hasOwnCommit(reflogSubjects(ref, cwd)), upstreamGone: track === "[gone]" };
     });
 }
 
@@ -560,6 +563,12 @@ export function isAncestor(ancestor: string, commit: string, cwd: string, spawn:
 
 /** Whether every commit of the branch is in the target. */
 export const inTarget = (branch: string, target: string, cwd: string): boolean => isAncestor(`refs/heads/${branch}`, target, cwd);
+
+/**
+ * Whether deleting the branch loses nothing the target lacks: its tip is in the target (inTarget), or its only
+ * commits beyond it are merges of it that add nothing (mergesOnly). The one rule before every `git branch -D` (RP-1198).
+ */
+export const mergedInto = (branch: string, target: string, cwd: string): boolean => inTarget(branch, target, cwd) || mergesOnly(`refs/heads/${branch}`, cwd, target);
 
 export function pruneWorktrees(mainRoot: string): void {
   git(["worktree", "prune"], mainRoot);

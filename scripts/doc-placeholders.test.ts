@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type PlaceholderBaseline, placeholderDocs, placeholderHits, placeholderProblems } from "./doc-placeholders.ts";
+import { baselineGains, type PlaceholderBaseline, placeholderDocs, placeholderHits, placeholderProblems } from "./doc-placeholders.ts";
 
 const fence = (info: string, ...lines: string[]) => ["```" + info, ...lines, "```"].join("\n");
 
@@ -141,9 +142,34 @@ describe("placeholderDocs and placeholderProblems", () => {
   });
 });
 
-describe("the repository", () => {
-  it("has no <placeholder> in a shell command except the ones the baseline lists", () => {
-    const baseline = JSON.parse(readFileSync("scripts/doc-placeholders-baseline.json", "utf8")) as PlaceholderBaseline;
-    expect(placeholderProblems(".", placeholderDocs("."), baseline)).toEqual([]);
+// RP-1198 review P4: the baseline only shrinks.
+describe("baselineGains", () => {
+  it("names each entry main's baseline does not have, a second copy of one included", () => {
+    const main: PlaceholderBaseline = { "docs/a.md": ["pnpm x <n>", "pnpm y <n>"], "docs/b.md": ["gh pr view <pr>"] };
+    expect(baselineGains(main, { "docs/a.md": ["pnpm y <n>"], "docs/b.md": ["gh pr view <pr>", "gh pr view <pr>"], "docs/c.md": ["pnpm z <n>"] })).toEqual([
+      "docs/b.md: gh pr view <pr> (scripts/doc-placeholders-baseline.json on origin/main does not list it: the list only shrinks; fix the doc instead)",
+      "docs/c.md: pnpm z <n> (scripts/doc-placeholders-baseline.json on origin/main does not list it: the list only shrinks; fix the doc instead)",
+    ]);
   });
+
+  it("passes a baseline that only shrank", () => {
+    expect(baselineGains({ "docs/a.md": ["pnpm x <n>", "pnpm y <n>"] }, { "docs/a.md": ["pnpm y <n>"] })).toEqual([]);
+  });
+});
+
+/** origin/main's baseline, or undefined when origin/main or the file is not there (a shallow CI clone, or before it merged). */
+const mainBaseline = (() => {
+  const shown = spawnSync("git", ["show", "origin/main:scripts/doc-placeholders-baseline.json"], { encoding: "utf8" });
+  return shown.status === 0 ? (JSON.parse(shown.stdout) as PlaceholderBaseline) : undefined;
+})();
+
+describe("the repository", () => {
+  const baseline = () => JSON.parse(readFileSync("scripts/doc-placeholders-baseline.json", "utf8")) as PlaceholderBaseline;
+
+  it("has no <placeholder> in a shell command except the ones the baseline lists", () => {
+    expect(placeholderProblems(".", placeholderDocs("."), baseline())).toEqual([]);
+  });
+
+  if (mainBaseline === undefined) it.skip("adds no baseline entry origin/main lacks: skipped, origin/main or its baseline is not there", () => {});
+  else it("adds no baseline entry origin/main's baseline lacks", () => expect(baselineGains(mainBaseline, baseline())).toEqual([]));
 });

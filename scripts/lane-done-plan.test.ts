@@ -4,7 +4,9 @@ import {
   claimIdsFor,
   laneLabel,
   laneStacks,
+  lastLines,
   mergedLeftovers,
+  startWithoutNumber,
   notMergedRefusal,
   parseLaneDoneArgs,
   decideLaneDone,
@@ -350,6 +352,81 @@ describe("releaseLines (rule 8: the last line is the RP-603 RELEASE text to past
 describe("restLine (RP-1198: run inside the lane, lane:done ends with the exact command for the rest)", () => {
   it("names the PR and the flags to run from the Main's worktree", () => {
     expect(restLine(pr)).toBe("This worktree and its stack stay: for the rest, run `pnpm lane:done 580 --yes` from the Main's worktree, then post the RELEASE it prints.");
+  });
+});
+
+// RP-1198 review P3: the no-number wiring, through an injected gh, as lane-done.ts runs it.
+describe("startWithoutNumber and lastLines (RP-1198: `pnpm lane:done` with no number)", () => {
+  const HEAD_QUERY = "pr list --head RP-1190-x --state merged --limit 1 --json number";
+  const MERGED_QUERY = "pr list --state merged --limit 200 --json number,headRefName,headRefOid";
+  /** A fake gh: answers by its arguments, and records each call. */
+  const gh = (answers: Record<string, string | Error>) => {
+    const asked: string[] = [];
+    const run = (args: string[]) => {
+      const line = args.join(" ");
+      asked.push(line);
+      const answer = answers[line];
+      if (answer === undefined) throw new Error(`unexpected gh ${line}`);
+      if (answer instanceof Error) throw answer;
+      return answer;
+    };
+    return { asked, run };
+  };
+  const lane = "G:/rabaed/.claude/worktrees/rp-1190";
+  const start = (run: (args: string[]) => string, currentBranch: string | undefined = "RP-1190-x") =>
+    startWithoutNumber({
+      currentBranch,
+      gh: run,
+      worktrees: () => [
+        { path: "G:/rabaed", branch: "main", head: "0".repeat(40), project: undefined },
+        { path: lane, branch: "RP-1190-x", head: "a".repeat(40), project: "rabaed-lane41" },
+      ],
+      mainRoot: "G:/rabaed",
+      stacks: () => [],
+      platform: "linux",
+    });
+
+  it("takes the current branch's merged PR, and run in the lane it keeps the lane and ends with `pnpm lane:done 590 --yes`", () => {
+    const fake = gh({ [HEAD_QUERY]: '[{"number":590}]' });
+    const started = start(fake.run);
+    expect(started).toEqual({ pr: 590 });
+    expect(fake.asked).toEqual([HEAD_QUERY]);
+
+    const merged = { ...pr, number: 590, headRefName: "RP-1190-x" };
+    const candidates = [laneWt({ path: lane, branch: "RP-1190-x", isCurrent: true })];
+    const decision = decideLaneDone(input({ pr: merged, candidates, currentProject: "rabaed-lane41" }));
+    expect(decision.remove).toEqual([]);
+    expect(reasons(decision)[0]).toContain("the current worktree: run `pnpm lane:done 590 --yes` from another worktree");
+    let released = false;
+    const lines = lastLines({ pr: merged, candidates, release: () => ((released = true), ["RELEASE"]) });
+    expect(lines.at(-1)).toBe("This worktree and its stack stay: for the rest, run `pnpm lane:done 590 --yes` from the Main's worktree, then post the RELEASE it prints.");
+    expect(released).toBe(false);
+  });
+
+  it("from another worktree ends with the RELEASE", () => {
+    expect(lastLines({ pr, candidates: [laneWt()], release: () => ["RELEASE all RP-1170 claims"] })).toEqual(["RELEASE all RP-1170 claims"]);
+  });
+
+  it("lists the merged PRs left here when the current branch has none, and never asks for main's", () => {
+    const fake = gh({ [HEAD_QUERY]: "[]", [MERGED_QUERY]: '[{"number":590,"headRefName":"RP-1190-x","headRefOid":"' + "a".repeat(40) + '"}]' });
+    const started = start(fake.run);
+    expect(started).toEqual({
+      list: [
+        "The current branch RP-1190-x has no merged PR, so lane:done removes nothing here. Merged PRs (of the last 200) that still have a worktree or stack in this clone:",
+        `  PR #590 (RP-1190-x): "${lane}" with stack rabaed-lane41: pnpm lane:done 590`,
+        "Run each from this worktree; it lists what it would remove and asks first. Nothing was removed.",
+      ],
+    });
+    const onMain = gh({ [MERGED_QUERY]: "[]" });
+    expect(start(onMain.run, "main")).toMatchObject({ list: [expect.stringMatching(/^The current branch main has no merged PR/)] });
+    expect(onMain.asked).toEqual([MERGED_QUERY]);
+  });
+
+  it("stops with one clear line when gh fails", () => {
+    const failing = Object.assign(new Error("Command failed: gh"), { stderr: "HTTP 401: Bad credentials (https://api.github.com/graphql)\nTry authenticating with:  gh auth login\n" });
+    const started = start(gh({ [HEAD_QUERY]: failing }).run);
+    expect(started).toEqual({ error: `lane:done refused: \`gh ${HEAD_QUERY}\` failed (HTTP 401: Bad credentials (https://api.github.com/graphql)). Nothing was touched.` });
+    expect(start(gh({ [HEAD_QUERY]: "[]", [MERGED_QUERY]: "not json" }).run)).toMatchObject({ error: expect.stringMatching(/^lane:done refused: `gh pr list --state merged .*` failed \(.*\)\. Nothing was touched\.$/) });
   });
 });
 

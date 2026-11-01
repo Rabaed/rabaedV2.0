@@ -18,6 +18,7 @@ import {
   judgeWorktree,
   listWorktrees,
   localBranches,
+  mergedInto,
   mergesOnly,
   parseWorktrees,
   refExists,
@@ -634,10 +635,10 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     run(["fetch", "--prune", "origin"]);
 
     expect(localBranches("origin/main", clone)).toEqual([
-      { branch: "RP-1-merged", inTarget: true, ownCommit: true, upstreamGone: true },
-      { branch: "RP-2-created", inTarget: true, ownCommit: false, upstreamGone: false },
-      { branch: "RP-3-open", inTarget: false, ownCommit: true, upstreamGone: false },
-      { branch: "main", inTarget: true, ownCommit: true, upstreamGone: false },
+      { branch: "RP-1-merged", inTarget: true, mergesOnly: false, ownCommit: true, upstreamGone: true },
+      { branch: "RP-2-created", inTarget: true, mergesOnly: false, ownCommit: false, upstreamGone: false },
+      { branch: "RP-3-open", inTarget: false, mergesOnly: false, ownCommit: true, upstreamGone: false },
+      { branch: "main", inTarget: true, mergesOnly: false, ownCommit: true, upstreamGone: false },
     ]);
   });
 
@@ -724,6 +725,23 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
       expect(run(["cherry", "origin/main", head]).trim()).toBe("");
       expect(mergesOnly(head, clone)).toBe(false);
       expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
+    });
+
+    // RP-1198 review P2: worktrees:prune deletes such a branch that has no worktree too.
+    it("says so of a local branch with no worktree, and mergedInto takes it, but not an evil merge's", () => {
+      run(["checkout", "-b", "RP-14-merges"]);
+      mergeMainInto("RP-14-merges", 1);
+      run(["checkout", "-b", "RP-15-evil"]);
+      mergeMainInto("RP-15-evil", 1);
+      writeFileSync(join(clone, "evil.txt"), "mine");
+      run(["add", "evil.txt"]);
+      run(["commit", "--amend", "--no-edit"]);
+      run(["checkout", "main"]);
+      const of = (branch: string) => localBranches("origin/main", clone).find((b) => b.branch === branch);
+      expect(of("RP-14-merges")).toMatchObject({ inTarget: false, mergesOnly: true });
+      expect(of("RP-15-evil")).toMatchObject({ inTarget: false, mergesOnly: false });
+      expect(mergedInto("RP-14-merges", "origin/main", clone)).toBe(true);
+      expect(mergedInto("RP-15-evil", "origin/main", clone)).toBe(false);
     });
 
     it("does not call it merges only when git cannot tell (no such upstream)", () => {

@@ -237,6 +237,59 @@ export function decideLaneDone({ pr, lane, candidates, claims, containers, volum
 export const restLine = (pr: Pick<PullRequest, "number">) =>
   `This worktree and its stack stay: for the rest, run \`${laneDoneCommand(pr.number, "--yes")}\` from the Main's worktree, then post the RELEASE it prints.`;
 
+/** lane:done's last lines: run in the lane's own worktree (it keeps it), the command for the rest (restLine); else the RELEASE. */
+export const lastLines = ({ pr, candidates, release }: { pr: Pick<PullRequest, "number">; candidates: Pick<Candidate, "isCurrent">[]; release: () => string[] }): string[] =>
+  candidates.some((c) => c.isCurrent) ? [restLine(pr)] : release();
+
+/** gh, injected: its stdout; throws (with gh's stderr) when it fails. */
+export type GhRunner = (args: string[]) => string;
+
+/** How many merged PRs the no-number list looks at. */
+export const MERGED_LIMIT = 200;
+
+/** gh's JSON answer, or lane:done's one-line refusal (gh's first line of stderr) when gh fails or answers no JSON. */
+function ghJson<T>(gh: GhRunner, args: string[]): { value: T } | { error: string } {
+  try {
+    return { value: JSON.parse(gh(args)) as T };
+  } catch (error) {
+    const why = ((error as { stderr?: string }).stderr?.trim() || (error as Error).message || String(error)).split(/\r?\n/)[0]!.trim();
+    return { error: `lane:done refused: \`gh ${args.join(" ")}\` failed (${why}). Nothing was touched.` };
+  }
+}
+
+/**
+ * RP-1198: `pnpm lane:done` with no number (review P3: its wiring, through an injected gh). The current
+ * branch's newest merged PR (`gh pr list --head … --state merged`: a merged one by name, so an open or closed
+ * PR of a reused branch name is not taken for it), which lane:done then runs as `pnpm lane:done <that number>`;
+ * on a detached HEAD, `main` or a branch with none, mergedLeftovers' list; a gh failure, one line.
+ * worktrees and stacks are read only for the list.
+ */
+export function startWithoutNumber({
+  currentBranch,
+  gh,
+  worktrees,
+  mainRoot,
+  stacks,
+  platform,
+}: {
+  currentBranch: string | undefined;
+  gh: GhRunner;
+  worktrees: () => CloneWorktree[];
+  mainRoot: string;
+  stacks: () => LaneStack[] | undefined;
+  platform?: NodeJS.Platform;
+}): { pr: number } | { list: string[] } | { error: string } {
+  if (currentBranch !== undefined && currentBranch !== "main") {
+    const own = ghJson<{ number: number }[]>(gh, ["pr", "list", "--head", currentBranch, "--state", "merged", "--limit", "1", "--json", "number"]);
+    if ("error" in own) return own;
+    const number = own.value[0]?.number;
+    if (number !== undefined) return { pr: number };
+  }
+  const merged = ghJson<MergedPrRef[]>(gh, ["pr", "list", "--state", "merged", "--limit", String(MERGED_LIMIT), "--json", "number,headRefName,headRefOid"]);
+  if ("error" in merged) return merged;
+  return { list: mergedLeftovers({ worktrees: worktrees(), merged: merged.value, mainRoot, currentBranch, limit: MERGED_LIMIT, stacks: stacks(), platform }) };
+}
+
 /** A merged PR as `gh pr list --state merged --json number,headRefName,headRefOid` gives it. */
 export type MergedPrRef = Pick<PullRequest, "number" | "headRefName" | "headRefOid">;
 

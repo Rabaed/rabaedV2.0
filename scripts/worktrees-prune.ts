@@ -6,7 +6,8 @@
 //      branch, then its rabaed-* compose project (containers, volumes, network) once
 //      the worktree is removed;
 //   2. every other local branch merged into origin/main and checked out nowhere
-//      (merge-base --is-ancestor origin/main, then `git branch -D`), never main;
+//      (merge-base --is-ancestor origin/main, or merges of it only: worktrees.ts mergedInto, then
+//      `git branch -D`), never main;
 //   3. the orphaned compose projects lanes:prune finds;
 //   4. the rabaed-stories-* volumes of the worktrees it removes and of those git no longer lists (RP-1120).
 // It never touches the main checkout or the current worktree, nor one whose Claude
@@ -69,10 +70,10 @@ import {
   fetchPrune,
   gatherFacts,
   gitError,
-  inTarget,
   isShallowRepo,
   listWorktrees,
   localBranches,
+  mergedInto,
   pruneWorktrees,
   refExists,
   removeLinkedWorktree,
@@ -267,7 +268,8 @@ for (const b of chosen.branches) {
   attempt(`branch ${b}`, () => {
     // removeLinkedWorktree may have deleted it already (a worktree-agent-* branch).
     if (!refExists(`refs/heads/${b}`, mainRoot)) return;
-    if (!inTarget(b, TARGET, mainRoot)) throw new Error(`${b} has commits ${TARGET} does not`);
+    // RP-1198 review P2: a branch that only merged origin/main in, with no worktree, goes too (S2's merge-tree check included).
+    if (!mergedInto(b, TARGET, mainRoot)) throw new Error(`${b} has commits ${TARGET} does not`);
     const refused = deleteBranch(b, mainRoot);
     if (refused !== undefined) logged.push(refused.refused);
     else console.log(`Removed branch ${b}.`);

@@ -111,7 +111,7 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
   const removed = (path: string) => remove.some((w) => samePath(w.path, path, platform));
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b) => b !== undefined));
   const branchesToDelete = branches
-    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inTarget &&(b.ownCommit || b.upstreamGone))
+    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && (b.inTarget || b.mergesOnly) && (b.ownCommit || b.upstreamGone))
     .map((b) => b.branch);
 
   const projectChoice = docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, holders, platform }) : { chosen: [], kept: [] };

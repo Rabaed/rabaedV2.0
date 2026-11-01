@@ -10,7 +10,8 @@ import { findNonPlainImports, formatChain } from "./import-graph.ts";
 // Node builtin or a relative .ts script.
 //
 // The first three are the tools named in the ticket. The next three reach a package the same
-// way, through stories-volumes.ts, and an owner who cannot install needs them too.
+// way, through stories-volumes.ts, and a Main whose worktree cannot install needs them too.
+// lanes-drop-dbs.ts drops databases (review P5).
 const ENTRY_POINTS = [
   "scripts/lanes-prune.ts",
   "scripts/lane-done.ts",
@@ -18,6 +19,7 @@ const ENTRY_POINTS = [
   "scripts/worktrees-prune.ts",
   "scripts/worktrees-clean.ts",
   "scripts/lanes-status.ts",
+  "scripts/lanes-drop-dbs.ts",
 ];
 
 const root = resolve(import.meta.dirname, "..");

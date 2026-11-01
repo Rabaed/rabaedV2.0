@@ -75,6 +75,24 @@ export function placeholderDocs(repo: string): string[] {
 }
 
 /**
+ * RP-1198 review P4: one message per entry of the baseline `now` that origin/main's (`main`) does not have,
+ * a second copy of one included: the list only shrinks. ci-green.ts holds a PR whose baseline gains one to the stamped verify.
+ */
+export function baselineGains(main: PlaceholderBaseline, now: PlaceholderBaseline): string[] {
+  const gains: string[] = [];
+  for (const doc of Object.keys(now).sort()) {
+    const left = new Map<string, number>();
+    for (const code of main[doc] ?? []) left.set(code, (left.get(code) ?? 0) + 1);
+    for (const code of now[doc] ?? []) {
+      const n = left.get(code) ?? 0;
+      if (n > 0) left.set(code, n - 1);
+      else gains.push(`${doc}: ${code} (scripts/doc-placeholders-baseline.json on origin/main does not list it: the list only shrinks; fix the doc instead)`);
+    }
+  }
+  return gains;
+}
+
+/**
  * One message per hit the baseline does not list, and one per baseline entry
  * that no longer matches a hit (delete it: the list only shrinks).
  */

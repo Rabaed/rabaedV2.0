@@ -135,19 +135,33 @@ const ratchetEntries = (text: string) =>
     .map((line) => line.trim())
     .filter((line) => line !== "" && !line.startsWith("#"));
 
+/** RP-1198: doc-placeholders.test.ts's baseline, `{ "<doc>": ["<snippet>", …] }`, a ratchet too; a second copy of a snippet is an entry. */
+const PLACEHOLDER_BASELINE = "scripts/doc-placeholders-baseline.json";
+const baselineEntries = (text: string) =>
+  Object.entries(JSON.parse(text) as Record<string, string[]>).flatMap(([doc, snippets]) => snippets.map((s, i) => `${doc}\t${s}\t${snippets.slice(0, i).filter((t) => t === s).length}`));
+
+/** A ratchet's entries by its path, or undefined when the path is no ratchet. */
+const ratchetOf = (path: string): ((text: string) => string[]) | undefined =>
+  path === PLACEHOLDER_BASELINE ? baselineEntries : RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt") ? ratchetEntries : undefined;
+
 /**
- * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`); and each
+ * The changed paths that are CI's own: `CI_OWN_FILES`; each ratchet list that gains an entry (`RATCHETS`, the placeholder baseline; one it cannot parse counts); and each
  * package.json that differs between the merge base and the head (`versions`, as `pnpm queue` reads them) in more than
  * its `version` or `description`. One it cannot parse, or read on either side, counts.
  */
 export function ciOwnChanges(changed: string[], versions: (file: string) => { before: string | undefined; after: string | undefined }): string[] {
   return changed.flatMap((path) => {
     if (isCiOwnFile(path)) return [path];
-    if (RATCHETS.some((dir) => path.startsWith(dir)) && path.endsWith(".txt")) {
+    const entriesOf = ratchetOf(path);
+    if (entriesOf !== undefined) {
       const { before, after } = versions(path);
       if (after === undefined) return before === undefined ? [`${path} (gains an entry)`] : [];
-      const was = new Set(ratchetEntries(before ?? ""));
-      return ratchetEntries(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
+      try {
+        const was = new Set(before === undefined ? [] : entriesOf(before));
+        return entriesOf(after).some((entry) => !was.has(entry)) ? [`${path} (gains an entry)`] : [];
+      } catch {
+        return [`${path} (gains an entry)`];
+      }
     }
     if (path !== "package.json" && !path.endsWith("/package.json")) return [];
     const { before, after } = versions(path);
