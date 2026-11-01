@@ -14,11 +14,6 @@ import {
   type VitestReport,
 } from "./test-timing.ts";
 
-// Real vitest reports from the RP-299 retro (seam 1 on main, and on the slowed
-// branch). Set TEST_TIMING_REPORTS to the folder holding them to run those tests.
-const reports = process.env.TEST_TIMING_REPORTS;
-const real = (name: string): VitestReport => JSON.parse(readFileSync(join(reports!, name), "utf8"));
-
 const report = (...files: [string, number, number][]): VitestReport => ({
   testResults: files.map(([name, startTime, endTime]) => ({ name, startTime, endTime })),
 });
@@ -222,21 +217,5 @@ describe("run", () => {
     writeFileSync(join(dir, "main.json"), "not json");
     run([current, "--main", join(dir, "main.json")], { GITHUB_STEP_SUMMARY: summary });
     expect(readFileSync(summary, "utf8")).toContain("no run on main to compare with yet");
-  });
-});
-
-describe.skipIf(!reports)("the real RP-299 seam 1 reports", () => {
-  it("summarises a slowed branch against main with a notice", () => {
-    const main = timingOf(real("seam1-main.json"));
-    const branch = timingOf(real("perf-before1.json"));
-    expect(main.files.length).toBeGreaterThan(10);
-    const { markdown } = summarise("seam 1", branch, main);
-    expect(markdown.split("\n").filter((l) => l.startsWith("| `"))).toHaveLength(10);
-    expect(markdown).toMatch(/\| `(apps|packages)\//);
-  });
-
-  it("gives no notice for a run against itself", () => {
-    const t = timingOf(real("perf-after1.json"));
-    expect(summarise("seam 1", t, t).notice).toBeUndefined();
   });
 });

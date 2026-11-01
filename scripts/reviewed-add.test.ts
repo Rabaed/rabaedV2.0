@@ -243,6 +243,17 @@ describe("addReviewed", () => {
     expect(calls).toEqual(["fetch", "add", "rerun 41"]);
   });
 
+  it("fails, naming why, and adds nothing when git cannot read a changed package.json (RP-1196)", async () => {
+    const { seam, calls } = fakeSeam({ changed: ["apps/admin/package.json"] });
+    seam.packageJsonVersions = () => {
+      throw new Error("git ls-tree failed: fatal: Not a valid object name abc1234");
+    };
+    const result = await addReviewed({ pr: 5 }, seam);
+    expect(result).toMatchObject({ ok: false, added: false });
+    expect(result.summary).toContain("Not a valid object name abc1234");
+    expect(calls).toEqual(["fetch"]);
+  });
+
   it("never adds it without a review comment at the head", async () => {
     const { seam, calls } = fakeSeam({ comments: [review(OLD)] });
     const result = await addReviewed({ pr: 5 }, seam);

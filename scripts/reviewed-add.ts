@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { isBaselineBotCommit, onlyCleanCommitsSince, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { CI_WORKFLOW, ciOverHttp, ciOwnChanges, readCiEvidence, type CiReads } from "./ci-green.ts";
 import { REQUIRED_CHECK } from "./reviewed-required.ts";
-import { realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen } from "./verify-gate.ts";
+import { commentsOverHttp, errorText, markerWriters, realGateGit, VERIFY_CHECK, verifiedBy, verifiedOrGreen, type CommentReads, type Permission, type ReviewComment } from "./verify-gate.ts";
 
 // Adds the `reviewed` label to a PR (RP-1118, owner's option b on RP-1098: no session labels its own PR).
 // It adds it only when both hold for the PR's current head:
@@ -37,35 +37,15 @@ export const reviewMarker = (sha: string) => `<!-- code-review: ${sha} -->`;
 
 const MARKER = /<!-- code-review: ([0-9a-f]{40}) -->/g;
 
-/**
- * GitHub's `permission` values (GET /repos/{o}/{r}/collaborators/{login}/permission) that can push to the repo:
- * `maintain` is reported as `write`, `triage` as `read`. A marker counts only from a user with one of these, the
- * people who could push or label the PR anyway. The lanes post as the owner's account. `author_association` is not
- * used: GitHub reports MEMBER only for a public org membership, so CI's token saw the owner as CONTRIBUTOR (RP-1159).
- * No bot counts: no review bot posts on this repo, and any workflow can comment as github-actions[bot].
- */
-const WRITE_PERMISSIONS: ReadonlySet<Permission> = new Set(["admin", "write"]);
-
-/** GitHub's legacy base role for a user on the repo (`permission` in the collaborator permission answer). */
-export type Permission = "admin" | "write" | "read" | "none";
-
-export interface ReviewComment {
-  login: string;
-  /** GitHub's `user.type`: "User" or "Bot". */
-  type: string;
-  body: string;
-}
+// Who counts (`canPush`), the comment shape and how comments are read are verify-gate.ts's, which reads Main 6's
+// baseline marker the same way (RP-1194).
+export type { Permission, ReviewComment };
 
 const markedCommits = (comment: ReviewComment) => [...comment.body.matchAll(MARKER)].map(([, sha = ""]) => sha);
 const hasMarker = (comment: ReviewComment) => markedCommits(comment).length > 0;
 
-/** The users among the markers' authors who can push to the repo; `permission` is asked once per login. */
-export async function writersAmong(comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> {
-  const logins = new Set(comments.filter((comment) => comment.type === "User" && hasMarker(comment)).map((comment) => comment.login));
-  const writers = new Set<string>();
-  for (const login of logins) if (WRITE_PERMISSIONS.has(await permission(login))) writers.add(login);
-  return writers;
-}
+/** The users among the review markers' authors who can push to the repo (`markerWriters`). */
+export const writersAmong = (comments: ReviewComment[], permission: (login: string) => Promise<Permission>): Promise<Set<string>> => markerWriters(comments, hasMarker, permission);
 
 /** A user (never a bot) in `writers`: one who can push to the repo (`writersAmong`). */
 export const isTrustedAuthor = (comment: ReviewComment, writers: ReadonlySet<string>) => comment.type === "User" && writers.has(comment.login);
@@ -111,13 +91,9 @@ export function addEvent(eventName: string, payload: unknown): AddEvent | undefi
   throw new Error(`reviewed-add runs on pull_request, issue_comment and workflow_run, not ${eventName}`);
 }
 
-export interface AddSeam extends ReviewedGit, CiReads {
+export interface AddSeam extends ReviewedGit, CiReads, CommentReads {
   /** The PR now. */
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
-  /** Every comment on the PR's conversation. */
-  comments(pr: number): Promise<ReviewComment[]>;
-  /** GitHub's `permission` for `login` on the repo. */
-  permission(login: string): Promise<Permission>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
   /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
@@ -181,7 +157,14 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   if (!settled) return { ok: false, added: false, summary: `PR #${pr}: the reviewed-label run for ${head} did not finish within ${timeoutMs / 1000} s. Re-run this workflow once it has.` };
   const pull = await seam.pull(pr);
   if (pull.headSha !== head) return skip(`its head moved to ${pull.headSha} while this waited; that push's own run decides.`);
-  const verify = verifiedOrGreen(pull.body, head, pr, seam, ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file)), await readCiEvidence(head, seam));
+  let ownChanges: string[];
+  try {
+    ownChanges = ciOwnChanges(seam.changedFiles(head), (file) => seam.packageJsonVersions(head, file));
+  } catch (error) {
+    // A changed file git cannot read refuses, as in the verify gate (RP-1196).
+    return { ok: false, added: false, summary: `PR #${pr}: could not read ${head}'s changes: ${errorText(error)}. Re-run this workflow.` };
+  }
+  const verify = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
   // The verify-gate check reads CI only when it runs, and it ran when the head was pushed, before CI finished:
   // re-run its failed run now CI is green, so the required check shows it.
   let reran = "";
@@ -224,8 +207,6 @@ export async function addReviewed(event: AddEvent, seam: AddSeam, options: { pol
   return { ok: true, added: true, summary: `${added}${rerun ? `; re-ran ${REQUIRED_CHECK} (run ${latest?.id})` : ""}.${reran}` };
 }
 
-const PER_PAGE = 100;
-
 export function overHttp(repository: string, token: string, fetcher: typeof fetch = fetch): Omit<AddSeam, keyof ReviewedGit | keyof CiReads | "fetchPull" | "changedFiles" | "packageJsonVersions" | "sleep"> {
   const call = async (method: string, path: string, body?: unknown, allow404 = false): Promise<unknown> => {
     const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
@@ -259,24 +240,7 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
         open: pull.state === "open",
       };
     },
-    async comments(pr) {
-      const all: ReviewComment[] = [];
-      // 30 pages of 100: far more comments than any PR here has.
-      for (let page = 1; page <= 30; page++) {
-        const batch = (await call("GET", `issues/${pr}/comments?per_page=${PER_PAGE}&page=${page}`)) as {
-          body: string | null;
-          user: { login: string; type: string } | null;
-        }[];
-        all.push(...batch.map((comment) => ({ login: comment.user?.login ?? "", type: comment.user?.type ?? "", body: comment.body ?? "" })));
-        if (batch.length < PER_PAGE) break;
-      }
-      return all;
-    },
-    async permission(login) {
-      // 404: no such user (a deleted account's ghost), so no access. Needs only the token's metadata read.
-      const found = (await call("GET", `collaborators/${encodeURIComponent(login)}/permission`, undefined, true)) as { permission: Permission } | undefined;
-      return found?.permission ?? "none";
-    },
+    ...commentsOverHttp(repository, token, fetcher),
     async labelRuns(headSha) {
       return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));
     },
