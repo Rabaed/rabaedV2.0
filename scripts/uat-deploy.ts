@@ -11,7 +11,8 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 //   node scripts/uat-deploy.ts migrate            bootstrap and migrate UAT's database (session pooler)
 //   node scripts/uat-deploy.ts app-role-check     as rabaed_app: RLS applies, the audit trail can't be rewritten (packages/db/src/check-app-role.ts)
 //   node scripts/uat-deploy.ts defaults           publish the Rabaed Default Versions that differ, as the Engineer in
-//                                                 DEFAULTS_ENGINEER_EMAIL, with a reason naming VERSION; counts and keys only (RP-1205)
+//                                                 DEFAULTS_ENGINEER_EMAIL, with a reason naming VERSION; counts and keys only (RP-1205).
+//                                                 Run it after `demo ensure`, which creates UAT's demo Engineer on a fresh database
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
 //                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
 //   node scripts/uat-deploy.ts records-env        the Records container's secrets (APP_VERSION from VERSION), as NAME=VALUE lines (RP-1042)

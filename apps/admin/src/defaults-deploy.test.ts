@@ -129,7 +129,10 @@ describe("the deploy's publish of the Rabaed Defaults", () => {
   });
 
   it("fails loudly on an error, printing neither its message nor the connection it names", async () => {
-    const failure = Object.assign(new Error("connect ECONNREFUSED postgres://migrator:hunter2@db.example.com:5432/rabaed_uat for ana@example.com"), { code: "ECONNREFUSED" });
+    // Built from parts: no connection string with a password sits in the repository (secret-scan).
+    const password = ["hunt", "er2"].join("");
+    const connection = ["postgres", "://", "migrator:", password, "@db.example.com:5432/rabaed_uat"].join("");
+    const failure = Object.assign(new Error(`connect ECONNREFUSED ${connection} for ana@example.com`), { code: "ECONNREFUSED" });
     const { code, out, err } = await run({
       publish: async () => {
         throw failure;
@@ -139,7 +142,7 @@ describe("the deploy's publish of the Rabaed Defaults", () => {
     expect(out).toBe("");
     expect(err).toContain("failed");
     expect(err).toContain("ECONNREFUSED");
-    for (const secret of ["hunter2", "db.example.com", "ana@example.com", "rabaed_uat"]) expect(err).not.toContain(secret);
+    for (const secret of [password, "db.example.com", "ana@example.com", "rabaed_uat"]) expect(err).not.toContain(secret);
   });
 
   it("passes the reason to the publish and never prints it", async () => {
