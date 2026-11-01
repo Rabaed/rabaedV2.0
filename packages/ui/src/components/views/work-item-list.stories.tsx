@@ -395,6 +395,19 @@ export const LaptopWidth: Story = {
     const headers = within(tableOf(context)).getAllByRole("columnheader").map((h) => h.textContent ?? "");
     const status = headers.indexOf(storyText(context, copy.status));
     await expect(headers.slice(status, status + 3)).toEqual([storyText(context, copy.status), storyText(context, b("Code", "الرمز")), storyText(context, copy.withColumn)]);
+    // The owner's third answer: no drag dots before the names (the headers still drag), and the Title at 180px at most.
+    for (const grip of tableOf(context).querySelectorAll("thead svg.tabler-icon-grid-dots")) await expect(getComputedStyle(grip).display).toBe("none");
+    // Every title, the longest included (its full words in the tooltip).
+    const titles = [...tableOf(context).querySelectorAll<HTMLElement>("tbody a[title]")];
+    await expect(titles.length).toBeGreaterThan(0);
+    for (const title of titles) await expect(title.getBoundingClientRect().width, title.title).toBeLessThanOrEqual(112);
+    // The fourth answer: "With" 140px at most, its full name in the tooltip; the cells 8px in from each side.
+    const owner = cellOf(context, "LED downlights", copy.withColumn);
+    const name = b("Faisal Al Harbi", "فيصل الحربي")[storyLocale(context)];
+    const holder = owner.querySelector<HTMLElement>(`[title="${name}"]`);
+    await expect(holder).not.toBeNull();
+    await expect(holder!.getBoundingClientRect().width).toBeLessThanOrEqual(140);
+    await expect(getComputedStyle(owner).paddingInlineStart).toBe("8px");
   },
 };
 
