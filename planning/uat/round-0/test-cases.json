@@ -245,7 +245,7 @@
   "title": "Download gives the item as it last arrived",
   "who": "Ali (TMC PM); Mohammed (DCL manager)",
   "steps": "1) On a Submitted MAR choose Download from the row menu as Ali, then as Mohammed. 2) Try Download on a Draft.",
-  "expected": "Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers nothing to download.",
+  "expected": "Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers Download of its Working Copy.",
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",

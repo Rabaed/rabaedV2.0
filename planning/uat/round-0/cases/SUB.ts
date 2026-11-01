@@ -493,7 +493,7 @@ defineCase("SUB-18", async (t) => {
   await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent("UAT SUB-18")}`);
   await settle(page);
   if (await notFound(page)) {
-    t.check("The row menu of the Submitted MAR offers Download, a Draft's does not (UI)", false, RP1049);
+    t.check("The row menu of the Submitted MAR offers Download, and so does a Draft's (UI)", false, RP1049);
     await t.shot(page, "list-not-found");
     t.note("The shared item and the Draft's 404 were read through the api (above); the row menus could not be opened.");
     return;
@@ -511,7 +511,7 @@ defineCase("SUB-18", async (t) => {
   await hp.waitForTimeout(1500);
   const draftItems = await hp.getByRole("menuitem").allInnerTexts();
   await t.shot(hp, "row-menu-draft");
-  t.check("A Draft offers no Download", !draftItems.some((x) => /Download/.test(x)), draftItems.join(" | "));
+  t.check("A Draft offers Download of its Working Copy", draftItems.some((x) => /Download/.test(x)), draftItems.join(" | "));
   const wc = await tm.api.hafiz!.post(`/work-items/${draft}/working-copy`);
   t.note(`POST /work-items/<Draft>/working-copy as Hafiz answers ${wc.status} ${wc.text.slice(0, 160)}; the row menu action Download opens the Working Copy PDF (docs/visibility.md Working Copy row) for items not closed.`);
   t.note("The content of the shared item is compared through the api (/shared); the downloaded file itself was not opened.");
