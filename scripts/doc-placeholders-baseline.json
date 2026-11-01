@@ -27,6 +27,7 @@
   "planning/parallel-sessions.md": [
     "pnpm queue <number> --no-review --wait",
     "pnpm lane:done <pr>",
+    "pnpm demo:session --uat <person>",
     "git show origin/main:<path>",
     "pnpm queue <number> --no-review",
     "pnpm screens <route>... --as <person>",

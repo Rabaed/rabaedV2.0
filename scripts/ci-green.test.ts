@@ -239,7 +239,7 @@ describe("a PR that weakens expectHiddenFrom", () => {
 const CODE_UNDER_TEST = ["packages/db/dev-tools/", "apps/web/next.config.ts", "scripts/screens-examples/", "scripts/uat-sheet/"];
 
 /** Tests whose code samples hold import lines that name no real file (lint rules' tests). */
-const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/uat-imports.test.ts"];
+const SAMPLES = ["packages/eslint-plugin/src/rules.test.ts", "scripts/ci-green.test.ts", "scripts/import-graph.test.ts", "scripts/uat-imports.test.ts"];
 
 describe("every helper a test imports", () => {
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.test.ts", "*.test.tsx"], { encoding: "utf8" }).stdout.split("\0").filter(Boolean);
