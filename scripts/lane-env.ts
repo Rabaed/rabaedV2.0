@@ -235,7 +235,12 @@ function takeOverLane(lane: number): boolean {
   if (choice.takeOver.length === 0 && choice.released.length === 0) return false;
   if (clashesAfterRemoval(lane, check, choice.takeOver, choice.released).length > 0) return false;
   try {
-    releaseContainers(choice.takeOver);
+    // RP-1198: it refuses lane 7's and the main checkout's containers itself, removing none.
+    const refused = releaseContainers(choice.takeOver);
+    if (refused !== undefined) {
+      console.error(`  ${refused.refused}`);
+      return false;
+    }
   } catch (error) {
     console.error((error as Error).message);
     process.exit(1);
