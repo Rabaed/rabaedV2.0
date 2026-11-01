@@ -614,6 +614,12 @@ describe("rule 10: a run: script with a pipe sets shell: bash", () => {
     }
   });
 
+  it("takes arithmetic for what it is: a | is bitwise or, and a << is a shift, not a heredoc that hides what follows", () => {
+    expect(messages(wf(runOf("echo $((a | b))\necho \"$(( 1 | 2 ))\"")))).toEqual([]);
+    expect(messages(wf(runOf("x=$((1<<3))\nnode tool.ts | tee out.log")))).toHaveLength(1);
+    expect(messages(wf(runOf("x=$(( (1<<n) | 2 ))\nnode tool.ts | tee out.log")))).toHaveLength(1);
+  });
+
   it("goes on reading after a heredoc, a quote and a substitution", () => {
     expect(messages(wf(runOf("cat <<EOF\n| a |\nEOF\nnode tool.ts | tee out.log")))).toHaveLength(1);
     expect(messages(wf(runOf("echo 'it'\"'\"'s' | tee out.log")))).toHaveLength(1);

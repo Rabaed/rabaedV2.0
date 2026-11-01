@@ -145,7 +145,7 @@ function teesToSummary(script: string): { target: string; previous: string }[] {
   return out;
 }
 
-type ShellContext = { kind: "dq" | "backtick" } | { kind: "sub" | "param"; depth: number };
+type ShellContext = { kind: "dq" | "backtick" } | { kind: "sub" | "arith" | "param"; depth: number };
 /** A heredoc marker at the start of the text (`<<EOF`, `<<-'EOF'`, `<<"EOF"`), not a here-string (`<<<`). */
 const heredocMarker = /^<<(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|\\?([\w.-]+))/;
 
@@ -181,8 +181,10 @@ function hasPipe(script: string): boolean {
       continue;
     }
     if (ch === "$" && script[i + 1] === "(") {
-      stack.push({ kind: "sub", depth: 1 });
-      i += 2;
+      // $(( )) is arithmetic: its | is bitwise or and its << a shift, so neither is looked at.
+      const arithmetic = script[i + 2] === "(";
+      stack.push({ kind: arithmetic ? "arith" : "sub", depth: arithmetic ? 2 : 1 });
+      i += arithmetic ? 3 : 2;
       continue;
     }
     if (ch === "$" && script[i + 1] === "{") {
@@ -217,10 +219,14 @@ function hasPipe(script: string): boolean {
       i++;
       continue;
     }
-    if (top?.kind === "sub") {
+    if (top?.kind === "sub" || top?.kind === "arith") {
       if (ch === "(") top.depth++;
       else if (ch === ")" && --top.depth === 0) {
         stack.pop();
+        i++;
+        continue;
+      }
+      if (top.kind === "arith") {
         i++;
         continue;
       }
