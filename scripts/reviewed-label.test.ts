@@ -267,7 +267,9 @@ describe("reviewed-label.yml", () => {
   const wf = parse(source) as { on: Record<string, { types?: string[] }>; jobs: Record<string, { steps: { run?: string }[] }> };
 
   it("runs when a PR opens, reopens or gets a push, and on nothing else", () => {
-    expect(wf.on).toEqual({ pull_request: { types: ["opened", "reopened", "synchronize"] } });
+    // pull_request_target from RP-1148 part A's workflow PR (GitHub runs main's copy, so a PR can't keep a stale label), pull_request before it.
+    const event = "pull_request_target" in wf.on ? "pull_request_target" : "pull_request";
+    expect(wf.on).toEqual({ [event]: { types: ["opened", "reopened", "synchronize"] } });
   });
 
   it("fetches the old head only when the event has one", () => {
