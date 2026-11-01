@@ -164,9 +164,9 @@ beforeAll(async () => {
   const post = async (path: string, body: unknown) => (await c1.caller.post(`/v1/projects/${projectId}/${path}`, body)).json().id as string;
   electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
   buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
-  const participants = (await c1.caller.get(`/v1/projects/${projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean; company: { legalName: { en: string } } }[];
+  const participants = (await c1.caller.get(`/v1/projects/${projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean; company: { legalName: { en: string } } }[]; // not hidden-from: reads the Project's own Company name, to look for it in the printed text
   const own = participants.find((p) => p.isOwnCompany)!;
-  c1Name = own.company.legalName.en;
+  c1Name = own.company.legalName.en; // not hidden-from: reads the Project's own Company name, to look for it in the printed text
   await ok(c1.caller.request("PUT", `/v1/participants/${own.id}/visibility`, { trade: all, location: all }));
   engineer = (await memberOnProject(api, c1, own.id, ["engineer"], { name: PEOPLE.engineer })).caller;
   pm = (await memberOnProject(api, c1, own.id, ["project_manager"], { name: PEOPLE.pm })).caller;
@@ -220,8 +220,8 @@ beforeAll(async () => {
 
 /** The name of the participant's Company, as the Project lists it. */
 async function detailOfParticipant(participantId: string): Promise<string | undefined> {
-  const list = (await c1.caller.get(`/v1/projects/${projectId}/participants`)).json().participants as { id: string; company: { legalName: { en: string } } }[];
-  return list.find((p) => p.id === participantId)?.company.legalName.en;
+  const list = (await c1.caller.get(`/v1/projects/${projectId}/participants`)).json().participants as { id: string; company: { legalName: { en: string } } }[]; // not hidden-from: reads a Company name, to look for it in the printed text
+  return list.find((p) => p.id === participantId)?.company.legalName.en; // not hidden-from: reads a Company name, to look for it in the printed text
 }
 
 describe("scenario RP-1175-1: the row menu's Download of another Company's Submitted item is exactly what /shared holds", () => {
@@ -285,11 +285,11 @@ describe("scenario RP-1175-1: the row menu's Download of another Company's Submi
       const read = async (by: Caller) => {
         const res = await by.post(`/v1/work-items/${id}/working-copy`);
         if (res.statusCode === 200) return [{ id }];
-        await expectHidden(res, `the working copy of ${id}`);
+        await expectHidden(res, `the working copy of ${id}`); // not hidden-from: the read of expectHiddenFrom above it: its seenBy viewers read the copy first
         return [];
       };
       await expectHiddenFrom({ read, target: id, seenBy: [pm, k1Pm], hiddenFrom: c2Engineer, name: nameOf, label: "the Download" });
-      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/shared`));
+      await expectHidden(c2Engineer.get(`/v1/work-items/${id}/shared`)); // not hidden-from: the same plain 404 as the Download above; the first test reads /shared as the other Company, the positive control
     }
   });
 });
@@ -299,14 +299,14 @@ describe("scenario RP-1175-1: a Draft's Download is its Working Copy, for the Me
     const read = async (by: Caller) => {
       const res = await by.post(`/v1/work-items/${draftId}/working-copy`);
       if (res.statusCode === 200) return [{ id: draftId }];
-      await expectHidden(res, "the Draft's working copy");
+      await expectHidden(res, "the Draft's working copy"); // not hidden-from: the read of expectHiddenFrom above it: its seenBy viewers read the Draft first
       return [];
     };
     await expectHiddenFrom({ read, target: draftId, seenBy: [engineer, pm], hiddenFrom: [k1Pm, c2Engineer], name: nameOf, label: "the Draft's Download" });
     const text = await rowMenuDownload(engineer, draftId);
     expect(text).toContain(squeeze("Draft 1175"));
-    for (const person of Object.values(PEOPLE)) expect(text, person).not.toContain(squeeze(person));
+    for (const person of Object.values(PEOPLE)) expect(text, person).not.toContain(squeeze(person)); // not hidden-from: the raiser's own Draft file, printed for the raiser in the line above, and shown to hold the Subject
     // /shared has nothing of a Draft, for anyone.
-    await expectHidden(engineer.get(`/v1/work-items/${draftId}/shared`));
+    await expectHidden(engineer.get(`/v1/work-items/${draftId}/shared`)); // not hidden-from: a Draft has nothing shared; the Submitted items' /shared is read in the first test
   }, 120_000);
 });

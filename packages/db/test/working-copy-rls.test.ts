@@ -360,9 +360,9 @@ describe("scenarios RP-23-3 and RP-1083-3: what a Working Copy prints", () => {
       hiddenFrom: [c2.members.engineer],
     });
     const { rows } = await migrator.query("select id from working_copy where work_item_id = $1 and app_version = 'test' and stale_at is null", [id]);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(1); // not hidden-from: one job, not a hidden row
     // What every one of them is given is what the first test above read: nothing C1 changed since it arrived.
-    expect(JSON.stringify(content)).not.toContain(CHANGED);
+    expect(JSON.stringify(content)).not.toContain(CHANGED); // not hidden-from: the content the beforeAll read, whose first test reads the shared description from it
   });
 
   // V5 and V19 (visibility.md, the Documental Record row): a reply Document only an internal event took (the
