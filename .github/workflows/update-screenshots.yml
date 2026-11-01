@@ -355,7 +355,7 @@ jobs:
           jq -r '.[]' <<< "$REFUSAL" | while IFS= read -r line; do
             echo "::error::${line//::/: :}"
           done
-          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then push or add the update-screenshots label again."
+          echo "These stories' new baselines were left out of the commit: fix the story so it renders the same every time (docs/agents/ci-logs.md), then add the update-screenshots label again (a push starts no run)."
           exit 1
 
   unlabel:
