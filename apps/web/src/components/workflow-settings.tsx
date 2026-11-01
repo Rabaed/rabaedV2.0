@@ -13,6 +13,7 @@ import {
 import {
   Badge,
   Button,
+  buttonVariants,
   Dialog,
   DialogClose,
   DialogContent,
@@ -31,6 +32,7 @@ import { SaveToLibraryAction } from "@/components/save-to-library-action";
 import { Link, useRouter } from "@/i18n/navigation";
 import { refusalMessage, setupCall, type SetupResult } from "@/lib/setup-call";
 import { copyIntoProject } from "@/lib/copy-into-project";
+import { copyRowActions, defaultRowActions, typeRowActions, type TypeRowAction } from "@/lib/workflow-row-actions";
 
 type Props = {
   projectId: string;
@@ -44,7 +46,7 @@ type Props = {
 };
 
 type Dialogs =
-  | { kind: "library" | "exception" | "back"; type: WorkflowSettingsType }
+  | { kind: "library" | "exception" | "back" | "saveToLibrary"; type: WorkflowSettingsType }
   // `source`: one of the Type's other Rabaed Defaults to copy (RP-596), else the Workflow the Type runs.
   | { kind: "duplicate"; type: WorkflowSettingsType; source?: WorkflowSettingsWorkflow }
   | null;
@@ -62,6 +64,7 @@ const head = "border-b border-border-subtle bg-surface-subtle px-5 py-2.5 text-s
  */
 export function WorkflowSettingsView({ projectId, settings, participants, copySuffix, isAuthorizedPerson }: Props) {
   const t = useTranslations("projectSettings.workflows");
+  const tLibrary = useTranslations("saveToLibrary");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialogs>(null);
@@ -74,16 +77,33 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
   const bind = (type: WorkflowSettingsType, workflowId: string, raisingParticipantId: string | null) =>
     setupCall("PUT", `/projects/${projectId}/workflow-bindings`, { workItemTypeId: type.id, raisingParticipantId, workflowId });
 
-  const menu = (type: WorkflowSettingsType): RowActionsItem[] => [
-    ...(settings.library.some((l) => l.workItemTypeId === type.id)
-      ? [{ key: "library", label: t("useLibrary"), icon: "building" as const, onSelect: () => setDialog({ kind: "library", type }) }]
-      : []),
-    { key: "exception", label: t("addException"), icon: "briefcase", onSelect: () => setDialog({ kind: "exception", type }) },
-    { key: "versions", label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${type.workflow.id}/versions/${type.workflow.versionNo ?? 1}`) },
-    ...(type.workflow.source === "project_copy"
-      ? [{ key: "back", label: t("backToDefault"), icon: "arrow-back-up" as const, onSelect: () => setDialog({ kind: "back", type }), separated: true }]
-      : []),
-  ];
+  /** The row's one button and its menu (RP-1178). */
+  const actions = (type: WorkflowSettingsType) => {
+    const { primary, menu } = typeRowActions({
+      source: type.workflow.source,
+      hasLibrary: settings.library.some((l) => l.workItemTypeId === type.id),
+      canEdit: settings.canEdit,
+      isAuthorizedPerson,
+    });
+    return { primary: primary && <PrimaryButton item={menuItem(type, primary)} />, menu: menu.map((a) => menuItem(type, a)) };
+  };
+
+  const menuItem = (type: WorkflowSettingsType, action: TypeRowAction): RowActionsItem => {
+    switch (action) {
+      case "duplicate":
+        return { key: action, label: t("duplicateEdit"), icon: "copy", onSelect: () => setDialog({ kind: "duplicate", type }) };
+      case "library":
+        return { key: action, label: t("useLibrary"), icon: "building", onSelect: () => setDialog({ kind: "library", type }) };
+      case "exception":
+        return { key: action, label: t("addException"), icon: "briefcase", onSelect: () => setDialog({ kind: "exception", type }) };
+      case "versions":
+        return { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${type.workflow.id}/versions/${type.workflow.versionNo ?? 1}`) };
+      case "saveToLibrary":
+        return { key: action, label: tLibrary("action"), icon: "folder", onSelect: () => setDialog({ kind: "saveToLibrary", type }) };
+      case "back":
+        return { key: action, label: t("backToDefault"), icon: "arrow-back-up", onSelect: () => setDialog({ kind: "back", type }), separated: true };
+    }
+  };
 
   // Back on a Rabaed Default whose latest Version uses an outcome or Stage this Project lacks (RP-566): which ones.
   const errorText = (error: string, body?: unknown) =>
@@ -189,19 +209,8 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
                     )}
                   </td>
                   {(settings.canEdit || isAuthorizedPerson) && (
-                    <td className={`${cell} whitespace-nowrap`}>
-                      <span className="flex flex-col items-end gap-1.5">
-                        {settings.canEdit && (
-                          <span className="flex items-center gap-1.5">
-                            <Button variant="secondary" size="sm" onClick={() => setDialog({ kind: "duplicate", type })}>
-                              <Icon name="copy" size={15} />
-                              {t("duplicateEdit")}
-                            </Button>
-                            <RowActionsMenu label={t("actionsFor", { type: typeName(type) })} items={menu(type)} />
-                          </span>
-                        )}
-                        <SaveToLibraryAction workflowId={type.workflow.id} name={type.workflow.name} isAuthorizedPerson={isAuthorizedPerson} />
-                      </span>
+                    <td className={`${cell} w-px whitespace-nowrap`}>
+                      <RowActions {...actions(type)} menuLabel={t("actionsFor", { type: typeName(type) })} />
                     </td>
                   )}
                 </tr>
@@ -251,6 +260,15 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
           errorText={errorText}
           onClose={() => setDialog(null)}
           onDone={() => done(t("exceptionAdded"))}
+        />
+      )}
+      {dialog?.kind === "saveToLibrary" && (
+        <SaveToLibraryAction
+          workflowId={dialog.type.workflow.id}
+          name={dialog.type.workflow.name}
+          isAuthorizedPerson={isAuthorizedPerson}
+          open
+          onOpenChange={(open) => !open && setDialog(null)}
         />
       )}
       {dialog?.kind === "back" && (
@@ -313,7 +331,7 @@ function RabaedDefaultsSection({
             {several.flatMap((type) =>
               type.rabaedDefaults.map((workflow) => (
                 <tr key={`${type.id}-${workflow.id}`} className="border-b border-border-subtle last:border-b-0" data-testid="workflow-rabaed-default-row">
-                  <th scope="row" className={`${cell} min-w-96 text-start font-semibold text-text`}>{workflow.name[locale]}</th>
+                  <th scope="row" className={`${cell} min-w-64 text-start font-semibold text-text`}>{workflow.name[locale]}</th>
                   <td className={cell}>
                     <bdi dir="ltr" translate="no" className="rounded-[5px] bg-segment-participant-tint px-1.5 py-px text-caption font-bold text-segment-participant-fg">
                       {type.code}
@@ -327,34 +345,8 @@ function RabaedDefaultsSection({
                     </span>
                   </td>
                   {canEdit && (
-                    <td className={`${cell} whitespace-nowrap`}>
-                      <span className="flex items-center justify-end gap-1.5">
-                        {workflow.versionNo !== null && !workflow.bound && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={async () => {
-                              const res = await onBind(type, workflow.id, null);
-                              if (res.ok) onDone(t("copyUsed", { type: type.code }));
-                              else onError(res.error);
-                            }}
-                          >
-                            {t("useFor", { type: type.code })}
-                          </Button>
-                        )}
-                        <Button variant="secondary" size="sm" onClick={() => onDuplicate(type, workflow)}>
-                          <Icon name="copy" size={15} />
-                          {t("duplicateEdit")}
-                        </Button>
-                        {workflow.versionNo !== null && (
-                          <Link
-                            href={`${base}/${workflow.id}/versions/${workflow.versionNo}`}
-                            className="inline-flex h-8 items-center rounded-sm px-3 text-sm font-medium text-brand-fg hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-focus"
-                          >
-                            {t("viewVersions")}
-                          </Link>
-                        )}
-                      </span>
+                    <td className={`${cell} w-px whitespace-nowrap`}>
+                      <DefaultActions type={type} workflow={workflow} base={base} onBind={onBind} onDuplicate={onDuplicate} onDone={onDone} onError={onError} />
                     </td>
                   )}
                 </tr>
@@ -383,7 +375,13 @@ function CopiesSection({
 }) {
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
+  const router = useRouter();
   const rows = types.flatMap((type) => type.copies.map((copy) => ({ type, copy })));
+  const bindFor = async (type: WorkflowSettingsType, workflowId: string) => {
+    const res = await onBind(type, workflowId, null);
+    if (res.ok) onDone(t("copyUsed", { type: type.code }));
+    else onError(res.error);
+  };
   return (
     <SettingsSection title={t("copiesTitle")} description={t("copiesIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="workflow-copies">
       {rows.length === 0 ? (
@@ -417,36 +415,20 @@ function CopiesSection({
                       {copy.hasDraft && copy.versionNo !== null && <Badge tone="neutral">{t("draftChanges")}</Badge>}
                     </span>
                   </td>
-                  <td className={`${cell} whitespace-nowrap`}>
-                    <span className="flex items-center justify-end gap-1.5">
-                      {copy.versionNo !== null && !copy.bound && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={async () => {
-                            const res = await onBind(type, copy.id, null);
-                            if (res.ok) onDone(t("copyUsed", { type: type.code }));
-                            else onError(res.error);
-                          }}
-                        >
-                          {t("useFor", { type: type.code })}
-                        </Button>
-                      )}
-                      {copy.versionNo !== null && (
-                        <Link
-                          href={`${base}/${copy.id}/versions/${copy.versionNo}`}
-                          className="inline-flex h-8 items-center rounded-sm px-3 text-sm font-medium text-brand-fg hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-focus"
-                        >
-                          {t("viewVersions")}
+                  <td className={`${cell} w-px whitespace-nowrap`}>
+                    <RowActions
+                      primary={
+                        <Link href={`${base}/${copy.id}`} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                          {t("edit")}
                         </Link>
+                      }
+                      menuLabel={t("actionsFor", { type: copy.name[locale] })}
+                      menu={copyRowActions(copy).menu.map((action) =>
+                        action === "useFor"
+                          ? { key: action, label: t("useFor", { type: type.code }), icon: "circle-check", onSelect: () => void bindFor(type, copy.id) }
+                          : { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${copy.id}/versions/${copy.versionNo ?? 1}`) },
                       )}
-                      <Link
-                        href={`${base}/${copy.id}`}
-                        className="inline-flex h-8 items-center rounded-sm px-3 text-sm font-medium text-brand-fg hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-focus"
-                      >
-                        {t("edit")}
-                      </Link>
-                    </span>
+                    />
                   </td>
                 </tr>
               ))}
@@ -455,6 +437,70 @@ function CopiesSection({
         </div>
       )}
     </SettingsSection>
+  );
+}
+
+/**
+ * A row's actions (RP-1178): at most one button, then the "⋯" menu with the rest, as the
+ * owner's rows (`Rabaed Settings Workflows.html` › `.wrow`), so the column stays inside its card.
+ */
+function RowActions({ primary, menuLabel, menu }: { primary: ReactNode; menuLabel: string; menu: RowActionsItem[] }) {
+  return (
+    <span className="flex items-center justify-end gap-1">
+      {primary}
+      {menu.length > 0 && <RowActionsMenu label={menuLabel} items={menu} />}
+    </span>
+  );
+}
+
+/** A menu command shown as the row's button. */
+function PrimaryButton({ item }: { item: RowActionsItem }) {
+  return (
+    <Button variant="secondary" size="sm" onClick={item.onSelect}>
+      {item.icon !== undefined && <Icon name={item.icon} size={15} />}
+      {item.label}
+    </Button>
+  );
+}
+
+/** A Rabaed Default's row: Use for the Type is its button; Duplicate and edit and the Versions are in its menu. */
+function DefaultActions({
+  type,
+  workflow,
+  base,
+  onBind,
+  onDuplicate,
+  onDone,
+  onError,
+}: {
+  type: WorkflowSettingsType;
+  workflow: WorkflowSettingsType["rabaedDefaults"][number];
+  base: string;
+  onBind: (type: WorkflowSettingsType, workflowId: string, participantId: string | null) => Promise<SetupResult>;
+  onDuplicate: (type: WorkflowSettingsType, source: WorkflowSettingsWorkflow) => void;
+  onDone: (message?: string) => void;
+  onError: (error: string) => void;
+}) {
+  const t = useTranslations("projectSettings.workflows");
+  const locale = useLocale() as Locale;
+  const router = useRouter();
+  const { primary, menu } = defaultRowActions(workflow);
+  const useFor: RowActionsItem = {
+    key: "useFor",
+    label: t("useFor", { type: type.code }),
+    onSelect: () =>
+      void onBind(type, workflow.id, null).then((res) => (res.ok ? onDone(t("copyUsed", { type: type.code })) : onError(res.error))),
+  };
+  return (
+    <RowActions
+      primary={primary && <PrimaryButton item={useFor} />}
+      menuLabel={t("actionsFor", { type: workflow.name[locale] })}
+      menu={menu.map((action) =>
+        action === "duplicate"
+          ? { key: action, label: t("duplicateEdit"), icon: "copy", onSelect: () => onDuplicate(type, workflow) }
+          : { key: action, label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${workflow.id}/versions/${workflow.versionNo ?? 1}`) },
+      )}
+    />
   );
 }
 
