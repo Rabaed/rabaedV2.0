@@ -40,6 +40,9 @@
 // the compose projects lose their containers and networks only, and the stories volumes stay; the
 // stories sets go one at a time with a pause, stopping at the first that times out.
 //
+// RP-1198: a worktree whose only commits beyond origin/main are merges of it (`git cherry` empty) has
+// nothing unpushed or unmerged, so it goes, and its branch with it (worktrees.ts mergesOnly).
+//
 // Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
 // or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
@@ -71,6 +74,7 @@ import {
   removeLinkedWorktree,
   reportRemoval,
   systemLiveness,
+  unlessMergesOnly,
   unpushedCount,
   type Worktree,
 } from "./worktrees.ts";
@@ -120,7 +124,8 @@ const pruneFacts = (list: Worktree[]): PruneWorktree[] =>
   gatherFacts(list, TARGET, mainRoot, live).map((w) => ({
     ...w,
     upstreamGone: w.branch !== undefined && gone.has(w.branch),
-    unpushed: unpushedCount(w.head, mainRoot),
+    // RP-1198: merges of origin/main only are not unpushed work (gatherFacts' ahead leaves them out too).
+    unpushed: unlessMergesOnly(unpushedCount(w.head, mainRoot), w.head, mainRoot, TARGET),
     project: composeProjectOfEnv(readWorktreeEnv(w.path) ?? ""),
   }));
 const worktrees = pruneFacts(listWorktrees(mainRoot));

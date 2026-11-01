@@ -7,9 +7,10 @@
 //      (lane-done-plan.ts: the safety rules are there, with their tests). Every one kept is listed at once.
 //   3. Removes each, only under .claude/worktrees/ and only past `pnpm worktree:remove`'s own refusals
 //      (worktree-removal.ts removalRefusal), with its long-path steps (core.longpaths, `rd /s /q \\?\…`,
-//      `git worktree prune`), then its branch: the lane's when its tip is in origin/main; a subagent's when
+//      `git worktree prune`), then its branch: the lane's when its tip is in origin/main or its only commits
+//      beyond it are merges of it (RP-1198: those are neither ahead nor unpushed either); a subagent's when
 //      every file it changed matches origin/main (a cherry-picked result: its commits are not in main);
-//      the app's worktree-agent-* branch only when its tip is in origin/main.
+//      the app's worktree-agent-* branch only when its tip is in origin/main (or merges only, as the lane's).
 //   4. Removes the lane's stack (containers, volumes, network; lanes.ts removeProject), never lane 7's and
 //      never one another worktree's .env or a live session uses, checked again just before; while a
 //      verify runs anywhere on the machine its volumes stay (verifies-running.ts).
@@ -47,7 +48,22 @@ import { verifiesRunningNow, volumesKeptReason } from "./verifies-running.ts";
 import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
 import { isAppWorktree } from "./worktrees-pruning.ts";
-import { currentRoot, fetchPrune, gitChanges, gitError, isAgentWorktree, isAncestor, isShallowRepo, listWorktrees, refExists, systemLiveness, unpushedCount, type Worktree } from "./worktrees.ts";
+import {
+  currentRoot,
+  fetchPrune,
+  gitChanges,
+  gitError,
+  isAgentWorktree,
+  isAncestor,
+  isShallowRepo,
+  listWorktrees,
+  mergesOnly,
+  refExists,
+  systemLiveness,
+  unlessMergesOnly,
+  unpushedCount,
+  type Worktree,
+} from "./worktrees.ts";
 
 const TARGET = "origin/main";
 const parsed = parseLaneDoneArgs(process.argv.slice(2));
@@ -182,7 +198,8 @@ for (const c of decision.remove) {
     readable,
     changes: readable ? attempt(() => gitChanges(c.path)) : undefined,
     // Rule 3 found every change of a subagent's branch in origin/main, so its commits, never pushed, lose nothing.
-    unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unpushedCount(registered.head, mainRoot)) : undefined,
+    // RP-1198: a lane's merges of origin/main only are not unpushed work.
+    unpushed: c.kind === "agent" ? 0 : readable && registered ? attempt(() => unlessMergesOnly(unpushedCount(registered.head, mainRoot), registered.head, mainRoot, TARGET)) : undefined,
     project: exists ? projectOf(c.path) : c.project,
     held: holdReason(c.path, systemHolders(), { sinceListed: true }),
   };
@@ -250,7 +267,8 @@ function attempt<T>(read: () => T): T | undefined {
 function facts(w: Worktree, kind: Candidate["kind"]): Candidate {
   const exists = existsSync(w.path);
   const readable = exists && existsSync(join(w.path, ".git"));
-  const ahead = attempt(() => aheadOf(w.head, TARGET, mainRoot));
+  // RP-1198: a branch that only merged origin/main in after its PR has nothing ahead of it.
+  const ahead = attempt(() => unlessMergesOnly(aheadOf(w.head, TARGET, mainRoot), w.head, mainRoot, TARGET));
   const paths = kind === "agent" ? attempt(() => branchPaths(w.head, TARGET, mainRoot)) : undefined;
   return {
     path: w.path,
@@ -280,7 +298,8 @@ function deleteBranches(c: Candidate): void {
   const created = `worktree-${c.path.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}`;
   if (c.kind === "agent" && created !== c.branch && refExists(`refs/heads/${created}`, mainRoot)) branches.push(created);
   for (const branch of branches) {
-    const merged = isAncestor(`refs/heads/${branch}`, TARGET, mainRoot);
+    // RP-1198: a tip that only merged origin/main in is not its ancestor, but has nothing it lacks.
+    const merged = isAncestor(`refs/heads/${branch}`, TARGET, mainRoot) || mergesOnly(`refs/heads/${branch}`, mainRoot, TARGET);
     if (!merged && !(c.kind === "agent" && branch === c.branch)) {
       logged.push(`Branch ${branch} kept: it has commits ${TARGET} does not.`);
       continue;

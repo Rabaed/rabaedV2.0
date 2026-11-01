@@ -3,7 +3,8 @@
 // `rd /s /q \\?\<path>` for what is left, then `git worktree prune` (worktree-removal.ts).
 // It refuses the main checkout, the current worktree, a folder a Claude session works in, and
 // lane 7's (Main 7's harness data), always; a folder git does not list outside .claude/worktrees/;
-// and, without --force, one with uncommitted or untracked files (listed) or unpushed commits.
+// and, without --force, one with uncommitted or untracked files (listed) or unpushed commits
+// (merges of origin/main only do not count, RP-1198).
 // Its branch and its compose project stay: it says how to remove them.
 //
 //   pnpm worktree:remove <path> [--force]      (until its package.json line lands: node scripts/worktree-remove.ts)
@@ -14,7 +15,7 @@ import { holdReason, systemHolders } from "./claude-sessions.ts";
 import { composeProjectOfEnv, readWorktreeEnv } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { removalRefusal, removeWorktreeFolder, type RemoveTarget } from "./worktree-removal.ts";
-import { currentRoot, gitChanges, listWorktrees, unpushedCount } from "./worktrees.ts";
+import { currentRoot, gitChanges, listWorktrees, unlessMergesOnly, unpushedCount } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -46,7 +47,8 @@ const target: RemoveTarget = {
   exists,
   readable,
   changes: readable ? attempt(() => gitChanges(path)) : undefined,
-  unpushed: readable && registered ? attempt(() => unpushedCount(registered.head, mainRoot)) : undefined,
+  // RP-1198: merges of origin/main only are not unpushed work, so a branch that only merged main in needs no --force.
+  unpushed: readable && registered ? attempt(() => unlessMergesOnly(unpushedCount(registered.head, mainRoot), registered.head, mainRoot)) : undefined,
   project: exists ? composeProjectOfEnv(readWorktreeEnv(path) ?? "") : undefined,
   held: holdReason(path, systemHolders()),
 };

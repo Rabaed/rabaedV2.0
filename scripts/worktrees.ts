@@ -250,7 +250,8 @@ function worktreeFacts(w: Worktree, target: string, mainRoot: string, live: Live
   const exists = existsSync(w.path);
   const changes = exists ? gitChanges(w.path) : [];
   const dirty = changes.length > 0;
-  const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
+  // RP-1198: a branch that only merged the target in has nothing ahead of it.
+  const ahead = unlessMergesOnly(Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim()), w.head, mainRoot, target);
   // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
   const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
   const noCommitsYet = exists && !hasOwnCommit(subjects);
@@ -345,7 +346,8 @@ export function commandLineHolds(commandLine: string, folder: string, platform: 
 /**
  * Unlocks, removes and deletes one worktree: its folder (git leaves it behind on
  * Windows when node_modules is in it) and its branch. The branch is deleted with
- * `git branch -D` when it is an ancestor of the target branch; `git branch -d` would
+ * `git branch -D` when it is an ancestor of the target branch, or its only commits beyond
+ * the target are merges (mergesOnly, RP-1198); `git branch -d` would
  * check against the main folder's HEAD, not the target. The `worktree-agent-*` branch
  * the app created the worktree on (named after its folder) goes too when it is in the
  * target. Returns the branches kept, each with why.
@@ -407,7 +409,8 @@ export function removeLinkedWorktree(w: Worktree, mainRoot: string, target: stri
   }
   const branchesKept: { branch: string; reason: string }[] = [];
   const deleteIfInTarget = (branch: string) => {
-    if (!inTarget(branch, target, mainRoot)) {
+    // RP-1198: a branch that only merged the target in is not its ancestor, but has nothing the target lacks.
+    if (!inTarget(branch, target, mainRoot) && !mergesOnly(`refs/heads/${branch}`, mainRoot, target)) {
       branchesKept.push({ branch, reason: `${branch} has commits ${target} does not` });
       return;
     }
@@ -463,6 +466,25 @@ export function localBranches(target: string, cwd: string): LocalBranch[] {
 
 /** Commits of head that no origin branch has. */
 export const unpushedCount = (head: string, cwd: string): number => Number(git(["rev-list", "--count", head, "--not", "--remotes=origin"], cwd).trim());
+
+/**
+ * Whether every commit of head that upstream lacks is a merge (RP-1198): `git cherry <upstream> <head>`
+ * prints nothing, as it leaves merges out (worktrees.test.ts proves it on a throwaway repo). Such a branch
+ * only merged main in, so it has nothing unique. A commit whose change main has but not the commit (a
+ * squash merge or cherry-pick, cherry's "-" line) is not merges only, so those are judged as before.
+ * A merge whose conflict resolution added content of its own is invisible to cherry too: that content
+ * would be lost. False when git cannot tell (no such upstream), so the caller keeps the worktree.
+ */
+export function mergesOnly(head: string, cwd: string, upstream = "origin/main"): boolean {
+  try {
+    return git(["cherry", upstream, head], cwd).trim() === "";
+  } catch {
+    return false;
+  }
+}
+
+/** A count of head's commits (unpushed, or ahead of upstream), or 0 when they are merges only (mergesOnly). */
+export const unlessMergesOnly = (count: number, head: string, cwd: string, upstream = "origin/main"): number => (count > 0 && mergesOnly(head, cwd, upstream) ? 0 : count);
 
 /** Deletes a branch whose commits are all in the target (the caller checked). */
 export const deleteBranch = (branch: string, cwd: string) => git(["branch", "-D", branch], cwd);

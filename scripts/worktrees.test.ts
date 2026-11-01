@@ -16,12 +16,14 @@ import {
   judgeWorktree,
   listWorktrees,
   localBranches,
+  mergesOnly,
   parseWorktrees,
   refExists,
   removeLinkedWorktree,
   removeWorktree,
   stillStarting,
   systemLiveness,
+  unlessMergesOnly,
   unpushedCount,
   type Liveness,
   type WorktreeFacts,
@@ -433,6 +435,32 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
   });
 
+  it("calls a branch whose only commits beyond the target are merges of it finished, and deletes the branch with its worktree (RP-1198)", () => {
+    run(["worktree", "add", "-b", "RP-13-merges", agent("agent-merges")]);
+    writeFileSync(join(root, "m.txt"), "m");
+    run(["add", "m.txt"]);
+    run(["commit", "-m", "main moves on"]);
+    run(["merge", "--no-ff", "-m", "merge main", "main"], agent("agent-merges"));
+    expect(gatherFacts([listed("agent-merges")], "main", root, nobody)[0]).toMatchObject({ ahead: 0, noCommitsYet: false });
+    expect(judgeWorktree(listed("agent-merges"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+    expect(removeWorktree(listed("agent-merges"), root, "main")).toEqual({});
+    expect(refExists("RP-13-merges", root)).toBe(false);
+  });
+
+  it("still keeps a branch with a commit of its own beside merges of the target, and its branch (RP-1198)", () => {
+    run(["worktree", "add", "-b", "RP-14-mixed", agent("agent-mixed")]);
+    writeFileSync(join(agent("agent-mixed"), "w.txt"), "w");
+    run(["add", "w.txt"], agent("agent-mixed"));
+    run(["commit", "-m", "work"], agent("agent-mixed"));
+    writeFileSync(join(root, "m.txt"), "m");
+    run(["add", "m.txt"]);
+    run(["commit", "-m", "main moves on"]);
+    run(["merge", "--no-ff", "-m", "merge main", "main"], agent("agent-mixed"));
+    expect(gatherFacts([listed("agent-mixed")], "main", root, nobody)[0]!.ahead).toBe(2);
+    expect(judgeWorktree(listed("agent-mixed"), "main", root, nobody).finished).toBe(false);
+    expect(removeWorktree(listed("agent-mixed"), root, "main").branchesKept?.map((b) => b.branch)).toEqual(["RP-14-mixed"]);
+  });
+
   it("keeps a merged worktree a running Claude session is in, in worktrees:clean and worktrees:prune (RP-956)", () => {
     run(["worktree", "add", "-b", "agent-main9", agent("agent-main9")]);
     writeFileSync(join(agent("agent-main9"), "c.txt"), "c");
@@ -607,6 +635,61 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     run(["fetch", "--prune", "origin"]);
     expect(localBranches("origin/main", clone).find((b) => b.branch === "RP-6-squashed")).toMatchObject({ inTarget: false, upstreamGone: true });
     expect(unpushedCount(head, clone)).toBe(1);
+  });
+
+  // RP-1198: main-2-signing-days was refused for 2 "unpushed" commits that were only merges of main.
+  describe("a branch whose only commits beyond origin/main are merges of main (RP-1198)", () => {
+    /** main moves on (pushed), and the branch merges it with a merge commit, `times` times. */
+    const mergeMainInto = (branch: string, times: number) => {
+      for (let i = 0; i < times; i++) {
+        run(["checkout", "main"]);
+        commit(clone, `main-${branch}-${i}.txt`);
+        run(["push", "origin", "main"]);
+        run(["checkout", branch]);
+        run(["merge", "--no-ff", "-m", `merge main ${i}`, "origin/main"]);
+      }
+      return run(["rev-parse", "HEAD"]).trim();
+    };
+
+    it("gives an empty `git cherry origin/main`, while one real commit gives a + line: git skips merges", () => {
+      run(["checkout", "-b", "RP-7-merges"]);
+      const head = mergeMainInto("RP-7-merges", 2);
+      expect(unpushedCount(head, clone)).toBe(2);
+      expect(run(["cherry", "origin/main", head]).trim()).toBe("");
+      commit(clone, "real.txt");
+      expect(run(["cherry", "origin/main", "HEAD"]).trim()).toMatch(/^\+ [0-9a-f]{40}$/);
+    });
+
+    it("calls it merges only, and its unpushed merges none, but not once it has a commit of its own", () => {
+      run(["checkout", "-b", "RP-8-merges"]);
+      const head = mergeMainInto("RP-8-merges", 2);
+      expect(mergesOnly(head, clone)).toBe(true);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(0);
+      commit(clone, "own.txt");
+      const own = run(["rev-parse", "HEAD"]).trim();
+      expect(mergesOnly(own, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(own, clone), own, clone)).toBe(3);
+    });
+
+    it("does not call a commit merges only when main has its change but not the commit (a squash merge: git cherry's - line)", () => {
+      run(["checkout", "-b", "RP-9-squashed"]);
+      commit(clone, "h.txt");
+      const head = run(["rev-parse", "HEAD"]).trim();
+      run(["checkout", "main"]);
+      run(["merge", "--squash", "RP-9-squashed"]);
+      run(["commit", "-m", "RP-9 squashed"]);
+      run(["push", "origin", "main"]);
+      expect(run(["cherry", "origin/main", head]).trim()).toMatch(/^- /);
+      expect(mergesOnly(head, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
+    });
+
+    it("does not call it merges only when git cannot tell (no such upstream)", () => {
+      run(["checkout", "-b", "RP-10-merges"]);
+      const head = mergeMainInto("RP-10-merges", 1);
+      expect(mergesOnly(head, clone, "origin/nowhere")).toBe(false);
+      expect(unlessMergesOnly(1, head, clone, "origin/nowhere")).toBe(1);
+    });
   });
 
   it("removes a worktree outside .claude/worktrees with its folder and merged branch, and refuses the main checkout", () => {
