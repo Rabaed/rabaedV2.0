@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { heldReason, type Holders } from "./claude-sessions.ts";
+import { protectedLaneReason } from "./lanes.ts";
 import { samePath } from "./paths.ts";
+import { isRefused, type Refused } from "./removal-guard.ts";
 import { choosePrune } from "./worktrees-pruning.ts";
 import {
   chooseWorktrees,
@@ -16,14 +18,18 @@ import {
   judgeWorktree,
   listWorktrees,
   localBranches,
+  mergedInto,
+  mergesOnly,
   parseWorktrees,
   refExists,
   removeLinkedWorktree,
   removeWorktree,
   stillStarting,
   systemLiveness,
+  unlessMergesOnly,
   unpushedCount,
   type Liveness,
+  type Removal,
   type WorktreeFacts,
 } from "./worktrees.ts";
 
@@ -88,6 +94,27 @@ describe("chooseWorktrees", () => {
     const { remove, skipped } = choose([wt("agent-a"), wt("agent-b", { branch: undefined })]);
     expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-a`, `${main}/.claude/worktrees/agent-b`]);
     expect(skipped).toEqual([]);
+  });
+
+  it("skips, and names, a merged worktree whose .env names lane 7, even with --only (RP-1198)", () => {
+    const projectOf = (path: string) => (path.endsWith("agent-harness") ? "rabaed-lane7" : "rabaed-lane41");
+    const { remove, skipped } = chooseWorktrees({ worktrees: [wt("agent-harness"), wt("agent-free")], currentPath: here, platform: "linux", holders: none, only: ["agent-harness", "agent-free"], projectOf });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-free`]);
+    expect(skipped.map((s) => s.reason)).toEqual([protectedLaneReason("rabaed-lane7")]);
+  });
+
+  it("reads a worktree's lane from its own .env when the caller passes none (RP-1198)", () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "rabaed-clean-lane7-")));
+    try {
+      const harness = join(root, ".claude", "worktrees", "agent-harness");
+      mkdirSync(harness, { recursive: true });
+      writeFileSync(join(harness, ".env"), "COMPOSE_PROJECT_NAME=rabaed-lane7\n");
+      const { remove, skipped } = chooseWorktrees({ worktrees: [{ ...wt("agent-harness"), path: harness }], currentPath: here, holders: none });
+      expect(remove).toEqual([]);
+      expect(skipped.map((s) => s.reason)).toEqual([protectedLaneReason("rabaed-lane7")]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("skips a merged worktree a desktop session holds, found by its path whatever its branch (RP-608)", () => {
@@ -313,6 +340,11 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const agent = (name: string) => join(root, ".claude", "worktrees", name);
   const listed = (name: string) => listWorktrees(root).find((w) => w.path.endsWith(`/${name}`) || w.path.endsWith(`\\${name}`))!;
+  /** What removeWorktree removed; its refusal (RP-1198) fails the test with its reason. */
+  const removal = (result: Refused | Removal): Removal => {
+    if (isRefused(result)) throw new Error(result.refused);
+    return result;
+  };
 
   beforeEach(() => {
     root = realpathSync(mkdtempSync(join(tmpdir(), "rabaed-worktrees-")));
@@ -368,7 +400,7 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(removeWorktree(listed("agent-merged"), root, "main")).toEqual({});
     expect(refExists("worktree-agent-merged", root)).toBe(false);
 
-    const { branchesKept } = removeWorktree(listed("agent-unmerged"), root, "main");
+    const { branchesKept } = removal(removeWorktree(listed("agent-unmerged"), root, "main"));
     expect(branchesKept).toEqual([{ branch: "worktree-agent-unmerged", reason: "worktree-agent-unmerged has commits main does not" }]);
     expect(refExists("worktree-agent-unmerged", root)).toBe(true);
     expect(existsSync(agent("agent-unmerged"))).toBe(false);
@@ -389,7 +421,7 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(removeWorktree(listed("agent-in"), root, "integration")).toEqual({});
     expect(refExists("RP-9-agent-in", root)).toBe(false);
 
-    const { branchesKept } = removeWorktree(listed("agent-out"), root, "integration");
+    const { branchesKept } = removal(removeWorktree(listed("agent-out"), root, "integration"));
     expect(branchesKept?.map((b) => b.branch)).toEqual(["RP-9-agent-out"]);
     expect(refExists("RP-9-agent-out", root)).toBe(true);
   });
@@ -416,7 +448,7 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     run(["checkout", "-b", "RP-12-held"], agent("agent-held"));
     // Another worktree has the created branch checked out, so `git branch -D` refuses it.
     run(["worktree", "add", join(root, "other"), "worktree-agent-held"]);
-    const { branchesKept, folderLeft } = removeWorktree(listed("agent-held"), root, "main");
+    const { branchesKept, folderLeft } = removal(removeWorktree(listed("agent-held"), root, "main"));
     expect(folderLeft).toBeUndefined();
     expect(branchesKept?.map((b) => b.branch)).toEqual(["worktree-agent-held"]);
     expect(existsSync(agent("agent-held"))).toBe(false);
@@ -431,6 +463,32 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: false, neverCommitted: false });
     run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
     expect(judgeWorktree(listed("agent-done"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+  });
+
+  it("calls a branch whose only commits beyond the target are merges of it finished, and deletes the branch with its worktree (RP-1198)", () => {
+    run(["worktree", "add", "-b", "RP-13-merges", agent("agent-merges")]);
+    writeFileSync(join(root, "m.txt"), "m");
+    run(["add", "m.txt"]);
+    run(["commit", "-m", "main moves on"]);
+    run(["merge", "--no-ff", "-m", "merge main", "main"], agent("agent-merges"));
+    expect(gatherFacts([listed("agent-merges")], "main", root, nobody)[0]).toMatchObject({ ahead: 0, noCommitsYet: false });
+    expect(judgeWorktree(listed("agent-merges"), "main", root, nobody)).toEqual({ finished: true, neverCommitted: false });
+    expect(removeWorktree(listed("agent-merges"), root, "main")).toEqual({});
+    expect(refExists("RP-13-merges", root)).toBe(false);
+  });
+
+  it("still keeps a branch with a commit of its own beside merges of the target, and its branch (RP-1198)", () => {
+    run(["worktree", "add", "-b", "RP-14-mixed", agent("agent-mixed")]);
+    writeFileSync(join(agent("agent-mixed"), "w.txt"), "w");
+    run(["add", "w.txt"], agent("agent-mixed"));
+    run(["commit", "-m", "work"], agent("agent-mixed"));
+    writeFileSync(join(root, "m.txt"), "m");
+    run(["add", "m.txt"]);
+    run(["commit", "-m", "main moves on"]);
+    run(["merge", "--no-ff", "-m", "merge main", "main"], agent("agent-mixed"));
+    expect(gatherFacts([listed("agent-mixed")], "main", root, nobody)[0]!.ahead).toBe(2);
+    expect(judgeWorktree(listed("agent-mixed"), "main", root, nobody).finished).toBe(false);
+    expect(removal(removeWorktree(listed("agent-mixed"), root, "main")).branchesKept?.map((b) => b.branch)).toEqual(["RP-14-mixed"]);
   });
 
   it("keeps a merged worktree a running Claude session is in, in worktrees:clean and worktrees:prune (RP-956)", () => {
@@ -577,10 +635,10 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     run(["fetch", "--prune", "origin"]);
 
     expect(localBranches("origin/main", clone)).toEqual([
-      { branch: "RP-1-merged", inTarget: true, ownCommit: true, upstreamGone: true },
-      { branch: "RP-2-created", inTarget: true, ownCommit: false, upstreamGone: false },
-      { branch: "RP-3-open", inTarget: false, ownCommit: true, upstreamGone: false },
-      { branch: "main", inTarget: true, ownCommit: true, upstreamGone: false },
+      { branch: "RP-1-merged", inTarget: true, mergesOnly: false, ownCommit: true, upstreamGone: true },
+      { branch: "RP-2-created", inTarget: true, mergesOnly: false, ownCommit: false, upstreamGone: false },
+      { branch: "RP-3-open", inTarget: false, mergesOnly: false, ownCommit: true, upstreamGone: false },
+      { branch: "main", inTarget: true, mergesOnly: false, ownCommit: true, upstreamGone: false },
     ]);
   });
 
@@ -609,7 +667,93 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     expect(unpushedCount(head, clone)).toBe(1);
   });
 
-  it("removes a worktree outside .claude/worktrees with its folder and merged branch, and refuses the main checkout", () => {
+  // RP-1198: main-2-signing-days was refused for 2 "unpushed" commits that were only merges of main.
+  describe("a branch whose only commits beyond origin/main are merges of main (RP-1198)", () => {
+    /** main moves on (pushed), and the branch merges it with a merge commit, `times` times. */
+    const mergeMainInto = (branch: string, times: number) => {
+      for (let i = 0; i < times; i++) {
+        run(["checkout", "main"]);
+        commit(clone, `main-${branch}-${i}.txt`);
+        run(["push", "origin", "main"]);
+        run(["checkout", branch]);
+        run(["merge", "--no-ff", "-m", `merge main ${i}`, "origin/main"]);
+      }
+      return run(["rev-parse", "HEAD"]).trim();
+    };
+
+    it("gives an empty `git cherry origin/main`, while one real commit gives a + line: git skips merges", () => {
+      run(["checkout", "-b", "RP-7-merges"]);
+      const head = mergeMainInto("RP-7-merges", 2);
+      expect(unpushedCount(head, clone)).toBe(2);
+      expect(run(["cherry", "origin/main", head]).trim()).toBe("");
+      commit(clone, "real.txt");
+      expect(run(["cherry", "origin/main", "HEAD"]).trim()).toMatch(/^\+ [0-9a-f]{40}$/);
+    });
+
+    it("calls it merges only, and its unpushed merges none, but not once it has a commit of its own", () => {
+      run(["checkout", "-b", "RP-8-merges"]);
+      const head = mergeMainInto("RP-8-merges", 2);
+      expect(mergesOnly(head, clone)).toBe(true);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(0);
+      commit(clone, "own.txt");
+      const own = run(["rev-parse", "HEAD"]).trim();
+      expect(mergesOnly(own, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(own, clone), own, clone)).toBe(3);
+    });
+
+    it("does not call a commit merges only when main has its change but not the commit (a squash merge: git cherry's - line)", () => {
+      run(["checkout", "-b", "RP-9-squashed"]);
+      commit(clone, "h.txt");
+      const head = run(["rev-parse", "HEAD"]).trim();
+      run(["checkout", "main"]);
+      run(["merge", "--squash", "RP-9-squashed"]);
+      run(["commit", "-m", "RP-9 squashed"]);
+      run(["push", "origin", "main"]);
+      expect(run(["cherry", "origin/main", head]).trim()).toMatch(/^- /);
+      expect(mergesOnly(head, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
+    });
+
+    // RP-1198 review S2: cherry does not see a merge commit's own content (an evil merge, or edits made during `merge --no-commit`).
+    it("does not call it merges only when a merge commit adds content of its own, which git cherry does not see", () => {
+      run(["checkout", "-b", "RP-13-evil"]);
+      mergeMainInto("RP-13-evil", 1);
+      writeFileSync(join(clone, "only-in-the-merge.txt"), "mine");
+      run(["add", "only-in-the-merge.txt"]);
+      run(["commit", "--amend", "--no-edit"]);
+      const head = run(["rev-parse", "HEAD"]).trim();
+      expect(run(["cherry", "origin/main", head]).trim()).toBe("");
+      expect(mergesOnly(head, clone)).toBe(false);
+      expect(unlessMergesOnly(unpushedCount(head, clone), head, clone)).toBe(1);
+    });
+
+    // RP-1198 review P2: worktrees:prune deletes such a branch that has no worktree too.
+    it("says so of a local branch with no worktree, and mergedInto takes it, but not an evil merge's", () => {
+      run(["checkout", "-b", "RP-14-merges"]);
+      mergeMainInto("RP-14-merges", 1);
+      run(["checkout", "-b", "RP-15-evil"]);
+      mergeMainInto("RP-15-evil", 1);
+      writeFileSync(join(clone, "evil.txt"), "mine");
+      run(["add", "evil.txt"]);
+      run(["commit", "--amend", "--no-edit"]);
+      run(["checkout", "main"]);
+      const of = (branch: string) => localBranches("origin/main", clone).find((b) => b.branch === branch);
+      expect(of("RP-14-merges")).toMatchObject({ inTarget: false, mergesOnly: true });
+      expect(of("RP-15-evil")).toMatchObject({ inTarget: false, mergesOnly: false });
+      expect(mergedInto("RP-14-merges", "origin/main", clone)).toBe(true);
+      expect(mergedInto("RP-15-evil", "origin/main", clone)).toBe(false);
+    });
+
+    it("does not call it merges only when git cannot tell (no such upstream)", () => {
+      run(["checkout", "-b", "RP-10-merges"]);
+      const head = mergeMainInto("RP-10-merges", 1);
+      expect(mergesOnly(head, clone, "origin/nowhere")).toBe(false);
+      expect(unlessMergesOnly(1, head, clone, "origin/nowhere")).toBe(1);
+    });
+  });
+
+  // RP-1198 comment 15382, point 1: outside .claude/worktrees only git's own remove, without --force, of a worktree git lists.
+  it("removes a clean worktree outside .claude/worktrees with git's remove (no --force), and its merged branch; refuses the main checkout", () => {
     const dir = join(tmp, "RP 5 done");
     run(["worktree", "add", "-b", "RP-5-done", dir]);
     commit(dir, "f.txt");
@@ -617,10 +761,42 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     run(["push", "origin", "main"]);
     run(["fetch", "origin"]);
 
-    expect(() => removeWorktree(listed(dir), clone, "origin/main")).toThrow(/not an agent worktree/);
+    expect(removeWorktree(listed(dir), clone, "origin/main")).toEqual({ refused: `Not removed: ${listed(dir).path} is not an agent worktree.` });
     expect(removeLinkedWorktree(listed(dir), clone, "origin/main")).toEqual({});
     expect(existsSync(dir)).toBe(false);
     expect(refExists("RP-5-done", clone)).toBe(false);
-    expect(() => removeLinkedWorktree(listed(clone), clone, "origin/main")).toThrow(/main checkout/);
+    expect(removeLinkedWorktree(listed(clone), clone, "origin/main")).toMatchObject({ refused: expect.stringContaining("is the main checkout") });
+  });
+
+  it("keeps, and names, a worktree outside .claude/worktrees with an untracked file: git's remove without --force refuses it (RP-1198)", () => {
+    const dir = join(tmp, "RP 6 dirty");
+    run(["worktree", "add", "-b", "RP-6-dirty", dir]);
+    writeFileSync(join(dir, "notes.md"), "mine");
+    const result = removeLinkedWorktree(listed(dir), clone, "origin/main");
+    expect(result).toMatchObject({ refused: expect.stringMatching(/^Kept .*RP 6 dirty: it is outside \.claude\/worktrees\/, .*untracked files/) });
+    expect(existsSync(join(dir, "notes.md"))).toBe(true);
+    expect(refExists("RP-6-dirty", clone)).toBe(true);
+  });
+
+  // RP-1198 review S1: an unlock outside would drop git's own guard (a locked worktree needs `remove -f -f`)
+  // and, when git then refuses, leave the worktree there without its lock.
+  it("keeps a locked worktree outside .claude/worktrees, naming the lock and the folder, and its lock survives (RP-1198)", () => {
+    const dir = join(tmp, "RP 11 locked");
+    run(["worktree", "add", "-b", "RP-11-locked", dir]);
+    run(["worktree", "lock", "--reason", "held by hand", dir]);
+    const path = listed(dir).path;
+    const result = removeLinkedWorktree(listed(dir), clone, "origin/main");
+    expect(result).toEqual({ refused: `Kept ${path}: it is outside .claude/worktrees/ and locked (held by hand); unlock it yourself if it should go.` });
+    expect(existsSync(dir)).toBe(true);
+    expect(listed(dir).locked).toBe("held by hand");
+    expect(refExists("RP-11-locked", clone)).toBe(true);
+  });
+
+  it("refuses a folder outside .claude/worktrees that git does not list, and deletes nothing in it (RP-1198)", () => {
+    const dir = join(tmp, "not a worktree");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "keep.txt"), "keep");
+    expect(removeLinkedWorktree({ path: dir, head: "", branch: undefined, locked: undefined }, clone, "origin/main")).toEqual({ refused: `Not removed: ${dir} is not a worktree git lists.` });
+    expect(existsSync(join(dir, "keep.txt"))).toBe(true);
   });
 });
