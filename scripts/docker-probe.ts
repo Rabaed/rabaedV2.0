@@ -48,7 +48,8 @@ export const realDockerRun: DockerRun = (args, timeoutMs) => {
 export function probeDocker(run: DockerRun = realDockerRun, timeoutMs: number = DOCKER_PROBE_TIMEOUT_MS): DockerProbe {
   for (const args of [["version"], ["volume", "ls", "-q"]]) {
     const result = run(args, timeoutMs);
-    if (!result.ok) const hang = result.reason === "timeout";
+    if (result.ok) continue;
+    const hang = result.reason === "timeout";
     return { ok: false, kind: hang ? "hang" : "down", message: hang ? DOCKER_NOT_ANSWERING : DOCKER_NOT_RUNNING };
   }
   return { ok: true };
