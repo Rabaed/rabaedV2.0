@@ -28,7 +28,8 @@ export const OTHER_REQUIRED_CHECKS: Readonly<Record<string, string>> = {
 /**
  * CI's own files: what decides what CI runs and how it judges it. A change to one voids the PR's CI run as a
  * verify. A leading `**` and slash is any folder, `*` anything but a slash. ci-green.test.ts checks that every script and local
- * action ci.yml runs, every vitest global setup, and every scripts/ file those scripts import is here. App code
+ * action a PR-facing workflow runs (with the package.json scripts it calls), every test config and what it loads,
+ * and everything those and the files here import is here (`ciOwnGaps`). App code
  * and tests are not: CI tests them, and review reads them. A package.json counts on any change but its `version`
  * or `description` (`ciOwnChanges`): CI calls `pnpm test:unit` and the like, `pnpm install` runs lifecycle scripts,
  * and its dependencies, overrides and `packageManager` choose the tools that run the tests.
@@ -91,6 +92,17 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/visibility-scenarios.ts",
   "scripts/worktrees-stale.ts",
   "scripts/worktrees.ts",
+  // The scripts the other PR-facing workflows run: reviewed-add's label, the pnpm audit check, update-screenshots'
+  // second render and flip-flop check.
+  "scripts/reviewed-add.ts",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the script's file name (npm's word), not the domain's
+  "scripts/dependency-audit.ts",
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the script's file name (npm's word), not the domain's
+  "scripts/dependency-audit-needed.ts",
+  "scripts/unstable-screenshots-reporter.ts",
+  "scripts/screenshot-flip-flop.ts",
+  // Root package.json's `prepare`, which every `pnpm install` in CI runs.
+  "scripts/hooks-install.ts",
 ];
 
 const globPattern = (glob: string) =>
