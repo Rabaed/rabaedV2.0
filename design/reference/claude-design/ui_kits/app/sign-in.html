@@ -94,7 +94,7 @@ const L=(e,a)=>st.lang==='ar'?a:e;const esc=s=>String(s).replace(/[&<>"]/g,c=>({
 const MS='<svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>';
 function form(){
  if(st.step==='otp')return `<button class="back" data-go="in"><i class="ti ti-arrow-left"></i>${L('Back','رجوع')}</button><div><h1>${L('Check your email','تحقق من بريدك')}</h1></div><p class="sub">${L('We sent a 6-digit code to confirm it’s you. It expires in 10 minutes.','أرسلنا رمزًا من 6 أرقام للتأكد من هويتك. تنتهي صلاحيته خلال 10 دقائق.')}</p>
- <div class="who"><i class="ti ti-mail"></i><b>${esc(st.email||'hafiz@tmc.ae')}</b><button data-go="in">${L('Change','تغيير')}</button></div>
+ <div class="who"><i class="ti ti-mail"></i><b>${esc(st.email||'hafiz@tmc.test')}</b><button data-go="in">${L('Change','تغيير')}</button></div>
  ${st.err?`<div class="alert"><i class="ti ti-alert-circle"></i><span>${st.err}</span></div>`:''}
  <form data-f="otp"><div class="f"><span class="lb">${L('Verification code','رمز التحقق')}</span><div class="otp">${[0,1,2,3,4,5].map(i=>`<input inputmode="numeric" maxlength="1" aria-label="${L('Digit','رقم')} ${i+1}" data-o="${i}">`).join('')}</div></div>
  <label class="rem" data-rem><span class="ck${st.rem?' on':''}">${st.rem?'<i class="ti ti-check"></i>':''}</span>${L('Trust this device for 30 days','الوثوق بهذا الجهاز لمدة 30 يومًا')}</label>
@@ -102,14 +102,14 @@ function form(){
  <p class="foot">${L('Didn’t get it?','لم يصلك؟')} <a href="#" data-resend>${st.sent?L('Sent again','أُعيد الإرسال'):L('Resend code','إعادة إرسال الرمز')}</a></p>`;
  if(st.step==='forgot')return `<button class="back" data-go="in"><i class="ti ti-arrow-left"></i>${L('Back to sign in','العودة لتسجيل الدخول')}</button><div><h1>${L('Reset your password','إعادة تعيين كلمة المرور')}</h1></div><p class="sub">${L('Enter your work email. If it has a Rabaed account, we’ll send a reset link.','أدخل بريد العمل. إن كان لديه حساب في ربائد، سنرسل رابط إعادة التعيين.')}</p>
  ${st.sent?`<div class="alert ok"><i class="ti ti-circle-check"></i><span>${L('Check your inbox — the link is valid for 1 hour.','تحقق من بريدك — الرابط صالح لمدة ساعة.')}</span></div>`:''}
- <form data-f="forgot"><div class="f"><label for="fe">${L('Work email','بريد العمل')}</label><div class="in"><i class="ti ti-mail"></i><input id="fe" type="email" value="${esc(st.email)}" placeholder="name@company.com" autocomplete="email"></div></div><button class="btn pri">${L('Send reset link','إرسال رابط إعادة التعيين')}</button></form>`;
+ <form data-f="forgot"><div class="f"><label for="fe">${L('Work email','بريد العمل')}</label><div class="in"><i class="ti ti-mail"></i><input id="fe" type="email" value="${esc(st.email)}" placeholder="name@company.test" autocomplete="email"></div></div><button class="btn pri">${L('Send reset link','إرسال رابط إعادة التعيين')}</button></form>`;
  const eE=st.err==='email',eP=st.err==='pw',eB=st.err==='bad';
  return `<div><h1>${L('Sign in to Rabaed','سجّل الدخول إلى ربائد')}</h1></div><p class="sub">${L('Submittals, inspections and site reports for every party on the project.','التقديمات والفحوصات وتقارير الموقع لكل أطراف المشروع.')}</p>
  <div class="sso"><button class="btn sec" data-sso>${MS}${L('Microsoft','مايكروسوفت')}</button><button class="btn sec" data-sso><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.8-2.1 5.1-4.4 6.7v5.5h7.1c4.2-3.8 6.6-9.5 6.6-16.2z"/><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9H4.5v5.7C8.1 41.2 15.5 46 24 46z"/><path fill="#FBBC05" d="M11.8 28.3c-.4-1.3-.7-2.8-.7-4.3s.3-2.9.7-4.3V14H4.5C3 17 2 20.4 2 24s1 7 2.5 10l7.3-5.7z"/><path fill="#EA4335" d="M24 10.8c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.2 29.9 2 24 2 15.5 2 8.1 6.8 4.5 14l7.3 5.7c1.7-5.2 6.5-8.9 12.2-8.9z"/></svg>${L('Google','جوجل')}</button></div>
  <div class="or">${L('or with email','أو بالبريد الإلكتروني')}</div>
  ${eB?`<div class="alert"><i class="ti ti-alert-circle"></i><span>${L('That email and password don’t match. Check them and try again.','البريد وكلمة المرور غير متطابقين. تحقق وحاول مرة أخرى.')}</span></div>`:''}
  <form data-f="in" novalidate>
- <div class="f${eE?' er':''}"><label for="em">${L('Work email','بريد العمل')}</label><div class="in"><i class="ti ti-mail"></i><input id="em" type="email" value="${esc(st.email)}" placeholder="name@company.com" autocomplete="email"></div>${eE?`<span class="em"><i class="ti ti-alert-circle"></i>${L('Enter a valid email','أدخل بريدًا صحيحًا')}</span>`:''}</div>
+ <div class="f${eE?' er':''}"><label for="em">${L('Work email','بريد العمل')}</label><div class="in"><i class="ti ti-mail"></i><input id="em" type="email" value="${esc(st.email)}" placeholder="name@company.test" autocomplete="email"></div>${eE?`<span class="em"><i class="ti ti-alert-circle"></i>${L('Enter a valid email','أدخل بريدًا صحيحًا')}</span>`:''}</div>
  <div class="f${eP?' er':''}"><div class="lb"><label for="pw">${L('Password','كلمة المرور')}</label><a href="#" data-go="forgot">${L('Forgot password?','نسيت كلمة المرور؟')}</a></div><div class="in pw"><i class="ti ti-lock"></i><input id="pw" type="${st.show?'text':'password'}" value="${esc(st.pw)}" autocomplete="current-password"><button type="button" class="eye" data-eye aria-label="${st.show?L('Hide password','إخفاء كلمة المرور'):L('Show password','إظهار كلمة المرور')}"><i class="ti ti-${st.show?'eye-off':'eye'}"></i></button></div>${eP?`<span class="em"><i class="ti ti-alert-circle"></i>${L('Enter your password','أدخل كلمة المرور')}</span>`:''}</div>
  <label class="rem" data-rem><span class="ck${st.rem?' on':''}">${st.rem?'<i class="ti ti-check"></i>':''}</span>${L('Keep me signed in','أبقني مسجلًا')}</label>
  <button class="btn pri" ${st.busy?'disabled':''}>${st.busy?'<span class="spin"></span>':''}${L('Sign in','تسجيل الدخول')}</button></form>
@@ -132,7 +132,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-lang],[dat
  if(d.go){st.step=d.go;st.err=null;st.sent=false}
  if(d.eye!==undefined)st.show=!st.show;
  if(d.rem!==undefined){e.preventDefault();st.rem=!st.rem}
- if(d.sso!==undefined){st.busy=true;render();return setTimeout(()=>{st.busy=false;st.step='otp';st.email=st.email||'hafiz@tmc.ae';render()},700)}
+ if(d.sso!==undefined){st.busy=true;render();return setTimeout(()=>{st.busy=false;st.step='otp';st.email=st.email||'hafiz@tmc.test';render()},700)}
  if(d.resend!==undefined)st.sent=true;
  render()});
 document.addEventListener('submit',e=>{e.preventDefault();keep();const f=e.target.dataset.f;
