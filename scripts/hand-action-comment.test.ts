@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commentOnHandAction, handAction, overHttp, type HandActionGitHub, type PrComment } from "./hand-action-comment.ts";
+import { commentOnHandAction, handAction, overHttp, type HandActionGitHub, type IssueEvent, type PrComment } from "./hand-action-comment.ts";
 import { pnpmQueueComment } from "./queue-marker.ts";
 
 // RP-1195 item 3: a `reviewed` label, auto-merge or a queue entry made by hand gets one comment
@@ -62,15 +62,15 @@ describe("handAction", () => {
     const enqueued = (extra: Record<string, unknown> = {}) => payload("enqueued", { pull_request: { ...payload("x").pull_request, updated_at: ENQUEUED_AT, ...extra } });
 
     it("says nothing when `pnpm queue` left its marker for the head before the entry", () => {
-      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)], events: [] })).toBeUndefined();
       // The same second counts: GitHub's times are whole seconds.
-      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD, undefined, undefined, ENQUEUED_AT)] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD, undefined, undefined, ENQUEUED_AT)], events: [] })).toBeUndefined();
     });
 
     // RP-1195 review: queue-marker.ts builds the marker, this script matches it inline; the two must change together.
     it("matches the comment queue-marker.ts builds, for that head only", () => {
       const built = (sha: string) => ({ body: pnpmQueueComment(sha), user: { login: "mmhaleess90", type: "User" }, author_association: "OWNER", created_at: "2026-11-02T10:00:00Z" });
-      expect(handAction("pull_request_target", enqueued(), { comments: [built(HEAD)] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [built(HEAD)], events: [] })).toBeUndefined();
       expect(handAction("pull_request_target", enqueued(), { comments: [built("b".repeat(40))] })).toMatchObject({ kind: "queue" });
     });
 
@@ -79,13 +79,26 @@ describe("handAction", () => {
       expect(handAction("pull_request_target", enqueued(), { comments: [after] })).toMatchObject({ kind: "queue" });
       expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD), after] })).toMatchObject({ kind: "queue" });
       // Another head's newer marker does not hide this head's.
-      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD), marker("b".repeat(40), undefined, undefined, "2026-11-02T10:01:00Z")] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD), marker("b".repeat(40), undefined, undefined, "2026-11-02T10:01:00Z")], events: [] })).toBeUndefined();
     });
 
     it("takes the time it runs when the payload has no updated_at", () => {
       const event = payload("enqueued");
-      expect(handAction("pull_request_target", event, { comments: [marker(HEAD)], now: new Date("2026-11-02T10:00:30Z") })).toBeUndefined();
+      expect(handAction("pull_request_target", event, { comments: [marker(HEAD)], events: [], now: new Date("2026-11-02T10:00:30Z") })).toBeUndefined();
       expect(handAction("pull_request_target", event, { comments: [marker(HEAD)], now: new Date("2026-11-02T09:59:00Z") })).toMatchObject({ kind: "queue" });
+    });
+
+    // RP-1195 follow-up (Main 6): a marker from an entry that was later dropped does not excuse a button re-entry.
+    it("does not count a marker when the PR left the queue between the marker and the entry", () => {
+      const left = (created_at: string) => ({ event: "removed_from_merge_queue", created_at });
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)], events: [left("2026-11-02T10:00:03Z")] })).toMatchObject({ kind: "queue" });
+      // A removal before the marker (an earlier entry) or after the entry being judged does not.
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)], events: [left("2026-11-02T09:59:00Z"), left("2026-11-02T10:01:00Z")] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)], events: [{ event: "added_to_merge_queue", created_at: "2026-11-02T10:00:03Z" }] })).toBeUndefined();
+    });
+
+    it("does not count a marker when the PR's events could not be read", () => {
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)] })).toMatchObject({ kind: "queue" });
     });
 
     it("names who queued it when no marker names the head, and says Reviewed required still passes", () => {
@@ -112,10 +125,11 @@ describe("handAction", () => {
 });
 
 /** A fake GitHub holding the PR's comments; records what gets posted. */
-const github = (comments: PrComment[] = []) => {
+const github = (comments: PrComment[] = [], events: () => IssueEvent[] = () => []) => {
   const posted: { pr: number; body: string }[] = [];
   const seam: HandActionGitHub = {
     comments: async () => comments,
+    events: async () => events(),
     postComment: async (pr, body) => {
       posted.push({ pr, body });
     },
@@ -176,6 +190,36 @@ describe("commentOnHandAction", () => {
     expect(button.posted).toHaveLength(1);
   });
 
+  describe("a `pnpm queue` marker and the PR's queue events (RP-1195 follow-up)", () => {
+    const marker = { body: pnpmQueueComment(HEAD), user: { login: "mmhaleess90", type: "User" }, author_association: "OWNER", created_at: "2026-11-02T10:00:00Z" };
+    const entry = (updated_at: string) => payload("enqueued", { pull_request: { ...payload("x").pull_request, updated_at } });
+
+    it("comments on a button entry after the marker's entry was dropped", async () => {
+      const { seam, posted } = github([marker], () => [
+        { event: "added_to_merge_queue", created_at: "2026-11-02T10:00:01Z" },
+        { event: "removed_from_merge_queue", created_at: "2026-11-02T10:20:00Z" },
+        { event: "added_to_merge_queue", created_at: "2026-11-02T10:30:00Z" },
+      ]);
+      await commentOnHandAction("pull_request_target", entry("2026-11-02T10:30:00Z"), seam);
+      expect(posted).toHaveLength(1);
+      expect(posted[0]?.body).toContain("without `pnpm queue`");
+    });
+
+    it("posts nothing for the marker's own entry", async () => {
+      const { seam, posted } = github([marker], () => [{ event: "added_to_merge_queue", created_at: "2026-11-02T10:00:01Z" }]);
+      expect(await commentOnHandAction("pull_request_target", entry("2026-11-02T10:00:01Z"), seam)).toBeUndefined();
+      expect(posted).toEqual([]);
+    });
+
+    it("comments when the events cannot be read", async () => {
+      const { seam, posted } = github([marker], () => {
+        throw new Error("GitHub GET … answered 403");
+      });
+      await commentOnHandAction("pull_request_target", entry("2026-11-02T10:00:01Z"), seam);
+      expect(posted).toHaveLength(1);
+    });
+  });
+
   it("posts once per action: a re-run finds its own comment", async () => {
     const { seam, posted } = github([{ body: `${ownMarker}\nold text`, user: { login: "github-actions[bot]", type: "Bot" } }]);
     expect(await commentOnHandAction("pull_request_target", reviewed, seam)).toBeUndefined();
@@ -224,6 +268,16 @@ describe("overHttp", () => {
       `https://api.github.com/repos/${REPO}/issues/640/comments?per_page=100&page=2`,
     ]);
     expect(new Headers(calls[0]?.init?.headers).get("Authorization")).toBe("Bearer t0ken");
+  });
+
+  it("reads every page of the PR's issue events", async () => {
+    const full = Array.from({ length: 100 }, () => ({ event: "labeled", created_at: "2026-11-02T10:00:00Z" }));
+    const { calls, github } = answering([full, [{ event: "removed_from_merge_queue", created_at: "2026-11-02T10:00:00Z" }]]);
+    expect(await github.events(640)).toHaveLength(101);
+    expect(calls.map((call) => call.url)).toEqual([
+      `https://api.github.com/repos/${REPO}/issues/640/events?per_page=100&page=1`,
+      `https://api.github.com/repos/${REPO}/issues/640/events?per_page=100&page=2`,
+    ]);
   });
 
   it("posts a comment on the PR", async () => {
