@@ -175,6 +175,19 @@ describe("branchMix: root package.json that only adds scripts for new scripts", 
     }
   });
 
+  it("refuses an added lifecycle name (postinstall runs on every install) even for an added script", () => {
+    expect(refused(root({ ...mainScripts, postinstall: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added pre<x> hook for an existing entry (prelint runs before lint) even for an added script", () => {
+    expect(refused(root({ ...mainScripts, prelint: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("passes `pr:status`: it starts with pr, not pre, so it is no hook", () => {
+    const head = commit({ ...newScript, "package.json": root({ ...mainScripts, "pr:status": "node scripts/new.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
+  });
+
   it("refuses a package.json that adds no entry at all (a reformat) beside code", () => {
     expect(refused(JSON.stringify({ name: "rabaed", private: true, scripts: mainScripts }))).toContain("shared: package.json");
   });
