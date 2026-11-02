@@ -1,18 +1,18 @@
 {
   "sections": [
     {
-      "key": "material",
+      "key": "classification",
       "title": {
-        "ar": "تفاصيل المادة",
-        "en": "Material details"
+        "ar": "التصنيف",
+        "en": "Classification"
       },
       "fields": [
         {
-          "key": "manufacturer",
-          "type": "text",
+          "key": "trade",
+          "type": "trade",
           "label": {
-            "ar": "المصنّع",
-            "en": "Manufacturer"
+            "ar": "التخصص",
+            "en": "Trade"
           },
           "required": true
         },
@@ -26,6 +26,46 @@
           "label": {
             "ar": "المورّد المعتمد",
             "en": "Approved supplier"
+          },
+          "required": true
+        },
+        {
+          "key": "location",
+          "type": "location",
+          "label": {
+            "ar": "الموقع",
+            "en": "Location"
+          },
+          "required": true
+        },
+        {
+          "key": "scopes",
+          "help": {
+            "ar": "نطاقات التخصص المختار التي تخصها هذه المادة.",
+            "en": "The Scopes of the chosen Trade this material is for."
+          },
+          "type": "scopes",
+          "label": {
+            "ar": "النطاقات",
+            "en": "Scopes"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "material",
+      "title": {
+        "ar": "تفاصيل المادة",
+        "en": "Material details"
+      },
+      "fields": [
+        {
+          "key": "manufacturer",
+          "type": "text",
+          "label": {
+            "ar": "المصنّع",
+            "en": "Manufacturer"
           },
           "required": true
         },
@@ -203,8 +243,8 @@
     {
       "key": "references",
       "title": {
-        "ar": "المراجع",
-        "en": "References"
+        "ar": "الروابط",
+        "en": "Links"
       },
       "fields": [
         {
@@ -217,46 +257,6 @@
           "label": {
             "ar": "الاعتمادات ذات الصلة",
             "en": "Related submittals"
-          },
-          "required": false
-        }
-      ]
-    },
-    {
-      "key": "classification",
-      "title": {
-        "ar": "التصنيف",
-        "en": "Classification"
-      },
-      "fields": [
-        {
-          "key": "trade",
-          "type": "trade",
-          "label": {
-            "ar": "التخصص",
-            "en": "Trade"
-          },
-          "required": true
-        },
-        {
-          "key": "location",
-          "type": "location",
-          "label": {
-            "ar": "الموقع",
-            "en": "Location"
-          },
-          "required": true
-        },
-        {
-          "key": "scopes",
-          "help": {
-            "ar": "نطاقات التخصص المختار التي تخصها هذه المادة.",
-            "en": "The Scopes of the chosen Trade this material is for."
-          },
-          "type": "scopes",
-          "label": {
-            "ar": "النطاقات",
-            "en": "Scopes"
           },
           "required": false
         }

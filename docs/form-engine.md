@@ -28,6 +28,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **2.10 The MAR Form Version 3 (as built, RP-294)**: read when you need what MAR Form Version 3 added (References).
   - **2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)**: read when you work on the MAR, SAR or DAR Form.
   - **2.12 The `approved_supplier` field and the MAR Form Version 6 (as built, RP-595, spec RP-598)**: read when you touch the `approved_supplier` field.
+  - **2.12a The MAR Form Version 7 (as built, RP-1152)**: read when you need the MAR Form's current section order.
   - **2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)**: read when a link question limits its items by Module, Type or outcome, or a Project makes one required.
 - **3. Checklists**: read when you work on `checklist` fields and their check items.
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
@@ -244,6 +245,12 @@ Settled with the owner (2026-10-15): a MAR's supplier must be approved. It is a 
 - **On screen:** a select of the Trade's approved suppliers, sorted in the viewer's alphabet; a held withdrawn supplier is listed marked "(withdrawn)"; a Trade with none shows "No approved supplier for this Trade yet" in place of the select (the MAR can't leave Draft until a Project Admin adds one). Read mode shows the name.
 - **MAR Form Version 6** (`apps/admin/forms/MAR.json`, published by `pnpm defaults:publish`) is Version 5 plus `supplier` ("Approved supplier", "المورّد المعتمد") in Material details, after Manufacturer; Manufacturer stays free text (the maker, not the one who supplies). It is Version 6 wherever the earlier document was published as Version 5 (every deployed environment); a database seeded fresh numbers the same document 5, since Versions 1 to 4 come from migrations. New MARs pin it; MARs on an earlier Version keep theirs and need no supplier. The demo's Project has one fictional Electrical supplier so its MARs leave Draft.
 - Seam 1: `apps/api/test/mar-form-v6.test.ts`; seam 3: `packages/domain/src/form-approved-supplier.test.ts`.
+
+### 2.12a The MAR Form Version 7 (as built, RP-1152)
+
+- **MAR Form Version 7** (`apps/admin/forms/MAR.json`, published by `pnpm defaults:publish`) is Version 6 in the New item's order (owner's decision 5, 2026-11-02): **Classification** first, holding Trade, then `supplier` (Approved supplier, moved from Material details), Location and Scopes; then **Material details** (Manufacturer, Model, Specification section, Description), **Items**, **Documents**, and **Links** ("الروابط", the References section retitled; its key stays `references`, with `related_submittals`).
+- Every field and section keeps its key, type and required flag, so answers and Documental Records carry over; Items' Quantity stays `total: true`. The supplier's choices still follow the `trade` answer, wherever its field sits (§2.12). It is Version 7 wherever Version 6 was published; a database seeded fresh numbers it 5 (§2.12). MARs on an earlier Version keep theirs.
+- Seam 1: `apps/api/test/mar-form-v7.test.ts`.
 
 ### 2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)
 
