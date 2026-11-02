@@ -267,9 +267,11 @@ describe("reviewed-label.yml", () => {
   const wf = parse(source) as { on: Record<string, { types?: string[] }>; jobs: Record<string, { steps: { run?: string }[] }> };
 
   it("runs when a PR opens, reopens or gets a push, and on nothing else", () => {
-    // pull_request_target from RP-1148 part A's workflow PR (GitHub runs main's copy, so a PR can't keep a stale label), pull_request before it.
-    const event = "pull_request_target" in wf.on ? "pull_request_target" : "pull_request";
-    expect(wf.on).toEqual({ [event]: { types: ["opened", "reopened", "synchronize"] } });
+    // RP-1148 part A moves it to pull_request_target (GitHub runs main's copy, so a PR can't keep a stale label) in two
+    // steps: both triggers while main's copy listens only to pull_request, then pull_request_target alone.
+    const events = Object.keys(wf.on).sort();
+    expect([["pull_request"], ["pull_request_target"], ["pull_request", "pull_request_target"]]).toContainEqual(events);
+    for (const event of events) expect(wf.on[event], event).toEqual({ types: ["opened", "reopened", "synchronize"] });
   });
 
   it("fetches the old head only when the event has one", () => {
