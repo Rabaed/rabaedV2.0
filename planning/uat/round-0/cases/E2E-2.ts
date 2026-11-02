@@ -216,9 +216,12 @@ defineCase("J9", async (t) => {
   // 2. Hafiz raises a WIR picking it (Tower 1, Electrical), saves a Draft and sends it for review.
   const hp = await c.page("hafiz");
   // RP-1221: the New Inspection is the create panel over the Inspections tab; Save Draft keeps it open on the new Draft (`&draft=<id>`).
+  // The New page sends the link on to the panel's landing: the Inspections tab, or the Submittals tab of a Project that shows them there.
   await go(hp, `/projects/${P}/work-items/new?module=inspections&type=WIR`);
+  // Open once the Form has loaded: the dialog is then named by its "No number yet" line (loading, "Opening the new Draft…").
+  const panel = hp.getByRole("dialog", { name: "No number yet" });
+  await panel.waitFor({ timeout: 20000 });
   await settle(hp);
-  const panel = hp.getByRole("dialog");
   await panel.getByLabel(/^Subject/).fill(`UAT J9 cable trays Tower 1 ${tag}`);
   await panel.getByLabel(/^Description/).fill("Cable trays on Floor 02, Tower 1, ready for inspection.");
   if (!/Templates for Electrical Works/.test(await panel.innerText())) await pickOption(hp, "answer-trade", /Electrical Works/);

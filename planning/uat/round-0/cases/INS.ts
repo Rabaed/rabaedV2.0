@@ -175,9 +175,12 @@ defineCase("INS-03", async (t) => {
   const { page } = await pageAs("hafiz");
   const projectId = await openProject(page);
   // RP-1221: the New Inspection is the create panel over the Inspections tab, the template picked from radio cards.
+  // The New page sends the link on to the panel's landing: the Inspections tab, or the Submittals tab of a Project that shows them there.
   await go(page, `/projects/${projectId}/work-items/new?module=inspections&type=WIR`);
+  // Open once the Form has loaded: the dialog is then named by its "No number yet" line (loading, "Opening the new Draft…").
+  const panel = page.getByRole("dialog", { name: "No number yet" });
+  await panel.waitFor({ timeout: 20000 });
   await settle(page);
-  const panel = page.getByRole("dialog");
   const before = await panel.innerText();
   t.check("Before a Trade, the Checklist Template says Choose a Trade first (or the only Trade is already picked)", /Choose a Trade first\./.test(before) || /Templates for Electrical Works/.test(before));
   if (/Choose a Trade first\./.test(before)) {
