@@ -50,9 +50,8 @@ function onlyDependencyFieldsChanged(before: string | undefined, after: string |
 const NEW_SCRIPT_COMMAND = /^node scripts\/([\w.-]+)$/;
 /** npm/pnpm lifecycle names: they run on install, publish or version, not when asked. */
 const LIFECYCLE_NAMES = ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly", "prepack", "postpack", "publish", "postpublish", "preversion", "version", "postversion", "dependencies"];
-/** A lifecycle name, or `pre<x>`/`post<x>` for an <x> in `scripts`: those run around another script. */
-const isHookName = (name: string, scripts: Record<string, unknown>) =>
-  LIFECYCLE_NAMES.includes(name) || ["pre", "post"].some((prefix) => name.startsWith(prefix) && Object.hasOwn(scripts, name.slice(prefix.length)));
+/** A lifecycle name, or any `pre…`/`post…` name: a later `<x>` would make it run around `<x>`, so those go in their own PR. */
+const isHookName = (name: string) => LIFECYCLE_NAMES.includes(name) || name.startsWith("pre") || name.startsWith("post");
 
 /**
  * RP-1195 item 7: true when root package.json only adds `scripts` entries `node scripts/<file>` whose file this change
@@ -75,7 +74,7 @@ function onlyNewScriptEntries(before: string | undefined, after: string | undefi
     return (
       added.length > 0 &&
       added.every(([name, command]) => {
-        if (isHookName(name, next.scripts)) return false;
+        if (isHookName(name)) return false;
         const file = typeof command === "string" ? NEW_SCRIPT_COMMAND.exec(command)?.[1] : undefined;
         return file !== undefined && isAdded(`scripts/${file}`);
       })

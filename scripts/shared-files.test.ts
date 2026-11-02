@@ -183,6 +183,10 @@ describe("branchMix: root package.json that only adds scripts for new scripts", 
     expect(refused(root({ ...mainScripts, prelint: "node scripts/new.ts" }))).toContain("shared: package.json");
   });
 
+  it("refuses an added post<x> even with no <x> yet (postfoo), so a later `foo` cannot wake it", () => {
+    expect(refused(root({ ...mainScripts, postfoo: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
   it("passes `pr:status`: it starts with pr, not pre, so it is no hook", () => {
     const head = commit({ ...newScript, "package.json": root({ ...mainScripts, "pr:status": "node scripts/new.ts" }) });
     expect(branchMix(repo, head)).toBeUndefined();
