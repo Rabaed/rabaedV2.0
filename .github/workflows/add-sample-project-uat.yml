@@ -1,0 +1,91 @@
+# Add the sample Project to UAT (RP-1217): by hand only. Adds the demo's second Project, Al Nakheel District –
+# Block A (NKD: 103 Submittals and a Snag List, apps/api/src/demo/sample-project.ts), to UAT's database without a
+# reset, so Riyadh Gate Tower and Ahmed's work there stay as they are; then spreads its open items' Step Age over
+# 1 to 4+ weeks (scripts/sample-project-age.ts, uat:age's own code). Everything goes through the api as the demo
+# people, signing in with DEMO_PASSWORD; running it again adds and ages nothing.
+#
+# Dry run (the default) only counts: how much of the sample Project is there, and how many items the Step Age
+# step would age; it changes nothing. The repository's run logs and step summaries are public (Main 6,
+# 2026-10-31): the tools print counts and Document Numbers only, a refused api call by its method, path and status
+# (publicFailure), and masked() takes any URL or email out of what they print as well. There are no free-text
+# inputs. scripts/uat-guard.ts refuses anything but UAT's database inside this job.
+# Run it on main: Actions > Add the sample Project to UAT > Run workflow.
+name: Add the sample Project to UAT
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (count what is there and what would be aged; change nothing)
+        required: true
+        type: boolean
+        default: true
+permissions:
+  contents: read
+# An explicit bash adds -o pipefail, so a failed tool fails its step instead of ending with tee's status (RP-1208).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  refused:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Run it on main; nothing was changed."
+          exit 1
+
+  run:
+    name: Add the sample Project to UAT (environment uat)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    timeout-minutes: 30
+    # Shared with Deploy UAT, Reset UAT, Age UAT items and the Supabase gate: never two at once on UAT's database.
+    concurrency:
+      group: uat-database
+      cancel-in-progress: false
+    env:
+      RABAED_ENVIRONMENT: uat
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+      # A fixed word: the box's value.
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: main, persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # The api in-process with UAT's file store, as the demo step of Deploy UAT runs it: every Submittal leaves
+      # Draft with its Datasheet, stored in R2 by the api's own code (ADR 0007).
+      - name: Add the sample Project
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          DATABASE_ADMIN_PASSWORD: ${{ secrets.DATABASE_ADMIN_PASSWORD }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          FILE_STORE_ACCESS_KEY_ID: ${{ secrets.FILE_STORE_ACCESS_KEY_ID }}
+          FILE_STORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_STORE_SECRET_ACCESS_KEY }}
+        run: |
+          masked() { sed -E -e 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#<url>#g' -e 's/[^[:space:]",:<>@]+@[^[:space:]",:<>@]+\.[^[:space:]",:<>@]+/<email>/g'; }
+          if [ "$DRY_RUN" = "true" ]; then action=sample-project-status; else action=add-sample-project; fi
+          node scripts/uat-deploy.ts demo "$action" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
+      # uat:age's guard needs UAT's mail settings to pass, as Age UAT items gives them; this step sends no mail.
+      - name: Spread its Step Age
+        env:
+          DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
+          DATABASE_MIGRATOR_PASSWORD: ${{ secrets.DATABASE_MIGRATOR_PASSWORD }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          UAT_WEB_URL: ${{ vars.UAT_WEB_URL }}
+        run: |
+          masked() { sed -E -e 's#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]]+#<url>#g' -e 's/[^[:space:]",:<>@]+@[^[:space:]",:<>@]+\.[^[:space:]",:<>@]+/<email>/g'; }
+          args=(--uat)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node scripts/sample-project-age.ts "${args[@]}" 2>&1 | masked | tee -a "$GITHUB_STEP_SUMMARY"
