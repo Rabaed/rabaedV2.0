@@ -8,13 +8,12 @@ import { resolve } from "node:path";
 // The comment is what wakes the session's Auto-fix; the action itself shows only in the PR's timeline.
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH. Reads the PR's comments
-// and posts one; runs no PR code. Imports builtins only, so it adds nothing to CI's own files but itself.
+// (and, for a queue entry, its issue events) and posts one; runs no PR code. Imports builtins only, so it adds nothing to CI's own files but itself.
 
 export interface Payload {
   action?: string;
   label?: { name?: string };
-  /** `updated_at` is the nearest the `enqueued` payload has to the entry's time: it carries no time of its own. */
-  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown; updated_at?: string };
+  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown };
   repository?: { full_name?: string };
   sender: { login: string; type?: string };
 }
@@ -26,9 +25,19 @@ export interface PrComment {
   created_at?: string;
 }
 
-/** What the script reads besides the event: the PR's comments, and the time it runs (for a payload with no time). */
+/** One of the PR's issue events (`repos/<repo>/issues/<n>/events`): `added_to_merge_queue`, `removed_from_merge_queue`, … */
+export interface IssueEvent {
+  event?: string;
+  created_at?: string;
+}
+
+/**
+ * What the script reads besides the event: the PR's comments, its issue events (undefined when they could not be
+ * read: then no `pnpm queue` marker counts), and the time it runs (when no queue entry is listed yet).
+ */
 export interface Facts {
   comments: readonly PrComment[];
+  events?: readonly IssueEvent[];
   now?: Date;
 }
 
@@ -56,15 +65,28 @@ const pnpmQueueMarker = (sha: string) => `<!-- pnpm-queue: ${sha} -->`;
 const WRITERS = ["OWNER", "MEMBER", "COLLABORATOR"];
 
 /**
- * Whether `pnpm queue` made the entry at `at`: the newest marker for the head, by a person with access, was posted at or
- * before it (RP-1195 review). A marker posted later belongs to a later run; `pnpm queue` takes off one whose enqueue failed.
+ * Whether `pnpm queue` made this entry, judged by the PR's own queue events rather than a payload time (the `enqueued`
+ * payload carries none). The newest marker for the head, by a person with access, counts only when:
+ * - no queue removal falls at or after it: a dropped entry's marker never covers a later button entry of the same
+ *   head, and `pnpm queue` posts a fresh marker on every run (#639's review);
+ * - at most one queue entry falls at or after it (this one), and the newest entry is not older than it: a marker typed
+ *   after a button entry doesn't cover it. With no entry listed yet (the events can lag), the time the script runs stands in.
+ * Unreadable events or times count no marker, so the comment is posted.
  */
-function queuedByPnpm(comments: readonly PrComment[], head: string, at: number): boolean {
-  const times = comments
+function queuedByPnpm(facts: Facts, head: string): boolean {
+  const times = facts.comments
     .filter((comment) => comment.user?.type === "User" && WRITERS.includes(comment.author_association ?? "") && (comment.body ?? "").includes(pnpmQueueMarker(head)))
     .map((comment) => Date.parse(comment.created_at ?? ""));
-  if (times.length === 0 || times.some(Number.isNaN)) return false;
-  return Math.max(...times) <= at;
+  if (facts.events === undefined || times.length === 0 || times.some(Number.isNaN)) return false;
+  const marked = Math.max(...times);
+  const timesOf = (name: string) => facts.events!.filter((each) => each.event === name).map((each) => Date.parse(each.created_at ?? ""));
+  const [entries, removals] = [timesOf("added_to_merge_queue"), timesOf("removed_from_merge_queue")];
+  if ([...entries, ...removals].some(Number.isNaN)) return false;
+  if (removals.some((time) => time >= marked)) return false;
+  const entriesSince = entries.filter((time) => time >= marked);
+  if (entriesSince.length > 1) return false;
+  const newestEntry = entries.length > 0 ? Math.max(...entries) : (facts.now ?? new Date()).getTime();
+  return marked <= newestEntry;
 }
 
 /** The hand action an event reports, or undefined when there is nothing to say. */
@@ -80,8 +102,7 @@ export function handAction(event: string, payload: Payload, facts: Facts): HandA
   }
   // Reviewed required fails while auto-merge is on (it reads auto_merge.enabled_by).
   if (payload.action === "auto_merge_enabled") return { kind: "auto-merge", ...base, failsReviewedRequired: true };
-  const at = Date.parse(pr.updated_at ?? "");
-  if (payload.action === "enqueued" && !queuedByPnpm(facts.comments, pr.head.sha, Number.isNaN(at) ? (facts.now ?? new Date()).getTime() : at)) {
+  if (payload.action === "enqueued" && !queuedByPnpm(facts, pr.head.sha)) {
     // With auto-merge off, Reviewed required passes a button entry: it only skips `pnpm queue`'s checks.
     return { kind: "queue", ...base, failsReviewedRequired: pr.auto_merge != null };
   }
@@ -109,6 +130,8 @@ export function handActionComment(action: HandAction): string {
 /** What the script reads and writes on GitHub; overHttp is the real one, tests fake it. */
 export interface HandActionGitHub {
   comments(pr: number): Promise<PrComment[]>;
+  /** The PR's issue events; GITHUB_TOKEN's `pull-requests: read` (or `issues: read`) reads them. */
+  events(pr: number): Promise<IssueEvent[]>;
   postComment(pr: number, body: string): Promise<void>;
 }
 
@@ -118,7 +141,9 @@ export interface HandActionGitHub {
  */
 export async function commentOnHandAction(event: string, payload: Payload, github: HandActionGitHub): Promise<string | undefined> {
   const comments = await github.comments(payload.pull_request.number);
-  const action = handAction(event, payload, { comments });
+  // Only a queue entry needs the events; unread, no marker counts, so the comment is posted (RP-1195 follow-up).
+  const events = payload.action === "enqueued" ? await github.events(payload.pull_request.number).catch(() => undefined) : undefined;
+  const action = handAction(event, payload, { comments, events });
   if (action === undefined) return undefined;
   const own = comments.filter((comment) => comment.user?.login === REVIEWED_ADD_ACTOR).map((comment) => comment.body ?? "");
   if (own.some((body) => body.includes(handActionMarker(action)))) return undefined;
@@ -137,15 +162,17 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     if (!response.ok) throw new Error(`GitHub ${init?.method ?? "GET"} ${path} answered ${response.status}`);
     return response;
   };
+  const pages = async <T>(path: string) => {
+    const all: T[] = [];
+    for (let page = 1; ; page++) {
+      const batch = (await (await api(`${path}?per_page=100&page=${page}`)).json()) as T[];
+      all.push(...batch);
+      if (batch.length < 100) return all;
+    }
+  };
   return {
-    async comments(pr) {
-      const all: PrComment[] = [];
-      for (let page = 1; ; page++) {
-        const batch = (await (await api(`repos/${repository}/issues/${pr}/comments?per_page=100&page=${page}`)).json()) as PrComment[];
-        all.push(...batch);
-        if (batch.length < 100) return all;
-      }
-    },
+    comments: (pr) => pages<PrComment>(`repos/${repository}/issues/${pr}/comments`),
+    events: (pr) => pages<IssueEvent>(`repos/${repository}/issues/${pr}/events`),
     async postComment(pr, body) {
       await api(`repos/${repository}/issues/${pr}/comments`, { method: "POST", body: JSON.stringify({ body }) });
     },

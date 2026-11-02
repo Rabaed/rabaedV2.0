@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stopIfBehindOrigin } from "./behind-origin.ts";
-import { hasPnpmQueueMarker, pnpmQueueComment } from "./queue-marker.ts";
+import { pnpmQueueComment } from "./queue-marker.ts";
 import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { cleanWalk, isMergeOfMain, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
-import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { DOCS_ONLY_LABEL, gateScripts, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, ratchetGains, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
@@ -109,7 +110,7 @@ export interface QueueSeam extends ReviewedGit {
   markQueued(pr: number, head: string): number;
   /** Takes the marker comment `id` off again after a failed enqueue (`gh api --method DELETE`), RP-1195 review. */
   unmarkQueued(id: number): void;
-  /** For each of STALE_COPY_FILES, how many of origin/main's commits to it HEAD lacks (`git log HEAD..origin/main -- <file>`); undefined where git could not tell. */
+  /** For queue-pr.ts, ci-green.ts and every file they import, how many of origin/main's commits to it HEAD lacks (`git log HEAD..origin/main -- <file>`); undefined where git could not tell. */
   scriptCopies(): ScriptCopy[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
@@ -133,8 +134,13 @@ export interface ScriptCopy {
   behind: number | undefined;
 }
 
-/** The scripts whose stale copy refused or passed what main's would not (RP-1195 item 6). */
-const STALE_COPY_FILES = ["queue-pr.ts", "ci-green.ts"];
+/**
+ * The scripts whose stale copy refused or passed what main's would not (RP-1195 item 6), and every file they import
+ * by relative import (RP-1195 follow-up): an older verify-gate.ts or git-files.ts changes the verdict the same way.
+ * The walk follows the running copy's imports, so a file only main's copy imports isn't listed; the importer that
+ * gained the import then shows as behind instead.
+ */
+const STALE_COPY_ENTRIES = ["scripts/queue-pr.ts", "scripts/ci-green.ts"];
 
 /**
  * A warning for each script that is older than origin/main's: main has commits to it that this checkout lacks. A copy
@@ -210,14 +216,9 @@ const headMoved = (pr: number, pinned: string, now: string | undefined) =>
   );
 
 function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: { id: string; head: string; warnings: string[] }): QueueResult {
-  // Unread comments count as no marker: one more marker comment is harmless.
-  let marked: boolean;
-  try {
-    marked = seam.comments(pr).some((comment) => hasPnpmQueueMarker(comment.body, head));
-  } catch {
-    marked = false;
-  }
-  const posted = marked ? undefined : seam.markQueued(pr, head);
+  // A fresh marker on every run, even for a head marked before (#639's review): the hand-action check counts a marker
+  // only when the PR has not left the queue since it, so a re-run after a drop needs its own.
+  const posted: number | undefined = seam.markQueued(pr, head);
   // RP-1195 review: a failed enqueue takes its own marker off, so a later button press on this head still gets the
   // hand-action comment. Returns what to add when that fails.
   const unmark = (): string[] => {
@@ -689,8 +690,20 @@ export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sle
 
 const mutation = "mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }";
 
-/** The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. */
-export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): QueueSeam {
+/** A file of the running copy's checkout, by its repo path; undefined when it is not there. */
+function runningCopyFile(path: string): string | undefined {
+  try {
+    return readFileSync(join(import.meta.dirname, "..", path), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. `read` gives a repo file's
+ * text for the stale-copy check's import walk (default: the running copy's).
+ */
+export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync, read: (path: string) => string | undefined = runningCopyFile): QueueSeam {
   const run = (command: string, args: string[]) => {
     const done = spawn(command, args, { cwd, encoding: "utf8" });
     return { status: done.status ?? 128, output: `${done.stdout ?? ""}${done.stderr ?? ""}`, stdout: done.stdout ?? "", stderr: done.stderr ?? "" };
@@ -777,12 +790,13 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       return (JSON.parse(done.stdout ?? "") as { id: number }).id;
     },
     unmarkQueued: (id) => void must("gh", ["api", "--method", "DELETE", `repos/{owner}/{repo}/issues/comments/${id}`]),
-    scriptCopies: () =>
-      STALE_COPY_FILES.map((name) => {
-        const file = `scripts/${name}`;
-        const done = run("git", ["log", "--format=%H", "HEAD..origin/main", "--", file]);
-        return { file, behind: done.status === 0 ? done.stdout.split("\n").filter((line) => line.trim() !== "").length : undefined };
-      }),
+    // One `git log` for the whole closure (two dozen files): --name-only lists each file once per commit that touches it.
+    scriptCopies: () => {
+      const files = gateScripts(read, STALE_COPY_ENTRIES);
+      const done = run("git", ["log", "--format=", "--name-only", "HEAD..origin/main", "--", ...files]);
+      const touched = done.stdout.split("\n").map((line) => line.trim());
+      return files.map((file) => ({ file, behind: done.status === 0 ? touched.filter((line) => line === file).length : undefined }));
+    },
     enqueue: (id, head) => {
       const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
       return answer.enqueuePullRequest.mergeQueueEntry;
