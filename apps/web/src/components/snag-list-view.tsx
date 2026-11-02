@@ -323,8 +323,10 @@ function useNewSnag({
   const location = givenLocation(useSearchParams());
   const phone = useMediaQuery(phoneQuery, false);
   const newItem = raising.newItem;
-  // The Type the panel opens on: the link's, else the Snag where the viewer may raise it, else their first.
-  const type = newItem?.type ?? (newTypes.some((x) => x.code === snagTypeCode) ? snagTypeCode : (newTypes[0]?.code ?? null));
+  // The Type the panel opens on: the link's when the viewer may raise it, else the Snag where they may, else their first.
+  // (A link naming another Type, such as a Comment, opens what they may raise, as the panel itself does.)
+  const linked = newTypes.some((x) => x.code === newItem?.type) ? (newItem?.type ?? null) : null;
+  const type = linked ?? (newTypes.some((x) => x.code === snagTypeCode) ? snagTypeCode : (newTypes[0]?.code ?? null));
   // A Snag on a phone: the camera-first New Snag. Another Type (no photos to take first) gets the panel's phone page, as the camera page sends it here.
   const camera = phone && newItem !== null && type === snagTypeCode;
   useEffect(() => {

@@ -4,7 +4,7 @@ import { pageAs, sessionFile } from "../harness/browser.ts";
 import { defineCase, type CaseApi } from "../harness/case.ts";
 import { Api, mailTo, readNotFound, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
-import { create, goRetry as go, makeXlsx, makePackage, moduleItems, mustAct, runTag, team, testPhoto, upload, writeData, type Json, type Team } from "../harness/helpers-sng.ts";
+import { create, findByTitle, goRetry as go, makeXlsx, makePackage, moduleItems, mustAct, runTag, snagSaved, team, testPhoto, upload, writeData, type Json, type Team } from "../harness/helpers-sng.ts";
 
 // Business end-to-end journeys J9, J10, J11, J12 and J14 (strategy section 4). Each is one continuous story
 // across Companies, with a screenshot at every hand-over; at each hand-over the receiving Company is read first
@@ -389,20 +389,24 @@ defineCase("J10", async (t) => {
   lap("crew");
 
   // 1. Ahmed raises the Snag on TMC (the one Contractor covering Tower 1).
+  // RP-1222: the New page link lands on the Snag List with the New Snag short form; the before photo is
+  // picked before Save Draft and uploaded to the new Draft straight after, and the form clears for the next Snag.
   const ap = await c.page("ahmed");
   await go(ap, `/projects/${P}/work-items/new?module=snag_list&type=SNG`);
   await settle(ap);
-  await ap.getByLabel(/^Subject/).fill(subject);
-  await ap.getByLabel(/^Description/).fill("The cable tray on Floor 02 is not bonded to earth at the far end.");
+  const panel = ap.getByRole("dialog");
+  await panel.getByRole("textbox", { name: "Subject" }).fill(subject);
+  await panel.getByLabel(/^Description/).fill("The cable tray on Floor 02 is not bonded to earth at the far end.");
   await pickOption(ap, "answer-trade", /Electrical Works/);
   await pickOption(ap, "answer-location", /Tower 1 Floor 02/);
-  await ap.getByRole("button", { name: "Save Draft" }).click();
-  await ap.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 20000 });
-  await settle(ap);
-  const snag = /\/work-items\/([0-9a-f-]{36})/.exec(ap.url())![1]!;
   await ap.locator("#answer-photos").setInputFiles({ name: "before.jpg", mimeType: "image/jpeg", buffer: testPhoto() });
-  await settle(ap, 2500);
+  await panel.getByRole("button", { name: "Save Draft" }).click();
+  await snagSaved(ap, 1);
+  await settle(ap);
+  const snag = (await findByTitle(ahmed, P, "snag_list", subject))!.id as string;
   t.check("[SNG-02] Ahmed's Draft Snag has its before photo", (await docsOf(ahmed, snag)).some((d) => d.fieldKey === "photos"));
+  await go(ap, `/work-items/${snag}`);
+  await settle(ap);
   t.check("[SNG-09] The Draft is Ahmed's alone: TMC (Hafiz) cannot read it", (await hafiz.get(`/work-items/${snag}`)).status === 404);
   await takeTransition(ap, "Raise");
   const raised = await H.detail(ahmed, snag);

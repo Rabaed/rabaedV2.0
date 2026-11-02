@@ -57,6 +57,15 @@ export async function findByTitle(api: Api, projectId: string, module: "snag_lis
 /** A tiny PNG-free test photo: a real small JPEG with EXIF, as the demo seed makes. */
 export const testPhoto = exifJpeg;
 
+/**
+ * Waits for the New Snag's short form (RP-1222) to save Snag number `n` since it opened: the panel
+ * stays open, cleared for the next Snag, its footer counting "1 Snag saved", "2 Snags saved". A New
+ * page link (`/work-items/new?module=snag_list`) lands on the Snag List with the panel open.
+ */
+export async function snagSaved(page: import("playwright").Page, n = 1): Promise<void> {
+  await page.getByRole("dialog").getByText(new RegExp(`^${n} Snags? saved$`)).waitFor({ timeout: 20000 });
+}
+
 // ---- Register files (fixtures-data) ----
 
 export const dataDir = resolve(round, "fixtures-data");
