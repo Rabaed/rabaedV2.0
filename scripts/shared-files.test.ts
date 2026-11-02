@@ -114,3 +114,125 @@ describe("branchMix", () => {
     expect(() => branchMix(repo)).toThrow(/git fetch origin main/);
   });
 });
+
+// RP-1195 item 7: root package.json may ride with code when it only adds `node scripts/<file>` entries for files the branch adds.
+describe("branchMix: root package.json that only adds scripts for new scripts", () => {
+  const root = (scripts: Record<string, string>, extra: Record<string, unknown> = {}) => `${JSON.stringify({ name: "rabaed", private: true, scripts, ...extra }, null, 2)}\n`;
+  const mainScripts = { lint: "eslint .", "check:x": "node scripts/old.ts" };
+
+  beforeEach(() => {
+    git("switch", "-q", "main");
+    commit({ "package.json": root(mainScripts), "scripts/old.ts": "export {};\n" });
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("switch", "-q", "-C", "feature");
+  });
+
+  const newScript = { "scripts/new.ts": "export {};\n", "scripts/new.test.ts": "export {};\n", "apps/admin/src/a.ts": "export const a = 2;\n" };
+
+  it("passes one added entry `node scripts/new.ts` beside the added scripts/new.ts, its test and other code", () => {
+    const head = commit({ ...newScript, "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
+  });
+
+  it("passes it in the working tree too, with the new script still untracked", () => {
+    write({ ...newScript, "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    expect(branchMix(repo)).toBeUndefined();
+  });
+
+  it("passes two added entries for two added scripts, placed between existing entries", () => {
+    const head = commit({ ...newScript, "scripts/two.ts": "export {};\n", "package.json": root({ "check:new": "node scripts/new.ts", lint: "eslint .", two: "node scripts/two.ts", "check:x": "node scripts/old.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
+  });
+
+  const refused = (packageJson: string, files: Record<string, string> = newScript) => branchMix(repo, commit({ ...files, "package.json": packageJson }))?.join("\n") ?? "";
+
+  it("refuses an added entry naming a script already on main", () => {
+    expect(refused(root({ ...mainScripts, again: "node scripts/old.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added entry naming a script that is in neither main nor the branch", () => {
+    expect(refused(root({ ...mainScripts, ghost: "node scripts/ghost.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added entry for a new script when an existing entry's command also changes", () => {
+    expect(refused(root({ ...mainScripts, lint: "eslint . --fix", "check:new": "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added entry for a new script when an existing entry is removed", () => {
+    expect(refused(root({ lint: "eslint .", "check:new": "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added entry for a new script when devDependencies change too", () => {
+    expect(refused(root({ ...mainScripts, "check:new": "node scripts/new.ts" }, { devDependencies: { vitest: "1.0.0" } }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added entry for a new script when the name changes too", () => {
+    expect(refused(root({ ...mainScripts, "check:new": "node scripts/new.ts" }).replace('"rabaed"', '"other"'))).toContain("shared: package.json");
+  });
+
+  it.each(["node scripts/new.ts --fix", "node scripts/new.ts && eslint .", "pnpm exec node scripts/new.ts", "node scripts/sub/new.ts"])(
+    "refuses an added entry that is not exactly `node scripts/<file>.ts`: %s",
+    (command) => {
+      expect(refused(root({ ...mainScripts, "check:new": command }), { ...newScript, "scripts/sub/new.ts": "export {};\n" })).toContain("shared: package.json");
+    },
+  );
+
+  it.each([
+    ["a test file", "node scripts/new.test.ts"],
+    ["a fixtures file", "node scripts/new.fixtures.ts"],
+    ["a file that is not .ts", "node scripts/notes.md"],
+  ])("refuses an added entry naming %s, even one the branch adds", (_, command) => {
+    const files = { ...newScript, "scripts/new.fixtures.ts": "export {};\n", "scripts/notes.md": "# notes\n" };
+    expect(refused(root({ ...mainScripts, "check:new": command }), files)).toContain("shared: package.json");
+  });
+
+  it.each(["postinstall", "install", "uninstall", "pnpm:devPreinstall"])("refuses the added name %s: it runs on install, not when asked", (name) => {
+    expect(refused(root({ ...mainScripts, [name]: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added script that is a symlink: node would follow it to code the branch didn't add", () => {
+    const target = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: "../apps/admin/src/a.ts", encoding: "utf8" }).trim();
+    git("update-index", "--add", "--cacheinfo", `120000,${target},scripts/new.ts`);
+    write({ "apps/admin/src/a.ts": "export const a = 2;\n", "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    git("add", "apps/admin/src/a.ts", "package.json");
+    git("commit", "-q", "--no-verify", "-m", "symlink");
+    expect(branchMix(repo, git("rev-parse", "HEAD"))?.join("\n") ?? "").toContain("shared: package.json");
+  });
+
+  it("passes a script renamed into scripts/ under a new name: the lists are --no-renames, so its new path is added", () => {
+    git("switch", "-q", "main");
+    commit({ "tools/new.ts": "export {};\n" });
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("switch", "-q", "-C", "feature");
+    git("mv", "tools/new.ts", "scripts/new.ts");
+    const head = commit({ "apps/admin/src/a.ts": "export const a = 2;\n", "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
+  });
+
+  it("refuses an added pre<x> hook for an existing entry (prelint runs before lint) even for an added script", () => {
+    expect(refused(root({ ...mainScripts, prelint: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added post<x> even with no <x> yet (postfoo), so a later `foo` cannot wake it", () => {
+    expect(refused(root({ ...mainScripts, postfoo: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("passes `pr:status`: it starts with pr, not pre, so it is no hook", () => {
+    const head = commit({ ...newScript, "package.json": root({ ...mainScripts, "pr:status": "node scripts/new.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
+  });
+
+  it("refuses a package.json that adds no entry at all (a reformat) beside code", () => {
+    expect(refused(JSON.stringify({ name: "rabaed", private: true, scripts: mainScripts }))).toContain("shared: package.json");
+  });
+
+  it("refuses an unparsable package.json, failing closed", () => {
+    expect(refused(`${root({ ...mainScripts, "check:new": "node scripts/new.ts" })},`)).toContain("shared: package.json");
+  });
+
+  it("still names the lockfile when it rides along with an exempt package.json", () => {
+    const text = refused(root({ ...mainScripts, "check:new": "node scripts/new.ts" }), { ...newScript, "pnpm-lock.yaml": "lock: 2\n" });
+    expect(text).toContain("shared: pnpm-lock.yaml");
+    expect(text).not.toContain("shared: package.json");
+  });
+});
