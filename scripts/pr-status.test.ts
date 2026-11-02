@@ -116,6 +116,22 @@ describe("prStatus", () => {
     ]);
   });
 
+  // RP-1195 review: one bot test for comments and events alike.
+  it("calls a comment a bot's by its login as well as its type, as it does an event's actor", () => {
+    const comments = [[comment("some-app[bot]", "User", "2026-11-01T08:00:00Z", `<!-- code-review: ${HEAD} -->`), comment("renovate", "Bot", "2026-11-01T08:10:00Z", `<!-- code-review: ${HEAD} -->`), comment("mmhaleess90", "User", "2026-11-01T08:20:00Z", `<!-- code-review: ${HEAD} -->`)]];
+    const report = prStatus(seam({ "api repos/{owner}/{repo}/issues/7/comments": JSON.stringify(comments), "api repos/{owner}/{repo}/collaborators": permission("admin") }), 7);
+    expect(report.markers.map((m) => [m.login, m.bot])).toEqual([
+      ["some-app[bot]", true],
+      ["renovate", true],
+      ["mmhaleess90", false],
+    ]);
+  });
+
+  it("reads the implement marker only on a line of its own, outside a fenced block", () => {
+    expect(prStatus(seam({ "pr view 7": pull({ body: "```\n<!-- implement: RP-9 -->\n```\n" }) }), 7).implement).toBeUndefined();
+    expect(prStatus(seam({ "pr view 7": pull({ body: "Text <!-- implement: RP-9 -->" }) }), 7).implement).toBeUndefined();
+  });
+
   it("passes the gate on a stamped verify line for the head, and lists the stamped shas", () => {
     const body = `${stampLine(`pnpm verify passed on ${HEAD}: lint, unit.`)}\n`;
     const report = prStatus(seam({ "pr view 7": pull({ body }) }), 7);

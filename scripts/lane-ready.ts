@@ -1,7 +1,7 @@
 /* eslint-disable rabaed/no-avoid-terms -- gh and git's names, as in review-post.ts */
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { checkReview, postReview, realSeam as postSeam, type PostSeam } from "./review-post.ts";
+import { checkReview, postChecked, realSeam as postSeam, type PostSeam } from "./review-post.ts";
 
 // Marks a lane's PR ready for review and posts its /code-review summary, in one command (RP-1195 item 1):
 //
@@ -24,16 +24,15 @@ export interface ReadySeam extends PostSeam {
 }
 
 export function laneReady(args: string[], seam: ReadySeam): { ok: boolean; message: string } {
-  const [prArg, file, ...rest] = args;
-  if (!/^[1-9]\d*$/.test(prArg ?? "") || file === undefined || rest.length > 0) return { ok: false, message: USAGE };
   const checked = checkReview(args, seam);
-  if (!checked.ok) return checked;
+  if (!checked.ok) return { ok: false, message: checked.usage ? USAGE : checked.message };
   const { pr } = checked;
   const marked = seam.isDraft(pr);
   if (marked) seam.markReady(pr);
+  // Checked once above; postChecked reads only the PR's head again, so a push since still refuses (RP-1195 review).
   let posted: { ok: boolean; message: string };
   try {
-    posted = postReview(args, seam);
+    posted = postChecked(checked, seam);
   } catch (error: unknown) {
     posted = { ok: false, message: error instanceof Error ? error.message : String(error) };
   }
@@ -41,15 +40,15 @@ export function laneReady(args: string[], seam: ReadySeam): { ok: boolean; messa
   return { ok: true, message: `${marked ? `Marked PR #${pr} ready for review. ` : ""}${posted.message}` };
 }
 
-function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReadySeam {
+export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): ReadySeam {
   const must = (command: string, args: string[]) => {
     const done = spawn(command, args, { cwd, encoding: "utf8" });
     if (done.status !== 0) throw new Error(`${command} ${args.slice(0, 2).join(" ")} failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
     return (done.stdout ?? "").trim();
   };
   return {
-    ...postSeam(cwd),
-    isDraft: (pr) => must("gh", ["pr", "view", String(pr), "--json", "isDraft", "--jq", ".isDraft"]) === "true",
+    ...postSeam(cwd, spawn),
+    isDraft: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "isDraft"])) as { isDraft: boolean }).isDraft === true,
     markReady: (pr) => void must("gh", ["pr", "ready", String(pr)]),
   };
 }

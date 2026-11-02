@@ -144,10 +144,11 @@ export function reviewPr(seam: ReviewPrSeam, n: number, options: { since?: strin
     return done.stdout;
   };
   try {
-    must(["fetch", "--no-tags", "origin", "main"], "fetch origin main");
+    // pr-status's gate read fetches origin main (and the PR head); this fetches the PR head again only to pin FETCH_HEAD
+    // right before reading it (RP-1195 review).
+    const pr = seam.report(n);
     must(["fetch", "--no-tags", "origin", `refs/pull/${n}/head`], `fetch origin refs/pull/${n}/head`);
     const sha = must(["rev-parse", "FETCH_HEAD"]).trim();
-    const pr = seam.report(n);
     const warnings = pr.head !== undefined && pr.head !== sha ? [`GitHub says the head is ${pr.head}, but origin's refs/pull/${n}/head is ${sha}: someone pushed while this ran; run it again.`] : [];
     const mergeBase = must(["merge-base", "origin/main", sha]).trim();
     const stat = lines(must(["diff", "--stat", `origin/main...${sha}`]));
@@ -162,7 +163,7 @@ export function reviewPr(seam: ReviewPrSeam, n: number, options: { since?: strin
 }
 
 const warn = (warnings: string[]) => warnings.map((w) => `  Warning: ${w}`);
-const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /** The four sections as lines. */
 export function formatReview(review: Review): string[] {
@@ -176,7 +177,7 @@ export function formatReview(review: Review): string[] {
     "",
     `== 2. Merges since ${merges.since.sha.slice(0, 7)} (${merges.since.why}): ${merges.merges.length === 0 ? "none" : merges.merges.length}`,
     ...merges.merges.flatMap((m) => [
-      `  ${m.sha.slice(0, 7)} ${m.subject}  (${m.ofMain ? "merge of main" : "not a merge of main"}; remerge-diff: ${m.diff.length === 0 ? "clean" : count(m.diff.length, "line")})`,
+      `  ${m.sha.slice(0, 7)} ${m.subject}  (${m.ofMain ? "merge of main" : "not a merge of main"}; remerge-diff: ${m.diff.length === 0 ? "clean" : plural(m.diff.length, "line")})`,
       ...m.diff.map((l) => `    ${l}`),
     ]),
     "",

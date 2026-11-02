@@ -24,7 +24,6 @@ const fakeGit = (answers: Record<string, GitResult>, calls: string[] = []) => (a
 const report = (over: Partial<PrReport> = {}): PrReport => ({ pr: 7, head: HEAD, implement: "RP-1", markers: [], timeline: [], warnings: [], ...over });
 
 const baseGit = (over: Record<string, GitResult> = {}): Record<string, GitResult> => ({
-  "fetch --no-tags origin main": ok(),
   "fetch --no-tags origin refs/pull/7/head": ok(),
   "rev-parse FETCH_HEAD": ok(`${HEAD}\n`),
   [`merge-base origin/main ${HEAD}`]: ok(`${BASE}\n`),
@@ -233,15 +232,20 @@ describe("formatReview and reviewPrMain", () => {
     expect(reviewPrMain([], seam(baseGit()))).toEqual({ code: 1, lines: [usage] });
     expect(reviewPrMain(["x"], seam(baseGit())).code).toBe(1);
     for (const args of [["7", "--since"], ["7", "--since", "not-a-sha"], ["7", "--since", REVIEWED, "more"], ["7", "8"]]) expect(reviewPrMain(args, seam(baseGit()))).toEqual({ code: 1, lines: [usage] });
-    expect(reviewPrMain(["7"], seam(baseGit({ "fetch --no-tags origin main": { status: 1, stdout: "", stderr: "no network" } })))).toEqual({ code: 1, lines: ["git fetch origin main failed: no network"] });
+    expect(reviewPrMain(["7"], seam(baseGit({ "fetch --no-tags origin refs/pull/7/head": { status: 1, stdout: "", stderr: "no network" } })))).toEqual({ code: 1, lines: ["git fetch origin refs/pull/7/head failed: no network"] });
   });
 });
 
 describe("reviewPr: head", () => {
-  it("fetches main and the PR head, and lists the stat and the files against the merge base", () => {
+  // RP-1195 review: pr-status's gate read fetches main already; review-pr fetches only the PR head, after it.
+  it("reads pr-status first, then fetches the PR head (not main again), and lists the stat and the files against the merge base", () => {
     const calls: string[] = [];
-    const review = reviewPr(seam(baseGit(), report(), calls), 7);
-    expect(calls.slice(0, 2)).toEqual(["fetch --no-tags origin main", "fetch --no-tags origin refs/pull/7/head"]);
+    const order: string[] = [];
+    const git = fakeGit(baseGit(), calls);
+    const review = reviewPr({ git: (args) => (order.push("git"), git(args)), report: () => (order.push("report"), report()) }, 7);
+    expect(order[0]).toBe("report");
+    expect(calls[0]).toBe("fetch --no-tags origin refs/pull/7/head");
+    expect(calls).not.toContain("fetch --no-tags origin main");
     expect(review.ok).toBe(true);
     if (!review.ok) return;
     expect(review.head).toEqual({ sha: HEAD, mergeBase: BASE, stat: [" scripts/x.ts | 2 +-", " 1 file changed, 1 insertion(+), 1 deletion(-)"], files: ["M\tscripts/x.ts"], warnings: [] });

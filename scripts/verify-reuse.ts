@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { isCiOwnFile } from "./ci-green.ts";
 import { isBaselineBotCommit, keepsLabel, realGit, type ReviewedGit } from "./reviewed-label.ts";
-import { stampLine, verifiedCommits } from "./verify-gate.ts";
+import { LINE, stampLine, verifiedCommits } from "./verify-gate.ts";
 import type { Step } from "./verify-steps.ts";
 
 // RP-1195 item 8: `pnpm verify --pr <n>` builds on the PR body's earlier stamped run when the branch's own commits
@@ -42,16 +42,24 @@ export type ReuseDecision =
   | { reuse: false; why: string }
   | { reuse: true; earlier: string; earlierSteps: string[]; commits: number; files: { step: TestStep; path: string }[] };
 
+/** A decision to build on the earlier run. */
+export type Reuse = Extract<ReuseDecision, { reuse: true }>;
+
+/** A verify step, and for a reuse run's seam step the only test files it runs. */
+export type FileStep = Step & { files?: string[] };
+
+/** The steps a reuse run always runs in full, which the earlier run must have run too. */
+const WHOLE_STEPS = ["lint", "typecheck", "test:unit"];
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 /** How many commits the walk down from HEAD follows, as `cleanWalk` (reviewed-label.ts). */
 const MAX_COMMITS = 50;
 
-// The gate's line, stamped (verify-gate.ts LINE); the stamp itself is checked by `verifiedCommits`.
-const STAMPED = /pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?)\. Stamp [0-9a-f]{16}\./g;
-
-/** The body's stamped lines: the commit and its step names (a label's ` (…)` note left out). */
+/** The body's stamped lines (the gate's `LINE`; `verifiedCommits` checks the stamp): the commit and its step names (a label's ` (…)` note left out). */
 function stampedRuns(body: string): { commit: string; steps: string[] }[] {
-  return [...body.matchAll(STAMPED)].flatMap(([line, commit = "", steps = ""]) =>
-    verifiedCommits(line).length === 1 ? [{ commit, steps: steps.split(", ").map((label) => label.replace(/ \(.*$/, "")) }] : [],
+  return [...body.matchAll(LINE)].flatMap(([line, commit = "", steps = "", stamp]) =>
+    stamp !== undefined && verifiedCommits(line).length === 1 ? [{ commit, steps: steps.replace(/\.$/, "").split(", ").map((label) => label.replace(/ \(.*$/, "")) }] : [],
   );
 }
 
@@ -96,7 +104,7 @@ export function testsOnlyReuse(body: string, head: string, git: ReuseGit): Reuse
       if (!earlier.steps.includes(step)) return { reuse: false, why: `the stamped run on ${earlier.commit} did not run ${step}, which ${path} is in` };
       files.set(path, step);
     }
-    for (const step of ["lint", "typecheck", "test:unit"]) {
+    for (const step of WHOLE_STEPS) {
       if (!earlier.steps.includes(step)) return { reuse: false, why: `the stamped run on ${earlier.commit} did not run ${step}` };
     }
     return {
@@ -111,23 +119,22 @@ export function testsOnlyReuse(body: string, head: string, git: ReuseGit): Reuse
   }
 }
 
-/** The changed files of `step` in a reuse reuse. */
-const filesOf = (reuse: Extract<ReuseDecision, { reuse: true }>, step: string) => reuse.files.filter((file) => file.step === step).map(({ path }) => path);
+/** The changed files of `step` in a reuse run. */
+const filesOf = (reuse: Reuse, step: string) => reuse.files.filter((file) => file.step === step).map(({ path }) => path);
 
 /** The steps a reuse run runs: lint, typecheck, the whole unit project, then each seam project on its changed files only. */
-export function reuseSteps(reuse: Extract<ReuseDecision, { reuse: true }>): (Step & { files?: string[] })[] {
+export function reuseSteps(reuse: Reuse): FileStep[] {
   const seams = (["test:seam1", "test:seam2"] as const).flatMap((step) => {
     const files = filesOf(reuse, step);
     return files.length > 0 ? [{ name: step, script: step, files }] : [];
   });
-  return [...["lint", "typecheck", "test:unit"].map((name) => ({ name, script: name })), ...seams];
+  return [...WHOLE_STEPS.map((name) => ({ name, script: name })), ...seams];
 }
 
 /** What `pnpm verify --pr` prints when it builds on the earlier run. */
-export function reuseMessage(pr: number, reuse: Extract<ReuseDecision, { reuse: true }>): string {
-  const many = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+export function reuseMessage(pr: number, reuse: Reuse): string {
   return [
-    `pnpm verify --pr ${pr}: building on the stamped run on ${reuse.earlier}: the branch's ${many(reuse.commits, "commit")} since it change only ${many(reuse.files.length, "test file")}:`,
+    `pnpm verify --pr ${pr}: building on the stamped run on ${reuse.earlier}: the branch's ${plural(reuse.commits, "commit")} since it change only ${plural(reuse.files.length, "test file")}:`,
     ...reuse.files.map(({ step, path }) => `  ${path} (${step})`),
     `It runs lint, typecheck and the whole test:unit, and of the seam suites only these files. \`pnpm verify --pr ${pr} --full\` runs everything.`,
   ].join("\n");
@@ -141,14 +148,14 @@ export const fullRunMessage = (pr: number, why: string): string => `pnpm verify 
  * also saying how many changed test files it re-ran on top of the earlier run), the others by the earlier commit's run.
  * Stamped only for a clean tree on a known commit, as `finalLine`.
  */
-export function reuseLine({ sha, dirty, reuse, passed }: { sha: string; dirty: boolean; reuse: Extract<ReuseDecision, { reuse: true }>; passed: string[] }): string {
+export function reuseLine({ sha, dirty, reuse, passed }: { sha: string; dirty: boolean; reuse: Reuse; passed: string[] }): string {
   const labels = reuse.earlierSteps.map((step) => {
     const ran = passed.find((label) => label === step || label.startsWith(`${step} (`));
     if (ran === undefined) return `${step} (${reuse.earlier}'s run)`;
     const files = filesOf(reuse, step);
     if (files.length === 0 || step === "test:unit") return ran;
     const note = ran.slice(step.length).replace(/^ \((.*)\)$/, "; $1");
-    return `${step} (re-ran ${files.length} changed test file${files.length === 1 ? "" : "s"} on top of ${reuse.earlier}'s run${note})`;
+    return `${step} (re-ran ${plural(files.length, "changed test file")} on top of ${reuse.earlier}'s run${note})`;
   });
   const line = `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${labels.join(", ")}.`;
   return dirty || sha === "" ? line : stampLine(line);

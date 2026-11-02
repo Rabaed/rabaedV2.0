@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { postReview, reviewComment, type PostSeam } from "./review-post.ts";
+import type { spawnSync } from "node:child_process";
+import { checkReview, implementKeys, postChecked, postReview, realSeam, reviewComment, type PostSeam } from "./review-post.ts";
 import { reviewMarker } from "./reviewed-add.ts";
 import { baselineMarker } from "./verify-gate.ts";
 
@@ -112,6 +113,19 @@ describe("postReview", () => {
     expect(unreadable.posted).toEqual([]);
   });
 
+  it("refuses a push between the check and the post: postChecked reads the PR's head again", () => {
+    let prHead = HEAD;
+    const { seam, posted } = fakeSeam({ prHead: () => prHead });
+    const checked = checkReview(["12", "s.md"], seam);
+    expect(checked.ok).toBe(true);
+    if (!checked.ok) return;
+    prHead = "b".repeat(40);
+    const result = postChecked(checked, seam);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain(`PR #12's head is now ${"b".repeat(40)}`);
+    expect(posted).toEqual([]);
+  });
+
   it("refuses a checkout with uncommitted or untracked files", () => {
     const { seam, posted } = fakeSeam({ dirty: () => ["?? scripts/new.ts"] });
     expect(postReview(["12", "summary.md"], seam)).toMatchObject({ ok: false });
@@ -128,5 +142,41 @@ describe("postReview", () => {
     expect(main6.message).toContain("Main 6");
     expect(postReview(["0x10", "s.md"], fakeSeam().seam).message).toMatch(/Usage/);
     expect(postReview(["12"], fakeSeam().seam).message).toMatch(/Usage/);
+  });
+});
+
+describe("implementKeys", () => {
+  it("lists the keys of the markers on lines of their own, in order", () => {
+    expect(implementKeys("<!-- implement: RP-1 -->\ntext\n<!-- implement: RP-22 -->")).toEqual(["RP-1", "RP-22"]);
+    expect(implementKeys("~~~\n<!-- implement: RP-1 -->\n~~~\n<!-- implement: RP-3 -->")).toEqual(["RP-3"]);
+  });
+});
+
+// RP-1195 review: gh's --json read with JSON.parse, never --jq.
+describe("realSeam", () => {
+  const answering = (stdout: string) => {
+    const calls: string[][] = [];
+    const spawn = ((command: string, args: string[]) => (calls.push([command, ...args]), { status: 0, stdout, stderr: "" })) as unknown as typeof spawnSync;
+    return { calls, seam: realSeam("/w", spawn) };
+  };
+
+  it("reads the head, the body and the branch with --json", () => {
+    const head = answering(JSON.stringify({ headRefOid: HEAD }));
+    expect(head.seam.prHead(12)).toBe(HEAD);
+    expect(head.calls).toEqual([["gh", "pr", "view", "12", "--json", "headRefOid"]]);
+    const body = answering(JSON.stringify({ body: "Text\n<!-- implement: RP-1 -->\n" }));
+    expect(body.seam.body(12)).toBe("Text\n<!-- implement: RP-1 -->\n");
+    expect(body.calls).toEqual([["gh", "pr", "view", "12", "--json", "body"]]);
+    expect(answering(JSON.stringify({ body: null })).seam.body(12)).toBe("");
+    const branch = answering(JSON.stringify({ headRefName: "RP-1-x" }));
+    expect(branch.seam.branch(12)).toBe("RP-1-x");
+  });
+
+  it("reads every page of the changed files with --slurp, a rename's old path too", () => {
+    const pages = [[{ filename: "a.md" }, { filename: "b.ts", previous_filename: "old.ts" }], [{ filename: "c.md" }]];
+    const { calls, seam } = answering(JSON.stringify(pages));
+    expect(seam.changedFiles(12)).toEqual(["a.md", "b.ts", "old.ts", "c.md"]);
+    expect(calls).toEqual([["gh", "api", "--paginate", "--slurp", "repos/{owner}/{repo}/pulls/12/files"]]);
+    expect(calls.flat()).not.toContain("--jq");
   });
 });

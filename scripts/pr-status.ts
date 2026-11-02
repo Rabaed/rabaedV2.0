@@ -7,6 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { formatPrStatus } from "./pr-status-lines.ts";
+import { implementKeys } from "./review-post.ts";
 import { readEvents, readQueue, realGh, type Gh } from "./orch-status.ts";
 import { reviewedText, type OpenPr, type QueueEntry } from "./orch-status-lines.ts";
 import { isTrustedAuthor, reviewAt, reviewMarker, type ReviewFound } from "./reviewed-add.ts";
@@ -72,7 +73,6 @@ interface Pull {
 }
 
 const PULL_FIELDS = "number,headRefName,headRefOid,isDraft,labels,autoMergeRequest,body,state";
-const IMPLEMENT = /<!-- implement: (RP-\d+) -->/;
 
 const reason = (error: unknown) => ((error as { stderr?: string }).stderr || (error as Error).message || String(error)).split("\n")[0]!.trim();
 
@@ -90,7 +90,8 @@ export function prStatus(seam: PrStatusSeam, n: number, queue?: QueueEntry[]): P
   report.branch = pull.headRefName;
   report.draft = pull.isDraft ?? false;
   report.state = pull.state;
-  report.implement = IMPLEMENT.exec(pull.body ?? "")?.[1];
+  // review-post.ts's reading: a marker on a line of its own, outside fenced blocks (RP-1195 review).
+  report.implement = implementKeys(pull.body ?? "")[0];
   const auto = pull.autoMergeRequest;
   report.autoMerge = auto ? { on: true, by: auto.enabledBy?.login, at: auto.enabledAt } : { on: false };
   try {
@@ -106,8 +107,12 @@ export function prStatus(seam: PrStatusSeam, n: number, queue?: QueueEntry[]): P
     report.warnings.push(`the PR's events could not be read (${reason(error)}).`);
   }
   report.reviewed = reviewedText(pull as OpenPr, events);
-  readGate(seam, pull, report);
-  readMarkers(seam, n, pull.headRefOid, report);
+  ({ gate: report.gate, stamped: report.stamped } = readGate(seam, pull));
+  const marks = readMarkers(seam, n, pull.headRefOid);
+  report.markers = marks.markers;
+  report.review = marks.review;
+  report.warnings.push(...marks.warnings);
+  report.timeline.push(...marks.markers.map((m) => ({ at: m.at, actor: m.login, bot: m.bot, event: `posted the review marker for ${m.sha.slice(0, 7)}` })));
   if (events) {
     report.enteredByAutoMerge = events.some((e) => e.event === "added_to_merge_queue") ? enteredQueueByAutoMerge(events) : undefined;
     report.timeline.push(...events.flatMap(eventItem));
@@ -125,10 +130,10 @@ const ciEvidence = (gh: Gh, head: string): CiEvidence =>
   });
 
 /** The verify gate's verdict (`verifiedOrGreen`, the docs-only pass as verify-gate.ts has it) and the stamped shas. */
-function readGate(seam: PrStatusSeam, pull: Pull, report: PrReport) {
+function readGate(seam: PrStatusSeam, pull: Pull): { gate: NonNullable<PrReport["gate"]>; stamped: string[] } {
   const head = pull.headRefOid;
   const body = pull.body ?? "";
-  report.stamped = verifiedCommits(body);
+  const stamped = verifiedCommits(body);
   let changed: string[];
   let ownChanges: string[];
   try {
@@ -137,37 +142,33 @@ function readGate(seam: PrStatusSeam, pull: Pull, report: PrReport) {
     changed = seam.git.changedFiles(head);
     ownChanges = ciOwnChanges(changed, (file) => seam.git.packageJsonVersions(head, file));
   } catch (error) {
-    report.gate = { ok: false, reason: `could not read the head's changes (${reason(error)})` };
-    return;
+    return { gate: { ok: false, reason: `could not read the head's changes (${reason(error)})` }, stamped };
   }
   const labels = (pull.labels ?? []).map((l) => l.name);
-  if (!needsVerify(labels, changed) && ownChanges.length === 0) {
-    report.gate = { ok: true, by: `${DOCS_ONLY_LABEL}: no verify run needed` };
-    return;
-  }
+  if (!needsVerify(labels, changed) && ownChanges.length === 0) return { gate: { ok: true, by: `${DOCS_ONLY_LABEL}: no verify run needed` }, stamped };
   const verdict = verifiedOrGreen(body, head, pull.number, seam.git, ownChanges, ciEvidence(seam.gh, head));
-  report.gate = verdict.ok ? { ok: true, by: verifiedBy(verdict) } : { ok: false, reason: verdict.reason };
+  return { gate: verdict.ok ? { ok: true, by: verifiedBy(verdict) } : { ok: false, reason: verdict.reason }, stamped };
 }
 
 // reviewed-add.ts keeps its pattern private; this one is built the same way from `reviewMarker` (RP-1195 item 2).
 const MARKER = new RegExp(reviewMarker("([0-9a-f]{40})"), "g");
 
 /** The review markers (`node scripts/review-post.ts`) and reviewed-add's decision on them, as reviewed-add reads them. */
-function readMarkers(seam: PrStatusSeam, n: number, head: string, report: PrReport) {
+function readMarkers(seam: PrStatusSeam, n: number, head: string): { markers: PrReport["markers"]; review?: ReviewFound; warnings: string[] } {
   let comments: (ReviewComment & { at: string })[];
   try {
     const raw = JSON.parse(seam.gh(["api", `repos/{owner}/{repo}/issues/${n}/comments?per_page=100`, "--paginate", "--slurp"])) as { user?: { login: string; type: string } | null; body?: string | null; created_at: string }[][];
     comments = raw.flat().map((c) => ({ login: c.user?.login ?? "", type: c.user?.type ?? "", body: c.body ?? "", at: c.created_at }));
   } catch (error) {
-    report.warnings.push(`the PR's comments could not be read, so the review markers are unknown (${reason(error)}).`);
-    return;
+    return { markers: [], warnings: [`the PR's comments could not be read, so the review markers are unknown (${reason(error)}).`] };
   }
+  const warnings: string[] = [];
   const marked = comments.flatMap((c) => [...c.body.matchAll(MARKER)].map(([, sha = ""]) => ({ comment: c, sha })));
   let writers: Set<string>;
   try {
     writers = markerWriters(comments, (c) => marked.some((m) => m.comment === c), (login) => (JSON.parse(seam.gh(["api", `repos/{owner}/{repo}/collaborators/${encodeURIComponent(login)}/permission`])) as { permission: Permission }).permission);
   } catch (error) {
-    report.warnings.push(`who may write a review marker could not be read (${reason(error)}).`);
+    warnings.push(`who may write a review marker could not be read (${reason(error)}).`);
     writers = new Set();
   }
   const clean = (sha: string) => {
@@ -177,13 +178,16 @@ function readMarkers(seam: PrStatusSeam, n: number, head: string, report: PrRepo
       return false;
     }
   };
-  report.markers = marked.map(({ comment, sha }) => ({ sha, login: comment.login, bot: comment.type !== "User", at: comment.at, counts: isTrustedAuthor(comment, writers) && clean(sha) }));
-  report.review = reviewAt(comments, head, seam.git, writers);
-  for (const m of report.markers) report.timeline.push({ at: m.at, actor: m.login, bot: m.bot, event: `posted the review marker for ${m.sha.slice(0, 7)}` });
+  const markers = marked.map(({ comment, sha }) => ({ sha, login: comment.login, bot: isBot(comment.login, comment.type), at: comment.at, counts: isTrustedAuthor(comment, writers) && clean(sha) }));
+  return { markers, review: reviewAt(comments, head, seam.git, writers), warnings };
 }
 
-/** True for a GitHub App's login (`<name>[bot]`): CI's reviewed-add, the merge queue. */
-const isBot = (login: string) => login === REVIEWED_ADD_ACTOR || login.endsWith("[bot]");
+/**
+ * True for a GitHub App (CI's reviewed-add, the merge queue): its login ends in `[bot]`, or GitHub types it `Bot`. One
+ * test for comments and events alike (an event carries only the login). hand-action-comment.ts keeps its own copy: it
+ * imports built-ins only.
+ */
+const isBot = (login: string, type?: string) => login === REVIEWED_ADD_ACTOR || login.endsWith("[bot]") || type === "Bot";
 
 /** The timeline line of an issue event the gate reads; none for the others. */
 function eventItem(e: PrEvent): TimelineItem[] {

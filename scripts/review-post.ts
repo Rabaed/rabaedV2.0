@@ -78,13 +78,14 @@ function markerExempt(pr: number, seam: PostSeam): boolean {
   }
 }
 
-export type Checked = { ok: true; pr: number; head: string; summary: string } | { ok: false; message: string };
+/** `usage` marks a refusal of the arguments themselves, so `pnpm lane:ready` can show its own usage instead. */
+export type Checked = { ok: true; pr: number; head: string; summary: string } | { ok: false; message: string; usage?: true };
 
 /** Every refusal of `postReview`, with nothing posted or changed. `pnpm lane:ready` runs it before it marks a PR ready. */
 export function checkReview(args: string[], seam: PostSeam): Checked {
   const [prArg, file, ...rest] = args;
   const pr = /^[1-9]\d*$/.test(prArg ?? "") ? Number(prArg) : 0;
-  if (pr === 0 || file === undefined || rest.length > 0) return { ok: false, message: USAGE };
+  if (pr === 0 || file === undefined || rest.length > 0) return { ok: false, message: USAGE, usage: true };
   const summary = seam.read(file);
   if (summary.trim() === "") return { ok: false, message: `${file} is empty: put /code-review's summary in it.` };
   if (summary.includes("<!-- code-review:")) return { ok: false, message: `${file} already holds a code-review marker; this script writes the marker itself.` };
@@ -124,30 +125,46 @@ function implementRefusal(pr: number, seam: PostSeam): string | undefined {
   );
 }
 
-export function postReview(args: string[], seam: PostSeam): { ok: boolean; message: string } {
-  const checked = checkReview(args, seam);
-  if (!checked.ok) return checked;
+/**
+ * Posts the review `checkReview` passed, reading only the PR's head again first: a push since the check refuses, so the
+ * marker still names the commit that was reviewed. `pnpm lane:ready` calls it after `gh pr ready` (RP-1195 review).
+ */
+export function postChecked(checked: Extract<Checked, { ok: true }>, seam: Pick<PostSeam, "prHead" | "post">): { ok: boolean; message: string } {
   const { pr, head, summary } = checked;
+  const now = seam.prHead(pr);
+  if (now !== head) return { ok: false, message: `PR #${pr}'s head is now ${now}, not the reviewed ${head}: pull, review what changed, then run this again.` };
   seam.post(pr, reviewComment(head, summary));
   return { ok: true, message: `Posted /code-review's summary on PR #${pr} for ${head}. CI adds \`reviewed\` once the body's stamped verify line names this head too.` };
 }
 
-export function realSeam(cwd: string = process.cwd()): PostSeam {
+export function postReview(args: string[], seam: PostSeam): { ok: boolean; message: string } {
+  const checked = checkReview(args, seam);
+  return checked.ok ? postChecked(checked, seam) : checked;
+}
+
+export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): PostSeam {
   const must = (command: string, args: string[], input?: string) => {
-    const done = spawnSync(command, args, { cwd, encoding: "utf8", input });
+    const done = spawn(command, args, { cwd, encoding: "utf8", input });
     if (done.status !== 0) throw new Error(`${command} ${args.slice(0, 2).join(" ")} failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
     return (done.stdout ?? "").trim();
   };
+  // gh's --json read with JSON.parse; nothing here needs jq (RP-1195 review).
+  const view = (pr: number, field: string) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", field])) as Record<string, unknown>)[field];
   return {
     head: () => must("git", ["rev-parse", "HEAD"]),
     dirty: () => must("git", ["status", "--porcelain"]).split("\n").filter(Boolean),
-    prHead: (pr) => must("gh", ["pr", "view", String(pr), "--json", "headRefOid", "--jq", ".headRefOid"]),
+    prHead: (pr) => String(view(pr, "headRefOid")),
     read: (file) => readFileSync(file, "utf8"),
-    body: (pr) => must("gh", ["pr", "view", String(pr), "--json", "body", "--jq", ".body"]),
-    branch: (pr) => (JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "headRefName"])) as { headRefName: string }).headRefName,
+    body: (pr) => {
+      const body = view(pr, "body");
+      return typeof body === "string" ? body : "";
+    },
+    branch: (pr) => String(view(pr, "headRefName")),
     // The REST list pages past gh pr view's 100 files; a rename's old path counts, as everywhere (RP-606).
     changedFiles: (pr) =>
-      must("gh", ["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/files`, "--jq", ".[] | .filename, (.previous_filename // empty)"]).split("\n").filter(Boolean),
+      (JSON.parse(must("gh", ["api", "--paginate", "--slurp", `repos/{owner}/{repo}/pulls/${pr}/files`])) as { filename: string; previous_filename?: string }[][])
+        .flat()
+        .flatMap((file) => [file.filename, ...(file.previous_filename ? [file.previous_filename] : [])]),
     post: (pr, body) => void must("gh", ["pr", "comment", String(pr), "--body-file", "-"], body),
   };
 }
