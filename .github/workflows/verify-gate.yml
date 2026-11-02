@@ -7,12 +7,19 @@ name: Verify gate
 # to it from. It applies the same rule as `pnpm queue` (scripts/verify-gate.ts), so a PR added to
 # the merge queue from GitHub cannot skip it (14 PRs merged without a valid line, retro 2026-10-29).
 # One job name, `verify-gate`, on both events, so the merge queue runs it too.
-# The script it runs is the default branch's, never the pull request's (GitHub reads this file
-# itself from the PR's merge commit; the reviewed gate covers edits to it). The script fetches the
-# PR's head and runs none of its code. Full history, for the walk and diff the script makes.
+# The script it runs is the default branch's, never the pull request's. The script fetches the
+# PR's head as data and runs none of its code. Full history, for the walk and diff the script makes.
 # `edited` runs it again when the body gets its verify line. A draft passes with a note (RP-1018);
 # marking it ready runs the check again, and a draft cannot enter the merge queue.
+# pull_request_target: GitHub runs main's copy of this file for it (RP-1148 part A). On pull_request a PR ran
+# its own copy, so it could rewrite its own required check. The job checks out only the default branch,
+# with read-only permissions. Under merge_group GitHub runs the merge commit's copy (the PR's change
+# included); reviewed-required names a PR that changes this file.
+# Step 1 of 2 (RP-1148): pull_request stays beside it until this file is on main (main's copy listens only to
+# pull_request, so without it nothing would report this check on the switching PR). Step 2 drops it.
 on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
   pull_request:
     types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
   merge_group:
@@ -20,7 +27,8 @@ permissions: {}
 concurrency:
   # Per head, not per PR: a body edit raced with a push must not cancel the new head's run, since
   # each run checks its own payload's head. The queue's entries each have their own ref.
-  group: verify-gate-${{ github.event.pull_request.head.sha || github.ref }}
+  # The event in the name: while both PR triggers run (step 1), one must not cancel the other (a cancelled required check fails).
+  group: verify-gate-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: true
 jobs:
   verify-gate:
