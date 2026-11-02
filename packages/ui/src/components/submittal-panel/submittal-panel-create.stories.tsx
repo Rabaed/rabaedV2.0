@@ -6,6 +6,7 @@ import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { SubmittalPanelGrip, SubmittalPanelSizeSwitch, useSubmittalPanelSize, type SubmittalPanelSizeLabels } from "./panel-resize.tsx";
+import { NewItemIdentity } from "./new-item.tsx";
 import { SubmittalPanel, type SubmittalPanelLayout, type SubmittalPanelLabels } from "./submittal-panel.tsx";
 
 // The Submittal Panel in create mode and its tablet and phone layouts (RP-1152 rows 1, 6, 7, 9).
@@ -20,6 +21,7 @@ const copy = {
   hint: { en: "Esc to close", ar: "Esc للإغلاق" },
   saveDraft: { en: "Save Draft", ar: "حفظ المسودة" },
   open: { en: "New", ar: "جديد" },
+  subject: { en: "Subject", ar: "الموضوع" },
 };
 
 const sizeLabels = (locale: Locale): SubmittalPanelSizeLabels => ({
@@ -38,7 +40,7 @@ const labels = (locale: Locale): SubmittalPanelLabels => ({
   back: copy.back[locale],
 });
 
-function CreateDemo({ context, layout = "slide-over" }: { context: StoryContext; layout?: SubmittalPanelLayout }) {
+function CreateDemo({ context, layout = "slide-over", focusSubject = false }: { context: StoryContext; layout?: SubmittalPanelLayout; focusSubject?: boolean }) {
   const locale = storyLocale(context);
   const [open, setOpen] = useState(true);
   const size = useSubmittalPanelSize({ initial: 960, dir: locale === "ar" ? "rtl" : "ltr" });
@@ -61,6 +63,19 @@ function CreateDemo({ context, layout = "slide-over" }: { context: StoryContext;
           edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels(locale)} />}
           topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels(locale)} />}
           actions={<Button>{copy.saveDraft[locale]}</Button>}
+          identity={
+            focusSubject ? (
+              <NewItemIdentity
+                locale={locale}
+                noNumber={locale === "ar" ? "بلا رقم بعد" : "No number yet"}
+                draft={locale === "ar" ? "مسودة" : "Draft"}
+                subject=""
+                onSubjectChange={() => {}}
+                subjectLabel={copy.subject[locale]}
+                focusSubject
+              />
+            ) : undefined
+          }
         >
           <p className="p-5">{locale === "ar" ? "أقسام النموذج" : "Form Sections"}</p>
         </SubmittalPanel>
@@ -101,6 +116,17 @@ export const Create: Story = {
     await expect(panelOf(context)).toBe(panel);
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(context.canvasElement).queryByRole("dialog")).toBeNull());
+  },
+};
+
+/**
+ * A panel that clears after each save opens again with the focus in its Subject (RP-1222 row 10):
+ * the panel moves focus in only when nothing inside it holds it already.
+ */
+export const CreateFocusInTheSubject: Story = {
+  render: (_args, context) => <CreateDemo context={context} focusSubject />,
+  play: async (context) => {
+    await expect(within(panelOf(context)).getByRole("textbox", { name: storyText(context, copy.subject) })).toHaveFocus();
   },
 };
 

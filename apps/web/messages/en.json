@@ -84,6 +84,7 @@
     "newSnag": {
       "back": "Back to Snag List",
       "subjectPlaceholder": "Subject *  e.g. Cable tray not bonded",
+      "subjectOnly": "Subject *",
       "saved": "{count, plural, one {1 Snag saved} other {{n} Snags saved}}",
       "toast": "Snag saved as a Draft",
       "open": "Open"

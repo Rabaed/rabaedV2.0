@@ -348,7 +348,8 @@ function useNewSnag({
       <NewSubmittalPanelHost
         projectId={projectId}
         module="snag_list"
-        look={{ module: tTabs("snag_list"), back: t("back"), icon: "alert-triangle", ...(type === snagTypeCode ? { subjectPlaceholder: t("subjectPlaceholder") } : {}) }}
+        // A Snag's example; another Snag List Type (a Site Observation, a Question) has none of its own, so no Submittal's either.
+        look={{ module: tTabs("snag_list"), back: t("back"), icon: "alert-triangle", subjectPlaceholder: t(type === snagTypeCode ? "subjectPlaceholder" : "subjectOnly") }}
         type={type}
         onTypeChange={(code) => raising.open({ type: code })}
         draft={newItem.draft}

@@ -146,9 +146,10 @@ export function SubmittalPanel({
   const page = layout === "page";
   const fullWidth = layout !== "slide-over";
 
-  // Focus moves into the panel when it opens (not when its content swaps), so the keyboard reaches it.
+  // Focus moves into the panel when it opens (not when its content swaps), so the keyboard reaches it;
+  // left where it is when a part inside already took it (the New Snag's Subject after a save, RP-1222 row 10).
   useEffect(() => {
-    ref.current?.focus({ preventScroll: true });
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
   }, []);
 
   // The phone's page covers the screen: the page behind it doesn't scroll while it is open (RP-1152 row 7).

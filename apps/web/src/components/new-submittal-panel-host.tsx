@@ -164,7 +164,8 @@ export function NewSubmittalPanelHost(props: NewSubmittalPanelHostProps) {
   const t = useTranslations("newSubmittal");
   return (
     // The panel's own toasts: dark, centred over the List (row 38).
-    <ToastProvider label={t("notifications")} closeLabel={t("close")} placement="center" look="dark">
+    // A panel that clears after each save keeps its toasts above the footer, clear of its count (RP-1222 rows 27, 28).
+    <ToastProvider label={t("notifications")} closeLabel={t("close")} placement="center" aboveFooter={props.afterSave === "clear"} look="dark">
       <NewSubmittalPanel {...props} />
     </ToastProvider>
   );
@@ -629,7 +630,15 @@ function DraftSubmittalPanel({
       const { id } = result;
       toast(
         savedToast
-          ? { title: savedToast.title, description: <Link href={`/work-items/${id}`}>{savedToast.open}</Link>, tone: "success" }
+          ? {
+              title: savedToast.title,
+              description: (
+                <Link href={`/work-items/${id}`} className="font-semibold underline underline-offset-2">
+                  {savedToast.open}
+                </Link>
+              ),
+              tone: "success",
+            }
           : { title: t("toast"), tone: "success" },
       );
       onSaved?.(id, answers);
