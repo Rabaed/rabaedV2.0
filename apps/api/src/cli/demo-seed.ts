@@ -40,9 +40,10 @@ try {
 }
 
 const password = demoPassword();
-const db = createDb(urls.app, { max: 2 });
+// The sample Project (RP-1217) moves four items at once.
+const db = createDb(urls.app, { max: 6 });
 const adminDb = createDb(urls.admin, { max: 1 });
-const migrator = createDb(urls.migrator, { max: 1 });
+const migrator = createDb(urls.migrator, { max: 2 });
 // The local file store (Docker), for the Datasheet and Sample photo of a MAR.
 const fileStoreSettings = fileStoreSettingsFromEnv();
 await ensureLocalBucket(fileStoreSettings);
@@ -50,7 +51,7 @@ const mailbox = demoMailbox();
 const app = await buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, files: createFileStore(fileStoreSettings), mailer: mailbox.mailer });
 try {
   const seed = await seedDemo(app, mailbox, { migrator, admin: adminDb }, password, { files: true });
-  console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
+  console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2", "Al Nakheel District – Block A" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   for (const r of rows) console.log(`  ${r.slice(0, 3).map((c, i) => c!.padEnd(widths[i]!)).join("  ")}  ${r[3]}`);

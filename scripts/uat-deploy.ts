@@ -15,6 +15,9 @@ import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } fro
 //                                                 Run it after `demo ensure`, which creates UAT's demo Engineer on a fresh database
 //   node scripts/uat-deploy.ts demo ensure|reset  seed the demo unless it is there | drop, migrate and seed it again;
 //                                                 with the file store (FILE_STORE_*), ensure also stores any missing demo image (RP-672)
+//   node scripts/uat-deploy.ts demo add-sample-project|sample-project-status
+//                                                 add the sample Project (RP-1217) beside the demo, without a reset
+//                                                 (needs the file store) | only count how much of it is there
 //   node scripts/uat-deploy.ts records-env        the Records container's secrets (APP_VERSION from VERSION), as NAME=VALUE lines (RP-1042)
 //   node scripts/uat-deploy.ts project <web|api|admin>   apply the project's settings and Sensitive variables
 //   node scripts/uat-deploy.ts bypass admin       print Admin's Protection Bypass for Automation secret while it has
@@ -361,8 +364,11 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed`);
 }
 
+/** What `demo` takes: the demo itself, and the sample Project added beside it without a reset (RP-1217). */
+const DEMO_ACTIONS = ["ensure", "reset", "add-sample-project", "sample-project-status"] as const;
+
 /**
- * pnpm's arguments for `migrate`, `app-role-check` and `demo ensure|reset`. A package's
+ * pnpm's arguments for `migrate`, `app-role-check` and `demo <action>`. A package's
  * script goes through `run`, a binary through `exec`: without `run`, db's `setup` ran
  * pnpm's own `setup`, which refuses the --recursive that --filter implies.
  */
@@ -371,8 +377,8 @@ export function pnpmCommand(command: string | undefined, argument?: string): str
   if (command === "app-role-check") return ["--filter", "@rabaed/db", "exec", "tsx", "src/check-app-role.ts"];
   if (command === "defaults") return ["--filter", "@rabaed/admin", "run", "defaults:publish", "--ci"];
   if (command === "demo") {
-    if (argument !== "ensure" && argument !== "reset") throw new Error("demo ensure|reset");
-    return ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument];
+    if (!DEMO_ACTIONS.includes(argument as (typeof DEMO_ACTIONS)[number])) throw new Error(`demo ${DEMO_ACTIONS.join("|")}`);
+    return ["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", argument!];
   }
   return undefined;
 }
@@ -393,7 +399,7 @@ async function main([command, argument]: string[]): Promise<void> {
   if (command === "bypass") return void process.stdout.write(`${await automationBypass(project(argument), env)}\n`);
   // Secrets on stdout, for `| flyctl secrets import` only: never into a log (RP-1042).
   if (command === "records-env") return void process.stdout.write(recordsSecretsImport(recordsContainerEnv(env, required(env, "VERSION"))));
-  throw new Error("Usage: node scripts/uat-deploy.ts migrate | app-role-check | defaults | demo ensure|reset | project <web|api|admin> | bypass admin | records-env");
+  throw new Error(`Usage: node scripts/uat-deploy.ts migrate | app-role-check | defaults | demo ${DEMO_ACTIONS.join("|")} | project <web|api|admin> | bypass admin | records-env`);
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {

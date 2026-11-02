@@ -31,17 +31,22 @@ async function home(by: Caller): Promise<Home & { body: string }> {
   return { ...(res.json() as Home), body: res.body };
 }
 
-/** Every item of a Project's List, all Revisions, as `by` sees it. */
-async function everything(by: Caller, projectId: string): Promise<string[]> {
+/**
+ * Every item of a Project's Lists, all Revisions, as `by` sees it: each Module the Project has, since
+ * `/work-items` reads the Submittals alone (the sample Project, RP-1217, has a Snag List too).
+ */
+async function everything(by: Caller, project: ProjectSummary): Promise<string[]> {
   const ids: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page: WorkItemList = (
-      await ok(by.get(`/v1/projects/${projectId}/work-items?${workItemSearchParams({ allRevisions: true, ...(cursor ? { cursor } : {}) })}`), 200)
-    ).json();
-    ids.push(...page.items.map((i) => i.id));
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
+  for (const module of project.modules) {
+    let cursor: string | undefined;
+    do {
+      const page: WorkItemList = (
+        await ok(by.get(`/v1/projects/${project.id}/modules/${module}/work-items?${workItemSearchParams({ allRevisions: true, ...(cursor ? { cursor } : {}) })}`), 200)
+      ).json();
+      ids.push(...page.items.map((i) => i.id));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+  }
   return ids;
 }
 
@@ -53,7 +58,7 @@ describe("Home for the demo people", () => {
     expect(h.counts.activeProjects).toBe(cards.filter((p) => p.status === "active").length);
     expect(h.counts.needMyAction).toBe(cards.reduce((n, p) => n + p.needMyAction, 0));
     const mine = new Map<string, string[]>();
-    for (const p of cards) mine.set(p.id, await everything(as(who), p.id));
+    for (const p of cards) mine.set(p.id, await everything(as(who), p));
     for (const row of h.needsMyAction) expect(mine.get(row.project.id)).toContain(row.id);
     for (const entry of h.activity) expect(mine.get(entry.project.id)).toContain(entry.workItem.id);
   });
@@ -61,8 +66,9 @@ describe("Home for the demo people", () => {
   it("Yousef (Beta Build) never meets a TMC item; Nasser sees only Jeddah Corniche Villas (RP-407-1, RP-407-6)", async () => {
     const hafizProjects: ProjectSummary[] = (await ok(as("hafiz").get("/v1/projects"), 200)).json().projects;
     const tower = hafizProjects.find((p) => p.code === "TWR")!;
-    const tmcItems = await everything(as("hafiz"), tower.id);
-    expect(tmcItems.length).toBeGreaterThan(0);
+    // Riyadh Gate Tower's and the sample Project's (RP-1217): Beta Build is a Contractor on both.
+    const tmcItems = [...(await everything(as("hafiz"), tower)), ...(await everything(as("hafiz"), hafizProjects.find((p) => p.code === "NKD")!))];
+    expect(tmcItems.length).toBeGreaterThan(100);
     const yousef = await home(as("yousef"));
     for (const id of tmcItems) expect(yousef.body).not.toContain(id);
     const nasser = await home(as("nasser"));

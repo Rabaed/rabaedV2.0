@@ -4,12 +4,13 @@ import type { Db } from "@rabaed/db";
 import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, type StartedDocumentUpload, type VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { SESSION_COOKIE } from "../app.ts";
+import { browser, DEMO_EMAIL_SUFFIX, demoEmail, SAMPLE_PHOTO_JPEG, type Call } from "./demo-api.ts";
 import type { DemoMailbox } from "./mailbox.ts";
 import { demoPdf } from "./demo-pdf.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
 import { demoSignaturePng } from "./demo-signature.ts";
 import { jpegWithExif } from "./exif-jpeg.ts";
+import { addSampleProject } from "./sample-project.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
 // their Members, Positions and Visibility, and a second Project no other demo
@@ -46,10 +47,6 @@ export interface DemoSeed {
 /** The Rabaed Engineer's email: created first, so whether a seed started can be told from it. */
 export const DEMO_ENGINEER_EMAIL = "engineer@rabaed.demo.rabaed.test";
 
-/** A small photo of a sample luminaire (a JPEG, 96 × 64), for the demo MAR's Sample photo. */
-const SAMPLE_PHOTO_JPEG =
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCABAAGADASIAAhEBAxEB/8QAGQABAQEBAQEAAAAAAAAAAAAAAAUEAQMG/8QALxAAAQICBgkEAwEAAAAAAAAAAAEEAgMFERIUFdEhUlNUc5GTorETNUbBBiJB8f/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAXEQEBAQEAAAAAAAAAAAAAAAAAAQIR/9oADAMBAAIRAxEAPwD60AFQB4uHUltZ9aOzarq0Kvg8cUZ7btXIDYDHijPbdq5DFGe27VyA2Ax4oz23auQxRntu1cgNgMeKM9t2rkekh63cRrBJmWokSuqpU0AaAAAAAE6koUifMIYkRYVmVKipoXTCV7i03WR00JNIe4UfxfuEvE0sZ7i03WR00FxabrI6aGg6c7ris1wabrI6aC4tN1kdNDScUTXTjPcWm6yOmhIly4JX5A5glwQwQpLSqGFKkTRCXyF8jdcNPEJuJW8AGkAABPpD3Cj+L9wl4g0h7hR/F+4S8Z0sDpwVmLOq6cUVgScAhfI3XDTxCXSF8jdcNPEJvKVvABpAAAZnjKW8sepFGliuqyqf3/DNgrbXm80yKQAm4K215vNMhgrbXm80yKQKJuCttebzTIYK215vNMikAJuCttebzTI9mlHymk1ZkuKNVVLP7KmRsBAAAH//2Q==";
-
 /** The MAR the seed ends with Code C and Remarks, after the Consultant's verification (RP-306). */
 export const CODE_C_TITLE = "Cable tray risers – Tower 1";
 
@@ -59,33 +56,11 @@ export const STEP_AGE_REPORT_POSITION = "step_age_report";
 /** The Draft the seed creates last: whether a seed finished can be told from it. */
 export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 
-type Method = "GET" | "POST" | "PUT" | "PATCH";
-/** An API call; `T` is the answer's shape where the seed reads it. */
-type Call = <T = unknown>(method: Method, url: string, body?: unknown) => Promise<T>;
-
-/** Calls the API in-process like one browser, keeping its session cookie; any failure stops the seed. */
-function browser(app: FastifyInstance): Call {
-  let token: string | undefined;
-  return async <T>(method: Method, url: string, body?: unknown): Promise<T> => {
-    const res = await app.inject({
-      method,
-      url,
-      cookies: token ? { [SESSION_COOKIE]: token } : {},
-      ...(body === undefined ? {} : { payload: body as object }),
-    });
-    const set = res.cookies.find((c) => c.name === SESSION_COOKIE);
-    if (set) token = set.value || undefined;
-    if (res.statusCode >= 400) throw new Error(`Demo seed: ${method} ${url} answered ${res.statusCode} ${res.body}`);
-    return (res.body ? res.json() : null) as T;
-  };
-}
-
 const bi = (en: string, ar: string): BilingualText => ({ en, ar });
 const all: VisibilityGrant = { isAll: true, valueIds: [] };
 const only = (...valueIds: string[]): VisibilityGrant => ({ isAll: false, valueIds });
-/** What every demo person's email ends with (the reserved .test domain): only the demo's people have it. */
-export const DEMO_EMAIL_SUFFIX = ".demo.rabaed.test";
-const email = (local: string, domain: string) => `${local}@${domain}${DEMO_EMAIL_SUFFIX}`;
+export { DEMO_EMAIL_SUFFIX };
+const email = demoEmail;
 
 interface Person {
   key: string;
@@ -700,6 +675,11 @@ export async function seedDemo(
     await take(hafizCaller, rev1, "send_for_review");
     await aliCaller("POST", `/v1/work-items/${rev1}/pick-up`);
     await take(aliCaller, rev1, "submit");
+
+    // The sample Project (RP-1217): Al Nakheel District – Block A, the same Companies and people
+    // with over a hundred Submittals and a full Snag List. Its Submittals leave Draft with their
+    // Datasheets, so it comes only with the file store, as the MARs above do.
+    await addSampleProject(app, databases.migrator, password);
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it

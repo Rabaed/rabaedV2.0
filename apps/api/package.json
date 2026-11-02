@@ -11,6 +11,7 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc -p tsconfig.json",
     "demo:seed": "tsx --env-file-if-exists=../../.env src/cli/demo-seed.ts",
+    "demo:add-sample-project": "tsx --env-file-if-exists=../../.env src/cli/demo-sample-project.ts",
     "r2:cors": "tsx src/cli/r2-cors.ts",
     "fonts:fetch": "tsx src/cli/fetch-fonts.ts"
   },
