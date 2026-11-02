@@ -1,5 +1,7 @@
 import { submittalPanelSizes, type SubmittalPanelWidth } from "@rabaed/ui";
 
+type SubmittalPanelSizeKey = (typeof submittalPanelSizes)[number]["key"];
+
 /**
  * The Submittal Panel's place in the URL (RP-1061): `?open=<id>` on the List and the Kanban, so
  * a reload or a shared link reopens it. The rest of the page's query (filters, page, view) is kept.
@@ -16,9 +18,57 @@ export function submittalPanelHref(pathname: string, search: string, id: string 
   if (id === null) {
     params.delete(openParam);
     params.delete(sizeParam);
-  } else params.set(openParam, id);
+  } else {
+    // An item and the create panel never share the URL (RP-1152).
+    params.delete(newParam);
+    params.delete(typeParam);
+    params.set(openParam, id);
+  }
+  return withQuery(pathname, params);
+}
+
+const withQuery = (pathname: string, params: URLSearchParams) => {
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
+};
+
+/**
+ * The create panel's place in the URL (RP-1152): `?new=1` on the List and the Kanban, `&type=SAR`
+ * once a Type is picked, and the link's size (`&size=wide` from "Add Submittal", `normal` from a
+ * direct link). Like `?open=`, a reload or a shared link reopens it, and the size is the link's.
+ */
+const newParam = "new";
+const typeParam = "type";
+/** A Type code is a short Document Number segment. */
+const typeCode = /^[A-Z0-9]{1,10}$/;
+
+/** The page's URL with the create panel open (its Type and size changed where given), or closed (null). Opening it closes an open item. */
+export function newItemPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey } | null): string {
+  const params = new URLSearchParams(search);
+  if (open === null) {
+    for (const key of [newParam, typeParam, sizeParam]) params.delete(key);
+    return withQuery(pathname, params);
+  }
+  if (params.has(openParam)) {
+    params.delete(openParam);
+    params.delete(sizeParam);
+  }
+  params.set(newParam, "1");
+  if (open.size !== undefined) params.set(sizeParam, open.size);
+  if (open.type !== undefined) params.set(typeParam, open.type);
+  return withQuery(pathname, params);
+}
+
+/** Whether the URL opens the create panel, and the Type it names (null when none, or not a Type code). */
+export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: string | null } | null {
+  if (params.get(newParam) !== "1") return null;
+  const type = params.get(typeParam);
+  return { type: type !== null && typeCode.test(type) ? type : null };
+}
+
+/** Where a direct link to the Submittals' New page lands: the List with the create panel at Normal (decision 1). */
+export function newItemLanding(projectId: string, type?: string): string {
+  return newItemPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...(type !== undefined && typeCode.test(type) ? { type } : {}) });
 }
 
 /** The item the URL opens: only an id that can be an item's, so an edited link asks the api nothing else. */
