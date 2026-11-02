@@ -162,21 +162,51 @@ describe("branchMix: root package.json that only adds scripts for new scripts", 
     expect(refused(root({ lint: "eslint .", "check:new": "node scripts/new.ts" }))).toContain("shared: package.json");
   });
 
-  it("refuses an added entry for a new script when another field changes (devDependencies, name)", () => {
+  it("refuses an added entry for a new script when devDependencies change too", () => {
     expect(refused(root({ ...mainScripts, "check:new": "node scripts/new.ts" }, { devDependencies: { vitest: "1.0.0" } }))).toContain("shared: package.json");
-    git("reset", "-q", "--hard", "origin/main");
+  });
+
+  it("refuses an added entry for a new script when the name changes too", () => {
     expect(refused(root({ ...mainScripts, "check:new": "node scripts/new.ts" }).replace('"rabaed"', '"other"'))).toContain("shared: package.json");
   });
 
-  it("refuses an added entry that is not exactly `node scripts/<file>`: extra args, a chain, pnpm, a subfolder", () => {
-    for (const command of ["node scripts/new.ts --fix", "node scripts/new.ts && eslint .", "pnpm exec node scripts/new.ts", "node scripts/sub/new.ts"]) {
-      git("reset", "-q", "--hard", "origin/main");
-      expect(refused(root({ ...mainScripts, "check:new": command }), { ...newScript, "scripts/sub/new.ts": "export {};\n" }), command).toContain("shared: package.json");
-    }
+  it.each(["node scripts/new.ts --fix", "node scripts/new.ts && eslint .", "pnpm exec node scripts/new.ts", "node scripts/sub/new.ts"])(
+    "refuses an added entry that is not exactly `node scripts/<file>.ts`: %s",
+    (command) => {
+      expect(refused(root({ ...mainScripts, "check:new": command }), { ...newScript, "scripts/sub/new.ts": "export {};\n" })).toContain("shared: package.json");
+    },
+  );
+
+  it.each([
+    ["a test file", "node scripts/new.test.ts"],
+    ["a fixtures file", "node scripts/new.fixtures.ts"],
+    ["a file that is not .ts", "node scripts/notes.md"],
+  ])("refuses an added entry naming %s, even one the branch adds", (_, command) => {
+    const files = { ...newScript, "scripts/new.fixtures.ts": "export {};\n", "scripts/notes.md": "# notes\n" };
+    expect(refused(root({ ...mainScripts, "check:new": command }), files)).toContain("shared: package.json");
   });
 
-  it("refuses an added lifecycle name (postinstall runs on every install) even for an added script", () => {
-    expect(refused(root({ ...mainScripts, postinstall: "node scripts/new.ts" }))).toContain("shared: package.json");
+  it.each(["postinstall", "install", "uninstall", "pnpm:devPreinstall"])("refuses the added name %s: it runs on install, not when asked", (name) => {
+    expect(refused(root({ ...mainScripts, [name]: "node scripts/new.ts" }))).toContain("shared: package.json");
+  });
+
+  it("refuses an added script that is a symlink: node would follow it to code the branch didn't add", () => {
+    const target = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: "../apps/admin/src/a.ts", encoding: "utf8" }).trim();
+    git("update-index", "--add", "--cacheinfo", `120000,${target},scripts/new.ts`);
+    write({ "apps/admin/src/a.ts": "export const a = 2;\n", "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    git("add", "apps/admin/src/a.ts", "package.json");
+    git("commit", "-q", "--no-verify", "-m", "symlink");
+    expect(branchMix(repo, git("rev-parse", "HEAD"))?.join("\n") ?? "").toContain("shared: package.json");
+  });
+
+  it("passes a script renamed into scripts/ under a new name: the lists are --no-renames, so its new path is added", () => {
+    git("switch", "-q", "main");
+    commit({ "tools/new.ts": "export {};\n" });
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("switch", "-q", "-C", "feature");
+    git("mv", "tools/new.ts", "scripts/new.ts");
+    const head = commit({ "apps/admin/src/a.ts": "export const a = 2;\n", "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    expect(branchMix(repo, head)).toBeUndefined();
   });
 
   it("refuses an added pre<x> hook for an existing entry (prelint runs before lint) even for an added script", () => {

@@ -46,12 +46,17 @@ function onlyDependencyFieldsChanged(before: string | undefined, after: string |
   }
 }
 
-/** An added root script: exactly `node scripts/<file>`, nothing after it, no subfolder. */
-const NEW_SCRIPT_COMMAND = /^node scripts\/([\w.-]+)$/;
-/** npm/pnpm lifecycle names: they run on install, publish or version, not when asked. */
-const LIFECYCLE_NAMES = ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly", "prepack", "postpack", "publish", "postpublish", "preversion", "version", "postversion", "dependencies"];
-/** A lifecycle name, or any `pre…`/`post…` name: a later `<x>` would make it run around `<x>`, so those go in their own PR. */
-const isHookName = (name: string) => LIFECYCLE_NAMES.includes(name) || name.startsWith("pre") || name.startsWith("post");
+/** An added root script: exactly `node scripts/<file>.ts`, nothing after it, no subfolder, not a test or fixture. */
+const NEW_SCRIPT_COMMAND = /^node scripts\/([\w-]+(?:\.[\w-]+)*\.ts)$/;
+const isTestOrFixture = (file: string) => /\.(?:test|fixtures)\.ts$/.test(file);
+/** Lifecycle names that run on install, publish or version, not when asked (the `pre…`/`post…` ones are caught below). */
+const LIFECYCLE_NAMES = ["install", "uninstall", "publish", "version", "dependencies", "shrinkwrap"];
+/**
+ * A name that runs without being asked: a lifecycle name, pnpm's own hooks (`pnpm:devPreinstall` runs on every install),
+ * or any `pre…`/`post…` name (a later `<x>` would make it run around `<x>`). Those go in their own PR. This also
+ * catches plain names like `preview`, which fails closed.
+ */
+const isHookName = (name: string) => LIFECYCLE_NAMES.includes(name) || name.startsWith("pnpm:") || name.startsWith("pre") || name.startsWith("post");
 
 /**
  * RP-1195 item 7: true when root package.json only adds `scripts` entries `node scripts/<file>` whose file this change
@@ -76,7 +81,7 @@ function onlyNewScriptEntries(before: string | undefined, after: string | undefi
       added.every(([name, command]) => {
         if (isHookName(name)) return false;
         const file = typeof command === "string" ? NEW_SCRIPT_COMMAND.exec(command)?.[1] : undefined;
-        return file !== undefined && isAdded(`scripts/${file}`);
+        return file !== undefined && !isTestOrFixture(file) && isAdded(`scripts/${file}`);
       })
     );
   } catch {
@@ -84,20 +89,27 @@ function onlyNewScriptEntries(before: string | undefined, after: string | undefi
   }
 }
 
-/** A workspace package.json's text where the change starts and where it ends; undefined where it does not exist. */
+/**
+ * A changed file's text where the change starts and where it ends; undefined where it does not exist. Named for the
+ * package.json files it was first read for; item 7 also reads an added script through it.
+ */
 export type PackageJsonVersions = (file: string) => { before: string | undefined; after: string | undefined };
 
 /**
  * The lines that name a rule-3 breach in `files` (changed against the merge base with origin/main), and say
- * what to do; undefined when there is none. A workspace package.json that changes only dependency fields
- * belongs to a dependencies-only PR beside the lockfile (RP-573). Callers add their heading and next step.
+ * what to do; undefined when there is none. Two changes are not breaches: a workspace package.json that changes only
+ * dependency fields belongs to a dependencies-only PR beside the lockfile (RP-573), and a root package.json that only
+ * adds `node scripts/<file>.ts` entries for scripts this change adds rides with them (RP-1195 item 7). Callers add
+ * their heading and next step.
  */
 export function sharedFilesMix(files: string[], versions: PackageJsonVersions): string[] | undefined {
-  // RP-1195 item 7: a root package.json that only adds scripts for scripts this change adds is not a root shared change.
+  // An added script: absent where the change starts, present where it ends. A file renamed into scripts/ counts, since
+  // the lists are --no-renames. Its text must hold a newline: a git symlink's blob is its one-line target, which `node`
+  // would follow to code the change didn't add (the seams read blobs, not modes; a real script spans lines).
   const isAdded = (file: string) => {
     if (!files.includes(file)) return false;
     const { before, after } = versions(file);
-    return before === undefined && after !== undefined;
+    return before === undefined && after !== undefined && after.includes("\n");
   };
   const rootPackageJson = files.includes("package.json") ? versions("package.json") : undefined;
   const exempt = rootPackageJson !== undefined && onlyNewScriptEntries(rootPackageJson.before, rootPackageJson.after, isAdded);
@@ -114,7 +126,7 @@ export function sharedFilesMix(files: string[], versions: PackageJsonVersions): 
     ...(workspacePackageJson
       ? ["Note: a workspace package.json beside the lockfile is allowed when only its dependency fields (dependencies/devDependencies/peerDependencies/optionalDependencies) change."]
       : []),
-    `Fix: a change to root ${rootSharedList} is its own PR (only those and docs).`,
+    `Fix: a change to root ${rootSharedList} is its own PR (only those and docs), unless root package.json only adds \`node scripts/<file>.ts\` entries for scripts this PR adds.`,
     ...(workspacePackageJson || files.includes("pnpm-lock.yaml")
       ? [
           'For dependencies: open a dependencies-only PR first (the lockfile and the workspace package.json dependency fields), then build the feature PR on it (docs/agents/issue-tracker.md › "Ticket: workspace dependencies").',
