@@ -371,8 +371,8 @@ describe("the Inspections Stages are the Submittals set (ADR 0025)", () => {
     const submittalKeys = (await board(hafiz.caller, "submittals")).stages.map((s) => s.key);
     const inspections = (await board(hafiz.caller, "inspections")).stages;
     expect(inspections.map((s) => s.key)).toEqual(submittalKeys);
-    expect(inspections.map((s) => s.key)).toEqual(["draft", "internal_review", "pending_approval", "approved", "revise_resubmit", "cancelled", "rejected"]);
-    expect(inspections.map((s) => s.name.en)).toEqual(["Draft", "Internal Review", "Pending Approval", "Approved", "Revise & Resubmit", "Cancelled", "Rejected"]); // not hidden-from: the Stages' names
+    expect(inspections.map((s) => s.key)).toEqual(["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"]);
+    expect(inspections.map((s) => s.name.en)).toEqual(["Draft", "Internal Review", "Revise & Resubmit", "Pending Approval", "Approved", "Rejected", "Cancelled"]); // not hidden-from: the Stages' names
     const { rows } = await sql<{ key: string }>`
       select distinct key from stage where module_key = 'inspections' and owner_kind = 'rabaed' order by key
     `.execute(migrator);

@@ -113,7 +113,7 @@ const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
 });
 
 const cards = {
-  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: own(engineer, person("Sara Al Qahtani", "سارة القحطاني", true), draftStep) }),
+  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, submissionDate: null, creationDate: null, stage: stages.draft, with: own(engineer, person("Sara Al Qahtani", "سارة القحطاني", true), draftStep) }),
   fire: card(28, { title: "Fire Suppression System", stepAgeWeeks: 2, with: own(engineer, person("Ahmed bin Said", "أحمد بن سعيد", true)) }),
   hvac: card(19, {
     title: "HVAC Ducting",
@@ -181,6 +181,16 @@ const board: WorkItemBoardData = {
   ],
   moves: {},
   layout: defaultBoardCardLayout,
+  mayRaise: true,
+};
+
+// The board as the api gives it to a Consultant's Member, who may raise no Submittal (RP-1219): no Draft
+// Stage and no Draft column, not even an empty one.
+const consultantBoard: WorkItemBoardData = {
+  ...board,
+  stages: board.stages.filter((s) => s.category !== "draft"),
+  columns: board.columns.filter((c) => c.stageKey !== "draft"),
+  mayRaise: false,
 };
 
 // What Ahmed may do with "Fire Suppression System" now (RP-350): two Transitions
@@ -226,8 +236,8 @@ const cardOf = (context: PlayContext, row: WorkItemRow) =>
   context.canvasElement.querySelector<HTMLElement>(`a[href="#${row.id}"]`)!.closest<HTMLElement>("[data-kanban-card]")!;
 
 /**
- * The board as the anatomy draws it: a column per Stage but Drafts (they stay
- * on the List and Need My Action), each with its dot, name and count; inside,
+ * The board as the anatomy draws it, for a Member who may raise a Submittal: a column per
+ * Stage, the Drafts first (RP-1219), each with its dot, name and count; inside,
  * Al Futtaim's Steps as groups, the Consultant as one group by its name only
  * (V14), the closed items as "Mixed". Cards show the number left to right, the
  * Revision or Code badge in the left corner, the Trade in its hue, the plan
@@ -238,8 +248,12 @@ export const Wide: Story = {
     const locale = storyLocale(context);
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
     const columns = within(region).getAllByRole("listitem").filter((li) => li.dataset.stage);
-    await expect(columns.map((c) => c.dataset.stage)).toEqual(board.stages.filter((s) => s.category !== "draft").map((s) => s.key));
-    await expect(context.canvasElement.querySelector(`a[href="#${cards.draft.id}"]`)).toBeNull();
+    await expect(columns.map((c) => c.dataset.stage)).toEqual(["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"]);
+    // The Draft card: no number, no date, no Step Age.
+    const draftCard = within(columnOf(context, stages.draft)).getByText(cards.draft.title).closest<HTMLElement>("[data-kanban-card]")!;
+    await expect(draftCard).not.toHaveAttribute("data-aged");
+    await expect(draftCard).not.toHaveTextContent(/127893/);
+    await expect(draftCard).not.toHaveTextContent("Jun");
 
     const internal = columnOf(context, stages.internal);
     const groups = within(internal).getAllByRole("region");
@@ -588,9 +602,26 @@ export const FilterPanelOpen: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(`^${labels.filters}`) }));
     const panel = await screen.findByRole("dialog", { name: labels.filters });
     await expect(within(panel).getByText(labels.filtersApplied("2", 2))).toBeVisible();
-    // The Kanban's Stage field has no Drafts.
-    await expect(within(panel).queryByRole("checkbox", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
+    // A raiser's Stage field offers the Draft column's Stage (RP-1219).
+    await expect(within(panel).getByRole("checkbox", { name: stages.draft.name[storyLocale(context)] })).not.toBeChecked();
     await expect(within(panel).getByRole("checkbox", { name: stages.internal.name[storyLocale(context)] })).toBeChecked();
+  },
+};
+
+/** A Consultant's Member, who may raise no Submittal (RP-1219): no Draft column, and no Draft in the Stage field. */
+export const ForAConsultant: Story = {
+  parameters: { overlay: true },
+  args: { board: consultantBoard },
+  render: (args, context) => <Toolbar args={args} locale={storyLocale(context)} />,
+  play: async (context) => {
+    const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
+    const columns = within(region).getAllByRole("listitem").filter((li) => li.dataset.stage);
+    await expect(columns.map((c) => c.dataset.stage)).toEqual(["internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"]);
+    const labels = workItemListLabels[storyLocale(context)];
+    await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(`^${labels.filters}`) }));
+    const panel = await screen.findByRole("dialog", { name: labels.filters });
+    await expect(within(panel).queryByRole("checkbox", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
+    await expect(within(panel).getByRole("checkbox", { name: stages.internal.name[storyLocale(context)] })).toBeVisible();
   },
 };
 

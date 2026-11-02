@@ -8,7 +8,7 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { toolbarButton } from "../list/list-toolbar.tsx";
 import { KanbanCard } from "./kanban-card.tsx";
-import { boardStages, cardContent, type WorkItemBoardLabels } from "./work-item-board.tsx";
+import { cardContent, type WorkItemBoardLabels } from "./work-item-board.tsx";
 
 /** The Card view layout menu's words, from the app's messages. */
 export type BoardLayoutMenuLabels = {
@@ -52,8 +52,9 @@ export function BoardLayoutMenu({ layout, onChange, labels, board, boardLabels, 
   const id = useId();
   const sample = useMemo(() => {
     if (!board) return undefined;
-    const shown = new Set(boardStages(board).map((s) => s.key));
-    return board.columns.filter((c) => shown.has(c.stageKey)).flatMap((c) => c.lanes.flatMap((l) => l.cards))[0];
+    // A numbered card when there is one: a Draft (first on a raiser's board, RP-1219) has no number, date or Step Age to preview.
+    const drafts = new Set(board.stages.filter((s) => s.category === "draft").map((s) => s.key));
+    return board.columns.filter((c) => !drafts.has(c.stageKey)).flatMap((c) => c.lanes.flatMap((l) => l.cards))[0];
   }, [board]);
   const places = useMemo(() => {
     const byId = new Map((board?.filters.locations ?? []).map((l) => [l.id, l]));

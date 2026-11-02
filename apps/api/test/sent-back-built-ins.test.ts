@@ -4,7 +4,7 @@
 // C1's Daily Report at Tower 1 is Sent Back to a Step that says "Edit the Form" (RP-580), and
 // C1 moves it to Building A and changes its Scope. Until C1 Submits it again, the Owner
 // Representative's Tower 1 engineer still has it, at Tower 1 with its old Scope, in the List,
-// a Location filter, the Kanban, search and the item; the Building A engineer has nothing of
+// a Location filter, search and the item (not the Kanban: the Draft Stage is a column for raisers only, RP-1219); the Building A engineer has nothing of
 // it, not even a 404's worth. C1 sees Building A. At the Submit the new values apply (V12):
 // the Tower 1 engineer loses it, the Building A engineer gains it.
 //
@@ -63,14 +63,18 @@ const cards = async (by: Caller) =>
 const scopeIds = (d: WorkItemDetail) => d.scopes.map((s) => s.id);
 const names = new Map<Caller, string>();
 const named = (by: Caller) => names.get(by) ?? "a Member";
-/** `id` is read, by id, by each `seenBy`, and by none of `hiddenFrom`: in the item, the List (with `query`) and the Kanban. */
-async function hiddenEverywhere(id: string, seenBy: Caller[], hiddenFrom: Caller, query: Parameters<typeof workItemSearchParams>[0]) {
-  const at = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string) =>
-    expectHiddenFrom({ read, target: id, seenBy, hiddenFrom, name: named, label });
+/**
+ * `id` is read, by id, by each `seenBy`, and by none of `hiddenFrom`: in the item, the List (with `query`) and the Kanban.
+ * The Kanban's are `kanbanSeenBy` (all of `seenBy` by default): while the item is in the Draft Stage, only a Member who
+ * may raise in the Module has that column (RP-1219).
+ */
+async function hiddenEverywhere(id: string, seenBy: Caller[], hiddenFrom: Caller, query: Parameters<typeof workItemSearchParams>[0], kanbanSeenBy = seenBy) {
+  const at = (read: (by: Caller) => Promise<readonly { id: string }[]>, label: string, readers = seenBy) =>
+    expectHiddenFrom({ read, target: id, seenBy: readers, hiddenFrom, name: named, label });
   await at(readById(`/v1/work-items/${id}`), "the item");
   await at((by) => list(by), "the List");
   await at((by) => list(by, query), `the List, searched for ${JSON.stringify(query)}`);
-  await at(cards, "the Kanban");
+  await at(cards, "the Kanban", kanbanSeenBy);
 }
 
 beforeAll(async () => {
@@ -141,7 +145,9 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
     }
   });
 
-  it("keeps it with the Tower 1 engineer, at Tower One with Lighting: List, Location filter, Kanban, search, item", async () => {
+  // Not on the Tower 1 engineer's Kanban: Sent Back to its Draft Step, it is in the Draft Stage, a column only for a
+  // Member who may raise a Submittal (RP-1219), which the OR may not.
+  it("keeps it with the Tower 1 engineer, at Tower One with Lighting: List, Location filter, search, item", async () => {
     const d = await detail(orTower1, id);
     expect(d.location?.id).toBe(tower1);
     expect(d.answers.location).toBe(tower1);
@@ -150,7 +156,6 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
     expect(await row(orTower1, id, { location: [tower1] })).toBeDefined();
     // C1, who has it at Building Alpha, finds it there; the Tower 1 engineer doesn't.
     await expectHiddenFrom({ read: (by: Caller) => list(by, { location: [buildingA] }), target: id, seenBy: engineer, hiddenFrom: orTower1, name: named, label: "the Building A filter" });
-    expect((await cards(orTower1)).find((c) => c.id === id)?.location?.id).toBe(tower1);
     expect(await row(orTower1, id, { q: "Tower One" })).toBeDefined();
     // Nothing tells it where C1 moved the report.
     await expectHiddenFrom({ read: (by: Caller) => list(by, { q: "Alpha" }), target: id, seenBy: engineer, hiddenFrom: orTower1, name: named, label: "a search for Alpha" });
@@ -166,7 +171,8 @@ describe("scenario RP-582-1: C1 moves a report Sent Back to an \"Edit the Form\"
 
   it("gives the Building A engineer nothing of it", async () => {
     // The Tower 1 engineer still has it as it was, and C1 as it is now.
-    await hiddenEverywhere(id, [orTower1, engineer], orBuildingA, { q: "Daily" });
+    // On the Kanban, C1's engineer reads it first: the OR has no Draft column (RP-1219).
+    await hiddenEverywhere(id, [orTower1, engineer], orBuildingA, { q: "Daily" }, [engineer]);
   });
 
   describe("scenario RP-582-2: once C1 Submits it again (V12)", () => {
