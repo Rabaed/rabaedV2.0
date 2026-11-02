@@ -473,7 +473,7 @@ export function samplePackages(): SamplePackage[] {
 /** Whether a submittal ending at `end` lets its Package be Done: closed at Code A, B or D (a Code C waits for its Revision). */
 export const closesPackage = (end: SubmittalEnd): boolean => end === "code_a" || end === "code_b" || end === "code_d";
 
-/** A check of a Checklist Template: Pass, Fail or N/A, a comment allowed; a Failed check raises nothing of its own. */
+/** A check item of a Checklist Template: Pass, Fail or N/A, a comment allowed; a Failed one raises nothing of its own. */
 export interface SampleCheck {
   key: string;
   text: BilingualText;
@@ -522,7 +522,7 @@ export interface SampleInspection {
   consultantEngineer?: ConsultantEngineer;
   /** From the Consultant Engineer on: the Code they recommend (the Code issued, once there is one). */
   recommendedCode?: "A" | "B" | "C" | "D";
-  /** Its Checklist's checks the Consultant Engineer answers Fail; every other one Passes. */
+  /** Its Checklist's check items the Consultant Engineer answers Fail; every other one Passes. */
   failing?: string[];
   /** Code B only: the Comments its Code raises. */
   comments?: { comment: string; reference: string; end: "open" }[];

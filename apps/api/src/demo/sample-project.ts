@@ -372,6 +372,13 @@ const verified = (matches: boolean, why: string) => ({
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Screen's field key.
 const resolution = (text: string) => ({ resolution_note: text });
 
+/** When an Inspection asks to be inspected: three days after the run, at 09:00 Riyadh time (06:00 UTC). */
+const requestedFor = () => {
+  const day = new Date(Date.now() + 3 * 24 * 3_600_000);
+  day.setUTCHours(6, 0, 0, 0);
+  return day.toISOString();
+};
+
 /** Moves each item, as whoever holds it. */
 class Runner {
   constructor(
@@ -502,13 +509,20 @@ class Runner {
     };
     for (const title of p.existing) await add(pm, await item(title));
     for (const d of p.drafts) await add(raiser, await item(d.title, () => this.draft(d, p.owner)));
+    // A run cut short may have left one: still a Draft (never sent), or Submitted but not yet moved on.
+    const resume: { id: string; s: SampleSubmittal }[] = [];
     for (const s of p.submitted) {
-      const own = await item(s.title, async () => {
-        const made = await this.draft(s, p.owner);
+      const made = await item(s.title, () => this.draft(s, p.owner));
+      const at = await raiser<WorkItemDetail>("GET", `/v1/work-items/${made}`);
+      if (at.stage.key === "draft") {
         await this.act(raiser, made, "send_for_review");
-        return made;
-      });
-      await add(pm, own);
+        changed = true;
+      } else if (packageId && at.step?.key === "consultant_engineer" && s.end !== "with_consultant_engineer") resume.push({ id: made, s });
+      await add(pm, made);
+    }
+    for (const { id: stuck, s } of resume) {
+      await this.reviewed(stuck, s, p.owner);
+      changed = true;
     }
     // Only its own submittals are Submitted: an Open Package's Drafts stay Drafts.
     const own = new Set(p.submitted.map((s) => s.title));
@@ -535,7 +549,8 @@ class Runner {
     const pm = this.as[SIDES[i.owner].pm];
     const answers = {
       description: i.description,
-      requested_for: "2026-11-05T06:00:00.000Z",
+      // A few days after the run, at 09:00 Riyadh: a Form answer, not a due date.
+      requested_for: requestedFor(),
       trade: this.ids.trade[i.trade],
       location: this.ids.location[i.location],
       checklist_template: this.ids.checklist[i.trade],
@@ -580,7 +595,7 @@ class Runner {
     if (end === "code_a") await this.act(mohammed, id, "approve_a", { answers: verification });
     if (end === "code_b") {
       const comments = (i.comments ?? []).map(({ comment, reference }) => ({ comment, reference }));
-      await this.act(mohammed, id, "approve_b", { answers: { ...verification, remarks: "Passed with comments: see the Comments.", items_to_create: comments } });
+      await this.act(mohammed, id, "approve_b", { answers: { ...verification, remarks: "Approved with comments: see the Comments.", items_to_create: comments } });
     }
     if (end === "code_c") await this.act(mohammed, id, "revise_c", { answers: { ...verification, remarks: "Correct the failed Checklist items and ask for a re-inspection. / صحّح البنود المخالفة واطلب إعادة الفحص." } });
     if (end === "code_d") await this.act(mohammed, id, "reject_d", { answers: { ...verification, remarks: "Rejected: redo the work. / مرفوض: أعد تنفيذ العمل." } });
