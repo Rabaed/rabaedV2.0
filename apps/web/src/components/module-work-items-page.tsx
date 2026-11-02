@@ -141,22 +141,20 @@ export async function ModuleWorkItemsPage({
   // too. "New Inspection" opens the Inspections' panel the same way (RP-1221), never the
   // Submittals' (RP-1179): on the Inspections tab, or on the Submittals tab of a Project that shows
   // them there (gap row 2, ADR 0025), beside "Add Submittal".
-  const newInspection = (onSubmittals: boolean) => (
-    <AddSubmittalButton label={t("newInspection")} {...(onSubmittals ? { module: "inspections" as const } : {})} />
-  );
+  const raisesHere = canRaise(raisable, covered);
   // The Inspections' Types are read only for a Project that shows them in the Submittals tab (RP-1221, gap row 2; ADR 0025).
   const inspectionsHere =
     module === "submittals" && inspectionsInSubmittals(project) && canRaise(await getRaisableTypes(projectId, "inspections"), covered);
   const action =
     module === "submittals" ? (
-      canRaise(raisable, covered) || inspectionsHere ? (
+      raisesHere || inspectionsHere ? (
         <>
-          {canRaise(raisable, covered) && <AddSubmittalButton label={t("addSubmittal")} />}
-          {inspectionsHere && newInspection(true)}
+          {raisesHere && <AddSubmittalButton label={t("addSubmittal")} />}
+          {inspectionsHere && <AddSubmittalButton label={t("newInspection")} module="inspections" />}
         </>
       ) : undefined
-    ) : module === "inspections" && canRaise(raisable, covered) ? (
-      newInspection(false)
+    ) : module === "inspections" && raisesHere ? (
+      <AddSubmittalButton label={t("newInspection")} />
     ) : undefined;
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
   // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every

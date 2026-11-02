@@ -59,6 +59,7 @@ import {
   withAllSubmittalPanelSections,
   writeSubmittalPanelPreferences,
   type BuiltInChoices,
+  type FormRendererProps,
   type IconName,
   type NewItemRoutePreviewLabels,
   type SubmittalPanelLayout,
@@ -121,6 +122,11 @@ export type NewSubmittalPanelLook = {
   icon: IconName;
   /** The Module's own words where they differ from a Submittal's (RP-1221, the Inspections); each left out keeps the panel's. */
   words?: NewSubmittalPanelWords;
+  /**
+   * The Form's own look in the panel (RP-1221, row 25): the Inspections' Checklist Template as cards with
+   * the picked one's items under them, since the panel has no column beside the Form. Left out, the Form's default.
+   */
+  form?: FormRendererProps["look"];
 };
 
 /** A Module's own words in the create panel (RP-1221). Wording only: who the who-sees line names is the panel's (RP-1222). */
@@ -393,6 +399,7 @@ function NewSubmittalPanel({
       onClose={onClose}
       refreshKey={refreshKey}
       words={look.words}
+      formLook={look.form}
       {...hooks}
     />
   );
@@ -443,6 +450,7 @@ type DraftProps = NewSubmittalPanelHooks & {
   refreshKey?: unknown;
   layout: SubmittalPanelLayout;
   words?: NewSubmittalPanelWords;
+  formLook?: FormRendererProps["look"];
 };
 
 /** One Draft after another: with `afterSave: "clear"`, a save starts the next one, keeping the `keep` answers. */
@@ -509,6 +517,7 @@ function DraftSubmittalPanel({
   refreshKey,
   layout,
   words,
+  formLook,
   routePreview = true,
   rail = true,
   documentsLock = true,
@@ -709,8 +718,7 @@ function DraftSubmittalPanel({
                 setError(null);
               }}
               idPrefix="answer"
-              // The picked Checklist Template's items under its card at every width: the panel has no column beside the Form (RP-1221, row 25).
-              look={{ checklistTemplate: "cards-preview" }}
+              {...(formLook ? { look: formLook } : {})}
               links={{
                 targets: state.linkTargets,
                 search: linkSearch(projectId),

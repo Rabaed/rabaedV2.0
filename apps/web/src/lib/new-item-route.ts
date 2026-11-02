@@ -3,7 +3,8 @@ import { projectTabKeys, type ProjectTabKey } from "@rabaed/ui";
 
 // Where a Module's items are raised (RP-1179). Every Module's New page is `/work-items/new`;
 // a Module other than the Submittals is named in `?module=`, so the page offers its Types and
-// heads itself with its words (a WIR: "Inspections › New WIR", never "New Submittal").
+// heads itself with its words (never "New Submittal" for an Inspection). The Submittals (RP-1152) and the
+// Inspections (RP-1221) are raised in the create panel over their tab instead: the page sends them there.
 
 /** The New page for `module`'s items, with the Type `type` picked when given. */
 export function newItemHref(projectId: string, module: ModuleKey, type?: string): string {
@@ -30,7 +31,7 @@ export function projectTabHref(projectId: string, key: ProjectTabKey): string {
 
 /**
  * The Project tab `pathname` belongs to: the tab whose page it is under, except the New page,
- * which belongs to the Module its `?module=` names (`moduleParam`), so New WIR is under Inspections.
+ * which belongs to the Module its `?module=` names (`moduleParam`), so a New Snag is under the Snag List.
  * A Module without a tab of its own (`modules`, the Modules with tabs: Inspections shown in the
  * Submittals tab, RP-652) raises under Submittals.
  */

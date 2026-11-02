@@ -88,9 +88,12 @@ export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: strin
   return { type: value !== "1" && typeCode.test(value) ? value : null, draft: draft !== null && uuid.test(draft) ? draft : null };
 }
 
+/** A direct link's Type, when it is a Type code: anything else opens the panel on the first Type. */
+const linkType = (type: string | undefined) => (type !== undefined && typeCode.test(type) ? { type } : {});
+
 /** Where a direct link to the Submittals' New page lands: the List with the create panel at Normal (decision 1). */
 export function newItemLanding(projectId: string, type?: string): string {
-  return newSubmittalPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...(type !== undefined && typeCode.test(type) ? { type } : {}) });
+  return newSubmittalPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...linkType(type) });
 }
 
 /** The Module the URL's create panel names (RP-1221), with the panel open only: null when it names none, or not a Module's key. */
@@ -108,7 +111,7 @@ export function newInspectionLanding(projectId: string, { inSubmittals }: { inSu
   const tab = inSubmittals ? moduleTabPaths.submittals : moduleTabPaths.inspections;
   return newSubmittalPanelHref(`/projects/${projectId}/${tab}`, "", {
     size: "normal",
-    ...(type !== undefined && typeCode.test(type) ? { type } : {}),
+    ...linkType(type),
     ...(inSubmittals ? { module: "inspections" as const } : {}),
   });
 }

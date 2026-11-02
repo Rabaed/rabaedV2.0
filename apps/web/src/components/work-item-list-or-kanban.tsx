@@ -281,6 +281,8 @@ export function WorkItemListOrKanban(
             outcome: tInspection("outcome"),
             whoSeesBox: { author: tInspection("whoSeesAuthor"), company: tInspection("whoSeesCompany") },
           },
+          // The picked Checklist Template's items under its card at every width (row 25).
+          form: { checklistTemplate: "cards-preview" },
         }
       : { module: tTabs("submittals"), back: tNew("back"), icon: "file-text" };
   const loaded = props.view === "list" ? props.list : props.board;

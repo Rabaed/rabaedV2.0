@@ -26,7 +26,7 @@ export default async function ModuleTabNewPage({
   setRequestLocale(locale);
   const moduleKey = moduleOfTabPath(moduleTab);
   if (!moduleKey) notFound();
-  // Another Module's tab (`/inspections/new`): its New page, so a WIR is raised as New WIR (RP-1179).
+  // Another Module's tab (`/inspections/new`): its New page, which opens the Inspections' create panel (RP-1179, RP-1221).
   if (moduleKey !== "snag_list") return redirect({ href: newItemHref(projectId, moduleKey, requested), locale });
   const [me, raisable, covered] = await Promise.all([getMe(), getRaisableTypes(projectId, "snag_list"), getMyVisibility(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });

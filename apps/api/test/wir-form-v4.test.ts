@@ -3,13 +3,31 @@
 // keep their order (Work to inspect, Documents, References, Checklist). Requested for's help says
 // "inspection", not "visit" (GLOSSARY.md Inspection). Every field keeps its key, type and required
 // flag, so answers, Checklists and Documental Records carry over. WIRs on Versions 1 to 3 keep theirs.
-import type { FormVersion } from "@rabaed/domain";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { formSchema, type FormVersion } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { all, ok, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi();
-afterAll(() => api.close());
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+afterAll(async () => {
+  await api.close();
+  await migrator.destroy();
+});
+
+/** The WIR's published Form Versions, oldest first. */
+async function wirVersions() {
+  const { rows } = await sql<{ version_no: number; schema: unknown }>`
+    select v.version_no, v.schema from form_version v
+    join work_item_type t on t.form_definition_id = v.form_definition_id
+    where t.owner_kind = 'rabaed' and t.code = 'WIR' and v.status = 'published'
+    order by v.version_no
+  `.execute(migrator);
+  return rows;
+}
 
 let engineer: Caller;
 let projectId = "";
@@ -27,6 +45,15 @@ beforeAll(async () => {
 const wirForm = async (): Promise<FormVersion> => (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/WIR/form`), 200)).json();
 
 describe("the WIR Form Version 4", () => {
+  // A database seeded fresh, as this one, publishes the document once; where Version 3 was published
+  // (every deployed environment) `pnpm defaults:publish` adds this as the next Version, and the WIRs
+  // pinned to an earlier one keep it (ADR 0006).
+  it("is the published Version a new WIR gets", async () => {
+    const latest = (await wirVersions()).at(-1)!;
+    expect((await wirForm()).versionNo).toBe(latest.version_no);
+    expect(formSchema.parse(latest.schema).sections[0]!.key).toBe("classification");
+  });
+
   it("puts Classification first, then Work to inspect, Documents, References and Checklist", async () => {
     const { schema } = await wirForm();
     expect(schema.sections.map((s) => [s.key, s.title])).toEqual([
