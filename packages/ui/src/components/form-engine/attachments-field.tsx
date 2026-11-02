@@ -3,7 +3,7 @@
 import { formatNumber, type AttachmentsField as AttachmentsFieldSchema, type DocumentSummary, type Locale } from "@rabaed/domain";
 import { useRef } from "react";
 import { cn } from "../../lib/cn.ts";
-import { IconButton } from "../button/button.tsx";
+import { IconButton, buttonVariants } from "../button/button.tsx";
 import { useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
 
@@ -20,6 +20,8 @@ import { Icon } from "../icon/icon.tsx";
 export type AttachmentsFieldLabels = {
   none: string;
   notYet: string;
+  /** The upload button, "Add Document". */
+  add: string;
   uploading: string;
   open: (name: string) => string;
   remove: (name: string) => string;
@@ -70,25 +72,42 @@ export function takesUpload(field: AttachmentsFieldSchema, files: AttachmentsFie
   return mode === "edit" && !!files?.canChange && (field.maxFiles === undefined || files.documents.length < field.maxFiles);
 }
 
-/** The file input, wired to its Field: the Field's label names it, and its help and error describe it. */
+/**
+ * The file input, wired to its Field: the Field's label names it, and its help and error describe it.
+ * It shows as a button in the page's language ("Add Document"), never the browser's own "Choose File /
+ * No file chosen", which reads in the browser's language (RP-1152 rows 29, 38).
+ */
 function FileInput({ field, pending, labels, onUpload }: { field: AttachmentsFieldSchema; pending: boolean; labels: AttachmentsFieldLabels; onUpload?: (file: File) => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const { labelId: _labelId, ...props } = useFieldControl({});
+  const { labelId, ...props } = useFieldControl<FieldControlProps>({});
   return (
     <div className="flex flex-col gap-1">
-      <input
-        {...props}
-        ref={input}
-        type="file"
-        accept={field.contentTypes?.join(",")}
-        disabled={pending}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onUpload?.(file);
-          if (input.current) input.current.value = "";
-        }}
-        className="block w-full text-sm text-text pointer-coarse:min-h-11 file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
-      />
+      <label
+        className={cn(
+          buttonVariants({ variant: "secondary" }),
+          "cursor-pointer self-start pointer-coarse:min-h-11",
+          "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus",
+          pending && "pointer-events-none opacity-50",
+        )}
+      >
+        <Icon name="upload" size={16} />
+        {labels.add}
+        <input
+          {...props}
+          // Named by the Field's label alone, not the button's word around it.
+          aria-labelledby={labelId}
+          ref={input}
+          type="file"
+          accept={field.contentTypes?.join(",")}
+          disabled={pending}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onUpload?.(file);
+            if (input.current) input.current.value = "";
+          }}
+          className="sr-only"
+        />
+      </label>
       {pending && (
         <p role="status" className="text-sm text-muted">
           {labels.uploading}

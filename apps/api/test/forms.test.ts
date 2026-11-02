@@ -80,8 +80,12 @@ describe("the Form for a new MAR", () => {
     // The MAR Form Version 5 (RP-437): Version 4 without the Consultant verification, which moved to the Consultant's replies (ADR 0019).
     expect(form.versionNo).toBe(5);
     expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
-      ["manufacturer", "text", true],
+      // The Built-in Fields, placed in the Form (RP-270), first since Version 7's document (RP-1152), the supplier after the Trade.
+      ["trade", "trade", true],
       ["supplier", "approved_supplier", true],
+      ["location", "location", true],
+      ["scopes", "scopes", false],
+      ["manufacturer", "text", true],
       ["model", "text", false],
       ["specification_section", "text", false],
       ["description", "textarea", true],
@@ -90,12 +94,8 @@ describe("the Form for a new MAR", () => {
       ["test_certificate", "attachments", false],
       ["sample_photo", "photos", false],
       ["related_submittals", "work_item_ref", false],
-      // The Built-in Fields, placed in the Form (RP-270).
-      ["trade", "trade", true],
-      ["location", "location", true],
-      ["scopes", "scopes", false],
     ]);
-    expect(form.schema.sections[0]!.title).toEqual({ en: "Material details", ar: "تفاصيل المادة" });
+    expect(form.schema.sections[0]!.title).toEqual({ en: "Classification", ar: "التصنيف" });
     // A Form that could be published: every Built-in Field once, Trade and Location required.
     expect(formSchemaProblems(form.schema)).toEqual([]);
   });
@@ -181,11 +181,11 @@ describe("Send for Review", () => {
     expect(res.json()).toEqual({
       error: "form_incomplete",
       fields: [
-        { key: "manufacturer", code: "required" },
         { key: "supplier", code: "required" },
+        { key: "location", code: "required" },
+        { key: "manufacturer", code: "required" },
         { key: "description", code: "required" },
         { key: "datasheet", code: "required" },
-        { key: "location", code: "required" },
       ],
     });
     expect(await detail(engineer, id)).toMatchObject({ stage: { key: "draft" }, documentNumber: null });

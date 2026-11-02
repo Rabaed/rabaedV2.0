@@ -164,6 +164,7 @@ export {
 } from "./components/settings/settings-layout.tsx";
 export { WatermarkSetting, type WatermarkSettingLabels, type WatermarkSettingProps, type WatermarkText } from "./components/settings/watermark-setting.tsx";
 export { cn } from "./lib/cn.ts";
+export { useMediaQuery } from "./lib/use-media-query.ts";
 export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,
@@ -301,8 +302,37 @@ export {
   type SubmittalPanelFactsProps,
   type SubmittalPanelIdentityProps,
   type SubmittalPanelLabels,
+  type SubmittalPanelLayout,
+  type SubmittalPanelMode,
   type SubmittalPanelProps,
 } from "./components/submittal-panel/submittal-panel.tsx";
+export {
+  BeforeYouSend,
+  DiscardDraftDialog,
+  DraftWhoSees,
+  LockedDocuments,
+  NewItemFooter,
+  NewItemIdentity,
+  NewItemRoutePreview,
+  NewItemSectionBar,
+  NewItemTypeCards,
+  RequiredChecklist,
+  newItemSubjectMaxLength,
+  type BeforeYouSendProps,
+  type DiscardDraftDialogProps,
+  type DraftWhoSeesLabels,
+  type DraftWhoSeesProps,
+  type LockedDocumentsProps,
+  type NewItemFooterProps,
+  type NewItemIdentityProps,
+  type NewItemRoutePreviewLabels,
+  type NewItemRoutePreviewProps,
+  type NewItemSectionBarProps,
+  type NewItemType,
+  type NewItemTypeCardsProps,
+  type RequiredChecklistProps,
+} from "./components/submittal-panel/new-item.tsx";
+export { newItemRequired, newItemRouteRows, type NewItemRequiredItem, type NewItemRouteRow } from "./components/submittal-panel/new-item-model.ts";
 export {
   SubmittalPanelGrip,
   SubmittalPanelSizeSwitch,

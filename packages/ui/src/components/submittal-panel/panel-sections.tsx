@@ -37,6 +37,8 @@ export type SubmittalPanelSectionsProps = {
   /** The folded sections, by key (kept in `panel-preferences`). A section not named is open. */
   collapsed: Readonly<Record<string, boolean>>;
   onCollapsedChange: (collapsed: Record<string, boolean>) => void;
+  /** The count and Collapse all / Expand all bar; off where the caller draws its own (the create panel's `NewItemSectionBar`, RP-1152). */
+  controls?: boolean;
 };
 
 /**
@@ -44,7 +46,7 @@ export type SubmittalPanelSectionsProps = {
  * all / Expand all, then each section, whose whole header is the button that folds it. A folded
  * header shows a one-line summary instead of the body.
  */
-export function SubmittalPanelSections({ locale, labels, sections, collapsed, onCollapsedChange }: SubmittalPanelSectionsProps) {
+export function SubmittalPanelSections({ locale, labels, sections, collapsed, onCollapsedChange, controls = true }: SubmittalPanelSectionsProps) {
   const id = useId();
   const keys = sections.map((s) => s.key);
   const allFolded = allSubmittalPanelSectionsCollapsed(keys, collapsed);
@@ -52,7 +54,7 @@ export function SubmittalPanelSections({ locale, labels, sections, collapsed, on
   const wideCount = sections.filter((s) => !s.inflowOnly).length;
   return (
     <div className="sdp-sections">
-      <div className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
+      <div hidden={!controls} className="sdp-section-controls flex items-center gap-1.5 px-5 pt-3 pb-2 text-[12px] text-muted @[880px]/sdp:px-7">
         <span className={cn("me-auto font-semibold", wideCount !== sections.length && "@[880px]/sdp:hidden")}>{labels.count(formatNumber(sections.length, locale), sections.length)}</span>
         {wideCount !== sections.length && <span className="me-auto hidden font-semibold @[880px]/sdp:inline">{labels.count(formatNumber(wideCount, locale), wideCount)}</span>}
         <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12.5px]" onClick={() => onCollapsedChange(withAllSubmittalPanelSections(keys, collapsed, !allFolded))}>

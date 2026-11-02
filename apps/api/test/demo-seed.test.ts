@@ -172,9 +172,13 @@ describe("the MAR Form Version 5, as the demo uses it", () => {
     const form: FormVersion = (await hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`)).json();
     expect(form.versionNo).toBe(5);
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
+    // In the order of Version 7's document (RP-1152): Classification first, the supplier after the Trade.
     expect(fields.map((f) => [f.key, f.type])).toEqual([
-      ["manufacturer", "text"],
+      ["trade", "trade"],
       ["supplier", "approved_supplier"],
+      ["location", "location"],
+      ["scopes", "scopes"],
+      ["manufacturer", "text"],
       ["model", "text"],
       ["specification_section", "text"],
       ["description", "textarea"],
@@ -183,9 +187,6 @@ describe("the MAR Form Version 5, as the demo uses it", () => {
       ["test_certificate", "attachments"],
       ["sample_photo", "photos"],
       ["related_submittals", "work_item_ref"],
-      ["trade", "trade"],
-      ["location", "location"],
-      ["scopes", "scopes"],
     ]);
     for (const f of fields) {
       expect("label" in f && f.label.en && f.label.ar, f.key).toBeTruthy();

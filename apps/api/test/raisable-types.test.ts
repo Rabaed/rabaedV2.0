@@ -53,6 +53,15 @@ describe("the Types a Member may raise", () => {
     ]);
   });
 
+  it("each carry a one-line description in both languages, for the New item's Type cards (RP-1152)", async () => {
+    const { types } = await raisable(engineer);
+    expect(Object.fromEntries(types.map((t) => [t.code, t.description]))).toEqual({
+      MAR: { en: "Approval of a material or product from an approved supplier", ar: "اعتماد مادة أو منتج من مورد معتمد" },
+      SAR: { en: "Approval of a supplier or manufacturer for the Approved Supplier List", ar: "اعتماد مورد أو مصنع لقائمة الموردين المعتمدين" },
+      DAR: { en: "Approval of a document, such as a report, a calculation or a plan", ar: "اعتماد مستند، مثل تقرير أو حسابات أو خطة" },
+    });
+  });
+
   it("don't include a Type the Member's role doesn't raise: a Consultant holds no Draft", async () => {
     expect((await raisable(k1Engineer)).types).toEqual([]);
   });

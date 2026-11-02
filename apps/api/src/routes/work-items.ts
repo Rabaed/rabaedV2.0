@@ -17,6 +17,7 @@ import {
   sharedWorkItem,
   formChoices,
   formToFill,
+  newItemRoutePreview,
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
@@ -77,6 +78,7 @@ import {
   searchLinkTargets,
   takeTransition,
 } from "../work-items/work-items.ts";
+import { readNewItemRoutePreview } from "../work-items/route-preview.ts";
 import { readWorkItemWorkflowMap } from "../work-items/workflow-map.ts";
 
 const projectParams = z.object({ projectId: z.string() });
@@ -222,6 +224,20 @@ export const workItemRoutes =
         const { success, data: typeCode } = workItemTypeCode.safeParse(request.params.typeCode);
         if (!success) throw notFound();
         return visibleOrNotFound(getNewWorkItemForm(ctx.db, memberId, projectId, typeCode));
+      },
+    );
+
+    // The route a new item of a Type would run, before it exists (RP-1152; V20): its Workflow
+    // for the raiser's Participant, the Stages and "Drafts visible to". The schema drops the rest.
+    app.get(
+      "/v1/projects/:projectId/work-item-types/:typeCode/route-preview",
+      { schema: { params: typeFormParams, response: { 200: newItemRoutePreview } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const projectId = idOrNotFound(request.params.projectId);
+        const { success, data: typeCode } = workItemTypeCode.safeParse(request.params.typeCode);
+        if (!success) throw notFound();
+        return visibleOrNotFound(readNewItemRoutePreview(ctx.db, memberId, projectId, typeCode));
       },
     );
 

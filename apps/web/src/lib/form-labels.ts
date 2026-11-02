@@ -57,6 +57,7 @@ export function useFormRendererLabels(): FormRendererLabels {
     attachments: {
       none: t("attachmentsField.none"),
       notYet: t("attachmentsField.notYet"),
+      add: t("attachmentsField.add"),
       uploading: t("attachmentsField.uploading"),
       open: (name) => t("attachmentsField.open", { name }),
       remove: (name) => t("attachmentsField.remove", { name }),

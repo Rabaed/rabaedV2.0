@@ -22,6 +22,7 @@ import type {
   MemberVisibility,
   MyProjects,
   MyCompany,
+  NewItemRoutePreview,
   MySignature,
   NotificationList,
   NotificationSettingsView,
@@ -68,6 +69,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { readApiJson, readTimeouts, valueOf, type ApiRead } from "./api-read.ts";
 import { apiUrl } from "./api-url.ts";
+import { raisableTypesPath } from "./new-submittal-panel.ts";
 
 /** GETs an API path with the browser's session cookie: absent if signed out, failed (and logged) if slow or broken (RP-1049). */
 async function apiRead<T>(path: string, timeoutMs: number = readTimeouts.small): Promise<ApiRead<T>> {
@@ -290,8 +292,12 @@ export function getRegisterImport(importId: string): Promise<RegisterImport | nu
 
 /** The Types of a Module (the Submittals by default) the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
 export function getRaisableTypes(projectId: string, module: ModuleKey = "submittals"): Promise<RaisableTypes | null> {
-  const query = module === "submittals" ? "" : `?module=${module}`;
-  return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types${query}`);
+  return apiGet<RaisableTypes>(raisableTypesPath(projectId, module));
+}
+
+/** The route a new item of Type `typeCode` would run for the signed-in Member, before it exists (RP-1152); null when they may not raise it there. */
+export function getNewItemRoutePreview(projectId: string, typeCode: string): Promise<NewItemRoutePreview | null> {
+  return apiGet<NewItemRoutePreview>(`/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/route-preview`);
 }
 
 /** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */

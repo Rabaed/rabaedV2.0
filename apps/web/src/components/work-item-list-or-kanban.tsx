@@ -41,6 +41,7 @@ import { useState, type ReactNode } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname): next/link keeps navigation
 // client-side without adding the locale again.
 import NextLink from "next/link";
+import { NewSubmittalPanelHost, useOpenNewSubmittal } from "@/components/new-submittal-panel-host";
 import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-panel-host";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
@@ -216,6 +217,8 @@ export function WorkItemListOrKanban(
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
   const t = useTranslations("workItemViews");
   const tRecord = useTranslations("documentalRecord");
+  const tNew = useTranslations("newSubmittal");
+  const tTabs = useTranslations("projectTabs");
   const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
   const [moving, setMoving] = useState<{ card: WorkItemRow; move: WorkItemMove } | null>(null);
@@ -247,6 +250,9 @@ export function WorkItemListOrKanban(
   const submittal = module === "submittals" ? opened : null;
   const openId = submittal?.openId ?? undefined;
   const onOpen = submittal ? (row: WorkItemRow) => submittal.open(row.id) : undefined;
+  // The create panel (RP-1152, `?new=1`, `?new=SAR`, `&draft=<id>` once saved): only the Submittals' for now; opening one closes the other.
+  const raising = useOpenNewSubmittal();
+  const newSubmittal = module === "submittals" && !openId ? raising.newItem : null;
   const loaded = props.view === "list" ? props.list : props.board;
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
   const post = (path: string, body: unknown) =>
@@ -392,6 +398,20 @@ export function WorkItemListOrKanban(
         onClose={submittal.close}
         locale={locale}
         filters={loaded.filters}
+        refreshKey={loaded}
+      />
+    )}
+    {newSubmittal && (
+      <NewSubmittalPanelHost
+        projectId={projectId}
+        module="submittals"
+        look={{ module: tTabs("submittals"), back: tNew("back"), icon: "file-text" }}
+        type={newSubmittal.type}
+        onTypeChange={(code) => raising.open({ type: code })}
+        draft={newSubmittal.draft}
+        onDraftSaved={raising.saved}
+        onClose={raising.close}
+        locale={locale}
         refreshKey={loaded}
       />
     )}

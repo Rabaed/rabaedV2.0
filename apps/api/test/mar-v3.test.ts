@@ -164,7 +164,8 @@ describe("the MAR Form Version 5", () => {
   it("is Version 4 without the Consultant verification: the Form is the raiser's (ADR 0019)", async () => {
     const form: FormVersion = (await ok(hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
     expect(form.versionNo).toBe(5);
-    expect(form.schema.sections.map((s) => s.key)).toEqual(["material", "quantities", "documents", "references", "classification"]);
+    // Version 7 (RP-1152) put Classification first; this document is the latest.
+    expect(form.schema.sections.map((s) => s.key)).toEqual(["classification", "material", "quantities", "documents", "references"]);
   });
 });
 

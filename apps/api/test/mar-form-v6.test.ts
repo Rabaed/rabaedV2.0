@@ -83,7 +83,8 @@ describe("the MAR Form Version 6", () => {
     const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
     const fieldsOf = (schema: FormVersion["schema"]) => schema.sections.flatMap((s) => s.fields);
     expect(fieldsOf(form.schema).find((f) => f.key === "supplier")).toMatchObject({ type: "approved_supplier", required: true });
-    expect(form.schema.sections.map((s) => s.key)).toEqual(["material", "quantities", "documents", "references", "classification"]);
+    // Version 7 (RP-1152) put Classification first; this document is the latest.
+    expect(form.schema.sections.map((s) => s.key)).toEqual(["classification", "material", "quantities", "documents", "references"]);
     // The Version before it (5 where it was published already, as in every deployed environment: this one is then 6;
     // a fresh database numbers it 5, since 1 to 4 come from migrations) has the same fields but the supplier.
     const versions = await marVersions();

@@ -6,6 +6,7 @@ import { NewItemTypePicker } from "@/components/new-item-type-picker";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { newPageWords } from "@/lib/new-item-route";
+import { newItemLanding } from "@/lib/submittal-panel-url";
 import {
   getMe,
   getMyVisibility,
@@ -20,8 +21,8 @@ import {
 } from "@/lib/session";
 
 /**
- * A Member creates an item in Draft (a Contractor's Submittal; with `?module=snag_list`, a Snag
- * List Type such as the Consultant's Snag, RP-94), of one of the Types they may
+ * A Member creates an item in Draft of another Module than the Submittals (with `?module=snag_list`, a
+ * Snag List Type such as the Consultant's Snag, RP-94; `?module=inspections`, a WIR), of one of the Types they may
  * raise (`?type=`, the MAR when none or one they may not). Its Form offers only the
  * Trades and Locations their own Visibility covers, so they can always see what
  * they raise, and the active Scopes of the chosen Trade.
@@ -37,6 +38,8 @@ export default async function NewWorkItemPage({
   const { type: requested, module: moduleParam } = await searchParams;
   // The Module whose Types it offers: the Submittals, unless "+ New" names another (the Snag List, RP-94).
   const moduleKey = moduleKeySchema.safeParse(moduleParam).data ?? "submittals";
+  // A Submittal is raised in the create panel over the List (RP-1152): a direct link lands there at Normal (decision 1).
+  if (moduleKey === "submittals") return redirect({ href: newItemLanding(projectId, requested), locale });
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
@@ -77,11 +80,8 @@ export default async function NewWorkItemPage({
             </span>
           </nav>
         ) : (
-          <Link
-            href={moduleKey === "submittals" ? `/projects/${project.id}/work-items` : `/projects/${project.id}/${moduleTabPaths[moduleKey]}`}
-            className="text-sm text-brand-fg underline underline-offset-4"
-          >
-            {moduleKey === "submittals" ? t("title") : tabs(moduleKey)}
+          <Link href={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} className="text-sm text-brand-fg underline underline-offset-4">
+            {tabs(moduleKey)}
           </Link>
         )}
         {/* The WIR request is headed by its Type's own name ("Work Inspection Request"); any other Inspections page says New Inspection, never New Submittal (RP-1179). */}

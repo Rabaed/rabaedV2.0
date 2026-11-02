@@ -24,17 +24,33 @@ defineCase("FRM-01", async (t) => {
   const dar = labelsOf(await form("DAR"));
   t.check("The SAR and the DAR have Forms of their own", sar.length > 0 && dar.length > 0 && JSON.stringify(sar) !== JSON.stringify(have) && JSON.stringify(dar) !== JSON.stringify(sar), `SAR: ${sar.join(", ")} | DAR: ${dar.join(", ")}`);
   const { page } = await pageAs("hafiz");
-  const id = await H.createItem(hafiz, tm, "MAR", `UAT FRM-01 form ${H.stamp()}`, await H.marAnswers(tm));
+  const subject = `UAT FRM-01 form ${H.stamp()}`;
+  const id = await H.createItem(hafiz, tm, "MAR", subject, await H.marAnswers(tm));
   await go(page, `/work-items/${id}`);
   await settle(page);
   const text = (await page.getByRole("main").innerText()).replace(/[ \t]+/g, " ");
-  const pos = (s: string) => text.indexOf(s);
-  t.check("Subject and Document Number sit above the Form; Attachments and Links below it", pos("Subject") < pos("Material details") && pos("Document Number") < pos("Material details") && pos("Attachments") > pos("Classification") && pos("Links") > pos("Attachments"));
+  // The page shows the Subject as its title and the Draft's Document Number as "No number yet", with no
+  // labels. MAR Version 7 (RP-1152) opens with Classification and ends with its own "Links" Form Section
+  // (Related submittals), so the System Fields are the Attachments after that and the Links after those.
+  const at = {
+    subject: text.indexOf(subject),
+    number: text.indexOf("No number yet"),
+    form: text.indexOf("Classification"),
+    lastField: text.indexOf("Related submittals"),
+  };
+  const attachments = text.indexOf("Attachments", at.lastField);
+  const links = text.indexOf("Links", attachments);
+  t.check(
+    "Subject and Document Number sit above the Form; Attachments and Links below it",
+    at.subject >= 0 && at.number >= 0 && at.subject < at.form && at.number < at.form && at.lastField > at.form && attachments > at.lastField && links > attachments,
+    `subject@${at.subject}, number@${at.number}, form@${at.form}, related@${at.lastField}, attachments@${attachments}, links@${links}`,
+  );
   await t.shot(page, "mar-form-top");
   for (const type of ["SAR", "DAR"]) {
     await go(page, `/projects/${tm.projectId}/work-items/new`);
     await settle(page);
-    await page.getByRole("main").getByText(type === "SAR" ? "Supplier Approval Request" : "Document Approval Request", { exact: true }).first().click();
+    // RP-1152: the create panel's Type cards, "Supplier Approval Request (SAR)".
+    await page.getByRole("dialog").getByRole("button", { name: type === "SAR" ? /Supplier Approval Request/ : /Document Approval Request/ }).first().click();
     await settle(page, 600);
     await t.shot(page, `new-${type.toLowerCase()}-form`);
   }
