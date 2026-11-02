@@ -219,6 +219,8 @@ function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChang
       identity={content.identity}
       rail={content.rail}
       actions={content.actions}
+      // `rail` off (row 13): no side band at Wide and Full; "Before you send" stays in the flow.
+      className={content.noRail ? "[&_.sdp-rail]:!hidden" : undefined}
     >
       {content.children}
     </SubmittalPanel>
@@ -314,6 +316,7 @@ type Frame = (content: {
   actions?: ReactNode;
   labelledBy?: string;
   onCloseOverride?: () => void;
+  noRail?: boolean;
   children: ReactNode;
 }) => ReactNode;
 
@@ -546,6 +549,7 @@ function DraftSubmittalPanel({
             <DraftWhoSees look="banner" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={whoSees} />
           </NewItemIdentity>
         ),
+        noRail: !rail,
         rail: rail && (
           <>
             {checklist(true)}
