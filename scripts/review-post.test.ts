@@ -12,6 +12,9 @@ function fakeSeam(overrides: Partial<PostSeam> = {}) {
     dirty: () => [],
     prHead: () => HEAD,
     read: () => "No findings.\n",
+    body: () => "Builds the thing.\n\n<!-- implement: RP-1 -->\n",
+    labels: () => [],
+    changedFiles: () => ["scripts/x.ts"],
     post: (pr, body) => void posted.push({ pr, body }),
     ...overrides,
   };
@@ -39,6 +42,50 @@ describe("postReview", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("push");
     expect(posted).toEqual([]);
+  });
+
+  // RP-1195 item 4: a review is posted only on a PR built through /implement or /implement-spec.
+  it("refuses a PR whose body has no implement marker, and names the fix", () => {
+    const { seam, posted } = fakeSeam({ body: () => "Builds the thing.\n" });
+    const result = postReview(["12", "summary.md"], seam);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("<!-- implement: RP-");
+    expect(result.message).toContain("gh pr edit 12 --body-file");
+    expect(result.message).toContain("rabaed-implement");
+    expect(posted).toEqual([]);
+  });
+
+  it("accepts a spec key's marker and more than one marker", () => {
+    const { seam, posted } = fakeSeam({ body: () => "<!-- implement: RP-900 -->\n<!-- implement: RP-901 -->" });
+    expect(postReview(["12", "summary.md"], seam).ok).toBe(true);
+    expect(posted).toHaveLength(1);
+  });
+
+  it("does not take a malformed marker", () => {
+    for (const body of ["<!-- implement: -->", "<!-- implement: rp-12 -->", "<!-- implement: RP- -->", "implement: RP-12"]) {
+      expect(postReview(["12", "s.md"], fakeSeam({ body: () => body }).seam).ok).toBe(false);
+    }
+  });
+
+  it("needs no marker on a PR whose changed files are all docs, rule files included", () => {
+    const files = ["docs/agents/issue-tracker.md", "CODING_STANDARDS.md", "planning/parallel-sessions.md", "docs/visibility/x.png"];
+    const { seam, posted } = fakeSeam({ body: () => "", changedFiles: () => files });
+    expect(postReview(["12", "s.md"], seam).ok).toBe(true);
+    expect(posted).toHaveLength(1);
+  });
+
+  it("needs no marker on a PR labelled docs-only", () => {
+    const { seam, posted } = fakeSeam({ body: () => "", labels: () => ["docs-only"] });
+    expect(postReview(["12", "s.md"], seam).ok).toBe(true);
+    expect(posted).toHaveLength(1);
+  });
+
+  it("refuses without a marker when the changed files can't be read, or are none, or one is not a doc", () => {
+    const unreadable = fakeSeam({ body: () => "", changedFiles: () => { throw new Error("gh api failed"); } });
+    expect(postReview(["12", "s.md"], unreadable.seam).ok).toBe(false);
+    expect(postReview(["12", "s.md"], fakeSeam({ body: () => "", changedFiles: () => [] }).seam).ok).toBe(false);
+    expect(postReview(["12", "s.md"], fakeSeam({ body: () => "", changedFiles: () => ["README.md", "scripts/x.ts"] }).seam).ok).toBe(false);
+    expect(unreadable.posted).toEqual([]);
   });
 
   it("refuses a checkout with uncommitted or untracked files", () => {
