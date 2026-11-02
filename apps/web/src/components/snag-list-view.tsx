@@ -334,6 +334,7 @@ function useNewSnag({
     routePreview: false,
     rail: false,
     documentsLock: false,
+    requiredChecklist: false,
     filesBeforeSave: true,
     afterSave: "clear",
     keep: ["trade", "location"],

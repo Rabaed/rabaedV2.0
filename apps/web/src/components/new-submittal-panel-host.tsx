@@ -105,6 +105,8 @@ export type NewSubmittalPanelHooks = {
   rail?: boolean;
   /** Documents locked until the first save (on); off, the Form's own note stands. */
   documentsLock?: boolean;
+  /** The "Required before Send for Review" checklist (on); off, the required marks stay on the fields alone (RP-1222 row 15). */
+  requiredChecklist?: boolean;
   /** After each first save of a Draft: its id and the answers it was saved with. */
   onSaved?: (id: string, answers: Readonly<Record<string, unknown>>) => void;
   /** "stay" (default): the new Draft stays open and autosaves; "clear": the Form empties for the next one, keeping `keep`. */
@@ -518,6 +520,7 @@ function DraftSubmittalPanel({
   afterSave = "stay",
   keep,
   filesBeforeSave = false,
+  requiredChecklist = true,
   savedCount,
   savedToast,
   companyLegalName,
@@ -689,7 +692,7 @@ function DraftSubmittalPanel({
         // `rail` off (row 13): no side band at Wide and Full; "Before you send" stays in the flow.
         rail: rail && (
           <>
-            {checklist(true)}
+            {requiredChecklist && checklist(true)}
             {routeView}
             <DraftWhoSees look="box" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={whoSees} />
           </>
@@ -722,10 +725,13 @@ function DraftSubmittalPanel({
               allCollapsed={allFolded}
               onToggleAll={() => setCollapsed(withAllSubmittalPanelSections(shownSections, collapsed, !allFolded))}
             />
-            {/* Where the rail is hidden (Normal, Compact, tablet, phone), or off: the checklist and the route in the flow (row 12). */}
-            <div className="px-5 pb-2 @[880px]/sdp:px-7">
-              <BeforeYouSend heading={t("before")} checklist={checklist(false)} route={routeView ?? undefined} inflow={rail} />
-            </div>
+            {/* Where the rail is hidden (Normal, Compact, tablet, phone), or off: the checklist and the route in the flow (row 12).
+                With neither (RP-1222 rows 14, 15: the required marks stay on the fields), no block at all. */}
+            {(requiredChecklist || routeView) && (
+              <div className="px-5 pb-2 @[880px]/sdp:px-7">
+                <BeforeYouSend heading={t("before")} checklist={requiredChecklist ? checklist(false) : undefined} route={routeView ?? undefined} inflow={rail} />
+              </div>
+            )}
             <FormRenderer
               schema={schema}
               answers={state.answers}
