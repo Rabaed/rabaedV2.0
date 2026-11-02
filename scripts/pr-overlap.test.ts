@@ -276,6 +276,27 @@ describe("branchFiles", () => {
     expect((await branchFiles(repo)).files).toEqual(["keep.txt"]);
   });
 
+  // RP-1191: `pnpm queue` looks at a PR's head from any checkout.
+  it("with a commit to look at, lists that commit's files whatever is checked out, and names no branch", async () => {
+    commit("keep.txt", "one more\n");
+    const at = git("rev-parse", "HEAD");
+    git("checkout", "-q", "main");
+    expect(await branchFiles(repo, undefined, at)).toEqual({ branch: "", head: at, files: ["keep.txt"] });
+    expect((await branchFiles(repo)).files).toEqual([]);
+  });
+
+  it("overlapWarning with a commit to look at finds the overlaps of that commit and leaves out its own PR by head", async () => {
+    commit("keep.txt", "one more\n");
+    const at = git("rev-parse", "HEAD");
+    git("checkout", "-q", "main");
+    const seam = fakeSeam([openPr(5, ["keep.txt"]), openPr(6, ["keep.txt"], { head: at })], { 5: ["keep.txt"] });
+    const text = await overlapWarning(repo, seam, at);
+    expect(text).toContain("#5 (RP-5-x) would conflict in: keep.txt");
+    expect(text).toContain("Merge order: #5, then #6 (this branch).");
+    expect(text).not.toContain("#6 (RP-6-x)");
+    expect(await overlapWarning(repo, fakeSeam([openPr(5, ["keep.txt"])]))).toBe("");
+  });
+
   it("overlapWarning prints the overlaps of the checked-out branch, and nothing when no open PR shares a file", async () => {
     commit("keep.txt", "one more\n");
     const shared = await overlapWarning(repo, fakeSeam([openPr(5, ["keep.txt"])], { 5: ["keep.txt"] }));
@@ -326,6 +347,13 @@ describe("gitConflicts", () => {
     edit("a.txt", "one\nMINE\nthree\n");
     edit("b.txt", "zero\none\ntwo\nthree\n");
     expect(await gitConflicts(repo, git("rev-parse", "other"))).toEqual(["a.txt"]);
+  });
+
+  it("merges into the given commit instead of HEAD", async () => {
+    edit("a.txt", "one\nMINE\nthree\n");
+    git("checkout", "-q", "main");
+    expect(await gitConflicts(repo, git("rev-parse", "other"))).toEqual([]);
+    expect(await gitConflicts(repo, git("rev-parse", "other"), undefined, git("rev-parse", "mine"))).toEqual(["a.txt"]);
   });
 
   it("names a file this branch deleted that the other PR edited", async () => {
