@@ -35,19 +35,31 @@ describe.skipIf(!existsSync(workflowPath))("reviewed-required.yml", () => {
     jobs: Record<string, { name?: string; if?: string; permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string }[] }>;
   };
   const jobs = Object.values(wf.jobs);
-  // pull_request_target from RP-1148 part A's workflow PR (GitHub runs main's copy of this file), pull_request before it.
-  const prEvent = "pull_request_target" in wf.on ? "pull_request_target" : "pull_request";
+  // RP-1148 part A moves the PR trigger from pull_request to pull_request_target (GitHub runs main's copy of this file)
+  // in two steps: both at once while main's copy listens only to pull_request (so the switching PR gets its required
+  // checks from its own copy), then pull_request_target alone.
+  const prEvents = (["pull_request_target", "pull_request"] as const).filter((event) => event in wf.on);
+  const prEvent = prEvents[0] ?? "pull_request";
   const types = wf.on[prEvent]?.types ?? [];
 
   it("runs on every PR event that can change the answer, and on merge_group", () => {
-    expect(wf.on).toEqual({ [prEvent]: { types: expect.arrayContaining(["opened", "reopened", "synchronize", "labeled", "unlabeled"]) }, merge_group: null });
+    expect(prEvents.length).toBeGreaterThan(0);
+    expect(Object.keys(wf.on).sort()).toEqual([...prEvents, "merge_group"].sort());
+    expect(wf.on.merge_group).toBeNull();
+    for (const event of prEvents) expect(wf.on[event], event).toEqual({ types: expect.arrayContaining(["opened", "reopened", "synchronize", "labeled", "unlabeled"]) });
   });
 
   // RP-1148 part A: on pull_request a PR runs its own copy of this file, so it could rewrite its own required check.
-  it.skipIf(prEvent !== "pull_request_target")("runs on pull_request_target, so the PR is judged by main's copy of this file (RP-1148)", () => {
-    expect(wf.on.pull_request).toBeUndefined();
+  it.skipIf(!prEvents.includes("pull_request_target"))("runs on pull_request_target, so the PR is judged by main's copy of this file (RP-1148)", () => {
     const checkouts = jobs.flatMap((job) => job.steps.filter((step) => step.uses?.startsWith("actions/checkout")));
     for (const checkout of checkouts) expect(checkout.with?.ref).toBe("${{ github.event.repository.default_branch }}");
+  });
+
+  // While both triggers run, the two runs of one PR answer alike, and one must never cancel the other: a cancelled
+  // required check fails. Each run's group names its event.
+  it.skipIf(prEvents.length < 2)("with both triggers, takes the same activity types on each and keeps their runs apart (RP-1148)", () => {
+    expect(wf.on.pull_request).toEqual(wf.on.pull_request_target);
+    expect(source).toMatch(/group:[^\n]*\$\{\{\s*github\.event_name\s*\}\}/);
   });
 
   // The draft events land in the workflow's own PR after this script (rule 3, RP-1018), so this waits for them.
