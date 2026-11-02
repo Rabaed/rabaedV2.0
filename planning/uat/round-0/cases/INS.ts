@@ -174,19 +174,22 @@ defineCase("INS-03", async (t) => {
   const { hafiz, saeed } = tm.api;
   const { page } = await pageAs("hafiz");
   const projectId = await openProject(page);
+  // RP-1221: the New Inspection is the create panel over the Inspections tab, the template picked from radio cards.
   await go(page, `/projects/${projectId}/work-items/new?module=inspections&type=WIR`);
   await settle(page);
-  const before = await page.getByRole("main").innerText();
-  t.check("Before a Trade, the Checklist Template says Choose a Trade first", (before.match(/Choose a Trade first\./g) ?? []).length >= 1);
-  await page.locator("#answer-trade").click();
-  await page.getByRole("option", { name: /Electrical Works/ }).first().click();
+  const panel = page.getByRole("dialog");
+  const before = await panel.innerText();
+  t.check("Before a Trade, the Checklist Template says Choose a Trade first (or the only Trade is already picked)", /Choose a Trade first\./.test(before) || /Templates for Electrical Works/.test(before));
+  if (/Choose a Trade first\./.test(before)) {
+    await page.locator("#answer-trade").click();
+    await page.getByRole("option", { name: /Electrical Works/ }).first().click();
+    await settle(page, 600);
+  }
+  const offered = await panel.innerText();
+  t.check("The Trade's active template is offered, and the other Trade's (Concrete pour) is not", /Cable trays and containment/.test(offered) && !/Concrete pour/.test(offered), offered.slice(0, 300));
+  await panel.getByRole("radio", { name: /Cable trays and containment/ }).first().check();
   await settle(page, 600);
-  await page.locator("#answer-checklist_template").click().catch(async () => page.getByRole("combobox").last().click());
-  const offered = (await page.getByRole("option").allInnerTexts()).join(" | ");
-  t.check("The Trade's active template is offered, and the other Trade's (Concrete pour) is not", /Cable trays and containment/.test(offered) && !/Concrete pour/.test(offered), offered);
-  await page.getByRole("option", { name: /Cable trays and containment/ }).first().click();
-  await settle(page, 600);
-  const after = await page.getByRole("main").innerText();
+  const after = await panel.innerText();
   t.check("The preview lists the items (3 items, answered by the Consultant on site)", /Supports at the spacing/.test(after) && /3 items/.test(after) && /answered by the Consultant on site/.test(after));
   await t.shot(page, "template-preview", { fullPage: true });
   // The copy, and the Trade/pick rules, through the api.

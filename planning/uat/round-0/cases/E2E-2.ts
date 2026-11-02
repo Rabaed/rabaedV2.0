@@ -215,22 +215,22 @@ defineCase("J9", async (t) => {
   lap("step 2");
   // 2. Hafiz raises a WIR picking it (Tower 1, Electrical), saves a Draft and sends it for review.
   const hp = await c.page("hafiz");
+  // RP-1221: the New Inspection is the create panel over the Inspections tab; Save Draft keeps it open on the new Draft (`&draft=<id>`).
   await go(hp, `/projects/${P}/work-items/new?module=inspections&type=WIR`);
   await settle(hp);
-  await hp.getByLabel(/^Subject/).fill(`UAT J9 cable trays Tower 1 ${tag}`);
-  await hp.getByLabel(/^Description/).fill("Cable trays on Floor 02, Tower 1, ready for inspection.");
-  await pickOption(hp, "answer-trade", /Electrical Works/);
+  const panel = hp.getByRole("dialog");
+  await panel.getByLabel(/^Subject/).fill(`UAT J9 cable trays Tower 1 ${tag}`);
+  await panel.getByLabel(/^Description/).fill("Cable trays on Floor 02, Tower 1, ready for inspection.");
+  if (!/Templates for Electrical Works/.test(await panel.innerText())) await pickOption(hp, "answer-trade", /Electrical Works/);
   await pickOption(hp, "answer-location", /Tower 1 Floor 02/);
   await settle(hp, 600);
-  await hp.locator("#answer-checklist_template").click();
-  await hp.getByRole("option", { name: new RegExp(tplName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first().click();
+  await panel.getByRole("radio", { name: new RegExp(tplName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first().check();
   await settle(hp, 600);
-  const preview = await mainText(hp);
+  const preview = await panel.innerText();
   t.check("[INS-03] Hafiz sees the new template's items in the preview (2 items, answered by the Consultant on site)", /Supports at the spacing/.test(preview) && /Trays bonded to earth/.test(preview) && /answered by the Consultant on site/.test(preview));
-  await hp.getByRole("button", { name: "Save Draft" }).click();
-  await hp.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 20000 });
-  await settle(hp);
-  const wir = /\/work-items\/([0-9a-f-]{36})/.exec(hp.url())![1]!;
+  await panel.getByRole("button", { name: "Save Draft" }).click();
+  await H.draftSaved(hp);
+  const wir = new URL(hp.url()).searchParams.get("draft")!;
   const hafiz = await c.api("hafiz");
   // The requested date is the one thing the New form leaves to the Draft's page; a save replaces every answer.
   const saved = (await H.detail(hafiz, wir)).answers as Json | undefined;

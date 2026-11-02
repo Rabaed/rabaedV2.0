@@ -1194,7 +1194,6 @@
     "inspection": {
       "breadcrumb": "مسار التنقل",
       "request": {
-        "newWir": "طلب فحص جديد",
         "raisedBy": "رفعته \u2068{company}\u2069",
         "goesTo": "يذهب إلى \u2068{name}\u2069",
         "numberOnSubmit": "يُعطى الرقم عند التقديم",
@@ -3321,6 +3320,15 @@
       "draft": "مسودة",
       "revision": "المراجعة {n}"
     }
+  },
+  "newInspection": {
+    "crumb": "فحص جديد",
+    "back": "العودة إلى {tab}",
+    "subjectPlaceholder": "الموضوع *  مثال: البلوك قبل اللياسة — البرج 1، الطابق 3",
+    "review": "فحص {role}",
+    "outcome": "رمز المراجعة: إغلاق أو مراجعة",
+    "whoSeesAuthor": "أنت وحدك ترى هذه المسودة. يراها الاستشاري بعد تقديمها.",
+    "whoSeesCompany": "شركتك وحدها ترى هذه المسودة. يراها الاستشاري بعد تقديمها."
   },
   "newSubmittal": {
     "crumb": "{type} جديد",

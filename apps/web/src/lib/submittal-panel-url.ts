@@ -1,3 +1,4 @@
+import { moduleKeySchema, moduleTabPaths, type ModuleKey } from "@rabaed/domain";
 import { submittalPanelSizes, type SubmittalPanelWidth } from "@rabaed/ui";
 
 type SubmittalPanelSizeKey = (typeof submittalPanelSizes)[number]["key"];
@@ -22,6 +23,7 @@ export function submittalPanelHref(pathname: string, search: string, id: string 
     // An item and the create panel never share the URL (RP-1152).
     params.delete(newParam);
     params.delete(draftParam);
+    params.delete(newModuleParam);
     params.set(openParam, id);
   }
   return withQuery(pathname, params);
@@ -40,16 +42,23 @@ const withQuery = (pathname: string, params: URLSearchParams) => {
  */
 const newParam = "new";
 const draftParam = "draft";
+/** The Module of the create panel, on a tab that shows another Module's items too (RP-1221: the Inspections on the Submittals tab, ADR 0025). */
+const newModuleParam = "newModule";
 /** A Type code is a short Document Number segment. */
 const typeCode = /^[A-Z0-9]{1,10}$/;
 
 /** The page's URL with the create panel open (its Type and size changed where given), or closed (null). Opening it closes an open item. */
-export function newSubmittalPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey; draft?: string } | null): string {
+export function newSubmittalPanelHref(
+  pathname: string,
+  search: string,
+  open: { type?: string; size?: SubmittalPanelSizeKey; draft?: string; module?: ModuleKey } | null,
+): string {
   const params = new URLSearchParams(search);
   if (open === null) {
     params.delete(newParam);
     params.delete(sizeParam);
     params.delete(draftParam);
+    params.delete(newModuleParam);
     return withQuery(pathname, params);
   }
   if (params.has(openParam)) {
@@ -59,6 +68,7 @@ export function newSubmittalPanelHref(pathname: string, search: string, open: { 
   params.set(newParam, open.type ?? params.get(newParam) ?? "1");
   if (open.size !== undefined) params.set(sizeParam, open.size);
   if (open.draft !== undefined) params.set(draftParam, open.draft);
+  if (open.module !== undefined) params.set(newModuleParam, open.module);
   return withQuery(pathname, params);
 }
 
@@ -76,6 +86,26 @@ export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: strin
 /** Where a direct link to the Submittals' New page lands: the List with the create panel at Normal (decision 1). */
 export function newItemLanding(projectId: string, type?: string): string {
   return newSubmittalPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...(type !== undefined && typeCode.test(type) ? { type } : {}) });
+}
+
+/** The Module the URL's create panel names (RP-1221), with the panel open only: null when it names none, or not a Module's key. */
+export function newItemModuleFrom(params: Pick<URLSearchParams, "get">): ModuleKey | null {
+  if (newItemFrom(params) === null) return null;
+  return moduleKeySchema.safeParse(params.get(newModuleParam)).data ?? null;
+}
+
+/**
+ * Where a direct link to the New Inspection lands (RP-1221, gap rows 2 and 5): the tab the Project
+ * shows Inspections in, with the create panel at Normal. The Inspections tab names the Module; the
+ * Submittals tab, when the Project shows them there (ADR 0025), names it in the URL.
+ */
+export function newInspectionLanding(projectId: string, { inSubmittals }: { inSubmittals: boolean }, type?: string): string {
+  const tab = inSubmittals ? moduleTabPaths.submittals : moduleTabPaths.inspections;
+  return newSubmittalPanelHref(`/projects/${projectId}/${tab}`, "", {
+    size: "normal",
+    ...(type !== undefined && typeCode.test(type) ? { type } : {}),
+    ...(inSubmittals ? { module: "inspections" as const } : {}),
+  });
 }
 
 /** The item the URL opens: only an id that can be an item's, so an edited link asks the api nothing else. */
