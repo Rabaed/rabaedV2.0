@@ -33,11 +33,30 @@ export type SubmittalPanelLabels = {
   close: string;
   /** The action bar's keyboard hint, e.g. "Esc to close · ↑ ↓ to move through the list". */
   hint: string;
+  /** The phone page's back arrow (`layout="page"`), e.g. "Back to Submittals"; Close's name without it. */
+  back?: string;
 };
+
+/**
+ * What the panel holds (RP-1152): an open item (the default), or a new one being raised, which has
+ * no place among the loaded rows, so no "n / total", no previous and next, and no ↑ / ↓ (row 9).
+ */
+export type SubmittalPanelMode = "item" | "create";
+
+/**
+ * How the panel sits (RP-1152 rows 6, 7): a slide-over at the chosen width (the default); the whole
+ * width on a tablet, with no drag edge; or, on a phone, a full page with a back arrow in place of
+ * Close, no size switch, and the footer fixed at the bottom.
+ */
+export type SubmittalPanelLayout = "slide-over" | "tablet-full" | "page";
 
 export type SubmittalPanelProps = {
   locale: Locale;
   labels: SubmittalPanelLabels;
+  /** An open item (default) or a new one (`"create"`): no place, no previous and next, no ↑ / ↓. */
+  mode?: SubmittalPanelMode;
+  /** A slide-over (default), the tablet's full width, or the phone's full page. */
+  layout?: SubmittalPanelLayout;
   /** The open item's number as the breadcrumb shows it (a `DocNo`, with its revision), or what a Draft says instead. */
   crumb: ReactNode;
   /** Its place among the loaded rows; none for an item that isn't on the loaded page. */
@@ -88,10 +107,12 @@ export function isTyping(target: Element | null): boolean {
 export function SubmittalPanel({
   locale,
   labels,
+  mode = "item",
+  layout = "slide-over",
   crumb,
-  position,
-  onPrevious,
-  onNext,
+  position: itemPosition,
+  onPrevious: itemPrevious,
+  onNext: itemNext,
   onClose,
   width = submittalPanelNormalWidth,
   resizing = false,
@@ -110,6 +131,13 @@ export function SubmittalPanel({
   className,
 }: SubmittalPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // A new item has no place among the loaded rows: nothing to count or move to (RP-1152 row 9).
+  const creating = mode === "create";
+  const position = creating ? undefined : itemPosition;
+  const onPrevious = creating ? undefined : itemPrevious;
+  const onNext = creating ? undefined : itemNext;
+  const page = layout === "page";
+  const fullWidth = layout !== "slide-over";
 
   // Focus moves into the panel when it opens (not when its content swaps), so the keyboard reaches it.
   useEffect(() => {
@@ -150,21 +178,39 @@ export function SubmittalPanel({
       tabIndex={-1}
       dir={directionOf(locale)}
       data-submittal-panel=""
+      data-mode={mode}
+      data-layout={layout}
       data-resizing={resizing || undefined}
-      style={{ width: `min(${width}px, 100vw)` }}
+      // The tablet's and phone's layouts span the screen edge to edge (a scrollbar beside them stays outside).
+      style={fullWidth ? undefined : { width: `min(${width}px, 100vw)` }}
       className={cn(
-        "sdp @container/sdp fixed inset-y-0 end-0 z-40 flex flex-col border-s border-border bg-surface text-text outline-none",
-        "shadow-[-28px_0_56px_-28px_color-mix(in_srgb,var(--shadow-colour)_32%,transparent)] rtl:shadow-[28px_0_56px_-28px_color-mix(in_srgb,var(--shadow-colour)_32%,transparent)]",
+        "sdp @container/sdp fixed inset-y-0 end-0 z-40 flex flex-col bg-surface text-text outline-none",
+        fullWidth && "start-0",
+        // The phone's page fills the screen: no edge, no shadow.
+        !page && "border-s border-border",
+        !page &&
+          "shadow-[-28px_0_56px_-28px_color-mix(in_srgb,var(--shadow-colour)_32%,transparent)] rtl:shadow-[28px_0_56px_-28px_color-mix(in_srgb,var(--shadow-colour)_32%,transparent)]",
         className,
       )}
     >
-      {edge}
-      <div className="sdp-top flex h-[52px] shrink-0 items-center gap-1 border-b border-border-subtle ps-4 pe-2.5">
+      {/* The drag edge only on the slide-over: the tablet's and phone's layouts don't resize (rows 6, 7). */}
+      {fullWidth ? null : edge}
+      <div className={cn("sdp-top flex h-[52px] shrink-0 items-center gap-1 border-b border-border-subtle pe-2.5", page ? "ps-1.5" : "ps-4")}>
+        {page && (
+          // The phone's back arrow, in place of Close: it points back along the reading direction.
+          <IconButton size="sm" label={labels.back ?? labels.close} onClick={onClose} className="shrink-0 text-brand-fg">
+            <Icon name="arrow-left" size={18} />
+          </IconButton>
+        )}
         <p className="sdp-crumb me-auto flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
-          <Icon name="file-text" size={15} className="shrink-0" />
-          {/* The Module and the place are left out in the Compact band (`.sdp-crumb-label`). */}
-          <span className="sdp-crumb-label whitespace-nowrap">{labels.module}</span>
-          <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="sdp-crumb-label shrink-0" />
+          {!page && (
+            <>
+              <Icon name="file-text" size={15} className="shrink-0" />
+              {/* The Module and the place are left out in the Compact band (`.sdp-crumb-label`). */}
+              <span className="sdp-crumb-label whitespace-nowrap">{labels.module}</span>
+              <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="sdp-crumb-label shrink-0" />
+            </>
+          )}
           <span className="truncate font-bold text-text">{crumb}</span>
           {position && position.index >= 0 && (
             <span className="sdp-crumb-label whitespace-nowrap tabular-nums">
@@ -172,19 +218,26 @@ export function SubmittalPanel({
             </span>
           )}
         </p>
-        <span className="sdp-nav flex shrink-0 items-center">
-          <IconButton size="sm" label={labels.previous} disabled={!onPrevious} onClick={onPrevious}>
-            <Icon name="chevron-up" size={16} />
-          </IconButton>
-          <IconButton size="sm" label={labels.next} disabled={!onNext} onClick={onNext}>
-            <Icon name="chevron-down" size={16} />
-          </IconButton>
-        </span>
-        {topBarEnd}
-        <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border-subtle" />
-        <IconButton size="sm" label={labels.close} onClick={onClose} className="shrink-0">
-          <Icon name="x" size={16} />
-        </IconButton>
+        {!creating && (
+          <span className="sdp-nav flex shrink-0 items-center">
+            <IconButton size="sm" label={labels.previous} disabled={!onPrevious} onClick={onPrevious}>
+              <Icon name="chevron-up" size={16} />
+            </IconButton>
+            <IconButton size="sm" label={labels.next} disabled={!onNext} onClick={onNext}>
+              <Icon name="chevron-down" size={16} />
+            </IconButton>
+          </span>
+        )}
+        {/* No size switch on the phone's page (row 7). */}
+        {!page && topBarEnd}
+        {!page && (
+          <>
+            <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border-subtle" />
+            <IconButton size="sm" label={labels.close} onClick={onClose} className="shrink-0">
+              <Icon name="x" size={16} />
+            </IconButton>
+          </>
+        )}
       </div>
       <div aria-busy={busy || undefined} className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="sdp-layout flex min-w-0">
@@ -200,7 +253,8 @@ export function SubmittalPanel({
         </div>
       </div>
       <div className="sdp-actions flex shrink-0 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface px-4 py-3">
-        <span className="sdp-hint me-auto text-caption text-muted">{labels.hint}</span>
+        {/* No keyboard hint in create mode or on the phone's page: the footer's save status leads there (`NewItemFooter`). */}
+        {!page && !creating && <span className="sdp-hint me-auto text-caption text-muted">{labels.hint}</span>}
         {actions}
       </div>
     </div>
