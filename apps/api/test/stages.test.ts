@@ -39,7 +39,7 @@ const list = async (by: Caller, at: Tower): Promise<WorkItemList> =>
 const board = async (by: Caller, at: Tower): Promise<WorkItemBoard> =>
   (await ok(by.get(`/v1/projects/${at.projectId}/work-items/kanban?${workItemSearchParams({})}`), 200)).json();
 
-const rabaedDefaultKeys = ["draft", "internal_review", "pending_approval", "approved", "revise_resubmit", "cancelled", "rejected"];
+const rabaedDefaultKeys = ["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"];
 
 describe("a new Project's Stages", () => {
   it("are the Rabaed Defaults, read by every Project Member, editable by its Project Admin only", async () => {

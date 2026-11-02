@@ -83,6 +83,37 @@ describe("a new Project's Stages", () => {
     expect(await stagesOf(projectId)).toEqual(defaults);
   });
 
+  // RP-1219 (owner, 2026-11-02): the Submittals' order, on the Kanban and in the List's Stage filter.
+  // The Inspections' Stages are the Submittals set, in the same order (ADR 0025).
+  it("put the Submittals and the Inspections in the order Draft, Internal Review, Revise & Resubmit, Pending Approval, Approved, Rejected, Cancelled", async () => {
+    const order = ["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"];
+    for (const module of ["submittals", "inspections"]) {
+      const defaults = await migrator.query<{ key: string }>("select key from stage where owner_kind = 'rabaed' and module_key = $1 order by sort, key", [module]);
+      expect(defaults.rows.map((r) => r.key), module).toEqual(order);
+      expect((await stagesOf(projectId, module)).map((s) => s.key), module).toEqual(order);
+    }
+  });
+
+  it("move a Project's copy still in the old default order to the new one, and keep a copy its Project Admin reordered", async () => {
+    const migration = readFileSync(new URL("../migrations/20271128000000_submittal_stage_order.sql", import.meta.url), "utf8");
+    const old = ["draft", "internal_review", "pending_approval", "approved", "revise_resubmit", "cancelled", "rejected"];
+    const reordered = ["draft", "approved", "internal_review", "pending_approval", "revise_resubmit", "rejected", "cancelled"];
+    const project = async (code: string, keys: string[]) => {
+      const id = await withMember(app, creator, (trx) =>
+        sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Order", "ar": "ترتيب"}'::jsonb, ${code}, 'contractor')`
+          .execute(trx)
+          .then((r) => r.rows[0]!.project_id),
+      );
+      await migrator.query("update stage set sort = array_position($2::text[], key) where project_id = $1 and module_key = 'submittals'", [id, keys]);
+      return id;
+    };
+    const atOld = await project("STO", old);
+    const atAdmins = await project("STA", reordered);
+    await migrator.query(migration);
+    expect((await stagesOf(atOld)).map((s) => s.key)).toEqual(["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"]);
+    expect((await stagesOf(atAdmins)).map((s) => s.key)).toEqual(reordered);
+  });
+
   // RP-528 review (owner, 2026-10-11): an edit of the Rabaed Default set reaches only the Projects created afterwards.
   it("stay as they are when a Rabaed Default Stage is added later; a Project created afterwards gets it", async () => {
     const key = `probe_${randomUUID().slice(0, 8).replaceAll("-", "")}`;
