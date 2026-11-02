@@ -28,8 +28,15 @@ describe("verifyOptions", () => {
     for (const argv of [["--bogus"], ["--from"], ["--log"], ["seam1"]]) {
       const options = verifyOptions(argv);
       expect(options.ok).toBe(false);
-      expect(!options.ok && options.message).toContain("Usage: pnpm verify [--from <step>] [--log <file>] [--pr <n>]");
+      expect(!options.ok && options.message).toContain("Usage: pnpm verify [--from <step>] [--log <file>] [--pr <n> [--full]]");
     }
+  });
+
+  it("takes --full beside --pr, to skip the tests-only reuse (RP-1195 item 8), and refuses it alone", () => {
+    expect(verifyOptions(["--pr", "521", "--full"])).toEqual({ ok: true, pr: 521, full: true });
+    const alone = verifyOptions(["--full"]);
+    expect(alone.ok).toBe(false);
+    expect(!alone.ok && alone.message).toContain("--full goes with --pr");
   });
 
   it("takes --pr and a PR number (RP-1171), beside the other flags", () => {

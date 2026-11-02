@@ -6,9 +6,9 @@ import { stepNames, type StepName } from "./verify-steps.ts";
 // final line, so a background run reports verify's own result and exit code (a pipe through tail or grep
 // hid both, RP-631).
 
-export type VerifyOptions = { ok: true; from?: StepName; log?: string; pr?: number } | { ok: false; message: string };
+export type VerifyOptions = { ok: true; from?: StepName; log?: string; pr?: number; full?: true } | { ok: false; message: string };
 
-const usage = "Usage: pnpm verify [--from <step>] [--log <file>] [--pr <n>]";
+const usage = "Usage: pnpm verify [--from <step>] [--log <file>] [--pr <n> [--full]]";
 const valid = `Valid steps: ${stepNames.join(", ")}.`;
 
 /** The step `name` names: its pnpm script (`test:seam1`), or that without its `test:`/`check:` prefix (`seam1`). */
@@ -16,9 +16,9 @@ const stepNamed = (name: string) => stepNames.find((step) => step === name || st
 
 /** The options in `argv` (the arguments after `pnpm verify`), or the message to stop with. */
 export function verifyOptions(argv: string[]): VerifyOptions {
-  let values: { from?: string; log?: string; pr?: string };
+  let values: { from?: string; log?: string; pr?: string; full?: boolean };
   try {
-    ({ values } = parseArgs({ args: argv[0] === "--" ? argv.slice(1) : argv, options: { from: { type: "string" }, log: { type: "string" }, pr: { type: "string" } }, strict: true, allowPositionals: false }));
+    ({ values } = parseArgs({ args: argv[0] === "--" ? argv.slice(1) : argv, options: { from: { type: "string" }, log: { type: "string" }, pr: { type: "string" }, full: { type: "boolean" } }, strict: true, allowPositionals: false }));
   } catch (error) {
     return { ok: false, message: `pnpm verify: ${error instanceof Error ? error.message : String(error)}\n${usage}\n${valid}` };
   }
@@ -29,6 +29,12 @@ export function verifyOptions(argv: string[]): VerifyOptions {
     if (values.from !== undefined) return { ok: false, message: `pnpm verify: --pr cannot go with --from: only a full, clean run is stamped, and only a stamped line goes in the PR body.\n${usage}` };
     if (!/^[1-9]\d*$/.test(values.pr)) return { ok: false, message: `pnpm verify: --pr needs a PR number, not "${values.pr}".\n${usage}` };
     options.pr = Number(values.pr);
+  }
+  // RP-1195 item 8: --pr builds on an earlier stamped run when only test files changed; --full runs everything anyway.
+  if (values.full) {
+    // eslint-disable-next-line rabaed/no-avoid-terms -- test files, vitest's word, not the domain's
+    if (values.pr === undefined) return { ok: false, message: `pnpm verify: --full goes with --pr: only --pr ever re-runs just the changed test files.\n${usage}` };
+    options.full = true;
   }
   if (values.from !== undefined) {
     const from = stepNamed(values.from);
