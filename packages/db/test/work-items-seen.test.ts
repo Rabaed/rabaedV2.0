@@ -18,18 +18,19 @@ afterAll(async () => {
 
 /**
  * Every active Member on a Project with items, with the Project and its Modules. On the demo's sample Project
- * (RP-1217: 140-odd items, the same Workflows as the rest) one Member of each Participant reads it, so the
+ * (RP-1217: 140-odd items, the same Workflows as the rest) and sample-project.test.ts's own copy of it (RP-1220,
+ * named alike), one Member of each Participant reads it, so the
  * per-item side's minutes stay within the timeout; the Participant is what the batch's answers turn on.
  */
 async function readers() {
   const { rows } = await sql<{ member_id: string; project_id: string; modules: string[] }>`
     select member_id, project_id, modules from (
-      select distinct on (pm.project_id, case when p.code = 'NKD' then pm.participant_id::text else pm.member_id::text end)
+      select distinct on (pm.project_id, case when p.name ->> 'en' like 'Al Nakheel District%' then pm.participant_id::text else pm.member_id::text end)
         pm.member_id, pm.project_id,
         array(select distinct t.module_key from work_item w join work_item_type t on t.id = w.work_item_type_id where w.project_id = pm.project_id) as modules
       from project_member pm join project p on p.id = pm.project_id
       where pm.status = 'active' and exists (select 1 from work_item w where w.project_id = pm.project_id)
-      order by pm.project_id, case when p.code = 'NKD' then pm.participant_id::text else pm.member_id::text end, pm.member_id
+      order by pm.project_id, case when p.name ->> 'en' like 'Al Nakheel District%' then pm.participant_id::text else pm.member_id::text end, pm.member_id
     ) r
     order by project_id, member_id
   `.execute(migrator);
