@@ -12,11 +12,8 @@ name: Reviewed label
 # pull_request_target: GitHub runs main's copy of this file for it (RP-1148 part A). On pull_request a PR
 # ran its own copy, so it could keep a stale `reviewed` after pushing unreviewed code. The job checks out
 # only the default branch and fetches the PR's commits as data; its write token never meets a fork's PR.
-# Step 1 of 2 (RP-1148): pull_request stays beside it until this file is on main; step 2 drops it.
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
-  pull_request:
     types: [opened, reopened, synchronize]
 permissions: {}
 jobs:

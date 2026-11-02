@@ -15,19 +15,15 @@ name: Verify gate
 # its own copy, so it could rewrite its own required check. The job checks out only the default branch,
 # with read-only permissions. Under merge_group GitHub runs the merge commit's copy (the PR's change
 # included); reviewed-required names a PR that changes this file.
-# Step 1 of 2 (RP-1148): pull_request stays beside it until this file is on main (main's copy listens only to
-# pull_request, so without it nothing would report this check on the switching PR). Step 2 drops it.
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
-  pull_request:
     types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
   merge_group:
 permissions: {}
 concurrency:
   # Per head, not per PR: a body edit raced with a push must not cancel the new head's run, since
   # each run checks its own payload's head. The queue's entries each have their own ref.
-  # The event in the name: while both PR triggers run (step 1), one must not cancel the other (a cancelled required check fails).
+  # The event in the name (RP-1148): a run of another event never cancels this one (a cancelled required check fails).
   group: verify-gate-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: true
 jobs:
