@@ -87,10 +87,12 @@ describe("a new Project's Stages", () => {
   // The Inspections' Stages are the Submittals set, in the same order (ADR 0025).
   it("put the Submittals and the Inspections in the order Draft, Internal Review, Revise & Resubmit, Pending Approval, Approved, Rejected, Cancelled", async () => {
     const order = ["draft", "internal_review", "revise_resubmit", "pending_approval", "approved", "rejected", "cancelled"];
+    // Only these seven: other suites add Rabaed Default Stages of their own while this one runs.
+    const ofTheSet = (keys: string[]) => keys.filter((k) => order.includes(k));
     for (const module of ["submittals", "inspections"]) {
       const defaults = await migrator.query<{ key: string }>("select key from stage where owner_kind = 'rabaed' and module_key = $1 order by sort, key", [module]);
-      expect(defaults.rows.map((r) => r.key), module).toEqual(order);
-      expect((await stagesOf(projectId, module)).map((s) => s.key), module).toEqual(order);
+      expect(ofTheSet(defaults.rows.map((r) => r.key)), module).toEqual(order);
+      expect(ofTheSet((await stagesOf(projectId, module)).map((s) => s.key)), module).toEqual(order);
     }
   });
 
@@ -104,6 +106,8 @@ describe("a new Project's Stages", () => {
           .execute(trx)
           .then((r) => r.rows[0]!.project_id),
       );
+      // Just the seven: a Stage another suite added to the Rabaed Defaults meanwhile would make its copy no default one.
+      await migrator.query("delete from stage where project_id = $1 and module_key = 'submittals' and not key = any($2::text[])", [id, keys]);
       await migrator.query("update stage set sort = array_position($2::text[], key) where project_id = $1 and module_key = 'submittals'", [id, keys]);
       return id;
     };
