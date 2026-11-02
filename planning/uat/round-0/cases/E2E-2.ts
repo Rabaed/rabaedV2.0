@@ -227,7 +227,7 @@ defineCase("J9", async (t) => {
   await panel.getByRole("radio", { name: new RegExp(tplName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first().check();
   await settle(hp, 600);
   const preview = await panel.innerText();
-  t.check("[INS-03] Hafiz sees the new template's items in the preview (2 items, answered by the Consultant on site)", /Supports at the spacing/.test(preview) && /Trays bonded to earth/.test(preview) && /answered by the Consultant on site/.test(preview));
+  t.check("[INS-03] Hafiz sees the new template's items in the preview under its card (2 items, with Hide items)", /Supports at the spacing/.test(preview) && /Trays bonded to earth/.test(preview) && /Hide items/.test(preview));
   await panel.getByRole("button", { name: "Save Draft" }).click();
   await H.draftSaved(hp);
   const wir = new URL(hp.url()).searchParams.get("draft")!;

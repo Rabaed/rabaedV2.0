@@ -190,7 +190,7 @@ export function useOpenNewSubmittal() {
     newItem,
     /** The Module the URL names beside the panel (RP-1221): null on a tab whose own Module it is. */
     module: newItemModuleFrom(params),
-    open: (open: { type?: string; size?: "wide"; module?: ModuleKey } = {}) => show(open),
+    open: (open: { type?: string; size?: "wide"; module?: ModuleKey | null } = {}) => show(open),
     saved: (draft: string) => show({ draft }),
     close: () => show(null),
   };
@@ -203,7 +203,7 @@ export function useOpenNewSubmittal() {
 export function AddSubmittalButton({ label, module }: { label: string; module?: ModuleKey }) {
   const { open } = useOpenNewSubmittal();
   return (
-    <Button className="h-[34px] px-3.5" onClick={() => open({ size: "wide", ...(module ? { module } : {}) })}>
+    <Button className="h-[34px] px-3.5" onClick={() => open({ size: "wide", module: module ?? null })}>
       <Icon name="plus" />
       {label}
     </Button>

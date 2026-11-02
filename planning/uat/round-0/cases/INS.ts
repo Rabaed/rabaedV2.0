@@ -190,7 +190,8 @@ defineCase("INS-03", async (t) => {
   await panel.getByRole("radio", { name: /Cable trays and containment/ }).first().check();
   await settle(page, 600);
   const after = await panel.innerText();
-  t.check("The preview lists the items (3 items, answered by the Consultant on site)", /Supports at the spacing/.test(after) && /3 items/.test(after) && /answered by the Consultant on site/.test(after));
+  // RP-1221: the panel's preview sits under the picked card, with Hide items: the items numbered and what a Fail asks for.
+  t.check("The preview under the card lists the items (3 items) with Hide items", /Supports at the spacing/.test(after) && /3 items/.test(after) && /Hide items/.test(after));
   await t.shot(page, "template-preview", { fullPage: true });
   // The copy, and the Trade/pick rules, through the api.
   const wir = await draftWir(tm, `UAT INS-03 WIR ${tag}`);

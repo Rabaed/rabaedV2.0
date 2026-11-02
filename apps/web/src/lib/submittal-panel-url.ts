@@ -51,7 +51,8 @@ const typeCode = /^[A-Z0-9]{1,10}$/;
 export function newSubmittalPanelHref(
   pathname: string,
   search: string,
-  open: { type?: string; size?: SubmittalPanelSizeKey; draft?: string; module?: ModuleKey } | null,
+  /** `module` (RP-1221): another Module's panel on this tab, or null for the tab's own; left out, the URL's stays. */
+  open: { type?: string; size?: SubmittalPanelSizeKey; draft?: string; module?: ModuleKey | null } | null,
 ): string {
   const params = new URLSearchParams(search);
   if (open === null) {
@@ -65,10 +66,14 @@ export function newSubmittalPanelHref(
     params.delete(openParam);
     params.delete(sizeParam);
   }
-  params.set(newParam, open.type ?? params.get(newParam) ?? "1");
+  // Another Module's panel starts afresh: its first Type, no Draft of the other's.
+  const switching = open.module !== undefined && open.module !== params.get(newModuleParam);
+  if (switching) params.delete(draftParam);
+  params.set(newParam, open.type ?? (switching ? null : params.get(newParam)) ?? "1");
   if (open.size !== undefined) params.set(sizeParam, open.size);
   if (open.draft !== undefined) params.set(draftParam, open.draft);
-  if (open.module !== undefined) params.set(newModuleParam, open.module);
+  if (open.module === null) params.delete(newModuleParam);
+  else if (open.module !== undefined) params.set(newModuleParam, open.module);
   return withQuery(pathname, params);
 }
 

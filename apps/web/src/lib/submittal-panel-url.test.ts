@@ -137,6 +137,18 @@ describe("the create panel's URL for another Module", () => {
     );
   });
 
+  it("opening the tab's own Module's panel (module null) drops it, and the other Module's Type with it", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&new=WIR&newModule=inspections&size=wide", { size: "wide", module: null })).toBe(
+      "/en/projects/p/work-items?page=2&new=1&size=wide",
+    );
+    // Switching to another Module starts on its first Type too.
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=SAR", { module: "inspections" })).toBe("/en/projects/p/work-items?new=1&newModule=inspections");
+    // The same Module, named again, keeps its Type.
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections", { module: "inspections" })).toBe(
+      "/en/projects/p/work-items?new=WIR&newModule=inspections",
+    );
+  });
+
   it("is dropped when an item opens", () => {
     expect(submittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections", id)).toBe(`/en/projects/p/work-items?open=${id}`);
   });

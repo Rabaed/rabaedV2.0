@@ -95,7 +95,7 @@ export async function ModuleWorkItemsPage({
     ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
     module,
   };
-  const [me, projectRead, listRead, boardRead, raisable, packagesRead, registerImports, covered, raisableInspections] = await Promise.all([
+  const [me, projectRead, listRead, boardRead, raisable, packagesRead, registerImports, covered] = await Promise.all([
     getMe(),
     readProject(projectId),
     // Names sort in the reader's language.
@@ -112,8 +112,6 @@ export async function ModuleWorkItemsPage({
     query.importId ? getRegisterImports(projectId) : null,
     // Whose Visibility covers a Trade may raise a Submittal (RP-1152, decision 6), or an Inspection (RP-1221).
     module === "submittals" || module === "inspections" ? getMyVisibility(projectId) : null,
-    // The Inspections' Types too on the Submittals tab, for a Project that shows them there (RP-1221, gap row 2; ADR 0025).
-    module === "submittals" ? getRaisableTypes(projectId, "inspections") : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   // A slow or failed read of the Project or its items says so and offers Try again; only the
@@ -146,7 +144,9 @@ export async function ModuleWorkItemsPage({
   const newInspection = (onSubmittals: boolean) => (
     <AddSubmittalButton label={t("newInspection")} {...(onSubmittals ? { module: "inspections" as const } : {})} />
   );
-  const inspectionsHere = module === "submittals" && inspectionsInSubmittals(project) && canRaise(raisableInspections, covered);
+  // The Inspections' Types are read only for a Project that shows them in the Submittals tab (RP-1221, gap row 2; ADR 0025).
+  const inspectionsHere =
+    module === "submittals" && inspectionsInSubmittals(project) && canRaise(await getRaisableTypes(projectId, "inspections"), covered);
   const action =
     module === "submittals" ? (
       canRaise(raisable, covered) || inspectionsHere ? (
@@ -203,6 +203,7 @@ export async function ModuleWorkItemsPage({
           hints={hints}
           packages={packages?.packages}
           importFilter={importFilter}
+          alsoRaises={inspectionsHere ? "inspections" : undefined}
         />
       ) : (
         list && (
@@ -220,6 +221,7 @@ export async function ModuleWorkItemsPage({
             hints={hints}
             packages={packages?.packages}
             importFilter={importFilter}
+            alsoRaises={inspectionsHere ? "inspections" : undefined}
           />
         )
       )}

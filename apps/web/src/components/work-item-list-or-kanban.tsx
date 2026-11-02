@@ -213,6 +213,8 @@ export function WorkItemListOrKanban(
     packages?: PackageSummary[];
     /** One import's Drafts (RP-954): the chip naming the import the List is filtered to. */
     importFilter?: WorkItemImportFilter;
+    /** Another Module whose items this tab shows too, and whose create panel it opens (RP-1221: the Inspections on the Submittals tab, ADR 0025). */
+    alsoRaises?: ModuleKey;
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
@@ -256,7 +258,13 @@ export function WorkItemListOrKanban(
   // where `&newModule=inspections` names them.
   const raising = useOpenNewSubmittal();
   const raisingModule: ModuleKey | null =
-    module === "inspections" ? "inspections" : module === "submittals" ? (raising.module === "inspections" ? "inspections" : "submittals") : null;
+    module === "inspections"
+      ? "inspections"
+      : module === "submittals"
+        ? raising.module !== null && raising.module === props.alsoRaises
+          ? raising.module
+          : "submittals"
+        : null;
   const newSubmittal = raisingModule !== null && !openId ? raising.newItem : null;
   const tInspection = useTranslations("newInspection");
   // The New Inspection's own words (RP-1221, rows 3, 11, 14, 23 and 24): the breadcrumb names the tab it opens over.
