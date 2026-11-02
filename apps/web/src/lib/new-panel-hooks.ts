@@ -1,10 +1,15 @@
 import { contentTypeOfFile, moduleTabPaths, type BilingualText, type DocumentSummary, type DraftsVisibleTo, type NewItemRoutePreview } from "@rabaed/domain";
 import type { BuiltInChoices } from "@rabaed/ui";
-import { isTypeCode, newSubmittalPanelHref } from "./submittal-panel-url.ts";
+import { givenLocation, isTypeCode, newSubmittalPanelHref } from "./submittal-panel-url.ts";
 
-/** Where a direct link to the Snag List's New page lands (row 5): the Snag List with the create panel at Normal, as the Submittals' does. */
-export function snagListLanding(projectId: string, type: string | undefined): string {
-  return newSubmittalPanelHref(`/projects/${projectId}/${moduleTabPaths.snag_list}`, "", { size: "normal", ...(type !== undefined && isTypeCode(type) ? { type } : {}) });
+/**
+ * Where a direct link to the Snag List's New page lands (row 5): the Snag List with the create panel at Normal, as the
+ * Submittals' does, keeping a Location the link gives (row 23), only an id a Location can have.
+ */
+export function snagListLanding(projectId: string, type: string | undefined, location?: string): string {
+  const href = newSubmittalPanelHref(`/projects/${projectId}/${moduleTabPaths.snag_list}`, "", { size: "normal", ...(type !== undefined && isTypeCode(type) ? { type } : {}) });
+  const given = location === undefined ? null : givenLocation(new URLSearchParams({ location }));
+  return given === null ? href : `${href}&location=${given}`;
 }
 
 // The create panel's hooks for the New Snag's short form (RP-1222), apart from React so they are

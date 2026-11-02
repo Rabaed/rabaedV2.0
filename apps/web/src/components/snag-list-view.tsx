@@ -330,7 +330,7 @@ function useNewSnag({
   useEffect(() => {
     if (camera) router.replace(cameraHref(snagTypeCode));
   }, [camera, router, cameraHref]);
-  const short: NewSubmittalPanelHooks = {
+  const shortForm: NewSubmittalPanelHooks = {
     routePreview: false,
     rail: false,
     documentsLock: false,
@@ -352,12 +352,13 @@ function useNewSnag({
         look={{ module: tTabs("snag_list"), back: t("back"), icon: "alert-triangle", subjectPlaceholder: t(type === snagTypeCode ? "subjectPlaceholder" : "subjectOnly") }}
         type={type}
         onTypeChange={(code) => raising.open({ type: code })}
-        draft={newItem.draft}
+        // The short form clears after each save and keeps no Draft in the URL, so a `draft=` link opens it fresh.
+        draft={type === snagTypeCode ? null : newItem.draft}
         onDraftSaved={raising.saved}
         onClose={raising.close}
         locale={locale}
         refreshKey={refreshKey}
-        {...(type === snagTypeCode ? short : {})}
+        {...(type === snagTypeCode ? shortForm : {})}
       />
     ),
   };

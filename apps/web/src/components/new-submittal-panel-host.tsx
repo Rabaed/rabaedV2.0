@@ -67,7 +67,7 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, getPathname, useRouter } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { useCreateRefusal } from "@/lib/create-refusal";
@@ -571,6 +571,8 @@ function DraftSubmittalPanel({
   const typed = typedSomething({ subject, answers: state.answers, start }) || picks.files.length > 0;
   const [pickedAt] = useState(() => new Date().toISOString());
   const picked = pickedDocuments(picks.files, { at: pickedAt, company: companyLegalName });
+  /** A clearing panel after one or more saves: ready for the next item (RP-1222 rows 10, 28). */
+  const cleared = afterSave === "clear" && saves > 0;
 
   const close = () => (created === null && typed ? setDiscarding(true) : onClose());
 
@@ -611,10 +613,10 @@ function DraftSubmittalPanel({
     };
     try {
       // A Draft made by an earlier Save Draft whose files failed (row 25): its answers are saved, then the files left are tried again.
-      const made = created;
+      const draft = created;
       const result = await saveThenUpload({
         picked: picks.files,
-        create: made === null ? post : async () => ((await state.save(false)) ? { ok: true, id: made.id } : { ok: false }),
+        create: draft === null ? post : async () => ((await state.save(false)) ? { ok: true, id: draft.id } : { ok: false }),
         upload: uploadToWorkItem,
       });
       if (result.kind === "refused") return;
@@ -622,7 +624,7 @@ function DraftSubmittalPanel({
       router.refresh();
       if (result.kind === "photosFailed") {
         // The Draft exists: the panel stays on it with what is left to upload, and says so (row 25).
-        if (made === null) onCreated({ id: result.id, at: new Date().toISOString() });
+        if (draft === null) onCreated({ id: result.id, at: new Date().toISOString() });
         picks.keepOnly(result.picked);
         setError(t("documentsNotUploaded"));
         return;
@@ -685,7 +687,7 @@ function DraftSubmittalPanel({
             invalid={subjectMissing}
             readOnly={created !== null}
             // A clearing panel is ready for the next one (RP-1222 row 10).
-            focusSubject={afterSave === "clear" && saves > 0}
+            focusSubject={cleared}
           >
             {/* Switching Type before the first save swaps the Form; after it, the Type is the Draft's. */}
             <NewItemTypeCards
@@ -710,7 +712,7 @@ function DraftSubmittalPanel({
           <NewItemFooter
             layout={layout === "page" ? "page" : "slide-over"}
             savedAt={savedAt}
-            savedCount={afterSave === "clear" && saves > 0 ? savedCount?.(saves) : undefined}
+            savedCount={cleared ? savedCount?.(saves) : undefined}
             openHref={created ? getPathname({ href: `/work-items/${created.id}`, locale }) : undefined}
             onCancel={close}
             onSave={save}
@@ -781,9 +783,10 @@ function DraftSubmittalPanel({
                       onSaveAnnotated: files.annotatesIn(docs.documents),
                     },
                   }
-                : created === null && filesBeforeSave
+                : filesBeforeSave
                   ? {
-                      // RP-1222 row 25: no Documents lock; the files wait in the browser until Save Draft.
+                      // RP-1222 row 25: no Documents lock; the files wait in the browser until Save Draft (and stay
+                      // shown while a Draft whose upload failed reads its own Documents).
                       files: {
                         documents: picked,
                         canChange: true,
@@ -844,25 +847,32 @@ function DraftSubmittalPanel({
  * each (its thumbnail, and what Open shows), until Save Draft uploads them. `on` false: none.
  */
 function usePickedFiles(on: boolean) {
-  const [files, setFiles] = useState<readonly PickedFile[]>([]);
-  const [urls, setUrls] = useState<Readonly<Record<string, string>>>({});
+  // Each pick gets its preview URL once, when picked; it is let go when the pick goes (removed, uploaded) or the panel closes.
+  const [picks, setPicks] = useState<readonly { pick: PickedFile; url: string }[]>([]);
+  const live = useRef(picks);
   useEffect(() => {
-    const made = Object.fromEntries(files.map((p) => [p.id, URL.createObjectURL(p.file)]));
-    setUrls(made);
-    return () => Object.values(made).forEach((url) => URL.revokeObjectURL(url));
-  }, [files]);
-  const shown = on ? files : [];
+    live.current = picks;
+  }, [picks]);
+  useEffect(() => () => live.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
+  const shown = on ? picks : [];
+  const letGo = (gone: (p: { pick: PickedFile }) => boolean) => {
+    picks.filter(gone).forEach((p) => URL.revokeObjectURL(p.url));
+    setPicks(picks.filter((p) => !gone(p)));
+  };
   return {
-    files: shown,
-    urls: on ? urls : {},
-    has: (id: string) => shown.some((p) => p.id === id),
-    add: (fieldKey: string, chosen: readonly File[]) => setFiles((f) => [...f, ...chosen.map((file) => ({ id: crypto.randomUUID(), fieldKey, file }))]),
-    remove: (id: string) => setFiles((f) => f.filter((p) => p.id !== id)),
+    files: shown.map((p) => p.pick),
+    urls: Object.fromEntries(shown.map((p) => [p.pick.id, p.url])),
+    has: (id: string) => shown.some((p) => p.pick.id === id),
+    add: (fieldKey: string, chosen: readonly File[]) => {
+      const added = chosen.map((file) => ({ pick: { id: crypto.randomUUID(), fieldKey, file }, url: URL.createObjectURL(file) }));
+      setPicks((current) => [...current, ...added]);
+    },
+    remove: (id: string) => letGo((p) => p.pick.id === id),
     open: (id: string) => {
-      const url = urls[id];
+      const url = shown.find((p) => p.pick.id === id)?.url;
       if (url) window.open(url, "_blank", "noopener");
     },
-    keepOnly: (left: readonly PickedFile[]) => setFiles(left),
+    keepOnly: (left: readonly PickedFile[]) => letGo((p) => !left.some((l) => l.id === p.pick.id)),
   };
 }
 

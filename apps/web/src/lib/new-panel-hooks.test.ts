@@ -103,6 +103,11 @@ describe("the New Snag's place in the URL (rows 5, 23)", () => {
     expect(snagListLanding("p1", undefined)).toBe("/projects/p1/snag-list?new=1&size=normal");
     expect(snagListLanding("p1", "not a code")).toBe("/projects/p1/snag-list?new=1&size=normal");
   });
+
+  it("keeps the Location a direct link gives (a Floor plan's way in), only an id a Location can have", () => {
+    expect(snagListLanding("p1", "SNG", id)).toBe(`/projects/p1/snag-list?new=SNG&size=normal&location=${id}`);
+    expect(snagListLanding("p1", "SNG", "Tower 2")).toBe("/projects/p1/snag-list?new=SNG&size=normal");
+  });
 });
 
 describe("the Location the panel opens with (row 23, the Floor plan's way in)", () => {
