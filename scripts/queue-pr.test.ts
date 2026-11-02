@@ -1600,6 +1600,13 @@ describe("realSeam", () => {
       const timedOut = lookWith({ status: null, error: new Error("spawnSync node ETIMEDOUT") }).seam.overlaps("abc1234");
       expect(timedOut).toBe("Warning: pnpm queue could not look for open PRs that change the same files (spawnSync node ETIMEDOUT); it did not check for overlaps.");
       expect(lookWith({ status: 1, stderr: "boom\nmore" }).seam.overlaps("abc1234")).toContain("(exit 1: boom)");
+      expect(lookWith({ status: null }).seam.overlaps("abc1234")).toContain("(ended by a signal)");
+    });
+
+    it("the script itself runs as a main module and asks for a commit", () => {
+      const done = spawnSync(process.execPath, [join(import.meta.dirname, "queue-overlap.ts")], { encoding: "utf8" });
+      expect(done.status).toBe(2);
+      expect(done.stderr).toContain("Usage: node scripts/queue-overlap.ts <commit>");
     });
   });
 

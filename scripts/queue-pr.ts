@@ -809,7 +809,7 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     overlaps: (head) => {
       const done = spawn(process.execPath, [join(import.meta.dirname, "queue-overlap.ts"), head], { cwd, encoding: "utf8", timeout: OVERLAP_LOOK_MS });
       if (done.error || done.status !== 0) {
-        const reason = done.error ? done.error.message : `exit ${done.status}: ${(done.stderr ?? "").trim().split("\n")[0] ?? ""}`;
+        const reason = done.error ? done.error.message : done.status === null ? `ended by ${done.signal ?? "a signal"}` : `exit ${done.status}: ${(done.stderr ?? "").trim().split("\n")[0] ?? ""}`;
         return `Warning: pnpm queue could not look for open PRs that change the same files (${reason}); it did not check for overlaps.`;
       }
       return (done.stdout ?? "").trim();
