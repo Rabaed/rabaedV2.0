@@ -42,6 +42,9 @@ export const CI_OWN_FILES: readonly string[] = [
   // the manual jobs and those that run once the verdict is in (jira-close, queue-drop-comment) judge nothing.
   // eslint-disable-next-line rabaed/no-avoid-terms -- the workflow's file name (npm's word), not the domain's
   ".github/workflows/dependency-audit.yml",
+  // It judges nothing, but runs on a PR's labeled, auto_merge_enabled and enqueued events (RP-1195 item 3). Listed
+  // here, with its script, ahead of the workflow's own PR (rule 3), so CI-green never covers a change to either.
+  ".github/workflows/hand-action-comment.yml",
   ".github/workflows/reviewed-add.yml",
   ".github/workflows/reviewed-label.yml",
   ".github/workflows/reviewed-required.yml",
@@ -88,6 +91,7 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/desktop-sessions.ts",
   "scripts/docs-only.ts",
   "scripts/git-files.ts",
+  "scripts/hand-action-comment.ts",
   "scripts/hidden-columns.ts",
   "scripts/lanes.ts",
   "scripts/migrations.ts",
