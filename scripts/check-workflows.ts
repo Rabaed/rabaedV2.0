@@ -74,7 +74,8 @@ const sameRepoGuard = /head[._]repo[a-z_.]*\.full_name\s*==\s*github\.repository
 /** Rule 2's marker: why a workflow runs on pull_request_target (the reason is required). */
 const targetReason = /^#[ \t]*pull_request_target:[ \t]*\S/m;
 /** A run: command that would check out (and so may run) the PR's code under pull_request_target. */
-const checkoutInRun = /\b(?:git\s+(?:checkout|switch|restore|worktree\s+add|reset\s+--hard)|gh\s+pr\s+checkout)\b/;
+// Git's own options may come before the verb (`git -C dir checkout`, `git -c k=v switch`, `git --work-tree=w checkout`).
+const checkoutInRun = /\b(?:git(?:\s+-{1,2}[\w-]+(?:[= ]\S+)?)*\s+(?:checkout|switch|restore|worktree\s+add|reset\s+--hard)|gh\s+pr\s+checkout)\b/;
 /** The one ref a checkout may take under pull_request_target: this repository's default branch. */
 const DEFAULT_BRANCH_REF = "${{ github.event.repository.default_branch }}";
 const untrustedInScript = new RegExp(
