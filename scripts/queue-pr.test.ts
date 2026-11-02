@@ -1176,13 +1176,16 @@ describe("queuePr: the pnpm-queue marker comment (RP-1195 item 3)", () => {
     expect(unmarked).toEqual([42]);
   });
 
-  it("keeps the marker when the PR is already queued, and takes off none it did not post", () => {
+  it("keeps the marker when the PR is already queued", () => {
     const already = () => {
       throw new Error("GraphQL: Pull request is already in the merge queue");
     };
     const posted = fakeSeam({ enqueue: already });
     expect(queuePr(149, posted.seam).ok).toBe(true);
     expect(posted.unmarked).toEqual([]);
+  });
+
+  it("takes off only the marker it posted when the enqueue fails, leaving an earlier one", () => {
     const earlier = fakeSeam({
       comments: () => [{ login: "dev", type: "User", body: pnpmQueueComment("abc1234") }],
       enqueue: () => {
@@ -1190,7 +1193,8 @@ describe("queuePr: the pnpm-queue marker comment (RP-1195 item 3)", () => {
       },
     });
     expect(() => queuePr(149, earlier.seam)).toThrow("something broke");
-    expect(earlier.unmarked).toEqual([]);
+    expect(earlier.marked).toEqual([[149, "abc1234"]]);
+    expect(earlier.unmarked).toEqual([42]);
   });
 
   it("says so when its marker cannot be taken off", () => {
@@ -1216,10 +1220,11 @@ describe("queuePr: the pnpm-queue marker comment (RP-1195 item 3)", () => {
     expect(() => queuePr(149, thrown.seam)).toThrow(/something broke[^]*could not take its pnpm-queue marker comment \(42\) off/);
   });
 
-  it("posts no second marker when the PR already holds one for this head (a re-run)", () => {
+  // #639's review: a re-run after a drop must not lean on the dropped entry's marker, which no longer counts.
+  it("posts a fresh marker on a re-run, even when the PR already holds one for this head", () => {
     const { seam, marked, enqueued } = fakeSeam({ comments: () => [{ login: "dev", type: "User", body: pnpmQueueComment("abc1234") }] });
     expect(queuePr(149, seam).ok).toBe(true);
-    expect(marked).toEqual([]);
+    expect(marked).toEqual([[149, "abc1234"]]);
     expect(enqueued).toHaveLength(1);
   });
 

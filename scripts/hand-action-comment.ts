@@ -13,8 +13,7 @@ import { resolve } from "node:path";
 export interface Payload {
   action?: string;
   label?: { name?: string };
-  /** `updated_at` is the nearest the `enqueued` payload has to the entry's time: it carries no time of its own. */
-  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown; updated_at?: string };
+  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown };
   repository?: { full_name?: string };
   sender: { login: string; type?: string };
 }
@@ -34,7 +33,7 @@ export interface IssueEvent {
 
 /**
  * What the script reads besides the event: the PR's comments, its issue events (undefined when they could not be
- * read: then no `pnpm queue` marker counts), and the time it runs (for a payload with no time).
+ * read: then no `pnpm queue` marker counts), and the time it runs (when no queue entry is listed yet).
  */
 export interface Facts {
   comments: readonly PrComment[];
@@ -66,21 +65,28 @@ const pnpmQueueMarker = (sha: string) => `<!-- pnpm-queue: ${sha} -->`;
 const WRITERS = ["OWNER", "MEMBER", "COLLABORATOR"];
 
 /**
- * Whether `pnpm queue` made the entry at `at`: the newest marker for the head, by a person with access, was posted at or
- * before it (RP-1195 review). A marker posted later belongs to a later run; `pnpm queue` takes off one whose enqueue failed.
- * A marker whose entry left the queue (a removal after it, at or before `at`) no longer counts: a button re-entry of the
- * same head is a hand action (RP-1195 follow-up). Unknown events count no marker.
+ * Whether `pnpm queue` made this entry, judged by the PR's own queue events rather than a payload time (the `enqueued`
+ * payload carries none). The newest marker for the head, by a person with access, counts only when:
+ * - no queue removal falls at or after it: a dropped entry's marker never covers a later button entry of the same
+ *   head, and `pnpm queue` posts a fresh marker on every run (#639's review);
+ * - at most one queue entry falls at or after it (this one), and the newest entry is not older than it: a marker typed
+ *   after a button entry doesn't cover it. With no entry listed yet (the events can lag), the time the script runs stands in.
+ * Unreadable events or times count no marker, so the comment is posted.
  */
-function queuedByPnpm(facts: Facts, head: string, at: number): boolean {
+function queuedByPnpm(facts: Facts, head: string): boolean {
   const times = facts.comments
     .filter((comment) => comment.user?.type === "User" && WRITERS.includes(comment.author_association ?? "") && (comment.body ?? "").includes(pnpmQueueMarker(head)))
     .map((comment) => Date.parse(comment.created_at ?? ""));
   if (facts.events === undefined || times.length === 0 || times.some(Number.isNaN)) return false;
   const marked = Math.max(...times);
-  if (marked > at) return false;
-  const left = facts.events.filter((each) => each.event === "removed_from_merge_queue").map((each) => Date.parse(each.created_at ?? ""));
-  // An unreadable time could fall anywhere: count it as a removal.
-  return !left.some((time) => Number.isNaN(time) || (time > marked && time <= at));
+  const timesOf = (name: string) => facts.events!.filter((each) => each.event === name).map((each) => Date.parse(each.created_at ?? ""));
+  const [entries, removals] = [timesOf("added_to_merge_queue"), timesOf("removed_from_merge_queue")];
+  if ([...entries, ...removals].some(Number.isNaN)) return false;
+  if (removals.some((time) => time >= marked)) return false;
+  const entriesSince = entries.filter((time) => time >= marked);
+  if (entriesSince.length > 1) return false;
+  const newestEntry = entries.length > 0 ? Math.max(...entries) : (facts.now ?? new Date()).getTime();
+  return marked <= newestEntry;
 }
 
 /** The hand action an event reports, or undefined when there is nothing to say. */
@@ -96,8 +102,7 @@ export function handAction(event: string, payload: Payload, facts: Facts): HandA
   }
   // Reviewed required fails while auto-merge is on (it reads auto_merge.enabled_by).
   if (payload.action === "auto_merge_enabled") return { kind: "auto-merge", ...base, failsReviewedRequired: true };
-  const at = Date.parse(pr.updated_at ?? "");
-  if (payload.action === "enqueued" && !queuedByPnpm(facts, pr.head.sha, Number.isNaN(at) ? (facts.now ?? new Date()).getTime() : at)) {
+  if (payload.action === "enqueued" && !queuedByPnpm(facts, pr.head.sha)) {
     // With auto-merge off, Reviewed required passes a button entry: it only skips `pnpm queue`'s checks.
     return { kind: "queue", ...base, failsReviewedRequired: pr.auto_merge != null };
   }

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stopIfBehindOrigin } from "./behind-origin.ts";
-import { hasPnpmQueueMarker, pnpmQueueComment } from "./queue-marker.ts";
+import { pnpmQueueComment } from "./queue-marker.ts";
 import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { cleanWalk, isMergeOfMain, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
@@ -137,6 +137,8 @@ export interface ScriptCopy {
 /**
  * The scripts whose stale copy refused or passed what main's would not (RP-1195 item 6), and every file they import
  * by relative import (RP-1195 follow-up): an older verify-gate.ts or git-files.ts changes the verdict the same way.
+ * The walk follows the running copy's imports, so a file only main's copy imports isn't listed; the importer that
+ * gained the import then shows as behind instead.
  */
 const STALE_COPY_ENTRIES = ["scripts/queue-pr.ts", "scripts/ci-green.ts"];
 
@@ -214,14 +216,9 @@ const headMoved = (pr: number, pinned: string, now: string | undefined) =>
   );
 
 function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: { id: string; head: string; warnings: string[] }): QueueResult {
-  // Unread comments count as no marker: one more marker comment is harmless.
-  let marked: boolean;
-  try {
-    marked = seam.comments(pr).some((comment) => hasPnpmQueueMarker(comment.body, head));
-  } catch {
-    marked = false;
-  }
-  const posted = marked ? undefined : seam.markQueued(pr, head);
+  // A fresh marker on every run, even for a head marked before (#639's review): the hand-action check counts a marker
+  // only when the PR has not left the queue since it, so a re-run after a drop needs its own.
+  const posted: number | undefined = seam.markQueued(pr, head);
   // RP-1195 review: a failed enqueue takes its own marker off, so a later button press on this head still gets the
   // hand-action comment. Returns what to add when that fails.
   const unmark = (): string[] => {
@@ -693,7 +690,6 @@ export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sle
 
 const mutation = "mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }";
 
-/** The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. */
 /** A file of the running copy's checkout, by its repo path; undefined when it is not there. */
 function runningCopyFile(path: string): string | undefined {
   try {
@@ -703,7 +699,10 @@ function runningCopyFile(path: string): string | undefined {
   }
 }
 
-/** `read` gives a repo file's text for the stale-copy check's import walk (default: the running copy's). */
+/**
+ * The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. `read` gives a repo file's
+ * text for the stale-copy check's import walk (default: the running copy's).
+ */
 export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync, read: (path: string) => string | undefined = runningCopyFile): QueueSeam {
   const run = (command: string, args: string[]) => {
     const done = spawn(command, args, { cwd, encoding: "utf8" });
