@@ -142,8 +142,8 @@ export const workItemBoard = workItemList.pick({ stages: true, filters: true, ty
   /** The viewer's own Card view layout for this board (RP-410). */
   layout: boardCardLayout,
   /**
-   * Whether the viewer may raise a Work Item Type of this Module on the Project (RP-1219), the rule
-   * of the Register Import's 403. Only then do `stages` and `columns` carry the Draft Stage: its
+   * Whether the viewer may raise a Work Item Type of this Module on the Project (RP-1219), by
+   * app.raisable_type_ids (the "+ New" Type picker's rule; the Register Import's 403 asks the same of the Submittals). Only then do `stages` and `columns` carry the Draft Stage: its
    * column, first, holds the viewer's own Drafts, by Subject, then id (visibility.md row 73).
    */
   mayRaise: z.boolean(),

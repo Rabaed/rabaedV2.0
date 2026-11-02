@@ -1,6 +1,6 @@
 // Seam 1 for scenario RP-1219-1 (visibility.md row 73, V3): the Kanban's Draft column. C1 and C2, two
 // Contractors on one Project, raise Submittal Drafts; K1 is its Consultant. The Kanban tells the web whether
-// the viewer may raise a Type of the Module (`mayRaise`, the rule of the Register Import's 403). Only then
+// the viewer may raise a Type of the Module (`mayRaise`, the "+ New" Type picker's rule, which the Register Import's 403 also asks of the Submittals). Only then
 // does it carry the Draft Stage and its column, holding the viewer's own Participant's Drafts, by Subject, then
 // id, never by when they were started. K1, who may raise no Submittal, gets no Draft column and no Draft Stage,
 // not even an empty one. Seam 2: packages/db/test/rp-1219-visibility-rls.test.ts.
@@ -18,6 +18,7 @@ afterAll(async () => {
 let at: Tower;
 let c2Engineer: Caller;
 let k1Engineer: Caller;
+let orMember: Caller;
 const names = new Map<Caller, string>();
 const named = (by: Caller) => names.get(by) ?? "someone";
 const c1Drafts: Record<string, string> = {};
@@ -42,11 +43,16 @@ beforeAll(async () => {
   const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);
+  const or = await api.authorizedPerson();
+  const orParticipant = await api.addParticipant(c1.caller, at.projectId, or.company, "owner_representative");
+  await ok(c1.caller.request("PUT", `/v1/participants/${orParticipant}/visibility`, { trade: all, location: all }));
+  orMember = await projectMember(api, or, orParticipant, []);
   for (const [by, name] of [
     [at.c1Engineer, "C1 engineer"],
     [c2Engineer, "C2 engineer"],
     [k1Engineer, "K1 engineer"],
     [at.k1Manager, "K1 manager"],
+    [orMember, "OR Member with no Position"],
   ] as const)
     names.set(by, name);
 
@@ -71,6 +77,18 @@ describe("scenario RP-1219-1: the Kanban's Draft column, C1 and C2 raising Draft
     // C1's engineer reads both first, the positive control.
     await expectHiddenFrom({ read: draftColumns, target: "draft", seenBy: [at.c1Engineer], hiddenFrom: k1, name: named, label: "the Draft column" });
     await expectHiddenFrom({ read: draftStages, target: "draft", seenBy: [at.c1Engineer], hiddenFrom: k1, name: named, label: "the Draft Stage" });
+  });
+
+  // Out of RP-1219's scope: the Snag List's board leaves Drafts out itself and keeps its Stage filter and total as they were.
+  it("leaves the Snag List's board as it was: its Stages keep Draft for every Member, a raiser or not", async () => {
+    const snags = async (by: Caller): Promise<WorkItemBoard> => (await ok(by.get(`/v1/projects/${at.projectId}/modules/snag_list/work-items/kanban`), 200)).json();
+    expect((await snags(at.c1Engineer)).mayRaise).toBe(true);
+    // A Member of the Owner Representative with no Position may raise nothing in the Snag List.
+    expect((await snags(orMember)).mayRaise).toBe(false);
+    for (const by of [at.c1Engineer, orMember]) {
+      const board = await snags(by);
+      expect(board.stages.map((s) => s.category), named(by)).toContain("draft"); // not hidden-from: the Snag List's Stages, unchanged for everyone
+    }
   });
 
   it("holds only the viewer's own Participant's Drafts: C1's to C1, C2's to C2, never another Contractor's", async () => {

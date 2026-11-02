@@ -1,6 +1,6 @@
 // Seam 2 for scenario RP-1219-1 (visibility.md row 73, V3), as the app role: the Kanban's Draft column. C1 and
 // C2, two Contractors on one Project, each raise Submittal Drafts; K1 is its Consultant. app.raisable_type_ids,
-// the rule the Kanban asks whether to show the Draft column (and the Register Import's 403), gives C1's and C2's
+// the rule the Kanban asks whether to show the Draft column (the "+ New" Type picker's rule; the Register Import's 403 asks the same of the Submittals), gives C1's and C2's
 // engineers a Submittals Type and K1's Members none. app.work_items_seen, which the column reads, gives each
 // Contractor only its own Participant's Drafts and K1 none of them. Seam 1: apps/api/test/rp-1219-visibility.test.ts.
 import { sql } from "kysely";

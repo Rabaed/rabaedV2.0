@@ -261,7 +261,7 @@ One point in a Workflow where a Work Item waits for a person or Step Pool to act
 _Avoid_: Node, task, state
 
 **Draft**:
-A Work Item that has never been sent: it sits at its Workflow's Draft Step, in the Drafts Stage, with no Document Number and no Step Age. Only its holder edits it; by the Draft Step's setting, the rest of the author's Company reads it, or nobody but the author. Other Companies never see it. A Return never makes an item a Draft again: it stays in Internal Review.
+A Work Item that has never been sent: it sits at its Workflow's Draft Step, in the Draft Stage, with no Document Number and no Step Age. Only its holder edits it; by the Draft Step's setting, the rest of the author's Company reads it, or nobody but the author. Other Companies never see it. A Return never makes an item a Draft again: it stays in Internal Review.
 
 **Transition**:
 A move of a Work Item from one Step to another, shown as a button whose label the Workflow sets, such as "Send for Review", "Request More Information" or "Submit". Each Transition has its own Action Form and notifications.

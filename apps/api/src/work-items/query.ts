@@ -1241,12 +1241,18 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
     const cards = await boardCards(trx, scope, q, now);
     // A search counts no more than the cards it shows ("Search and filters": no totals beyond what is shown).
     const counts = q.q === undefined ? await countByStage(trx, scope, q, now) : new Map([...cards].map(([key, c]) => [key, c.length]));
-    const { stages: all, filters } = await stagesAndFilters(trx, scope, counts);
+    const { stages: everyStage, filters } = await stagesAndFilters(trx, scope, counts);
     // The Draft column, first, only for a Member who may raise a Type of the Module (RP-1219): anyone else
-    // gets no Draft Stage at all, not even an empty column or a Stage to filter by.
+    // gets no Draft Stage at all, not even an empty column or a Stage to filter by. The Snag List's board
+    // leaves Drafts out itself and keeps its Stage filter and total as they were (out of RP-1219's scope).
     const mayRaise = await mayRaiseIn(trx, tabScope);
     const isDraft = (s: { category: string }) => s.category === "draft";
-    const stages = mayRaise ? [...all.filter(isDraft), ...all.filter((s) => !isDraft(s))] : all.filter((s) => !isDraft(s));
+    const stages =
+      tabScope.moduleKey === "snag_list"
+        ? everyStage
+        : mayRaise
+          ? [...everyStage.filter(isDraft), ...everyStage.filter((s) => !isDraft(s))]
+          : everyStage.filter((s) => !isDraft(s));
     const columns = stages.map((s) => {
       const inStage = cards.get(s.key) ?? [];
       const lanes = boardLanes(isDraft(s) ? [...inStage].sort(bySubjectThenId) : inStage);
@@ -1260,7 +1266,8 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
 
 /**
  * Whether the Member may raise a Work Item Type of the scope's Module on its Project (RP-1219): the
- * rule of the "+ New" Type picker and of the Register Import's 403, app.raisable_type_ids.
+ * "+ New" Type picker's rule, app.raisable_type_ids (app.may_raise_type on the Workflow bound for their
+ * Participant). The Register Import's 403 asks the same of the Submittals, and also needs the Type's Form.
  */
 async function mayRaiseIn(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<boolean> {
   const { rows } = await sql<{ raisable: boolean }>`
@@ -1269,7 +1276,11 @@ async function mayRaiseIn(trx: Trx, { projectId, moduleKey }: QueryScope): Promi
   return rows[0]?.raisable === true;
 }
 
-/** The Draft column's order: by Subject, byte by byte, then id; never by when a Draft was started (visibility.md row 73, ADR 0015). */
+/**
+ * The Draft column's order: by Subject, byte by byte, then id; never by when a Draft was started (visibility.md row 73,
+ * ADR 0015). The board's SQL sort already puts un-numbered Drafts so, but by the board's sort first: a Draft with a number
+ * (Sent Back to its Draft Step) has a Step Age and would sort by it. The column holds one order whatever the sort.
+ */
 const bySubjectThenId = (a: BoardCardInput, b: BoardCardInput): number => byBytes(a.card.title, b.card.title) || byBytes(a.card.id, b.card.id);
 const byBytes = (a: string, b: string): number => Buffer.compare(Buffer.from(a), Buffer.from(b));
 

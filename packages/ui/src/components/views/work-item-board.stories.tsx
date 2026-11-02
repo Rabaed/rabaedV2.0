@@ -252,6 +252,7 @@ export const Wide: Story = {
     // The Draft card: no number, no date, no Step Age.
     const draftCard = within(columnOf(context, stages.draft)).getByText(cards.draft.title).closest<HTMLElement>("[data-kanban-card]")!;
     await expect(draftCard).not.toHaveAttribute("data-aged");
+    await expect(draftCard).not.toHaveTextContent(/127893/);
     await expect(draftCard).not.toHaveTextContent("Jun");
 
     const internal = columnOf(context, stages.internal);
