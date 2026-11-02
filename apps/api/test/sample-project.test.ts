@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { demoMailbox } from "../src/demo/mailbox.ts";
-import { SAMPLE_PROJECT, samplePackages, sampleSubmittals, type SampleSubmittal } from "../src/demo/sample-project-plan.ts";
+import { SAMPLE_PROJECT, sampleInspections, samplePackages, sampleSubmittals, type SampleSubmittal } from "../src/demo/sample-project-plan.ts";
 import { addSampleProject, sampleRecords, sampleProjectStatus } from "../src/demo/sample-project.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
 import { createTestApi, DEFAULT_PASSWORD, expectHidden, readById, testConfig, type Caller } from "./support/harness.ts";
@@ -186,7 +186,7 @@ describe("adding it again", () => {
       ).rows[0]!;
     const before = await count();
     const result = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD));
-    expect(result).toEqual({ projectId, added: 0, present: 129, packages: { added: 0, present: 6 } });
+    expect(result).toEqual({ projectId, added: 0, present: 129 + sampleInspections().length, packages: { added: 0, present: 6 } });
     expect(await count()).toEqual(before);
   });
 });
@@ -222,25 +222,49 @@ describe("its Packages (RP-1220)", () => {
     }
   });
 
-  it("added to a Project that has its items but no Packages, adds only the Packages, then nothing", async () => {
-    // A Project of the same make with fewer items: the Submittals TMC's Packages take in, nothing else.
+  it("added to a Project that has its 129 items, adds only the Packages and the Inspections, then nothing", async () => {
+    // A Project of the same make, first given what RP-1217 added (UAT has it): its 129 items, no Packages, no Inspections.
     const full = sampleRecords();
-    const taken = new Set(full.packages.flatMap((p) => p.existing));
-    const items = { ...full, submittals: full.submittals.filter((s) => taken.has(s.title)), snags: [] };
     const project = { code: "NKP", name: { en: "Al Nakheel District – Packages seam test", ar: "مجمع النخيل – اختبار الحزم" } };
-    const status = () => sampleProjectStatus(migrator, { records: items, project });
+    const status = () => sampleProjectStatus(migrator, { records: full, project });
+    const items = full.submittals.length + full.snags.length;
+    const own = full.packages.flatMap((p) => [...p.submitted, ...p.drafts]).length;
 
-    const first = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: { ...items, packages: [] }, project }));
-    expect(first).toMatchObject({ added: taken.size, present: 0, packages: { added: 0, present: 0 } });
-    expect((await status()).packages).toEqual({ present: 0, planned: full.packages.length });
+    const first = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: { ...full, inspections: [], packages: [] }, project }));
+    expect(first).toMatchObject({ added: items, present: 0, packages: { added: 0, present: 0 } });
+    // The dry run's answer: the Inspections, the Packages and their own items are missing.
+    expect(await status()).toEqual({ project: true, present: items, planned: items + full.inspections.length + own, packages: { present: 0, planned: full.packages.length } });
 
-    const second = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: items, project }));
-    expect(second).toMatchObject({ added: 0, present: taken.size, packages: { added: full.packages.length, present: 0 } });
+    const second = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: full, project }));
+    expect(second).toMatchObject({ added: full.inspections.length, present: items, packages: { added: full.packages.length, present: 0 } });
     const listed = await packagesOf(as.ali, second.projectId);
     expect(new Set(listed.map((p) => p.status))).toEqual(new Set(["open", "in_progress", "done"]));
 
-    const third = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: items, project }));
+    const third = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: full, project }));
     expect(third).toMatchObject({ added: 0, packages: { added: 0, present: full.packages.length } });
-    expect(await status()).toMatchObject({ present: taken.size, packages: { present: full.packages.length, planned: full.packages.length } });
+    expect(await status()).toEqual({ project: true, present: items + full.inspections.length + own, planned: items + full.inspections.length + own, packages: { present: full.packages.length, planned: full.packages.length } });
+  });
+});
+
+describe("its Inspections (RP-1220)", () => {
+  it("reach every Stage for their Contractor, and the Consultant reads none still with the Contractor", async () => {
+    const tmc = await stageCounts(as.ali, "inspections");
+    // Both Code C Inspections were re-inspected, and the List shows a chain as its latest item: as their Rev 1s.
+    expect(Object.keys(tmc).sort()).toEqual(["approved", "draft", "internal_review", "pending_approval", "rejected"]);
+    const internal = (await listed(as.ali, "inspections")).filter((i) => i.stage.key === "draft" || i.stage.key === "internal_review");
+    expect(internal.length).toBeGreaterThan(0);
+    for (const { id: target } of internal) {
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: as.ali, hiddenFrom: [as.ahmed, as.yousef], name: nameOf, label: "RP-1220 Inspections" });
+    }
+  });
+
+  it("re-inspects a Code C as its Rev 1, and closes with Review Codes, not an Inspection Result", async () => {
+    const rows = await listed(as.ali, "inspections");
+    expect(rows.filter((i) => i.documentNumber?.endsWith(" Rev 1")).length).toBe(2);
+    const { rows: outcomes } = await sql<{ outcome: string }>`
+      select distinct w.outcome from work_item w join work_item_type t on t.id = w.work_item_type_id
+      where w.project_id = ${projectId}::uuid and t.code = 'WIR' and w.outcome is not null order by 1
+    `.execute(migrator);
+    expect(outcomes.map((o) => o.outcome)).toEqual(["A", "B", "C", "D"]);
   });
 });

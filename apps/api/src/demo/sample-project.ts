@@ -10,10 +10,13 @@ import {
   SAMPLE_LOCATIONS,
   SAMPLE_SUPPLIERS,
   SAMPLE_TRADES,
+  SAMPLE_CHECKLISTS,
+  sampleInspections,
   samplePackages,
   sampleSnags,
   sampleSubmittals,
   type SampleDraft,
+  type SampleInspection,
   type SamplePackage,
   type SampleSnag,
   type SampleSubmittal,
@@ -52,7 +55,6 @@ const PEOPLE = {
 } as const;
 type Who = keyof typeof PEOPLE;
 
-
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position's key, as GLOSSARY.md's Position entry names it.
 const PM = "project_manager";
 
@@ -88,11 +90,13 @@ export interface SampleProjectResult {
 export interface SampleRecords {
   submittals: SampleSubmittal[];
   snags: SampleSnag[];
+  /** Its Inspections (RP-1220): items of their own, as the Submittals are. */
+  inspections: SampleInspection[];
   packages: SamplePackage[];
 }
 
 /** The whole sample Project, as sample-project-plan.ts lays it out. */
-export const sampleRecords = (): SampleRecords => ({ submittals: sampleSubmittals(), snags: sampleSnags(), packages: samplePackages() });
+export const sampleRecords = (): SampleRecords => ({ submittals: sampleSubmittals(), snags: sampleSnags(), inspections: sampleInspections(), packages: samplePackages() });
 
 /** Which Project: the sample Project itself, or (a seam test) another of the same make. */
 export type SampleProjectName = { code: string; name: BilingualText };
@@ -144,6 +148,7 @@ export async function addSampleProject(
       const planned = [
         ...records.submittals.map((item) => ({ title: item.title, move: () => run.submittal(item) })),
         ...records.snags.map((item) => ({ title: item.title, move: () => run.snag(item) })),
+        ...records.inspections.map((item) => ({ title: item.title, move: () => run.inspection(item) })),
       ];
       const todo = planned.filter((p) => !existing.has(p.title));
       log(`sample project: ${planned.length - todo.length} of ${planned.length} item(s) already there; adding ${todo.length}`);
@@ -157,24 +162,36 @@ export async function addSampleProject(
       );
       log(`sample project: ${added} item(s) added`);
 
-      // A Package whose name its Contractor already has on the Project is left as it is.
-      const have = new Set<string>();
-      for (const side of ["tmc", "beta"] as const) {
-        const { packages } = await as[SIDES[side].pm]<{ packages: { name: BilingualText; owner: { companyName: BilingualText } }[] }>("GET", `/v1/projects/${projectId}/packages`);
-        for (const p of packages) if (p.owner.companyName.en === SIDES[side].company) have.add(`${side}:${p.name.en}`);
+      // Each Contractor's Packages by name, its own Participant's only. One already there is finished if a run
+      // stopped half way through it, and left as it is when complete.
+      const found = new Map<string, string>();
+      for (const side of Object.keys(SIDES) as Side[]) {
+        const pm = as[SIDES[side].pm];
+        const { participants } = await pm<{ participants: { id: string; isOwnCompany: boolean }[] }>("GET", `/v1/projects/${projectId}/participants`);
+        const own = participants.find((p) => p.isOwnCompany)?.id;
+        const { packages } = await pm<{ packages: { id: string; name: BilingualText; owner: { participantId: string } }[] }>("GET", `/v1/projects/${projectId}/packages`);
+        for (const p of packages) if (p.owner.participantId === own) found.set(`${side}:${p.name.en}`, p.id);
       }
-      const packagesTodo = records.packages.filter((p) => !have.has(`${p.owner}:${p.name.en}`));
-      log(`sample project: ${records.packages.length - packagesTodo.length} of ${records.packages.length} Package(s) already there; adding ${packagesTodo.length}`);
+      const already = records.packages.filter((p) => found.has(`${p.owner}:${p.name.en}`)).length;
+      log(`sample project: ${already} of ${records.packages.length} Package(s) already there; adding ${records.packages.length - already}`);
       let packagesAdded = 0;
+      let packagesFinished = 0;
       await inParallel(
-        packagesTodo.map((p) => async () => {
-          await run.package(p);
-          packagesAdded++;
+        records.packages.map((p) => async () => {
+          const packageId = found.get(`${p.owner}:${p.name.en}`);
+          if (!(await run.package(p, packageId))) return;
+          if (packageId) packagesFinished++;
+          else packagesAdded++;
         }),
         concurrency,
       );
-      log(`sample project: ${packagesAdded} Package(s) added`);
-      return { projectId, added, present: planned.length - todo.length, packages: { added: packagesAdded, present: records.packages.length - packagesTodo.length } };
+      log(`sample project: ${packagesAdded} Package(s) added${packagesFinished ? `, ${packagesFinished} finished` : ""}`);
+      return {
+        projectId,
+        added,
+        present: planned.length - todo.length,
+        packages: { added: packagesAdded, present: records.packages.length - packagesAdded - packagesFinished },
+      };
     } finally {
       await sql`select pg_advisory_unlock(${LOCK_KEY})`.execute(connection);
     }
@@ -186,7 +203,8 @@ export async function sampleProjectStatus(
   migrator: Db,
   { records = sampleRecords(), project: which = SAMPLE_PROJECT }: Pick<SampleProjectOptions, "records" | "project"> = {},
 ): Promise<{ project: boolean; present: number; planned: number; packages: { present: number; planned: number } }> {
-  const titles = [...records.submittals, ...records.snags].map((p) => p.title);
+  // Every item it raises by Subject: a Package's own too, so a missing one shows before its Package.
+  const titles = [...records.submittals, ...records.snags, ...records.inspections, ...records.packages.flatMap((p) => [...p.submitted, ...p.drafts])].map((p) => p.title);
   const { rows } = await sql<{ title: string }>`
     select distinct w.title from work_item w join project p on p.id = w.project_id
     where p.code = ${which.code} and p.name ->> 'en' = ${which.name.en} and w.title = any(${titles}::text[])
@@ -251,6 +269,8 @@ interface Ids {
   trade: Record<TradeCode | "GEN", string>;
   location: Record<string, string>;
   supplier: Record<TradeCode, string>;
+  /** Each Trade's Checklist Template: the Version a WIR's `checklist_template` names (RP-1220). */
+  checklist: Record<TradeCode, string>;
 }
 
 const sameGrant = (a: VisibilityGrant, b: VisibilityGrant) => a.isAll === b.isAll && [...a.valueIds].sort().join() === [...b.valueIds].sort().join();
@@ -307,7 +327,22 @@ async function setUp(as: People, projectId: string, which: SampleProjectName): P
       }
     }
   }
-  return { trade, location, supplier };
+  // Each Trade's Checklist Template (RP-1220), added by the Project Admin unless one of its name is there: Pass,
+  // Fail or N/A, a comment allowed, and a Failed check raises nothing of its own.
+  const templates = () => admin<{ templates: { id: string; versionId: string; name: BilingualText; tradeId: string }[] }>("GET", `/v1/projects/${projectId}/checklist-templates`);
+  let listed = (await templates()).templates;
+  const checklist = {} as Record<TradeCode, string>;
+  for (const t of SAMPLE_TRADES) {
+    const { name, checks } = SAMPLE_CHECKLISTS[t.code];
+    const mine = () => listed.find((x) => x.tradeId === trade[t.code] && x.name.en === name.en);
+    if (!mine()) {
+      const items = checks.map((c) => ({ key: c.key, text: c.text, comment: "optional", on_negative: "none" }));
+      await admin("POST", `/v1/projects/${projectId}/checklist-templates`, { name, tradeId: trade[t.code], items });
+      listed = (await templates()).templates;
+    }
+    checklist[t.code] = mine()!.versionId;
+  }
+  return { trade, location, supplier, checklist };
 }
 
 /** The Company's Participant on the Project: the Project Admin's own, or invited by CR number and accepted by its Authorized Person. */
@@ -382,7 +417,8 @@ class Runner {
     return jpegWithExif({ takenAt: `2026:10:${String(10 + (n % 18)).padStart(2, "0")} 09:${String(10 + (n % 40)).padStart(2, "0")}:00`, offset: "+03:00", latitude: 24.77, longitude: 46.64 }, Buffer.from(SAMPLE_PHOTO_JPEG, "base64"));
   }
 
-  private answers(item: SampleSubmittal): Record<string, unknown> {
+  /** A Submittal's Form answers: a SAR's of its supplier, else a MAR's of its product (a Draft's too). */
+  private answers(item: Pick<SampleSubmittal, "trade" | "location" | "product" | "supplier">): Record<string, unknown> {
     const where = { trade: this.ids.trade[item.trade], location: this.ids.location[item.location] };
     const p = item.product;
     if (item.supplier) {
@@ -411,7 +447,7 @@ class Runner {
   private async draft(item: SampleSubmittal | SampleDraft, side: Side): Promise<string> {
     const raiser = this.as[SIDES[side].raiser];
     const type = "type" in item ? item.type : "MAR";
-    const answers = this.answers({ type, supplier: undefined, ...item } as SampleSubmittal);
+    const answers = this.answers(item);
     const { id } = await raiser<{ id: string }>("POST", `/v1/projects/${this.projectId}/work-items`, { type, title: item.title, answers });
     const lines = [item.title, item.product.description, "Demo document: made up for the Rabaed demo."];
     if (type === "SAR") await this.upload(raiser, id, "company_profile", "company-profile.pdf", "application/pdf", demoPdf(lines));
@@ -437,29 +473,117 @@ class Runner {
    * stand; Beta Build's own are raised, sent for review and held by Yousef, Submitted together by Submit Package,
    * then each moves on to its own end. An Open one holds Drafts only.
    */
-  async package(p: SamplePackage) {
+  /**
+   * Puts the Package together, or finishes one a run cut short (`packageId`): each submittal it takes in, Draft
+   * and own submittal is added only where missing, and its own are Submitted (Submit Package) only while some
+   * are still to Submit. Whether it changed anything.
+   */
+  async package(p: SamplePackage, packageId?: string): Promise<boolean> {
     const { raiser: raiserKey, pm: pmKey } = SIDES[p.owner];
     const raiser = this.as[raiserKey];
     const pm = this.as[pmKey];
-    const { id: packageId } = await pm<{ id: string }>("POST", `/v1/projects/${this.projectId}/packages`, { name: p.name });
-    const add = (by: Call, workItemId: string) => by("POST", `/v1/packages/${packageId}/items`, { workItemId });
-    for (const title of p.existing) {
-      const [item] = await this.titled(title);
-      if (!item) throw new Error("Sample project: a Package's submittal is not on the Project");
-      await add(pm, item);
+    let changed = packageId === undefined;
+    const id = packageId ?? (await pm<{ id: string }>("POST", `/v1/projects/${this.projectId}/packages`, { name: p.name })).id;
+    const detail = () => pm<{ status: string; items: { id: string; title: string; toSubmit: boolean }[] }>("GET", `/v1/packages/${id}`);
+    const inIt = new Set((await detail()).items.map((i) => i.id));
+    const add = async (by: Call, workItemId: string) => {
+      if (inIt.has(workItemId)) return;
+      await by("POST", `/v1/packages/${id}/items`, { workItemId });
+      inIt.add(workItemId);
+      changed = true;
+    };
+    /** The item with this Subject: the Project's, else made now by `make`. */
+    const item = async (title: string, make?: () => Promise<string>) => {
+      const [found] = await this.titled(title);
+      if (found) return found;
+      if (!make) throw new Error("Sample project: a Package's submittal is not on the Project");
+      changed = true;
+      return make();
+    };
+    for (const title of p.existing) await add(pm, await item(title));
+    for (const d of p.drafts) await add(raiser, await item(d.title, () => this.draft(d, p.owner)));
+    for (const s of p.submitted) {
+      const own = await item(s.title, async () => {
+        const made = await this.draft(s, p.owner);
+        await this.act(raiser, made, "send_for_review");
+        return made;
+      });
+      await add(pm, own);
     }
-    for (const d of p.drafts) await add(raiser, await this.draft(d, p.owner));
-    if (p.submitted.length === 0) return;
-    const ids: string[] = [];
-    for (const item of p.submitted) {
-      const id = await this.draft(item, p.owner);
-      await this.act(raiser, id, "send_for_review");
-      await this.pickUp(pm, id);
-      await add(pm, id);
-      ids.push(id);
+    // Only its own submittals are Submitted: an Open Package's Drafts stay Drafts.
+    const own = new Set(p.submitted.map((s) => s.title));
+    const toSubmit = (await detail()).items.filter((i) => i.toSubmit && own.has(i.title));
+    if (toSubmit.length === 0) return changed;
+    for (const i of toSubmit) await this.pickUp(pm, i.id);
+    await pm("POST", `/v1/packages/${id}/submit`, { confirmed: true, idempotencyKey: randomUUID() });
+    // Each one Submitted now moves on to its own end.
+    for (const i of toSubmit) {
+      const planned = p.submitted.find((s) => s.title === i.title);
+      if (planned) await this.reviewed(i.id, planned, p.owner);
     }
-    await pm("POST", `/v1/packages/${packageId}/submit`, { confirmed: true, idempotencyKey: randomUUID() });
-    for (const [i, item] of p.submitted.entries()) await this.reviewed(ids[i]!, item, p.owner);
+    return true;
+  }
+
+  /**
+   * An Inspection (RP-1220) on the current WIR Workflow: its Contractor raises it with its Trade's Checklist
+   * Template and sends it; its PM Submits it (or returns it); Design Consultants' Engineer answers its Checklist on
+   * site and Sends it to Mohammed with a Recommended Code; Mohammed issues the Code (ADR 0025). A Code C is
+   * re-inspected as its Rev 1.
+   */
+  async inspection(i: SampleInspection) {
+    const raiser = this.as[SIDES[i.owner].raiser];
+    const pm = this.as[SIDES[i.owner].pm];
+    const answers = {
+      description: i.description,
+      requested_for: "2026-11-05T06:00:00.000Z",
+      trade: this.ids.trade[i.trade],
+      location: this.ids.location[i.location],
+      checklist_template: this.ids.checklist[i.trade],
+    };
+    const { id } = await raiser<{ id: string }>("POST", `/v1/projects/${this.projectId}/work-items`, { type: "WIR", title: i.title, answers });
+    if (i.end === "draft") return;
+    await this.act(raiser, id, "send_for_review");
+    if (i.end === "with_pm") return;
+    if (i.end === "returned") return this.act(pm, id, "return", { answers: { reason: "Clean the work face and photograph the work first. / نظّف الموقع وصوّر العمل أولاً." } });
+    await this.act(pm, id, "submit", { answers: { cover_note: "Ready on site from 09:00. / جاهز في الموقع من الساعة 09:00." } });
+    await this.inspected(id, i, i.end, i.recommendedCode, i.failing ?? []);
+    if (!i.revision) return;
+    // Rev 1: the raiser creates it from the closed Inspection, its answers and Checklist copied, and it is
+    // inspected again: still with the Consultant Engineer, or passed at Code A.
+    const { id: rev1 } = await raiser<{ id: string }>("POST", `/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() });
+    await this.act(raiser, rev1, "send_for_review");
+    await this.act(pm, rev1, "submit", { answers: { cover_note: "Corrected and ready again. / تم التصحيح وجاهز مجدداً." } });
+    if (i.revision === "open") await this.inspected(rev1, i, "with_consultant_engineer", undefined, []);
+    else await this.inspected(rev1, { ...i, comments: [] }, "code_a", "A", []);
+  }
+
+  /** From the Consultant Engineer's Step on, for an Inspection: its Checklist answered, `failing` Failed, then `end`. */
+  private async inspected(id: string, i: SampleInspection, end: SampleInspection["end"], code: SampleInspection["recommendedCode"], failing: string[]) {
+    const { mohammed } = this.as;
+    const engineer = this.as[i.consultantEngineer ?? (i.trade === "ME" ? "sara" : "ahmed")];
+    if (end === "with_consultant_engineer") {
+      if (i.consultantEngineer) await this.pickUp(engineer, id);
+      return;
+    }
+    await this.pickUp(engineer, id);
+    const checks = Object.fromEntries(
+      SAMPLE_CHECKLISTS[i.trade].checks.map((c) => [c.key, failing.includes(c.key) ? { answer: "fail", comment: "Not as per the drawing. / غير مطابق للمخطط." } : { answer: "pass" }]),
+    );
+    await engineer("PUT", `/v1/work-items/${id}/reply-checklists/inspection_checklist`, { answers: checks });
+    const matches = code === "A" || code === "B";
+    await this.act(engineer, id, "send_to_manager", { recommendedCode: code, internalNote: matches ? "Inspected on site: as per the drawing." : "Inspected on site: see the failed Checklist items." });
+    if (end === "with_consultant_manager") {
+      if (i.title.length % 2 === 0) await this.pickUp(mohammed, id);
+      return;
+    }
+    const verification = verified(matches, "The work is not as per the drawing. / العمل غير مطابق للمخطط.");
+    if (end === "code_a") await this.act(mohammed, id, "approve_a", { answers: verification });
+    if (end === "code_b") {
+      const comments = (i.comments ?? []).map(({ comment, reference }) => ({ comment, reference }));
+      await this.act(mohammed, id, "approve_b", { answers: { ...verification, remarks: "Passed with comments: see the Comments.", items_to_create: comments } });
+    }
+    if (end === "code_c") await this.act(mohammed, id, "revise_c", { answers: { ...verification, remarks: "Correct the failed Checklist items and ask for a re-inspection. / صحّح البنود المخالفة واطلب إعادة الفحص." } });
+    if (end === "code_d") await this.act(mohammed, id, "reject_d", { answers: { ...verification, remarks: "Rejected: redo the work. / مرفوض: أعد تنفيذ العمل." } });
   }
 
   /** From the Consultant Engineer's Step on: the reply, the Code, a Code B's Comments and a Code C's Revision. */

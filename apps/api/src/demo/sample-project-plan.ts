@@ -393,7 +393,7 @@ export function samplePackages(): SamplePackage[] {
     for (const title of found) taken.add(title);
     return found;
   };
-  const closed = (s: SampleSubmittal) => ["code_a", "code_b", "code_d"].includes(s.end);
+  const closed = (s: SampleSubmittal) => closesPackage(s.end);
   return [
     {
       name: { en: "Lighting and power – Block A", ar: "الإنارة والطاقة – المبنى أ" },
@@ -467,5 +467,116 @@ export function samplePackages(): SamplePackage[] {
         { title: "Protection board – Podium Basement 1", trade: "CV", location: "PB1", product: BETA.protection },
       ],
     },
+  ];
+}
+
+/** Whether a submittal ending at `end` lets its Package be Done: closed at Code A, B or D (a Code C waits for its Revision). */
+export const closesPackage = (end: SubmittalEnd): boolean => end === "code_a" || end === "code_b" || end === "code_d";
+
+/** A check of a Checklist Template: Pass, Fail or N/A, a comment allowed; a Failed check raises nothing of its own. */
+export interface SampleCheck {
+  key: string;
+  text: BilingualText;
+}
+
+/** Each Trade's Checklist Template on the sample Project, which its Inspections pick (RP-1220). */
+export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks: SampleCheck[] }> = {
+  EL: {
+    name: { en: "Cable containment and wiring", ar: "حوامل الكابلات والتمديدات" },
+    checks: [
+      { key: "supports", text: { en: "Supports at the spacing on the drawing", ar: "الدعامات بالمسافات المبينة في المخطط" } },
+      { key: "earthing", text: { en: "Containment bonded to earth", ar: "الحوامل موصولة بالتأريض" } },
+      { key: "labels", text: { en: "Cables labelled at both ends", ar: "الكابلات معلّمة من الطرفين" } },
+    ],
+  },
+  ME: {
+    name: { en: "Pipework installation", ar: "تركيب الأنابيب" },
+    checks: [
+      { key: "supports", text: { en: "Pipe supports at the spacing on the drawing", ar: "دعامات الأنابيب بالمسافات المبينة في المخطط" } },
+      { key: "pressure_test", text: { en: "Pressure test held for two hours", ar: "اختبار الضغط ثابت لمدة ساعتين" } },
+      { key: "insulation", text: { en: "Insulation complete and sealed", ar: "العزل مكتمل ومحكم" } },
+    ],
+  },
+  CV: {
+    name: { en: "Concrete pour", ar: "صب الخرسانة" },
+    checks: [
+      { key: "formwork", text: { en: "Formwork level, tight and clean", ar: "القوالب مستوية ومحكمة ونظيفة" } },
+      { key: "rebar_cover", text: { en: "Rebar cover as per drawing", ar: "غطاء حديد التسليح حسب المخطط" } },
+      { key: "embedded_items", text: { en: "Sleeves and embedded items in place", ar: "الأكمام والقطع المدفونة في أماكنها" } },
+    ],
+  },
+};
+
+/** Where an Inspection ends in the seed: as a Submittal does, or still a Draft. */
+export type InspectionEnd = SubmittalEnd | "draft";
+
+/** A Work Inspection Request (WIR) on the current WIR Workflow, which closes with a Review Code (ADR 0025). */
+export interface SampleInspection {
+  title: string;
+  /** Its raising Contractor. */
+  owner: "tmc" | "beta";
+  trade: TradeCode;
+  location: string;
+  end: InspectionEnd;
+  description: string;
+  consultantEngineer?: ConsultantEngineer;
+  /** From the Consultant Engineer on: the Code they recommend (the Code issued, once there is one). */
+  recommendedCode?: "A" | "B" | "C" | "D";
+  /** Its Checklist's checks the Consultant Engineer answers Fail; every other one Passes. */
+  failing?: string[];
+  /** Code B only: the Comments its Code raises. */
+  comments?: { comment: string; reference: string; end: "open" }[];
+  /** Code C only: re-inspected as Rev 1, which is still with the Consultant Engineer (`open`) or passed at Code A. */
+  revision?: "open" | "passed";
+}
+
+const inspection = (
+  title: string,
+  trade: TradeCode,
+  location: string,
+  end: InspectionEnd,
+  extra: Partial<SampleInspection> = {},
+): SampleInspection => ({
+  title,
+  owner: "tmc",
+  trade,
+  location,
+  end,
+  description: `${title}: ready for inspection.`,
+  ...(CODES[end as SubmittalEnd] ? { recommendedCode: CODES[end as SubmittalEnd] } : {}),
+  ...(end !== "draft" && end !== "with_pm" && end !== "returned" && end !== "with_consultant_engineer" ? { consultantEngineer: trade === "ME" ? "sara" : "ahmed" } : {}),
+  ...extra,
+});
+
+/**
+ * The sample Project's Inspections (RP-1220): raised by the Contractors (TMC, and Beta Build too), carried out by
+ * Design Consultants on the current WIR Workflow, ending with a Review Code; at every Stage, with a Code C
+ * re-inspected twice over (one Revision still open, one passed) and a Rejected one.
+ */
+export function sampleInspections(): SampleInspection[] {
+  return [
+    inspection("Cable tray installation – Tower A Level 02", "EL", "A02", "draft"),
+    inspection("Blinding concrete – Podium Basement 1", "CV", "PB1", "draft"),
+    inspection("Lighting circuits wiring – Tower A Level 03", "EL", "A03", "with_pm"),
+    inspection("Chilled water risers – Tower A Level 04", "ME", "A04", "with_pm"),
+    inspection("Column reinforcement – Podium Ground Floor", "CV", "PGF", "returned"),
+    inspection("Slab reinforcement – Podium Level 01", "CV", "P01", "with_consultant_engineer", { consultantEngineer: "ahmed" }),
+    inspection("Sprinkler pipework – Podium Ground Floor", "ME", "PGF", "with_consultant_engineer", { consultantEngineer: "sara" }),
+    inspection("Earthing system – Podium Basement 1", "EL", "PB1", "with_consultant_engineer"),
+    inspection("Duct pressure test – Tower A Level 05", "ME", "A05", "with_consultant_manager", { recommendedCode: "A" }),
+    inspection("Wall formwork – Podium Basement 1", "CV", "PB1", "with_consultant_manager", { recommendedCode: "C", failing: ["formwork"] }),
+    inspection("Distribution board installation – Podium Ground Floor", "EL", "PGF", "code_a"),
+    inspection("Drainage pipework – Podium Basement 1", "ME", "PB1", "code_a"),
+    inspection("Lighting fixtures – Podium Level 01", "EL", "P01", "code_b", {
+      comments: [{ comment: "Fix the loose fixture covers at gridline 4: Lighting fixtures, Podium Level 01.", reference: "Inspection", end: "open" }],
+    }),
+    inspection("Roof slab pour – Tower A Level 06", "CV", "A06", "code_b", {
+      comments: [{ comment: "Cure the slab edges for seven more days: Roof slab pour, Tower A Level 06.", reference: "Inspection", end: "open" }],
+    }),
+    inspection("Fan coil unit connections – Tower A Level 03", "ME", "A03", "code_c", { failing: ["pressure_test"], revision: "passed" }),
+    inspection("Transfer beam reinforcement – Podium Level 01", "CV", "P01", "code_c", { failing: ["rebar_cover"], revision: "open" }),
+    inspection("Busbar riser installation – Tower A Level 04", "EL", "A04", "code_d", { failing: ["supports", "earthing"] }),
+    inspection("Curtain wall anchors – Tower A Level 05", "CV", "A05", "code_a", { owner: "beta" }),
+    inspection("Glazing sealant – Tower A Level 06", "CV", "A06", "with_consultant_engineer", { owner: "beta", consultantEngineer: "ahmed" }),
   ];
 }

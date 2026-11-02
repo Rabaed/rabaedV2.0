@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { samplePackages, sampleSnags, sampleSubmittals } from "./sample-project-plan.ts";
+import { closesPackage, SAMPLE_CHECKLISTS, sampleInspections, samplePackages, sampleSnags, sampleSubmittals } from "./sample-project-plan.ts";
 
 // RP-1220: the sample Project's Packages (GLOSSARY.md Package): Done, In Progress (with a Code C waiting for its
 // Revision) and Open, for more than one Contractor Participant.
@@ -31,7 +31,7 @@ describe("the sample Project's Packages", () => {
     for (const p of packages.filter((p) => p.status === "done")) {
       const items = itemsOf(p);
       expect(items.length, p.name.en).toBeGreaterThan(0);
-      expect(items.every((s) => ["code_a", "code_b", "code_d"].includes(s.end)), p.name.en).toBe(true);
+      expect(items.every((s) => closesPackage(s.end)), p.name.en).toBe(true);
     }
   });
 
@@ -39,7 +39,7 @@ describe("the sample Project's Packages", () => {
     const inProgress = packages.filter((p) => p.status === "in_progress");
     for (const p of inProgress) {
       const items = itemsOf(p);
-      expect(items.some((s) => !["code_a", "code_b", "code_d"].includes(s.end)), p.name.en).toBe(true);
+      expect(items.some((s) => !closesPackage(s.end)), p.name.en).toBe(true);
       expect(p.drafts, p.name.en).toEqual([]);
     }
     expect(inProgress.some((p) => itemsOf(p).some((s) => s.end === "code_c"))).toBe(true);
@@ -68,5 +68,46 @@ describe("the sample Project's Packages", () => {
     for (const s of packages.flatMap((p) => p.submitted)) {
       if (s.end !== "with_consultant_engineer") expect(s.recommendedCode, s.title).toBeDefined();
     }
+  });
+});
+
+// RP-1220 (the owner's addition): Inspections on the current WIR Workflow, ending with a Review Code (ADR 0025).
+describe("the sample Project's Inspections", () => {
+  const inspections = sampleInspections();
+  const ends = (...wanted: string[]) => inspections.filter((i) => wanted.includes(i.end));
+
+  it("spreads them over every Stage: Draft, Internal Review, Pending Approval, Code A and B, Code C and Rejected", () => {
+    for (const end of ["draft", "with_pm", "with_consultant_engineer", "with_consultant_manager", "code_a", "code_b", "code_c", "code_d"]) {
+      expect(ends(end).length, end).toBeGreaterThan(0);
+    }
+  });
+
+  it("re-inspects Code C items as a Revision: one still open, one passed", () => {
+    expect(new Set(ends("code_c").map((i) => i.revision))).toEqual(new Set(["open", "passed"]));
+    expect(inspections.filter((i) => i.revision).every((i) => i.end === "code_c")).toBe(true);
+  });
+
+  it("comes from more than one Contractor", () => {
+    expect(new Set(inspections.map((i) => i.owner))).toEqual(new Set(["tmc", "beta"]));
+  });
+
+  it("fails only checks its Trade's Checklist has, and fails some where the Code is C or D", () => {
+    for (const i of inspections) {
+      const keys = SAMPLE_CHECKLISTS[i.trade].checks.map((c) => c.key);
+      for (const key of i.failing ?? []) expect(keys, i.title).toContain(key);
+    }
+    expect(ends("code_c", "code_d").every((i) => (i.failing ?? []).length > 0)).toBe(true);
+    expect(ends("code_a", "code_b").every((i) => (i.failing ?? []).length === 0)).toBe(true);
+  });
+
+  it("gives each Code B its Comments, and every Subject is the Project's only one", () => {
+    expect(ends("code_b").every((i) => (i.comments ?? []).length > 0)).toBe(true);
+    const all = [
+      ...inspections.flatMap((i) => [i.title, ...(i.comments ?? []).map((c) => c.comment)]),
+      ...submittals.flatMap((s) => [s.title, ...(s.comments ?? []).map((c) => c.comment)]),
+      ...sampleSnags().map((s) => s.title),
+      ...packages.flatMap((p) => [...p.submitted.map((s) => s.title), ...p.drafts.map((d) => d.title)]),
+    ];
+    expect(new Set(all).size).toBe(all.length);
   });
 });
