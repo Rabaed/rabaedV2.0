@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import * as laneReset from "./lane-reset.ts";
 import * as lanes from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import * as storiesVolumes from "./stories-volumes.ts";
@@ -44,6 +45,7 @@ const CAN_LINK = (() => {
 const REMOVES_NOTHING: Record<string, string> = {
   "lanes-lock.ts:removeStale": "a lane lock file, only when the holder it names is gone (its own pid check)",
   "verify-lock.ts:releaseLock": "the verify lock file, only when this pid holds it",
+  "verify-queue.ts:removePlaces": "this pid's own place files in the machine-wide verify line (RP-1197)",
   "lanes.ts:dropOrKeep": "pure: splits orphan databases into those to drop and the busy ones",
   "lanes.ts:dropDbsPostgres": "pure: lanes:drop-dbs's Postgres containers, lane 7's left out",
   "lanes.ts:pruneCommand": "pure: the lanes:prune command line for a lane",
@@ -82,6 +84,7 @@ const REMOVES_ONLY_ITS_OWN: Record<string, string> = {
   "lanes-lock.ts:acquireLaneLock": "its own lane lock file and the temp files beside it (removeStale's pid check)",
   "verify-lock.ts:acquireLock": "its own verify lock file's temp and stale copies (create, removeStale)",
   "verify-lock.ts:waitForLock": "calls acquireLock",
+  "verify-queue.ts:waitForTurn": "the verify line's own lock (acquireLock) and the place files of runs whose pid is gone (RP-1197)",
   "removal-guard.ts:folderDeletionRefusal": "pure: its refusal text names `git worktree remove`; it runs nothing",
 };
 
@@ -179,7 +182,7 @@ const READS = ["git worktree list --porcelain"];
 
 type Outcome = { result: unknown; ran: string[] };
 /** How to call one helper for one case, or why the case does not apply to it. */
-type Case = ((f: Fixture) => Outcome) | { notApplicable: string };
+type Case = ((f: Fixture) => Outcome | Promise<Outcome>) | { notApplicable: string };
 type Cases = { "lane 7": Case; "the main checkout": Case; "a folder outside .claude/worktrees": Case };
 
 /** A target with the facts a caller that checked nothing would pass. */
@@ -285,6 +288,35 @@ const veraPdfContainer = (f: Fixture, path: string): Outcome => {
   return { result, ran: d.ran };
 };
 
+/**
+ * lane:reset with a careless world: Docker answers, the lane has a stack, nothing holds it and the
+ * prompt says yes. It returns an exit code; its refusal is what it prints on exit 1 (as worktrees:prune logs).
+ */
+const reset = async (lane: number): Promise<Outcome> => {
+  const d = docker();
+  const errors: string[] = [];
+  const name = lanes.laneProject(lane);
+  const deps: laneReset.ResetDeps = {
+    cwd: "C:\\w\\careless",
+    probe: () => ({ ok: true }),
+    sessionCwds: () => [],
+    docker: (args) => d.run(args),
+    listContainers: () => [{ name: `${name}-db-1`, state: "running", project: name, workingDir: "C:\\w\\careless", ports: [] }],
+    listVolumes: () => [{ name: `${name}_db-data`, project: name }],
+    worktrees: () => [],
+    readEnv: () => undefined,
+    exists: () => true,
+    holders: () => ({ runningSession: () => undefined, desktopSession: () => undefined }),
+    verifies: () => ({ runs: [] }),
+    remove: (stale, options) => lanes.removeProject(stale, { ...options, run: d.run, wait: () => {} }),
+    confirm: async () => true,
+    log: () => {},
+    error: (line) => errors.push(line),
+  };
+  const code = await laneReset.resetLane([String(lane)], deps);
+  return { result: code === 0 ? {} : { refused: errors.join("\n") }, ran: d.ran };
+};
+
 /** A branch helper deletes no folder: the outside rule is for the helpers that do (RP-1198 comment 15382, point 1). */
 const NO_FOLDER = { notApplicable: "it deletes no folder; the .claude/worktrees rule is for those that do (RP-1198 comment 15382, point 1)" };
 
@@ -335,6 +367,15 @@ const HELPERS: Record<string, { module: Record<string, unknown>; cases: Cases }>
     cases: {
       "lane 7": () => project("rabaed-lane7"),
       "the main checkout": () => project("rabaed"),
+      "a folder outside .claude/worktrees": NO_FOLDER,
+    },
+  },
+  "lane-reset.ts:resetLane": {
+    module: laneReset,
+    cases: {
+      "lane 7": () => reset(7),
+      // Lane 0's stack is the main checkout's (rabaed-lane0); lane:reset takes lanes, never the bare `rabaed`.
+      "the main checkout": () => reset(0),
       "a folder outside .claude/worktrees": NO_FOLDER,
     },
   },
@@ -476,8 +517,8 @@ describe("delete helpers refuse on their own (RP-1198)", () => {
         it(`${key} has no ${what} case: ${call.notApplicable}`, () => expect(call.notApplicable).not.toBe(""));
         continue;
       }
-      it(`${key} refuses ${what} itself, running nothing`, () => {
-        const { result, ran } = call(f);
+      it(`${key} refuses ${what} itself, running nothing`, async () => {
+        const { result, ran } = await call(f);
         const why = (result as { refused?: unknown } | undefined)?.refused;
         expect(why, "returns { refused: <why> }").toEqual(expect.stringMatching(/\S/));
         expect(ran).toEqual([]);

@@ -3,6 +3,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { processStart } from "./process-start.ts";
 import { describeHolder, liveHolder, lockFile, type LockHolder, type Processes } from "./verify-lock.ts";
+import { addByPid, describeRun, machineDir, machineLockFile, OLD_SLOT, readLine } from "./verify-queue.ts";
 import { isRunning } from "./worktrees-stale.ts";
 import { listWorktrees } from "./worktrees.ts";
 
@@ -16,15 +17,16 @@ import { listWorktrees } from "./worktrees.ts";
 /** A lock file and where it is, for the message. */
 export type VerifyLock = { where: string; file: string };
 export type VerifyRun = { where: string; holder: LockHolder };
-export type VerifyCheck = { runs: VerifyRun[] } | { unknown: string };
+/** `waiting` (RP-1197): runs queued behind the machine-wide verify, each about to verify; absent when none. */
+export type VerifyCheck = { runs: VerifyRun[]; waiting?: VerifyRun[] } | { unknown: string };
 
-const SLOT = /^rabaed-verify-.+\.lock$/;
 
-/** Every worktree's `.verify.lock`, then the Mains' verify slots among the common git folder's files. */
-export function verifyLockFiles(worktrees: string[], commonGitDir: string, commonFiles: string[]): VerifyLock[] {
+/** The machine-wide verify lock (RP-1197, when `machineDirectory` is given), every worktree's `.verify.lock`, then the Mains' verify slots among the common git folder's files. */
+export function verifyLockFiles(worktrees: string[], commonGitDir: string, commonFiles: string[], machineDirectory?: string): VerifyLock[] {
   return [
+    ...(machineDirectory === undefined ? [] : [{ where: "the machine-wide verify line", file: machineLockFile(machineDirectory) }]),
     ...worktrees.map((path) => ({ where: path, file: lockFile(path) })),
-    ...commonFiles.filter((name) => SLOT.test(name)).map((name) => ({ where: `the verify slot ${name}`, file: join(commonGitDir, name) })),
+    ...commonFiles.filter((name) => OLD_SLOT.test(name)).map((name) => ({ where: `the verify slot ${name}`, file: join(commonGitDir, name) })),
   ];
 }
 
@@ -33,7 +35,7 @@ export function runningVerifies(locks: VerifyLock[], holderOf: (file: string) =>
   const runs: VerifyRun[] = [];
   for (const lock of locks) {
     const holder = holderOf(lock.file);
-    if (holder !== undefined && !runs.some((r) => r.holder.pid === holder.pid)) runs.push({ where: lock.where, holder });
+    if (holder !== undefined) addByPid(runs, { where: lock.where, holder }, (run) => run.holder.pid);
   }
   return runs;
 }
@@ -41,9 +43,27 @@ export function runningVerifies(locks: VerifyLock[], holderOf: (file: string) =>
 export const describeRuns = (runs: VerifyRun[]): string =>
   `${runs.length === 1 ? "a verify runs" : `${runs.length} verifies run`} (${runs.map((r) => `${describeHolder(r.holder)}, in ${r.where}`).join("; ")})`;
 
-/** Why no volume may be removed now, or undefined when none runs. */
-export const volumesKeptReason = (check: VerifyCheck): string | undefined =>
-  "unknown" in check ? `whether a verify runs could not be checked (${check.unknown})` : check.runs.length === 0 ? undefined : describeRuns(check.runs);
+/** The runs queued behind the verifying one (RP-1197): "2 waiting (lane 13 (#577), in the machine-wide verify line; ...)". */
+export const describeWaiting = (waiting: VerifyRun[]): string =>
+  `${waiting.length} waiting (${waiting.map((r) => `${describeRun(r.holder)}, in ${r.where}`).join("; ")})`;
+
+/** Why no volume may be removed now, or undefined when none runs and none waits (a waiting run verifies soon). */
+export const volumesKeptReason = (check: VerifyCheck): string | undefined => {
+  if ("unknown" in check) return `whether a verify runs could not be checked (${check.unknown})`;
+  const waiting = check.waiting ?? [];
+  if (check.runs.length === 0 && waiting.length === 0) return undefined;
+  return [check.runs.length > 0 ? describeRuns(check.runs) : undefined, waiting.length > 0 ? describeWaiting(waiting) : undefined].filter(Boolean).join("; ");
+};
+
+/**
+ * A run with a place in the machine-wide line is waiting, not verifying, though it already holds its
+ * worktree's lock (verify.ts takes that first): readLine's waiting leaves out the line's holder.
+ */
+export function splitWaiting(runs: VerifyRun[], lineWaiting: LockHolder[]): VerifyCheck {
+  const waitingPids = new Set(lineWaiting.map((w) => w.pid));
+  const verifying = runs.filter((r) => !waitingPids.has(r.holder.pid));
+  return lineWaiting.length === 0 ? { runs: verifying } : { runs: verifying, waiting: lineWaiting.map((holder) => ({ where: "the machine-wide verify line", holder })) };
+}
 
 /** The running verifies of this clone, read now; `unknown` when git or the lock folder could not be read. */
 export function verifiesRunningNow(cwd: string = process.cwd()): VerifyCheck {
@@ -52,7 +72,9 @@ export function verifiesRunningNow(cwd: string = process.cwd()): VerifyCheck {
     const worktrees = listWorktrees(cwd).map((w) => w.path);
     const processes: Processes = { isAlive: isRunning, startOf: processStart, ancestors: [] };
     const self: LockHolder = { pid: process.pid, started: new Date(), command: "a clean-up" };
-    return { runs: runningVerifies(verifyLockFiles(worktrees, common, readdirSync(common)), (file) => liveHolder(file, self, processes)) };
+    const dir = machineDir();
+    const runs = runningVerifies(verifyLockFiles(worktrees, common, readdirSync(common), dir), (file) => liveHolder(file, self, processes));
+    return splitWaiting(runs, readLine(dir, self, processes).waiting);
   } catch (error) {
     return { unknown: ((error as { stderr?: string }).stderr || (error as Error).message || String(error)).split("\n")[0]!.trim() };
   }
