@@ -22,6 +22,7 @@ import type {
   MemberVisibility,
   MyProjects,
   MyCompany,
+  NewItemRoutePreview,
   MySignature,
   NotificationList,
   NotificationSettingsView,
@@ -292,6 +293,11 @@ export function getRegisterImport(importId: string): Promise<RegisterImport | nu
 export function getRaisableTypes(projectId: string, module: ModuleKey = "submittals"): Promise<RaisableTypes | null> {
   const query = module === "submittals" ? "" : `?module=${module}`;
   return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types${query}`);
+}
+
+/** The route a new item of Type `typeCode` would run for the signed-in Member, before it exists (RP-1152); null when they may not raise it there. */
+export function getNewItemRoutePreview(projectId: string, typeCode: string): Promise<NewItemRoutePreview | null> {
+  return apiGet<NewItemRoutePreview>(`/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/route-preview`);
 }
 
 /** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */

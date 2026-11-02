@@ -457,6 +457,22 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
  * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
  */
 export async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
+  const versionId = await newItemWorkflowVersionId(trx, projectId, typeCode);
+  // No Workflow for the raiser's Participant: the Type isn't theirs to raise (RP-590).
+  if (!versionId) return null;
+  const workflow = await workflowSteps(trx, versionId);
+  const draft = workflow.steps.find((s) => s.draft);
+  if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
+  return [workflow, { step: draft.key, canSave: true }];
+}
+
+/**
+ * The Workflow Version a new item of the Rabaed Default Type `typeCode` raised by the acting
+ * Member on `projectId` starts on (draftOf, and the route preview, RP-1152): the latest
+ * published Version of the Workflow bound for their Participant, as app.create_work_item
+ * resolves it (RP-426). Null when there is none they read.
+ */
+export async function newItemWorkflowVersionId(trx: Trx, projectId: string, typeCode: string): Promise<string | null> {
   // app.new_item_workflow_version is security invoker: Rabaed Admin (an Engineer's Register
   // Import, run as the default Member) reads past row-level security through it, so the Version
   // it answers is kept only when the Member reads its Workflow (workflow_definition's policy,
@@ -476,13 +492,7 @@ export async function draftOf(trx: Trx, projectId: string, typeCode: string): Pr
     from work_item_type t
     where t.owner_kind = 'rabaed' and t.code = ${typeCode} and not t.raised_from_item_only
   `.execute(trx);
-  const r = rows[0];
-  // No Workflow for the raiser's Participant: the Type isn't theirs to raise (RP-590).
-  if (!r?.workflow_version_id) return null;
-  const workflow = await workflowSteps(trx, r.workflow_version_id);
-  const draft = workflow.steps.find((s) => s.draft);
-  if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
-  return [workflow, { step: draft.key, canSave: true }];
+  return rows[0]?.workflow_version_id ?? null;
 }
 
 /**

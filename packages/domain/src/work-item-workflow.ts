@@ -2,7 +2,7 @@ import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { baseRoles, type BaseRole } from "./project.ts";
 import { stageCategories } from "./work-item.ts";
-import { workflowDefinition, type WorkflowDefinition } from "./workflow-definition.ts";
+import { draftsVisibleTo, workflowDefinition, type WorkflowDefinition } from "./workflow-definition.ts";
 
 // The map of a Work Item's Workflow (RP-438, WF-15; workflow-engine.md §11): the
 // Version the item is pinned to, whole, as every Project Member reads it (V20), and
@@ -42,6 +42,21 @@ export const workItemWorkflowMap = z.object({
   position: workItemMapPosition.nullable(),
 });
 export type WorkItemWorkflowMap = z.infer<typeof workItemWorkflowMap>;
+
+/**
+ * The route a new item of a Type would run, before it exists (RP-1152):
+ * `GET /v1/projects/:projectId/work-item-types/:typeCode/route-preview`. The Workflow Version
+ * the create would start it on for the viewer's Participant, its raiser's Steps held by the
+ * viewer's role as on the item's map; the Stages of the Type's Module on the Project; and who
+ * of the raiser's Company reads its Draft (V1). A Workflow is a description (V20): no Company,
+ * no Member, no id. The route strip reads it with the item at its Draft Step.
+ */
+export const newItemRoutePreview = z.object({
+  definition: workflowDefinition,
+  stages: z.array(z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) })),
+  draftsVisibleTo: z.enum(draftsVisibleTo),
+});
+export type NewItemRoutePreview = z.infer<typeof newItemRoutePreview>;
 
 /** The terminal Step a closed item with `outcome` reached: the one every close (or Cancel) setting it leads to; null if several or none. */
 export function closedStepKey(definition: WorkflowDefinition, outcome: string): string | null {
