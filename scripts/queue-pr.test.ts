@@ -4,13 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-green.ts";
-import { queuePr, queuePrWhenChecksPass, realSeam, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { queuePr, queuePrWhenChecksPass, realSeam, staleCopyWarnings, waitForMerge, type PullStatus, type QueueSeam } from "./queue-pr.ts";
+import { pnpmQueueComment } from "./queue-marker.ts";
 import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
 import { baselineMarker, stampLine } from "./verify-gate.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
   const enqueued: [string, string][] = [];
+  const marked: [number, string][] = [];
+  const unmarked: number[] = [];
   const seam: QueueSeam = {
     fetchMain: () => true,
     fetchPull: () => "abc1234",
@@ -42,13 +45,19 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     comments: () => [],
     permission: () => "none",
     mergeChecks: () => ({ ok: true, skipped: [] }),
+    markQueued: (pr, head) => {
+      marked.push([pr, head]);
+      return 42;
+    },
+    unmarkQueued: (id) => void unmarked.push(id),
+    scriptCopies: () => [],
     enqueue: (id, head) => {
       enqueued.push([id, head]);
       return { position: 3, state: "QUEUED" };
     },
     ...overrides,
   };
-  return { seam, enqueued };
+  return { seam, enqueued, marked, unmarked };
 }
 
 describe("queuePr: main's newest checks on the merge (RP-1171)", () => {
@@ -142,6 +151,33 @@ describe("queuePr", () => {
     expect(text).toContain("package.json");
     expect(text).toContain(".github/workflows/ci.yml");
     expect(text).not.toContain("apps/api/src/a.ts");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues a root package.json beside code when it only adds `node scripts/x.ts` and the PR adds scripts/x.ts (RP-1195 item 7)", () => {
+    const before = JSON.stringify({ scripts: { lint: "eslint ." } });
+    const after = JSON.stringify({ scripts: { lint: "eslint .", x: "node scripts/x.ts" } });
+    const answers: Record<string, { before: string | undefined; after: string | undefined }> = {
+      "package.json": { before, after },
+      "scripts/x.ts": { before: undefined, after: "export {};\n" },
+    };
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["package.json", "scripts/x.ts", "apps/api/src/a.ts"],
+      packageJsonVersions: (_commit, file) => answers[file] ?? { before: "old", after: "new" },
+    });
+    expect(queuePr(163, seam).ok).toBe(true);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("still refuses that PR when scripts/x.ts is already on main, with the same rule-3 refusal", () => {
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["package.json", "scripts/x.ts", "apps/api/src/a.ts"],
+      packageJsonVersions: (_commit, file) =>
+        file === "package.json" ? { before: JSON.stringify({ scripts: {} }), after: JSON.stringify({ scripts: { x: "node scripts/x.ts" } }) } : { before: "old", after: "new" },
+    });
+    const text = queuePr(163, seam).lines.join("\n");
+    expect(text).toContain("breaks planning/parallel-sessions.md rule 3");
+    expect(text).toContain("shared: package.json");
     expect(enqueued).toEqual([]);
   });
 
@@ -1107,6 +1143,153 @@ describe("waitForMerge", () => {
   });
 });
 
+describe("queuePr: the pnpm-queue marker comment (RP-1195 item 3)", () => {
+  it("marks the head on the PR before it enqueues it", () => {
+    const order: string[] = [];
+    const { seam } = fakeSeam({
+      markQueued: (pr, head) => (order.push(`mark ${pr} ${head}`), 42),
+      enqueue: (id, head) => (order.push(`enqueue ${id} ${head}`), { position: 1, state: "QUEUED" }),
+    });
+    expect(queuePr(149, seam).ok).toBe(true);
+    expect(order).toEqual(["mark 149 abc1234", "enqueue PR_node abc1234"]);
+  });
+
+  // RP-1195 review: a marker left by a failed enqueue would excuse a later button press on that head.
+  it("takes its own marker off when the enqueue fails, and keeps the failure", () => {
+    const { seam, unmarked } = fakeSeam({
+      enqueue: () => {
+        throw new Error("GraphQL: something broke");
+      },
+    });
+    expect(() => queuePr(149, seam)).toThrow("GraphQL: something broke");
+    expect(unmarked).toEqual([42]);
+  });
+
+  it("takes its own marker off when GitHub refuses the pinned head", () => {
+    const { seam, unmarked } = fakeSeam({
+      enqueue: () => {
+        throw new Error("GraphQL: expectedHeadOid does not match");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result).toMatchObject({ ok: false, reason: "head_moved" });
+    expect(unmarked).toEqual([42]);
+  });
+
+  it("keeps the marker when the PR is already queued", () => {
+    const already = () => {
+      throw new Error("GraphQL: Pull request is already in the merge queue");
+    };
+    const posted = fakeSeam({ enqueue: already });
+    expect(queuePr(149, posted.seam).ok).toBe(true);
+    expect(posted.unmarked).toEqual([]);
+  });
+
+  it("takes off only the marker it posted when the enqueue fails, leaving an earlier one", () => {
+    const earlier = fakeSeam({
+      comments: () => [{ login: "dev", type: "User", body: pnpmQueueComment("abc1234") }],
+      enqueue: () => {
+        throw new Error("GraphQL: something broke");
+      },
+    });
+    expect(() => queuePr(149, earlier.seam)).toThrow("something broke");
+    expect(earlier.marked).toEqual([[149, "abc1234"]]);
+    expect(earlier.unmarked).toEqual([42]);
+  });
+
+  it("says so when its marker cannot be taken off", () => {
+    const { seam } = fakeSeam({
+      enqueue: () => {
+        throw new Error("GraphQL: expectedHeadOid does not match");
+      },
+      unmarkQueued: () => {
+        throw new Error("gh api failed: 403");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).toContain("could not take its pnpm-queue marker comment (42) off");
+    const thrown = fakeSeam({
+      enqueue: () => {
+        throw new Error("GraphQL: something broke");
+      },
+      unmarkQueued: () => {
+        throw new Error("gh api failed: 403");
+      },
+    });
+    expect(() => queuePr(149, thrown.seam)).toThrow(/something broke[^]*could not take its pnpm-queue marker comment \(42\) off/);
+  });
+
+  // #639's review: a re-run after a drop must not lean on the dropped entry's marker, which no longer counts.
+  it("posts a fresh marker on a re-run, even when the PR already holds one for this head", () => {
+    const { seam, marked, enqueued } = fakeSeam({ comments: () => [{ login: "dev", type: "User", body: pnpmQueueComment("abc1234") }] });
+    expect(queuePr(149, seam).ok).toBe(true);
+    expect(marked).toEqual([[149, "abc1234"]]);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("marks again when the earlier marker names another head", () => {
+    const { seam, marked } = fakeSeam({ comments: () => [{ login: "dev", type: "User", body: pnpmQueueComment("old9999") }] });
+    expect(queuePr(149, seam).ok).toBe(true);
+    expect(marked).toEqual([[149, "abc1234"]]);
+  });
+
+  it("marks nothing when it refuses", () => {
+    const { seam, marked } = fakeSeam({ labels: () => [] });
+    expect(queuePr(149, seam).ok).toBe(false);
+    expect(marked).toEqual([]);
+  });
+
+  it("marks only after --wait's checks pass", async () => {
+    let checksDone = false;
+    const marks: boolean[] = [];
+    const { seam } = fakeSeam({
+      requiredChecks: () => ["build"],
+      checkRuns: () => (checksDone ? [{ name: "build", status: "completed", conclusion: "success" }] : [{ name: "build", status: "in_progress", conclusion: "" }]),
+      markQueued: () => (marks.push(checksDone), 42),
+    });
+    const result = await queuePrWhenChecksPass(149, seam, { sleep: async () => void (checksDone = true), now: () => 0 });
+    expect(result.ok).toBe(true);
+    expect(marks).toEqual([true]);
+  });
+});
+
+describe("queuePr: a stale copy of queue-pr.ts or ci-green.ts (RP-1195 item 6)", () => {
+  it("warns first, naming the file and the fix, and still queues", () => {
+    const { seam, enqueued } = fakeSeam({ scriptCopies: () => [{ file: "scripts/ci-green.ts", behind: 2 }] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(enqueued).toHaveLength(1);
+    expect(result.lines[0]).toContain("scripts/ci-green.ts");
+    expect(result.lines[0]).toContain("git merge origin/main");
+  });
+
+  it("leads a refusal too", () => {
+    const { seam } = fakeSeam({ labels: () => [], scriptCopies: () => [{ file: "scripts/queue-pr.ts", behind: 1 }] });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines[0]).toMatch(/^Warning: .*scripts\/queue-pr\.ts/);
+  });
+});
+
+describe("staleCopyWarnings", () => {
+  it("one warning per file origin/main has commits to that this checkout lacks", () => {
+    const lines = staleCopyWarnings([
+      { file: "scripts/queue-pr.ts", behind: 2 },
+      { file: "scripts/ci-green.ts", behind: 0 },
+    ]);
+    expect(lines).toEqual([
+      "Warning: origin/main has 2 commits to scripts/queue-pr.ts that this checkout lacks, so this run's checks may not be main's (an older copy refuses or passes what main's would not). Run `git merge origin/main` in this checkout, or run `pnpm queue` from a fresh worktree of origin/main.",
+    ]);
+    expect(staleCopyWarnings([{ file: "scripts/ci-green.ts", behind: 1 }])[0]).toContain("has 1 commit to scripts/ci-green.ts");
+  });
+
+  // RP-1195 review: a branch that edits queue-pr.ts itself has a copy that differs from main's but is not older.
+  it("is silent when only this checkout changed the file, or git could not tell", () => {
+    expect(staleCopyWarnings([{ file: "scripts/queue-pr.ts", behind: 0 }, { file: "scripts/ci-green.ts", behind: undefined }])).toEqual([]);
+  });
+});
+
 // The real seam, with spawnSync injected: it must hand git and gh the right arguments.
 describe("realSeam", () => {
   function recorded(answer: (command: string, args: string[]) => { status: number | null; stdout?: string; stderr?: string }) {
@@ -1301,5 +1484,58 @@ describe("realSeam", () => {
   it("throws with the command's output when a required call fails", () => {
     const { seam } = recorded(() => ({ status: 1, stderr: "no auth" }));
     expect(() => seam.head()).toThrow(/no auth/);
+  });
+
+  it("posts the marker comment through gh api and returns its id (RP-1195 item 3)", () => {
+    const calls: { args: string[]; input: unknown }[] = [];
+    const spawn = ((_command: string, args: string[], options: { input?: string }) => (calls.push({ args, input: options.input }), { status: 0, stdout: '{"id":987,"body":"x"}' })) as unknown as typeof spawnSync;
+    expect(realSeam("/work", spawn).markQueued(149, "abc1234")).toBe(987);
+    expect(calls).toEqual([{ args: ["api", "--method", "POST", "repos/{owner}/{repo}/issues/149/comments", "--input", "-"], input: JSON.stringify({ body: pnpmQueueComment("abc1234") }) }]);
+  });
+
+  it("takes a marker comment off by its id, and says so when gh fails", () => {
+    const { calls, seam } = recorded(() => ({ status: 0, stdout: "" }));
+    seam.unmarkQueued(987);
+    expect(calls.map(({ args }) => args.join(" "))).toEqual(["api --method DELETE repos/{owner}/{repo}/issues/comments/987"]);
+    expect(() => recorded(() => ({ status: 1, stderr: "HTTP 404" })).seam.unmarkQueued(987)).toThrow(/gh api --method DELETE failed:\nHTTP 404/);
+  });
+
+  // RP-1195 follow-up (Main 6): an older copy of a file they import changes the verdict the same way.
+  it("counts origin/main's commits HEAD lacks to queue-pr.ts, ci-green.ts and every file they import (RP-1195 item 6)", () => {
+    const texts: Record<string, string> = {
+      "scripts/queue-pr.ts": 'import { a } from "./verify-gate.ts";\nimport { b } from "./ci-green.ts";\nimport { spawnSync } from "node:child_process";',
+      "scripts/ci-green.ts": 'import { c } from "./git-files.ts";',
+      "scripts/verify-gate.ts": 'import { c } from "./git-files.ts";',
+      "scripts/git-files.ts": "export const c = 1;",
+    };
+    const calls: string[] = [];
+    // `git log --format= --name-only`: each commit's touched files, a blank line between commits.
+    const spawn = ((_command: string, args: string[]) => (calls.push(args.join(" ")), { status: 0, stdout: "scripts/queue-pr.ts\nscripts/git-files.ts\n\nscripts/queue-pr.ts\n" })) as unknown as typeof spawnSync;
+    const seam = realSeam("/work", spawn, (path) => texts[path]);
+    expect(seam.scriptCopies()).toEqual([
+      { file: "scripts/queue-pr.ts", behind: 2 },
+      { file: "scripts/ci-green.ts", behind: 0 },
+      { file: "scripts/verify-gate.ts", behind: 0 },
+      { file: "scripts/git-files.ts", behind: 1 },
+    ]);
+    expect(calls).toEqual(["log --format= --name-only HEAD..origin/main -- scripts/queue-pr.ts scripts/ci-green.ts scripts/verify-gate.ts scripts/git-files.ts"]);
+    // Each stale file is named in its own warning.
+    expect(staleCopyWarnings(seam.scriptCopies()).map((line) => line.match(/to (\S+) that/)?.[1])).toEqual(["scripts/queue-pr.ts", "scripts/git-files.ts"]);
+  });
+
+  it("knows no count for any file when git log fails", () => {
+    const spawn = (() => ({ status: 128, stdout: "", stderr: "fatal: bad revision" })) as unknown as typeof spawnSync;
+    const copies = realSeam("/work", spawn, (path) => (path === "scripts/queue-pr.ts" ? "" : path === "scripts/ci-green.ts" ? "" : undefined)).scriptCopies();
+    expect(copies).toEqual([
+      { file: "scripts/queue-pr.ts", behind: undefined },
+      { file: "scripts/ci-green.ts", behind: undefined },
+    ]);
+  });
+
+  it("reads the closure from the running copy by default", () => {
+    let listed: string[] = [];
+    const spawn = ((_command: string, args: string[]) => ((listed = args.slice(args.indexOf("--") + 1)), { status: 0, stdout: "" })) as unknown as typeof spawnSync;
+    realSeam("/work", spawn).scriptCopies();
+    expect(listed).toEqual(expect.arrayContaining(["scripts/queue-pr.ts", "scripts/ci-green.ts", "scripts/verify-gate.ts", "scripts/reviewed-label.ts", "scripts/shared-files.ts", "scripts/merge-checks.ts", "scripts/git-files.ts"]));
   });
 });

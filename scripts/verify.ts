@@ -15,6 +15,7 @@ import { acquireLock, liveHolder, lockFile, releaseLock, type LockHolder, type P
 import { machineDir, machineLockFile, oldSlotsOf, removePlaces, waitForTurn } from "./verify-queue.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { verifyOverlap } from "./verify-overlap.ts";
+import { fullRunMessage, realReuseGit, reuseLine, reuseMessage, reuseSteps, testsOnlyReuse, type FileStep, type Reuse, type ReuseDecision } from "./verify-reuse.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
 import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
@@ -36,6 +37,8 @@ import { listWorktrees } from "./worktrees.ts";
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
 // waits its turn in the machine-wide verify line: one full verify runs on the machine at a time (RP-1197; was one per Main, RP-1096).
 // `--pr <n>` writes the stamped last line into PR n's body after a full, clean run, and refuses unless HEAD is the PR's head (RP-1171).
+// RP-1195 item 8: with `--pr`, when the branch's own commits since the body's stamped run change only covered test files,
+// it runs lint, typecheck, the whole unit project and only the changed seam files, and stamps a line saying so (verify-reuse.ts); `--full` runs everything.
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 // HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
@@ -177,9 +180,28 @@ for (const { name, reason } of selected.skipped) out.info(`skip ${name}: ${reaso
 // `--from` (RP-1019): the steps before it are left out, and the last line names them.
 const resumed = options.from === undefined ? selected : startFrom(selected, options.from);
 if ("error" in resumed) stopEarly(resumed.error);
-const { steps } = resumed;
+let { steps }: { steps: FileStep[] } = resumed;
 const from = "from" in resumed ? resumed.from : undefined;
 for (const name of from?.notRun ?? []) out.info(`skip ${name}: before --from ${from?.step}`);
+
+// Tests-only reuse (RP-1195 item 8): only with --pr and not --full; any doubt runs everything.
+let reuse: Reuse | undefined;
+if (options.pr !== undefined && prBody) {
+  let decision: ReuseDecision;
+  if (options.full) decision = { reuse: false, why: "--full asked for it" };
+  else {
+    try {
+      decision = testsOnlyReuse(prBody.body(options.pr), startedOn, realReuseGit(root));
+    } catch (error) {
+      decision = { reuse: false, why: `the PR body could not be read (${error instanceof Error ? error.message.split("\n")[0] : String(error)})` };
+    }
+  }
+  if (decision.reuse) {
+    reuse = decision;
+    steps = reuseSteps(decision);
+    out.info(reuseMessage(options.pr, decision));
+  } else out.info(fullRunMessage(options.pr, decision.why));
+}
 
 // The lane's stack first (RP-575, RP-1096): Docker answers, the db and rustfs containers run
 // healthy, and both answer. A stopped or jammed one otherwise showed only at test:seam1, after
@@ -284,7 +306,7 @@ function runPnpm(args: string[], onSpawn: (child: ReturnType<typeof spawn>) => v
 }
 
 const passed: string[] = [];
-for (const { name, script } of steps) {
+for (const { name, script, files } of steps) {
   const started = Date.now();
   out.info(`run  ${name} ...`);
   let exit = "";
@@ -304,13 +326,18 @@ for (const { name, script } of steps) {
     setTimer: (tick, ms) => setInterval(tick, ms),
     clearTimer: (timer) => clearInterval(timer as NodeJS.Timeout),
   });
+  // runStep's first call is the step's own run; a later one is a timed-out re-run naming its own files.
+  let firstRun = true;
   const outcome = await runStep(
     script,
     async (args) => {
       if (changedMidStep !== undefined) return { status: 1, output: "" };
-      const result = await runPnpm(args, (started) => (child = runningChild = started));
+      // A reuse run's seam step runs only its changed files (RP-1195 item 8).
+      const ran = files && firstRun ? [...args, ...files] : args;
+      firstRun = false;
+      const result = await runPnpm(ran, (started) => (child = runningChild = started));
       exit = String(result.exit);
-      out.stepOutput(["pnpm", ...args].join(" "), result.output);
+      out.stepOutput(["pnpm", ...ran].join(" "), result.output);
       return { status: result.status, output: result.output };
     },
     postgresAnswers,
@@ -346,7 +373,7 @@ const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
 if (overlaps) out.error(`\n${overlaps}`);
-const last = finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
+const last = reuse ? reuseLine({ sha, dirty: status !== "", reuse, passed }) : finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
 if (options.pr !== undefined && prBody) {
   // A full, clean run on the PR's head only (writeVerifyLine checks the stamp and the head again, the PR may have been pushed to meanwhile).
   const written = writeVerifyLine(options.pr, last, startedOn, prBody);

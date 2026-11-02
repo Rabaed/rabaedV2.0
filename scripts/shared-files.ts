@@ -1,7 +1,15 @@
 /* eslint-disable rabaed/no-avoid-terms -- package.json dependency fields, git's changed files and GitHub's merge queue, by their own names */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
+
+const isSymlink = (path: string) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
 import { isDoc } from "./reviewed-required.ts";
 import { fileAtVia } from "./git-files.ts";
 
@@ -46,16 +54,74 @@ function onlyDependencyFieldsChanged(before: string | undefined, after: string |
   }
 }
 
-/** A workspace package.json's text where the change starts and where it ends; undefined where it does not exist. */
+/** An added root script: exactly `node scripts/<file>.ts`, nothing after it, no subfolder, not a test or fixture. */
+const NEW_SCRIPT_COMMAND = /^node scripts\/([\w-]+(?:\.[\w-]+)*\.ts)$/;
+const isTestOrFixture = (file: string) => /\.(?:test|fixtures)\.ts$/.test(file);
+/** Lifecycle names that run on install, publish or version, not when asked (the `pre…`/`post…` ones are caught below). */
+const LIFECYCLE_NAMES = ["install", "uninstall", "publish", "version", "dependencies", "shrinkwrap"];
+/**
+ * A name that runs without being asked: a lifecycle name, pnpm's own hooks (`pnpm:devPreinstall` runs on every install),
+ * or any `pre…`/`post…` name (a later `<x>` would make it run around `<x>`). Those go in their own PR. This also
+ * catches plain names like `preview`, which fails closed.
+ */
+const isHookName = (name: string) => LIFECYCLE_NAMES.includes(name) || name.startsWith("pnpm:") || name.startsWith("pre") || name.startsWith("post");
+
+/**
+ * RP-1195 item 7: true when root package.json only adds `scripts` entries `node scripts/<file>` whose file this change
+ * adds (`isAdded`); every other field and every existing entry unchanged. Both versions must exist and parse (fails closed).
+ */
+function onlyNewScriptEntries(before: string | undefined, after: string | undefined, isAdded: (file: string) => boolean): boolean {
+  if (before === undefined || after === undefined) return false;
+  try {
+    const parse = (text: string) => {
+      const json: unknown = JSON.parse(text);
+      if (typeof json !== "object" || json === null || Array.isArray(json)) throw new Error("not an object");
+      const { scripts = {}, ...rest } = json as Record<string, unknown>;
+      if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) throw new Error("scripts not an object");
+      return { scripts: scripts as Record<string, unknown>, rest: JSON.stringify(rest) };
+    };
+    const [old, next] = [parse(before), parse(after)];
+    if (old.rest !== next.rest) return false;
+    if (Object.entries(old.scripts).some(([name, command]) => !Object.hasOwn(next.scripts, name) || next.scripts[name] !== command)) return false;
+    const added = Object.entries(next.scripts).filter(([name]) => !Object.hasOwn(old.scripts, name));
+    return (
+      added.length > 0 &&
+      added.every(([name, command]) => {
+        if (isHookName(name)) return false;
+        const file = typeof command === "string" ? NEW_SCRIPT_COMMAND.exec(command)?.[1] : undefined;
+        return file !== undefined && !isTestOrFixture(file) && isAdded(`scripts/${file}`);
+      })
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A changed file's text where the change starts and where it ends; undefined where it does not exist. Named for the
+ * package.json files it was first read for; item 7 also reads an added script through it.
+ */
 export type PackageJsonVersions = (file: string) => { before: string | undefined; after: string | undefined };
 
 /**
  * The lines that name a rule-3 breach in `files` (changed against the merge base with origin/main), and say
- * what to do; undefined when there is none. A workspace package.json that changes only dependency fields
- * belongs to a dependencies-only PR beside the lockfile (RP-573). Callers add their heading and next step.
+ * what to do; undefined when there is none. Two changes are not breaches: a workspace package.json that changes only
+ * dependency fields belongs to a dependencies-only PR beside the lockfile (RP-573), and a root package.json that only
+ * adds `node scripts/<file>.ts` entries for scripts this change adds rides with them (RP-1195 item 7). Callers add
+ * their heading and next step.
  */
 export function sharedFilesMix(files: string[], versions: PackageJsonVersions): string[] | undefined {
-  const breach = rootSharedFilesBreach(files, (file) => {
+  // An added script: absent where the change starts, present where it ends. A file renamed into scripts/ counts, since
+  // the lists are --no-renames. Its text must hold a newline: a git symlink's blob is its one-line target, which `node`
+  // would follow to code the change didn't add (the seams read blobs, not modes; a real script spans lines).
+  const isAdded = (file: string) => {
+    if (!files.includes(file)) return false;
+    const { before, after } = versions(file);
+    return before === undefined && after !== undefined && after.includes("\n");
+  };
+  const rootPackageJson = files.includes("package.json") ? versions("package.json") : undefined;
+  const exempt = rootPackageJson !== undefined && onlyNewScriptEntries(rootPackageJson.before, rootPackageJson.after, isAdded);
+  const breach = rootSharedFilesBreach(exempt ? files.filter((file) => file !== "package.json") : files, (file) => {
     if (!isWorkspacePackageJson(file)) return false;
     const { before, after } = versions(file);
     return onlyDependencyFieldsChanged(before, after);
@@ -68,7 +134,7 @@ export function sharedFilesMix(files: string[], versions: PackageJsonVersions): 
     ...(workspacePackageJson
       ? ["Note: a workspace package.json beside the lockfile is allowed when only its dependency fields (dependencies/devDependencies/peerDependencies/optionalDependencies) change."]
       : []),
-    `Fix: a change to root ${rootSharedList} is its own PR (only those and docs).`,
+    `Fix: a change to root ${rootSharedList} is its own PR (only those and docs), unless root package.json only adds \`node scripts/<file>.ts\` entries for scripts this PR adds.`,
     ...(workspacePackageJson || files.includes("pnpm-lock.yaml")
       ? [
           'For dependencies: open a dependencies-only PR first (the lockfile and the workspace package.json dependency fields), then build the feature PR on it (docs/agents/issue-tracker.md › "Ticket: workspace dependencies").',
@@ -97,6 +163,12 @@ export function branchMix(repo: string, commit?: string): string[] | undefined {
   const files = [...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))].filter((file) => !isWorkflow(file));
   // Undefined only where the path is not there; any other git failure throws (RP-1196).
   const show = fileAtVia(repo, spawnSync);
-  const onDisk = (file: string) => (existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : undefined);
+  // A symlink reads as its target, the way git stores it, never followed: so an added script that is a symlink fails
+  // item 7's exemption here too, as it does in `pnpm queue` and the hook (Main 6's Low on #637).
+  const onDisk = (file: string) => {
+    const path = join(repo, file);
+    if (!existsSync(path) && !isSymlink(path)) return undefined;
+    return isSymlink(path) ? readlinkSync(path) : readFileSync(path, "utf8");
+  };
   return sharedFilesMix(files, (file) => ({ before: show(base, file), after: commit ? show(commit, file) : onDisk(file) }));
 }

@@ -1,9 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { stopIfBehindOrigin } from "./behind-origin.ts";
+import { pnpmQueueComment } from "./queue-marker.ts";
 import { mergeTreeOid, realMergeChecksSeam, runMergeChecks, type MergeChecksResult } from "./merge-checks.ts";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
 import { cleanWalk, isMergeOfMain, realGit, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
-import { DOCS_ONLY_LABEL, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
+import { DOCS_ONLY_LABEL, gateScripts, REQUIRED_CHECK, reviewGate } from "./reviewed-required.ts";
 import { realStopInput, stopAfterEnqueue } from "./queue-stack-stop.ts";
 import { sharedFilesMix } from "./shared-files.ts";
 import { ciEvidenceOf, ciJobsPath, ciOwnChanges, ciRunFrom, ciRunningLine, ciRunsPath, ratchetGains, runsFrom, type CiEvidence, type CiRun } from "./ci-green.ts";
@@ -56,6 +59,10 @@ import { isAncestor } from "./worktrees.ts";
 // Once the PR is queued (RP-1170), it stops the lane's stack: the containers of the worktree on the PR's branch,
 // with `docker stop`, so its volumes stay (queue-stack-stop.ts says when it leaves one running). --keep-stack
 // skips that; a stop Docker refuses is a warning, never a failed queue.
+// RP-1195 item 6: it stops when this checkout is far behind origin/main (`stopIfBehindOrigin`, as lane:done does),
+// and warns when this checkout's queue-pr.ts or ci-green.ts is older than origin/main's. RP-1195 item 3: right before the
+// enqueue it comments `<!-- pnpm-queue: <head> -->` (scripts/queue-marker.ts), so a queue entry made by `pnpm queue`
+// can be told from one made with the PR page's button (both act as the same gh login); a failed enqueue takes it off.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -99,6 +106,12 @@ export interface QueueSeam extends ReviewedGit {
   labelWorkflowOnMain(): boolean;
   /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
   labelRuns(commit: string): { status: string; conclusion: string }[];
+  /** Posts the pnpm-queue marker comment for `head` on the PR (`gh api` POST) and returns the comment's id, RP-1195 item 3. */
+  markQueued(pr: number, head: string): number;
+  /** Takes the marker comment `id` off again after a failed enqueue (`gh api --method DELETE`), RP-1195 review. */
+  unmarkQueued(id: number): void;
+  /** For queue-pr.ts, ci-green.ts and every file they import, how many of origin/main's commits to it HEAD lacks (`git log HEAD..origin/main -- <file>`); undefined where git could not tell. */
+  scriptCopies(): ScriptCopy[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
   /** The PR's `state` and `isInMergeQueue` (GraphQL; `gh pr view` has no such field). */
@@ -113,6 +126,33 @@ export interface QueueSeam extends ReviewedGit {
   checkRuns(commit: string): CheckRun[];
   /** The latest commit status of each context on `commit` (`gh api repos/{owner}/{repo}/commits/<commit>/status`): a required check can be one. */
   commitStatuses(commit: string): CommitStatus[];
+}
+
+export interface ScriptCopy {
+  file: string;
+  /** origin/main's commits to the file that HEAD does not have; undefined when git could not tell. */
+  behind: number | undefined;
+}
+
+/**
+ * The scripts whose stale copy refused or passed what main's would not (RP-1195 item 6), and every file they import
+ * by relative import (RP-1195 follow-up): an older verify-gate.ts or git-files.ts changes the verdict the same way.
+ * The walk follows the running copy's imports, so a file only main's copy imports isn't listed; the importer that
+ * gained the import then shows as behind instead.
+ */
+const STALE_COPY_ENTRIES = ["scripts/queue-pr.ts", "scripts/ci-green.ts"];
+
+/**
+ * A warning for each script that is older than origin/main's: main has commits to it that this checkout lacks. A copy
+ * that only differs (a branch editing queue-pr.ts itself) is not older, so it gets none (RP-1195 review).
+ */
+export function staleCopyWarnings(copies: ScriptCopy[]): string[] {
+  return copies
+    .filter(({ behind }) => behind !== undefined && behind > 0)
+    .map(
+      ({ file, behind }) =>
+        `Warning: origin/main has ${behind} commit${behind === 1 ? "" : "s"} to ${file} that this checkout lacks, so this run's checks may not be main's (an older copy refuses or passes what main's would not). Run \`git merge origin/main\` in this checkout, or run \`pnpm queue\` from a fresh worktree of origin/main.`,
+    );
 }
 
 /** Why a `--wait` ended without queueing, when it is not one of the refusals. */
@@ -176,12 +216,33 @@ const headMoved = (pr: number, pinned: string, now: string | undefined) =>
   );
 
 function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: { id: string; head: string; warnings: string[] }): QueueResult {
+  // A fresh marker on every run, even for a head marked before (#639's review): the hand-action check counts a marker
+  // only when the PR has not left the queue since it, so a re-run after a drop needs its own.
+  const posted: number | undefined = seam.markQueued(pr, head);
+  // RP-1195 review: a failed enqueue takes its own marker off, so a later button press on this head still gets the
+  // hand-action comment. Returns what to add when that fails.
+  const unmark = (): string[] => {
+    if (posted === undefined) return [];
+    try {
+      seam.unmarkQueued(posted);
+      return [];
+    } catch (error) {
+      return [`It could not take its pnpm-queue marker comment (${posted}) off (${error instanceof Error ? error.message.split("\n")[0] : String(error)}): delete that comment by hand.`];
+    }
+  };
   try {
     const entry = seam.enqueue(id, head);
     return { ok: true, lines: [...warnings, `Queued PR #${pr} at ${head}: position ${entry.position}, state ${entry.state}.`] };
   } catch (error) {
-    if (error instanceof Error && HEAD_REFUSED.test(error.message)) return headMoved(pr, head, undefined);
-    if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) throw error;
+    if (error instanceof Error && HEAD_REFUSED.test(error.message)) {
+      const moved = headMoved(pr, head, undefined);
+      return { ...moved, lines: [...moved.lines, ...unmark()] };
+    }
+    if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) {
+      const left = unmark();
+      if (left.length > 0) throw new Error(`${error instanceof Error ? error.message : String(error)}\n${left.join("\n")}`, { cause: error });
+      throw error;
+    }
     return { ok: true, lines: [...warnings, `PR #${pr} is already in the merge queue (an earlier call queued it); treating it as queued.`] };
   }
 }
@@ -275,6 +336,7 @@ function uncleanMergeLine(pr: number, head: string, body: string, git: ReviewedG
 
 function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; waitForLabelRun?: boolean }, first: string[]): QueueResult | Prepared {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
+  first.push(...staleCopyWarnings(seam.scriptCopies()));
 
   // The checks run on the PR's own head, fetched from refs/pull/<n>/head, so any checkout can queue any PR.
   const pull = seam.pullRequest(pr);
@@ -628,8 +690,20 @@ export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sle
 
 const mutation = "mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }";
 
-/** The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. */
-export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): QueueSeam {
+/** A file of the running copy's checkout, by its repo path; undefined when it is not there. */
+function runningCopyFile(path: string): string | undefined {
+  try {
+    return readFileSync(join(import.meta.dirname, "..", path), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. `read` gives a repo file's
+ * text for the stale-copy check's import walk (default: the running copy's).
+ */
+export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync, read: (path: string) => string | undefined = runningCopyFile): QueueSeam {
   const run = (command: string, args: string[]) => {
     const done = spawn(command, args, { cwd, encoding: "utf8" });
     return { status: done.status ?? 128, output: `${done.stdout ?? ""}${done.stderr ?? ""}`, stdout: done.stdout ?? "", stderr: done.stderr ?? "" };
@@ -710,6 +784,19 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .split("\n")
         .filter((line) => line.trim() !== "")
         .map((line) => JSON.parse(line) as CommitStatus),
+    markQueued: (pr, head) => {
+      const done = spawn("gh", ["api", "--method", "POST", `repos/{owner}/{repo}/issues/${pr}/comments`, "--input", "-"], { cwd, encoding: "utf8", input: JSON.stringify({ body: pnpmQueueComment(head) }) });
+      if ((done.status ?? 128) !== 0) throw new Error(`gh api POST issues/${pr}/comments failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
+      return (JSON.parse(done.stdout ?? "") as { id: number }).id;
+    },
+    unmarkQueued: (id) => void must("gh", ["api", "--method", "DELETE", `repos/{owner}/{repo}/issues/comments/${id}`]),
+    // One `git log` for the whole closure (two dozen files): --name-only lists each file once per commit that touches it.
+    scriptCopies: () => {
+      const files = gateScripts(read, STALE_COPY_ENTRIES);
+      const done = run("git", ["log", "--format=", "--name-only", "HEAD..origin/main", "--", ...files]);
+      const touched = done.stdout.split("\n").map((line) => line.trim());
+      return files.map((file) => ({ file, behind: done.status === 0 ? touched.filter((line) => line === file).length : undefined }));
+    },
     enqueue: (id, head) => {
       const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
       return answer.enqueuePullRequest.mergeQueueEntry;
@@ -730,6 +817,8 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("Usage: pnpm queue <pr number> [--wait] [--no-review] [--keep-stack]");
     process.exit(2);
   }
+  // RP-1195 item 6: a checkout far behind origin/main runs old checks; the helper lane:done and lanes:prune use.
+  stopIfBehindOrigin("pnpm queue");
   try {
     const seam = realSeam();
     const started = new Date();

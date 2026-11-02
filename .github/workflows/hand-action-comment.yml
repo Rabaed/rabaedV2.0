@@ -1,0 +1,36 @@
+name: Hand action comment
+# Comments on a PR when a person does by hand what `pnpm queue` does (RP-1195 item 3): adds the
+# `reviewed` label, turns GitHub auto-merge on, or puts the PR in the merge queue without `pnpm queue`'s
+# marker comment for its head. Since RP-1167 the first two fail Reviewed required, and the PR's checks
+# going red says only that; the comment names who did it and how to undo it, and wakes the session's
+# Auto-fix. The logic is in scripts/hand-action-comment.ts, one comment per action (a re-run finds it).
+# reviewed-add adds `reviewed` with GITHUB_TOKEN, which starts no run here; the script skips bots anyway.
+# Not a required check: it judges nothing and must never be added to the main ruleset.
+# pull_request_target: GitHub runs main's copy of this file, so a PR cannot drop its own warning. Nothing of
+# the PR is checked out or run here: the job checks out the default branch and reads the PR's comments and
+# queue events through the API; its one write is that comment.
+on:
+  pull_request_target:
+    types: [labeled, auto_merge_enabled, enqueued]
+permissions: {}
+jobs:
+  comment:
+    # A fork's PR is never queued by `pnpm queue`; the script skips it too.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Comment on a hand action
+        if: hashFiles('scripts/hand-action-comment.ts') != ''
+        run: node scripts/hand-action-comment.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
