@@ -63,6 +63,9 @@ import { isAncestor } from "./worktrees.ts";
 // and warns when this checkout's queue-pr.ts or ci-green.ts is older than origin/main's. RP-1195 item 3: right before the
 // enqueue it comments `<!-- pnpm-queue: <head> -->` (scripts/queue-marker.ts), so a queue entry made by `pnpm queue`
 // can be told from one made with the PR page's button (both act as the same gh login); a failed enqueue takes it off.
+// RP-1191: before the merge checks it prints the open-PR overlap warning (other open PRs that change the same files,
+// which would conflict, the merge order; scripts/pr-overlap.ts) for the PR's head. A warning only: it never refuses,
+// says so when GitHub can't be reached, and prints nothing when no other open PR shares a file.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -106,6 +109,8 @@ export interface QueueSeam extends ReviewedGit {
   labelWorkflowOnMain(): boolean;
   /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
   labelRuns(commit: string): { status: string; conclusion: string }[];
+  /** The open-PR overlap warning for the PR's `head` (scripts/pr-overlap.ts, RP-1191): "" when no other open PR shares a file. Never throws or refuses. */
+  overlaps(head: string): string;
   /** Posts the pnpm-queue marker comment for `head` on the PR (`gh api` POST) and returns the comment's id, RP-1195 item 3. */
   markQueued(pr: number, head: string): number;
   /** Takes the marker comment `id` off again after a failed enqueue (`gh api --method DELETE`), RP-1195 review. */
@@ -298,6 +303,15 @@ function readOrRefuse<T>(pr: number, head: string, read: () => T): { ok: true; v
   }
 }
 
+/** The seam's overlap warning, or one line saying it did not look: this never refuses (RP-1191). */
+function overlapLine(seam: QueueSeam, head: string): string {
+  try {
+    return seam.overlaps(head);
+  } catch (error) {
+    return `Warning: pnpm queue could not look for open PRs that change the same files (${errorText(error)}); it did not check for overlaps.`;
+  }
+}
+
 /** The ruleset's required checks and the head's CI runs, any gh error as evidence the gate refuses. */
 const ciEvidence = (seam: QueueSeam, head: string) => ciEvidenceOf(() => ({ required: seam.requiredChecks(), runs: seam.ciRuns(head) }));
 
@@ -457,8 +471,13 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
 
   // Main's newest checks on the merge of the PR and main (RP-1171): the queue runs them on that merge, and PR #496
   // dropped from it on checks that landed on main while it was queued.
-  // Extension point (RP-1172): the open-PR overlap finder (scripts/check-claims.ts) can be called here, to push a
-  // warning on `warnings`; it must not refuse.
+  // Open PRs that change this PR's files (RP-1191, RP-1172): a warning only, before the slow part and before the
+  // enqueue posts its marker, so a conflict with a PR ahead shows before the lane loses time.
+  const overlaps = overlapLine(seam, head);
+  if (overlaps) {
+    first.push(overlaps);
+    warnings.push(overlaps);
+  }
   let onMerge: MergeChecksResult;
   try {
     onMerge = seam.mergeChecks(merge.output, head);
@@ -688,6 +707,9 @@ export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sle
   }
 }
 
+/** Longest the overlap look may take (GitHub, and one `git fetch` per overlapping PR) before `pnpm queue` goes on without it. */
+const OVERLAP_LOOK_MS = 60_000;
+
 const mutation = "mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }";
 
 /** A file of the running copy's checkout, by its repo path; undefined when it is not there. */
@@ -784,6 +806,14 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .split("\n")
         .filter((line) => line.trim() !== "")
         .map((line) => JSON.parse(line) as CommitStatus),
+    overlaps: (head) => {
+      const done = spawn(process.execPath, [join(import.meta.dirname, "queue-overlap.ts"), head], { cwd, encoding: "utf8", timeout: OVERLAP_LOOK_MS });
+      if (done.error || done.status !== 0) {
+        const reason = done.error ? done.error.message : done.status === null ? `ended by ${done.signal ?? "a signal"}` : `exit ${done.status}: ${(done.stderr ?? "").trim().split("\n")[0] ?? ""}`;
+        return `Warning: pnpm queue could not look for open PRs that change the same files (${reason}); it did not check for overlaps.`;
+      }
+      return (done.stdout ?? "").trim();
+    },
     markQueued: (pr, head) => {
       const done = spawn("gh", ["api", "--method", "POST", `repos/{owner}/{repo}/issues/${pr}/comments`, "--input", "-"], { cwd, encoding: "utf8", input: JSON.stringify({ body: pnpmQueueComment(head) }) });
       if ((done.status ?? 128) !== 0) throw new Error(`gh api POST issues/${pr}/comments failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);

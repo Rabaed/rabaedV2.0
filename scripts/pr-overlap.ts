@@ -157,28 +157,32 @@ async function git(run: Exec, repo: string, ...args: string[]): Promise<string> 
  * path too. HEAD, not the working tree: it is the commit `git merge-tree` merges, so an uncommitted file
  * can't look shared and then merge clean. origin/main is as last fetched: an old one lists main's own
  * changes as the branch's (`git fetch origin main` first). Throws when git fails.
+ *
+ * With `at` (a commit), the branch is that commit instead of HEAD (`pnpm queue` looks at a PR's head whatever is
+ * checked out): its `branch` is "" then, so the branch's own PR is found by its head.
  */
-export async function branchFiles(repo: string, run: Exec = exec): Promise<BranchFiles> {
-  const branch = (await git(run, repo, "rev-parse", "--abbrev-ref", "HEAD")).trim();
-  const head = (await git(run, repo, "rev-parse", "HEAD")).trim();
-  const base = (await git(run, repo, "merge-base", "origin/main", "HEAD")).trim();
-  const files = (await git(run, repo, "diff", "--name-only", "--no-renames", base, "HEAD")).split(/\r?\n/).filter(Boolean);
+export async function branchFiles(repo: string, run: Exec = exec, at?: string): Promise<BranchFiles> {
+  const branch = at === undefined ? (await git(run, repo, "rev-parse", "--abbrev-ref", "HEAD")).trim() : "";
+  const target = at ?? "HEAD";
+  const head = (await git(run, repo, "rev-parse", target)).trim();
+  const base = (await git(run, repo, "merge-base", "origin/main", target)).trim();
+  const files = (await git(run, repo, "diff", "--name-only", "--no-renames", base, target)).split(/\r?\n/).filter(Boolean);
   return { branch, head, files: [...new Set(files)].sort() };
 }
 
-/** The files that would conflict merging `commit` into HEAD of `repo`. Throws when git can't say. */
-export async function gitConflicts(repo: string, commit: string, run: Exec = exec): Promise<string[]> {
-  const merge = await run("git", ["-c", "core.quotePath=false", "merge-tree", "--write-tree", "--name-only", "HEAD", commit], repo);
+/** The files that would conflict merging `commit` into `into` (HEAD by default) of `repo`. Throws when git can't say. */
+export async function gitConflicts(repo: string, commit: string, run: Exec = exec, into = "HEAD"): Promise<string[]> {
+  const merge = await run("git", ["-c", "core.quotePath=false", "merge-tree", "--write-tree", "--name-only", into, commit], repo);
   return parseMergeTree(merge.code, merge.stdout);
 }
 
 /**
- * The overlap warning for the branch checked out in `repo` against GitHub's open PRs: "" when there is none,
- * and one line saying it could not look when GitHub or git can't answer. It never throws and never refuses.
+ * The overlap warning for the branch checked out in `repo` (or the commit `at`) against GitHub's open PRs: "" when
+ * there is none, and one line saying it could not look when GitHub or git can't answer. It never throws and never refuses.
  */
-export async function overlapWarning(repo: string, seam: OverlapSeam = ghSeam(repo)): Promise<string> {
+export async function overlapWarning(repo: string, seam?: OverlapSeam, at?: string): Promise<string> {
   try {
-    return overlapMessage(await findOverlaps(await branchFiles(repo), seam));
+    return overlapMessage(await findOverlaps(await branchFiles(repo, exec, at), seam ?? ghSeam(repo, exec, at)));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return `Warning: check:claims could not look for open PRs that change the same files (${reason}); it did not check for overlaps.`;
@@ -217,7 +221,7 @@ const FILES_JQ = ".[] | (.filename, (.previous_filename // empty))";
  * tree and the branches, but `conflictsWith` fetches a PR's head into the object store (`git fetch origin
  * pull/N/head`) and `git merge-tree` writes the merged trees there.
  */
-export function ghSeam(repo: string, run: Exec = exec): OverlapSeam {
+export function ghSeam(repo: string, run: Exec = exec, at?: string): OverlapSeam {
   const gh = async (path: string, jq: string) => {
     const done = await run("gh", ["api", path, "--paginate", "--jq", jq], repo);
     if (done.code !== 0) throw new Error(`gh api ${path} failed (exit ${done.code})`);
@@ -246,7 +250,7 @@ export function ghSeam(repo: string, run: Exec = exec): OverlapSeam {
         const fetched = await run("git", ["fetch", "--quiet", "origin", `pull/${pr.number}/head`], repo);
         if (fetched.code !== 0) throw new Error(`git fetch origin pull/${pr.number}/head failed (exit ${fetched.code})`);
       }
-      return gitConflicts(repo, pr.head, run);
+      return gitConflicts(repo, pr.head, run, at);
     },
   };
 }
