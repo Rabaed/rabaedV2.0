@@ -11,7 +11,7 @@ In Rabaed every submittal, inspection, snag and report is a **Work Item** of a *
 
 A Workflow is a diagram:
 - **Steps** are the boxes: a point where the item waits for someone, e.g. "Contractor Engineer", "Contractor PM review", "Consultant Engineer review", "Consultant Manager decision".
-- **Stages** group Steps and are the Kanban columns: Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected, Cancelled.
+- **Stages** group Steps and are the Kanban columns, in this order: Draft, Internal Review, Revise & Resubmit, Pending Approval, Approved, Rejected, Cancelled. The Draft column shows only to a Member who may raise a Type of the Module (a Contractor's raisers, never a Consultant), with their own Participant's Drafts, by Subject.
 - **Transitions** are the arrows. Each one is a button the user presses, with a label such as "Send for Review", "Return", "Submit", "Approve – Code A", "Approve with Comments – Code B", "Revise & Resubmit – Code C", "Reject – Code D".
 
 Each Transition has:

@@ -253,7 +253,7 @@ What the author writes when publishing a Workflow Version: what changed and why.
 _Avoid_: release note, changelog
 
 **Stage**:
-A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them; a Stage can hold several Steps, such as Internal Review's Contractor Engineer and Contractor PM. Stages are the Kanban columns. A Participant sees its own Steps inside a Stage, with their counts; other Participants see the Stage only.
+A named phase that shows where a Work Item is overall. The Submittals' Rabaed Defaults, in their order: Draft, Internal Review, Revise & Resubmit, Pending Approval, Approved, Rejected, Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them; a Stage can hold several Steps, such as Internal Review's Contractor Engineer and Contractor PM. Stages are the Kanban columns, in their order. The Draft column, first, is shown only to a Member who may raise a Work Item Type of that Module on the Project, and holds only their own Participant's Drafts, by Subject; anyone else, such as a Consultant, has no Draft column. A Participant sees its own Steps inside a Stage, with their counts; other Participants see the Stage only.
 _Avoid_: Status, state, phase
 
 **Step**:

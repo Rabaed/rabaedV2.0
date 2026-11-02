@@ -26,6 +26,10 @@ let c2Draft = "";
 const kanban = async (by: Caller): Promise<WorkItemBoard> => (await ok(by.get(`/v1/projects/${at.projectId}/work-items/kanban`), 200)).json();
 const draftColumn = (board: WorkItemBoard) => board.columns.find((c) => c.stageKey === "draft");
 const draftCards = (board: WorkItemBoard) => (draftColumn(board)?.lanes ?? []).flatMap((l) => l.cards);
+/** The Draft column `by` reads on the Kanban, by its Stage key: empty or not. */
+const draftColumns = async (by: Caller) => (draftColumn(await kanban(by)) ? [{ id: "draft" }] : []);
+/** The Draft-category Stages the Kanban gives `by` (its Stage field reads them), by key. */
+const draftStages = async (by: Caller) => (await kanban(by)).stages.filter((s) => s.category === "draft").map((s) => ({ id: s.key }));
 /** The Drafts `by` reads in the Kanban's Draft column. */
 const inDraftColumn = async (by: Caller) => draftCards(await kanban(by)).map((c) => ({ id: c.id }));
 
@@ -62,12 +66,11 @@ describe("scenario RP-1219-1: the Kanban's Draft column, C1 and C2 raising Draft
   });
 
   it("gives K1, who may raise no Submittal, no Draft column and no Draft Stage, not even an empty one", async () => {
-    for (const by of [k1Engineer, at.k1Manager]) {
-      const board = await kanban(by);
-      expect(board.mayRaise, named(by)).toBe(false);
-      expect(draftColumn(board), named(by)).toBeUndefined();
-      expect(board.stages.map((s) => s.category), named(by)).not.toContain("draft");
-    }
+    for (const by of [k1Engineer, at.k1Manager]) expect((await kanban(by)).mayRaise, named(by)).toBe(false);
+    const k1 = [k1Engineer, at.k1Manager];
+    // C1's engineer reads both first, the positive control.
+    await expectHiddenFrom({ read: draftColumns, target: "draft", seenBy: [at.c1Engineer], hiddenFrom: k1, name: named, label: "the Draft column" });
+    await expectHiddenFrom({ read: draftStages, target: "draft", seenBy: [at.c1Engineer], hiddenFrom: k1, name: named, label: "the Draft Stage" });
   });
 
   it("holds only the viewer's own Participant's Drafts: C1's to C1, C2's to C2, never another Contractor's", async () => {
