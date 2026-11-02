@@ -52,7 +52,7 @@ export const stampLine = (line: string): string => `${line} Stamp ${stampOf(line
  * the body's line or be followed by markdown (a code span, bold, a table cell), never by more words.
  * Exported for verify-reuse.ts (RP-1195 review); global, so read it with `matchAll`, which copies it.
  */
-export const LINE =/pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?\.)(?: Stamp ([0-9a-f]{16})\.)?(?=\W|$)/g;
+export const LINE = /pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?\.)(?: Stamp ([0-9a-f]{16})\.)?(?=\W|$)/g;
 
 function readLines(body: string): { commit: string; stamped: boolean }[] {
   return [...body.matchAll(LINE)].map(([, commit = "", steps = "", stamp]) => ({ commit, stamped: stamp !== undefined && stamp === stampOf(`pnpm verify passed on ${commit}: ${steps}`) }));
