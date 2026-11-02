@@ -32,9 +32,12 @@ export const createdWorkItem = z.object({ id: z.uuid() });
 /**
  * The Types of a Module (the Submittals') the viewer's Participant may raise on a
  * Project: each is bound to a published Workflow for it, whose Draft Step their
- * base role holds. The New item's Type picker lists them, the MAR first (RP-590).
+ * base role holds. The New item's Type picker lists them, the MAR first (RP-590), each
+ * with its one-line description, null when the Type has none (RP-1152).
  */
-export const raisableTypes = z.object({ types: z.array(z.object({ code: workItemTypeCode, name: bilingualText })) });
+export const raisableTypes = z.object({
+  types: z.array(z.object({ code: workItemTypeCode, name: bilingualText, description: bilingualText.nullable() })),
+});
 export type RaisableTypes = z.infer<typeof raisableTypes>;
 
 /** The Submittals' Rabaed Default Types, in the Type picker's order (RP-590): the MAR, the SAR, the DAR. */

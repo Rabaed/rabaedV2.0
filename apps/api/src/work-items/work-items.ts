@@ -441,13 +441,13 @@ export function getRaisableTypes(db: Db, memberId: string, projectId: string, mo
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
-    const { rows } = await sql<{ code: string; name: BilingualText }>`
-      select t.code, t.name
+    const { rows } = await sql<{ code: string; name: BilingualText; description: BilingualText | null }>`
+      select t.code, t.name, t.description
       from app.raisable_type_ids(${projectId}::uuid, ${module}) r
       join work_item_type t on t.id = r.work_item_type_id
       order by array_position(${[...submittalTypeCodes]}::text[], t.code::text), t.code
     `.execute(trx);
-    return { types: rows.map((r) => ({ code: r.code, name: r.name })) };
+    return { types: rows.map((r) => ({ code: r.code, name: r.name, description: r.description })) };
   });
 }
 

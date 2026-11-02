@@ -569,6 +569,8 @@ export interface WorkItemTypeTable {
   module_key: ModuleKey;
   code: string;
   name: ColumnType<Bilingual, string, string>;
+  /** RP-1152: a one-line description for the New item's Type card; null when it has none. */
+  description: ColumnType<Bilingual | null, string | null | undefined, string | null>;
   workflow_definition_id: string;
   /** Which Rabaed Default outcome set it starts with; its outcomes are then its own (`outcome`, RP-429). */
   outcome_kind: "review_code" | "inspection_result" | "approval" | "none";
