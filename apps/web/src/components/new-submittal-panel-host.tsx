@@ -570,7 +570,9 @@ function DraftSubmittalPanel({
   const close = () => (created === null && typed ? setDiscarding(true) : onClose());
 
   async function create() {
-    const answers = formVisibility(schema, state.answers).answers;
+    // The answers as sent: once created, they are saved, so autosave sends only what is typed after.
+    const sent = state.answers;
+    const answers = formVisibility(schema, sent).answers;
     const missing: FieldError[] = tradeKey !== undefined && isUnanswered(answers[tradeKey]) ? [{ key: tradeKey, code: "required" }] : [];
     setSubjectMissing(subject.trim() === "");
     // A Draft needs a Subject and a Trade (row 26): they are marked, not refused.
@@ -598,6 +600,9 @@ function DraftSubmittalPanel({
         router.refresh();
         onSaved?.(id, answers);
         if (afterSave === "clear") return onCleared(afterSaveAnswers(answers, { mode: "clear", keep }));
+        // Without this, the typing before the create left the Form "unsaved", and autosave re-sent every
+        // answer moments later, over an edit made meanwhile elsewhere (RP-1221, UAT J9).
+        state.markSaved(sent);
         onCreated({ id, at: new Date().toISOString() });
         // The URL holds the new Draft, so a reload or Esc keeps it (row 38).
         onDraftSaved(id);

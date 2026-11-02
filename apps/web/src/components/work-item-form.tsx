@@ -93,6 +93,11 @@ type WorkItemFormState = {
   change(changes: Readonly<Record<string, FormValue | undefined>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
   save(auto?: boolean): Promise<boolean>;
+  /**
+   * The answers `sent` (the `answers` object as it was) were saved elsewhere, such as the New item
+   * panel's create (RP-1221): nothing is unsaved unless typed since, so autosave never re-sends them.
+   */
+  markSaved(sent: Readonly<Record<string, unknown>>): void;
   /** Shows the API's per-field errors on the Form. */
   showErrors(errors: readonly FieldError[], message: string): void;
 };
@@ -272,6 +277,11 @@ export function WorkItemFormProvider({
     return false;
   }
 
+  function markSaved(sent: Readonly<Record<string, unknown>>) {
+    // Typed while it was being saved? Then that is still unsaved; the next save carries it.
+    setDirty(answersRef.current !== sent);
+  }
+
   // Autosave: a few seconds after the last change, in the first Draft only.
   const saveRef = useRef(save);
   saveRef.current = save;
@@ -313,6 +323,7 @@ export function WorkItemFormProvider({
         message,
         change,
         save,
+        markSaved,
         showErrors,
       }}
     >
