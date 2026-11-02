@@ -130,8 +130,12 @@ export type ChecklistTemplateFieldProps = {
   labels: ChecklistTemplateFieldLabels;
   name?: string;
   onChange?: (versionId: string | undefined) => void;
-  /** How the pick shows in edit mode: a select (default), or radio cards with their preview (RP-655, the WIR request). */
-  look?: "select" | "cards";
+  /**
+   * How the pick shows in edit mode: a select (default); radio cards with their preview on a phone only (RP-655, the WIR
+   * request, whose page shows it beside the Form); or radio cards with their preview under them at every width (RP-1221, the
+   * New item panel, which has no column beside the Form).
+   */
+  look?: "select" | "cards" | "cards-preview";
   /** The Trade's name, which the cards' line names. */
   tradeName?: string;
 };
@@ -214,7 +218,7 @@ export function ChecklistTemplatePreview({ choice, locale, labels: text }: { cho
  * The pick as radio cards (RP-655, the WIR request): one card per active template of the Trade,
  * with its Version and count, the line naming the Trade and how many other Trades' are hidden, and
  * when the pick locks. On a phone the picked one's preview follows, which Hide items folds; a wide
- * screen leaves it to the page, which shows it beside the Form.
+ * screen leaves it to the page, which shows it beside the Form, unless `previewAlways` (the New item panel).
  */
 function TemplateCards({
   value,
@@ -226,7 +230,8 @@ function TemplateCards({
   labels: text,
   name,
   onChange,
-}: Omit<ChecklistTemplateFieldProps, "mode" | "look">) {
+  previewAlways = false,
+}: Omit<ChecklistTemplateFieldProps, "mode" | "look"> & { previewAlways?: boolean }) {
   const [itemsShown, setItemsShown] = useState(true);
   const current = typeof value === "string" ? value : "";
   const options = templateOptions(value, tradeId, choices, locale, text);
@@ -276,7 +281,7 @@ function TemplateCards({
         {text.locked}
       </p>
       {picked && (
-        <div className="flex flex-col gap-3 lg:hidden">
+        <div className={cn("flex flex-col gap-3", !previewAlways && "lg:hidden")}>
           <button
             type="button"
             aria-expanded={itemsShown}
@@ -327,8 +332,21 @@ export function ChecklistTemplateField({ value, tradeId, choices, required, mode
 
   const options = templateOptions(value, tradeId, choices, locale, text);
   if (options.length === 0) return <p className="text-body text-muted">{tradeId === "" ? text.chooseTradeFirst : text.noneForTrade}</p>;
-  if (look === "cards") {
-    return <TemplateCards value={value} tradeId={tradeId} tradeName={tradeName} choices={choices} required={required} locale={locale} labels={text} name={name} onChange={onChange} />;
+  if (look !== "select") {
+    return (
+      <TemplateCards
+        value={value}
+        tradeId={tradeId}
+        tradeName={tradeName}
+        choices={choices}
+        required={required}
+        locale={locale}
+        labels={text}
+        name={name}
+        onChange={onChange}
+        previewAlways={look === "cards-preview"}
+      />
+    );
   }
   return (
     <Select

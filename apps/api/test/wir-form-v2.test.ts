@@ -163,15 +163,18 @@ describe("the WIR Form Version 2 (`pnpm defaults:publish`)", () => {
         .filter((s) => s.key !== "references")
         .map((s) => ({ ...s, fields: s.fields.filter((f) => f.key !== "requested_for") })),
     };
-    expect(latest.sections.map((s) => s.key)).toEqual(["inspection", "documents", "references", "classification", "checklist"]);
-    expect(latest.sections[0]!.fields.map((f) => f.key)).toEqual(["description", "specification_section", "requested_for"]);
-    expect(latest.sections[0]!.fields[2]).toMatchObject({ type: "datetime", required: true, label: { en: "Requested for" } });
-    expect(latest.sections[2]!.fields).toEqual([
+    // Version 4 (RP-1221) put Classification first; this document is the latest.
+    expect(latest.sections.map((s) => s.key)).toEqual(["classification", "inspection", "documents", "references", "checklist"]);
+    const section = (key: string) => latest.sections.find((s) => s.key === key)!;
+    expect(section("inspection").fields.map((f) => f.key)).toEqual(["description", "specification_section", "requested_for"]);
+    expect(section("inspection").fields[2]).toMatchObject({ type: "datetime", required: true, label: { en: "Requested for" } });
+    expect(section("references").fields).toEqual([
       expect.objectContaining({ key: "approved_submittals", type: "work_item_ref", required: false, accepts: { modules: ["submittals"], outcomes: ["A", "B"] } }),
     ]);
-    expect(v1.sections.flatMap((s) => s.fields.map((f) => f.key))).toEqual([
-      "description", "specification_section", "attachments", "photos", "trade", "location", "scopes",
-    ]);
+    // Its fields; their order is Version 4's here, which the publish checks don't judge.
+    expect(new Set(v1.sections.flatMap((s) => s.fields.map((f) => f.key)))).toEqual(
+      new Set(["description", "specification_section", "attachments", "photos", "trade", "location", "scopes"]),
+    );
     const types = new Map([
       ["MAR", new Set(["A", "B", "C", "D"])],
       ["WIR", new Set(["passed", "passed_with_comments", "failed"])],
