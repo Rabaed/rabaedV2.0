@@ -5,7 +5,7 @@
 // (V20): the read names no Company and no Member, and a Member who may not raise the Type, or
 // isn't on the Project, gets the 404 that names nothing.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { newItemRoutePreview, type NewItemRoutePreview } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -93,23 +93,42 @@ describe("the route preview of a new item", () => {
 });
 
 describe("scenario RP-1152-1: the route preview names no Company and no Member", () => {
+  type Viewer = { by: () => Caller; project: () => string; name: string };
+  const as = (name: string, by: () => Caller, project = () => projectId): Viewer => ({ by, project, name });
+  /** The Types of `type` whose preview `viewer` reads: [type] when it is read, [] when it is the 404 that names nothing. */
+  const previewRead = (type: string) => async (viewer: Viewer) => {
+    const res = await preview(viewer.by(), type, viewer.project());
+    if (res.statusCode === 200) return [{ id: type }];
+    await expectHidden(res, viewer.name); // not hidden-from: the 404's body, inside the read expectHiddenFrom proves
+    return [];
+  };
+
   it("gives the raiser the Steps, their roles and the Draft Step's setting, and no name or id of anyone", async () => {
     const body = (await ok(preview(hafiz, "MAR"), 200)).body;
+    expect(newItemRoutePreview.parse(JSON.parse(body)).definition.steps.length).toBeGreaterThan(0);
     // Every Company here, C1 and K1, has the harness's legal name, and its Authorized Person the harness's name.
-    for (const name of ["Test Constructions", "إنشاءات الاختبار", "Test Person", "شخص الاختبار", ...names]) expect(body).not.toContain(name);
-    expect(body).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    for (const name of ["Test Constructions", "إنشاءات الاختبار", "Test Person", "شخص الاختبار", ...names]) expect(body).not.toContain(name); // not hidden-from: the preview read just above, with its Steps
+    expect(body).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i); // not hidden-from: the same preview, holding no id
   });
 
-  it("is the 404 that names nothing for a Member who may not raise the Type: a Consultant, a Type raised only from an item, a Type that isn't one", async () => {
-    await expectHidden(preview(k1Engineer, "MAR"));
-    await expectHidden(preview(hafiz, "CMT"));
-    await expectHidden(preview(hafiz, "NOPE"));
-    await expectHidden(preview(hafiz, "not a code"));
+  it("is the 404 that names nothing for a Member who may not raise the Type, and off the Member's Projects", async () => {
+    await expectHiddenFrom({
+      read: previewRead("MAR"),
+      target: "MAR",
+      seenBy: as("Hafiz, C1's engineer", () => hafiz),
+      hiddenFrom: [
+        as("K1's engineer, who holds no Draft", () => k1Engineer),
+        as("a C1 Member off the Project", () => outsider),
+        as("Hafiz on C1's other Project", () => hafiz, () => otherProjectId),
+        as("Hafiz on a Project id that is no id", () => hafiz, () => "not-a-uuid"),
+      ],
+      name: (v: Viewer) => v.name,
+      label: "the MAR's route preview",
+    });
   });
 
-  it("is the same 404 off the Member's Projects", async () => {
-    await expectHidden(preview(outsider, "MAR"));
-    await expectHidden(preview(hafiz, "MAR", otherProjectId));
-    await expectHidden(preview(hafiz, "MAR", "not-a-uuid"));
+  it("is the same 404 for a Type raised only from an item, and for a code that is no Type", async () => {
+    // Nobody raises these directly, so no viewer reads them first: the MAR's read above is the proof.
+    for (const type of ["CMT", "NOPE", "not a code"]) await expectHidden(preview(hafiz, type), type); // not hidden-from: no viewer reads a preview of these Types
   });
 });

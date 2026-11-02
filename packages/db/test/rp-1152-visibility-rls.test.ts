@@ -91,6 +91,6 @@ describe("scenario RP-1152-1: the route preview names no Company and no Member",
     const read = JSON.stringify(steps.map((s) => s.row));
     const ids = [tower.c1, tower.k1, tower.c2].flatMap((c) => [c.id, c.ap, ...Object.values(c.members)]);
     const { rows: participants } = await migrator.query("select id from participant where project_id = $1", [tower.projectId]);
-    for (const id of [...ids, ...participants.map((p: { id: string }) => p.id)]) expect(read).not.toContain(id);
+    for (const id of [...ids, ...participants.map((p: { id: string }) => p.id)]) expect(read).not.toContain(id); // not hidden-from: the Steps Hafiz just read, his Draft Step among them
   });
 });
