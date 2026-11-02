@@ -4,7 +4,7 @@ import type { Db } from "@rabaed/db";
 import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, type StartedDocumentUpload, type VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { browser, DEMO_EMAIL_SUFFIX, demoEmail, SAMPLE_PHOTO_JPEG, type Call } from "./demo-api.ts";
+import { browser, demoEmail, SAMPLE_PHOTO_JPEG, type Call } from "./demo-api.ts";
 import type { DemoMailbox } from "./mailbox.ts";
 import { demoPdf } from "./demo-pdf.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
@@ -59,8 +59,6 @@ export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 const bi = (en: string, ar: string): BilingualText => ({ en, ar });
 const all: VisibilityGrant = { isAll: true, valueIds: [] };
 const only = (...valueIds: string[]): VisibilityGrant => ({ isAll: false, valueIds });
-export { DEMO_EMAIL_SUFFIX };
-const email = demoEmail;
 
 interface Person {
   key: string;
@@ -190,7 +188,7 @@ export async function seedDemo(
         legalName,
         crNumber,
         vatNumber: `3999900000000${n}3`,
-        authorizedPerson: { email: email(ap.local, domain), fullName: ap.name, locale: ap.locale ?? "en" },
+        authorizedPerson: { email: demoEmail(ap.local, domain), fullName: ap.name, locale: ap.locale ?? "en" },
         reason: `Demo seed: onboarding ${legalName.en} for the Riyadh Gate Tower – Phase 2 walkthrough`,
       },
       new Date(),
@@ -201,7 +199,7 @@ export async function seedDemo(
     await caller("POST", "/v1/invitations/accept", { token: r.invitation.token, password });
     await sign(caller, r.authorizedPersonId);
     await brand(caller, r.companyId, r.authorizedPersonId);
-    people.push({ key: ap.key, email: email(ap.local, domain), name: ap.name, company: legalName.en, label: ap.label });
+    people.push({ key: ap.key, email: demoEmail(ap.local, domain), name: ap.name, company: legalName.en, label: ap.label });
     return { caller, authorizedPersonId: r.authorizedPersonId, crNumber, domain, legalName };
   }
 
@@ -351,7 +349,7 @@ export async function seedDemo(
     locations: VisibilityGrant = all,
     trades: VisibilityGrant = all,
   ) {
-    const address = email(person.local, company.domain);
+    const address = demoEmail(person.local, company.domain);
     const invited = await company.caller<{ memberId: string }>("POST", "/v1/members", {
       email: address,
       fullName: person.name,
@@ -411,7 +409,7 @@ export async function seedDemo(
   // One Draft of TMC's own, so a fresh demo has a Riyadh Gate Tower Work Item
   // for the deploy's visibility check to try as someone from another Project.
   const hafizCaller = browser(app);
-  await hafizCaller("POST", "/v1/session", { email: email(hafiz.local, tmc.domain), password });
+  await hafizCaller("POST", "/v1/session", { email: demoEmail(hafiz.local, tmc.domain), password });
   const { id: emergencyLightingId } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Emergency lighting – Tower 2",
@@ -473,7 +471,7 @@ export async function seedDemo(
     // leave Draft, so they come only with the file store.
     const signedIn = async (company: Onboarded, person: Person) => {
       const caller = browser(app);
-      await caller("POST", "/v1/session", { email: email(person.local, company.domain), password });
+      await caller("POST", "/v1/session", { email: demoEmail(person.local, company.domain), password });
       return caller;
     };
     const aliCaller = await signedIn(tmc, ali);

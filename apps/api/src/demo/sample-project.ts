@@ -75,6 +75,15 @@ export interface SampleProjectResult {
 /** What the run prints: counts only, never a Subject or an email (the UAT job's log is public). */
 export type SampleLog = (line: string) => void;
 
+/**
+ * A failure as the public UAT log may print it: a refused api call by its method, path and status only,
+ * never the answer's body, which can quote an answer or a Subject (RP-1217 review).
+ */
+export function publicFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/( answered \d{3})[\s\S]*$/, "$1");
+}
+
 export interface SampleProjectOptions {
   log?: SampleLog;
   /** How many items move at once; each needs its own api connection at times. */
@@ -169,8 +178,9 @@ async function signInAll(app: FastifyInstance, password: string): Promise<People
 
 /** The Project, created by TMC's Authorized Person (its Project Admin) unless it is there. */
 async function project(saeed: Call): Promise<string> {
-  const { projects } = await saeed<{ projects: { id: string; code: string }[] }>("GET", "/v1/projects");
-  const found = projects.find((p) => p.code === SAMPLE_PROJECT.code);
+  const { projects } = await saeed<{ projects: { id: string; code: string; name: BilingualText }[] }>("GET", "/v1/projects");
+  // By its code and English name, as sampleProjectStatus finds it.
+  const found = projects.find((p) => p.code === SAMPLE_PROJECT.code && p.name.en === SAMPLE_PROJECT.name.en);
   if (found) return found.id;
   const { projectId } = await saeed<{ projectId: string }>("POST", "/v1/projects", { name: SAMPLE_PROJECT.name, code: SAMPLE_PROJECT.code, role: "contractor" });
   return projectId;
@@ -354,7 +364,7 @@ class Runner {
       if (engineer) await this.pickUp(engineer, id);
       return;
     }
-    const code = { with_consultant_manager: "A", code_a: "A", code_b: "B", code_c: "C", code_d: "D" }[item.end];
+    const code = item.recommendedCode!;
     const matches = code === "A" || code === "B";
     const why = "The finish does not match the specification. / التشطيب لا يطابق المواصفات.";
     await this.act(engineer!, id, "send_to_manager", {
@@ -388,6 +398,7 @@ class Runner {
       const { answers: copied } = await hafiz<{ answers: Record<string, unknown> }>("GET", `/v1/work-items/${rev1}`);
       await hafiz("PUT", `/v1/work-items/${rev1}/answers`, { answers: { ...copied, description: `${item.product.description} Revised to the specified finish.` } });
       await this.act(hafiz, rev1, "send_for_review");
+      if (item.revision === "returned") await this.act(ali, rev1, "return", { answers: { reason: "Attach the finish sample photo too. / أرفق صورة عينة التشطيب أيضاً." } });
     }
   }
 

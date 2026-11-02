@@ -143,8 +143,10 @@ export interface SampleSubmittal {
   supplier?: { name: BilingualText; crNumber: string; country: string; supply: string };
   /** The Consultant Engineer who picks it up (from Pending Approval on); none leaves it in their Step Pool. */
   consultantEngineer?: ConsultantEngineer;
-  /** Code C only: its Rev 1 is raised and sent for review, so it is in Internal Review with the PM. */
-  revision?: boolean;
+  /** Code C only: its Rev 1 is raised and sent for review, in Internal Review with the PM, or `returned` to the Engineer. */
+  revision?: "with_pm" | "returned";
+  /** From the Consultant Engineer on: the Code they recommend to the Manager (the Code issued, once there is one). */
+  recommendedCode?: "A" | "B" | "C" | "D";
   /**
    * Code B only: the Comments its Code raises in the Snag List (each row's comment is its Subject),
    * and the Stage each is left at: Open with the Contractor, or resolved by them, then closed.
@@ -186,6 +188,9 @@ const B_COMMENTS = [
   { comment: "Confirm the colour with the Architect before ordering.", reference: "Room finishes drawing" },
   { comment: "Show the inspection hatches on the shop drawing.", reference: "Shop drawing" },
 ];
+
+/** The Code each closed end issues; the items still with the Manager carry a spread of Recommended Codes. */
+const CODES: Partial<Record<SubmittalEnd, "A" | "B" | "C" | "D">> = { code_a: "A", code_b: "B", code_c: "C", code_d: "D" };
 
 const COMMENT_ENDS = ["open", "resolved", "closed"] as const;
 
@@ -232,7 +237,8 @@ export function sampleSubmittals(): SampleSubmittal[] {
       product: p,
       ...(sar ? { supplier: sar } : {}),
       ...(consultantEngineer ? { consultantEngineer } : {}),
-      ...(end === "code_c" && revised < REVISED ? { revision: (revised++, true) } : {}),
+      ...(end === "code_c" && revised < REVISED ? { revision: revised++ === 0 ? ("returned" as const) : ("with_pm" as const) } : {}),
+      ...(reviewed ? { recommendedCode: CODES[end] ?? (["A", "A", "B", "C"] as const)[index % 4]! } : {}),
       ...(end === "code_b" ? { comments: commentsOf(codeB++, `${p.name}, ${floor.name.en}`) } : {}),
       ...(index % 7 === 0 && !sar ? { samplePhoto: true } : {}),
     };

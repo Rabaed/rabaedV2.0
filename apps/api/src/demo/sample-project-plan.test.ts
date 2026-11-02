@@ -24,6 +24,15 @@ describe("the sample Project's Submittals", () => {
     const revised = submittals.filter((s) => s.revision);
     expect(revised.length).toBeGreaterThan(0);
     expect(revised.every((s) => s.end === "code_c")).toBe(true);
+    // A Revision back with the Engineer too, not only new items.
+    expect(new Set(revised.map((s) => s.revision))).toEqual(new Set(["with_pm", "returned"]));
+  });
+
+  it("gives the Manager's queue a spread of Recommended Codes, and each closed item its own Code", () => {
+    expect(new Set(ends("with_consultant_manager").map((s) => s.recommendedCode)).size).toBeGreaterThan(1);
+    for (const [end, code] of [["code_a", "A"], ["code_b", "B"], ["code_c", "C"], ["code_d", "D"]] as const) {
+      expect(ends(end).every((s) => s.recommendedCode === code), end).toBe(true);
+    }
   });
 
   it("uses Code A and Code B for the 26, and each Code B raises a Comment", () => {
@@ -60,7 +69,7 @@ describe("the sample Project's Submittals", () => {
 describe("the sample Project's Snag List", () => {
   const snags = sampleSnags();
 
-  it("has Snags in every Status of the Snag Workflow", () => {
+  it("has Snags at every Stage of the Snag Workflow", () => {
     const stages = new Set(snags.filter((s) => s.type === "SNG").map((s) => s.end));
     expect(stages).toEqual(new Set(["draft", "open", "in_progress", "on_hold", "resolved", "closed"]));
   });

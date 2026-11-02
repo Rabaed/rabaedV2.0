@@ -26,7 +26,7 @@ import { apiConfigFromEnv } from "../config.ts";
 import { ensureDemo } from "../demo/ensure.ts";
 import { demoMailbox, seedingConfig } from "../demo/mailbox.ts";
 import { restoreDemoImages } from "../demo/restore-images.ts";
-import { addSampleProject, sampleProjectStatus } from "../demo/sample-project.ts";
+import { addSampleProject, publicFailure, sampleProjectStatus } from "../demo/sample-project.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../documents/file-store.ts";
 
 const parsed = z
@@ -59,7 +59,11 @@ const db = createDb(urls.app, { max: 4 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
   if (action === "sample-project-status" || action === "add-sample-project") {
-    await sampleProject(action);
+    // One line, no stack: UAT's job log is public.
+    await sampleProject(action).catch((error: unknown) => {
+      console.error(`demo: ${(error as Error).message}`);
+      process.exitCode = 1;
+    });
   } else await demo();
 } finally {
   await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);
@@ -73,10 +77,12 @@ async function sampleProject(action: "sample-project-status" | "add-sample-proje
   const before = await sampleProjectStatus(migrator);
   console.log(`demo: the sample Project is ${before.project ? "there" : "not there"}, with ${before.present} of its ${before.planned} item(s)`);
   if (action === "sample-project-status") return;
-  if (!files) throw new Error("the sample Project needs the file store: its Submittals leave Draft with their Datasheets");
+  if (!files) throw new Error("the sample Project needs the file store: its Submittals leave Draft with their Datasheets; nothing was changed");
   const app = await buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer: demoMailbox().mailer, files });
   try {
     await addSampleProject(app, migrator, password, { log: (line) => console.log(`demo: ${line}`) });
+  } catch (error) {
+    throw new Error(`the sample Project stopped: ${publicFailure(error)}`);
   } finally {
     await app.close();
   }

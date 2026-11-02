@@ -81,7 +81,8 @@ async function main(argv: string[]): Promise<number> {
         refused++;
       }
     }
-    console.log(`sample-project-age: ${aged} item(s) ${args.dryRun ? "would be" : ""} aged, ${refused} refused by uat:age's checks, ${candidates.length - targets.length} left as they are`.replace("  ", " "));
+    const verb = args.dryRun ? "would be aged" : "aged";
+    console.log(`sample-project-age: ${aged} item(s) ${verb}, ${refused} refused by uat:age's checks, ${candidates.length - targets.length} left as they are`);
     return 0;
   } finally {
     await db.destroy();

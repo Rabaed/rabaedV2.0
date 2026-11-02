@@ -3,7 +3,7 @@
 // Contractor reads them, what each other Company may see of the same records (docs/visibility.md,
 // scenarios RP-1217-1 to RP-1217-5), and that adding it again changes nothing.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemHistory, WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,7 +12,7 @@ import { demoMailbox } from "../src/demo/mailbox.ts";
 import { SAMPLE_PROJECT, sampleSubmittals, type SampleSubmittal } from "../src/demo/sample-project-plan.ts";
 import { addSampleProject } from "../src/demo/sample-project.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
-import { createTestApi, DEFAULT_PASSWORD, expectHidden, testConfig, type Caller } from "./support/harness.ts";
+import { createTestApi, DEFAULT_PASSWORD, expectHidden, readById, testConfig, type Caller } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -34,6 +34,7 @@ const demo = {
 } as const;
 type Who = keyof typeof demo;
 const as = {} as Record<Who, Caller>;
+const nameOf = (caller: Caller) => (Object.keys(as) as Who[]).find((who) => as[who] === caller) ?? "someone";
 let projectId = "";
 
 beforeAll(async () => {
@@ -99,7 +100,7 @@ describe("the sample Project, as its Contractor reads it", () => {
     expect(items.every((i) => /^NKD-(MAR|SAR)-\d{2}-\d{4}( Rev 1)?$/.test(i.documentNumber ?? ""))).toBe(true);
   });
 
-  it("fills the Snag List: Snags in every Status, Site Observations and Code B's Comments", async () => {
+  it("fills the Snag List: Snags at every Stage, Site Observations and Code B's Comments", async () => {
     const counts = await stageCounts(as.ali, "snag_list");
     for (const stage of ["open", "in_progress", "on_hold", "resolved", "closed"]) expect(counts[stage], stage).toBeGreaterThan(0);
     const types = new Set((await listed(as.ali, "snag_list")).map((i) => i.type.code));
@@ -112,26 +113,38 @@ describe("what each Company sees of it (docs/visibility.md)", () => {
     const expected = planned(submitted, { revisions: false });
     expect(await stageCounts(as.ahmed)).toEqual(expected);
     expect(await stageCounts(as.mohammed)).toEqual(expected);
-    const seen = new Set((await listed(as.ahmed, "submittals")).map((i) => i.title));
-    for (const s of plan.filter((s) => !submitted(s))) expect(seen.has(s.title), s.title).toBe(false);
+    // By id too, each first read by TMC: the Consultant and the Owner Representative read none of the 12.
+    const internal = (await listed(as.ali, "submittals")).filter((i) => i.stage.key === "internal_review");
+    expect(internal.length).toBe(12);
+    for (const { id: target } of internal) {
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: as.ali, hiddenFrom: [as.ahmed, as.mohammed, as.faisal], name: nameOf, label: "RP-1217-1" });
+    }
   });
 
-  it("RP-1217-2: Beta Build, the second Contractor, reads none of TMC's Submittals or Snags", async () => {
-    expect(await listed(as.yousef, "submittals")).toEqual([]);
-    expect(await listed(as.yousef, "snag_list")).toEqual([]);
+  it("RP-1217-2: Beta Build, the second Contractor, reads none of TMC's Submittals or Snags, though it reads the Project", async () => {
+    // It is on the Project: the reads work for it.
+    expect((await as.yousef.get(`/v1/projects/${projectId}`)).statusCode).toBe(200);
+    const submittal = (await listed(as.hafiz, "submittals"))[0]!;
+    const snag = (await listed(as.hafiz, "snag_list")).find((i) => i.type.code === "SNG")!;
+    for (const [target, module] of [[submittal.id, "submittals"], [snag.id, "snag_list"]] as const) {
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: as.hafiz, hiddenFrom: as.yousef, name: nameOf, label: "RP-1217-2" });
+      // On its List either.
+      await expectHiddenFrom({ read: (by: Caller) => listed(by, module), target, seenBy: as.hafiz, hiddenFrom: as.yousef, name: nameOf, label: "RP-1217-2" });
+    }
   });
 
   it("RP-1217-3: the Consultant Engineer's Recommended Code and Internal Note stay inside Design Consultants", async () => {
     const atManager = plan.find((s) => s.end === "with_consultant_manager")!;
     const [item] = (await sql<{ id: string }>`select id from work_item where project_id = ${projectId}::uuid and title = ${atManager.title}`.execute(migrator)).rows;
-    const events = async (by: Caller) => ((await by.get(`/v1/work-items/${item!.id}/history`)).json() as WorkItemHistory).events;
-    const internal = (e: WorkItemHistory["events"][number]) => e.type === "recommend_code" || e.type === "internal_note";
-    expect((await events(as.mohammed)).filter(internal).length).toBeGreaterThan(0);
-    for (const who of ["ali", "hafiz", "faisal"] as const) {
-      const res = await as[who].get(`/v1/work-items/${item!.id}/history`);
-      if (res.statusCode === 404) continue; // Hidden altogether is hidden too.
-      expect((res.json() as WorkItemHistory).events.filter(internal), who).toEqual([]);
-    }
+    /** The item, when `by` reads a Recommended Code or Internal Note event in its history; none when they read no such event, or not the item. */
+    const internalOf = async (by: Caller): Promise<{ id: string }[]> => {
+      const res = await by.get(`/v1/work-items/${item!.id}/history`);
+      if (res.statusCode === 404) return []; // not hidden-from: the read expectHiddenFrom calls below, the plain 404 being no row
+      expect(res.statusCode, res.body).toBe(200);
+      const events = (res.json() as WorkItemHistory).events.filter((e) => e.type === "recommend_code" || e.type === "internal_note");
+      return events.length > 0 ? [{ id: item!.id }] : []; // not hidden-from: the same read, no such event being no row
+    };
+    await expectHiddenFrom({ read: internalOf, target: item!.id, seenBy: [as.mohammed, as.ahmed], hiddenFrom: [as.ali, as.hafiz, as.faisal], name: nameOf, label: "RP-1217-3" });
   });
 
   it("RP-1217-4: the Mechanical-only Consultant Engineer reads only the Mechanical Submittals", async () => {
@@ -145,8 +158,15 @@ describe("what each Company sees of it (docs/visibility.md)", () => {
   it("RP-1217-5: Nasser, who is not on it, can't tell it exists", async () => {
     const { projects } = (await as.nasser.get("/v1/projects")).json() as { projects: { code: string }[] };
     expect(projects.map((p) => p.code)).toEqual(["JCV"]);
-    await expectHidden(as.nasser.get(`/v1/projects/${projectId}`));
-    await expectHidden(as.nasser.get(`/v1/projects/${projectId}/modules/submittals/work-items`));
+    // The Project page and its List: read by Ali and Yousef (who are on it), the plain 404 for Nasser.
+    await expectHiddenFrom({ read: readById(`/v1/projects/${projectId}`), target: projectId, seenBy: [as.ali, as.yousef], hiddenFrom: as.nasser, name: nameOf, label: "RP-1217-5" });
+    const listOf = async (by: Caller) => {
+      const res = await by.get(`/v1/projects/${projectId}/modules/submittals/work-items`);
+      if (res.statusCode === 200) return [{ id: projectId }];
+      await expectHidden(res);
+      return []; // not hidden-from: the read expectHiddenFrom calls, the plain 404 being no row
+    };
+    await expectHiddenFrom({ read: listOf, target: projectId, seenBy: as.ali, hiddenFrom: as.nasser, name: nameOf, label: "RP-1217-5" });
   });
 });
 
