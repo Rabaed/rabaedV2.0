@@ -13,6 +13,7 @@ function fakeSeam(overrides: Partial<PostSeam> = {}) {
     prHead: () => HEAD,
     read: () => "No findings.\n",
     body: () => "Builds the thing.\n\n<!-- implement: RP-1 -->\n",
+    branch: () => "RP-1-x",
     changedFiles: () => ["scripts/x.ts"],
     post: (pr, body) => void posted.push({ pr, body }),
     ...overrides,
@@ -48,27 +49,51 @@ describe("postReview", () => {
     const { seam, posted } = fakeSeam({ body: () => "Builds the thing.\n" });
     const result = postReview(["12", "summary.md"], seam);
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("<!-- implement: RP-");
-    expect(result.message).toContain("gh pr edit 12 --body-file");
-    expect(result.message).toContain("rabaed-implement");
+    expect(result.message).toContain("build it through the `rabaed-implement` skill, which writes the marker");
+    expect(result.message).toContain("<!-- implement: RP-1 -->");
+    expect(result.message).toMatch(/a PR opened before RP-1195 merged[^]*gh pr edit 12 --body-file/);
     expect(posted).toEqual([]);
   });
 
-  it("accepts a spec key's marker and more than one marker", () => {
-    const { seam, posted } = fakeSeam({ body: () => "<!-- implement: RP-900 -->\n<!-- implement: RP-901 -->" });
+  it("accepts more than one marker when one names the branch's key", () => {
+    const { seam, posted } = fakeSeam({ body: () => "<!-- implement: RP-900 -->\n<!-- implement: RP-1 -->", branch: () => "RP-1-x" });
     expect(postReview(["12", "summary.md"], seam).ok).toBe(true);
     expect(posted).toHaveLength(1);
   });
 
-  it("does not take a malformed marker", () => {
-    for (const body of ["<!-- implement: -->", "<!-- implement: rp-12 -->", "<!-- implement: RP- -->", "implement: RP-12"]) {
-      expect(postReview(["12", "s.md"], fakeSeam({ body: () => body }).seam).ok).toBe(false);
+  it("does not take a malformed marker, one inside a line, a fenced block or a quote", () => {
+    const fenced = "Example:\n```\n<!-- implement: RP-1 -->\n```\n";
+    const tilde = "````md\n<!-- implement: RP-1 -->\n````";
+    for (const body of ["<!-- implement: -->", "<!-- implement: rp-1 -->", "<!-- implement: RP- -->", "implement: RP-1", "See <!-- implement: RP-1 --> here", fenced, tilde, "> <!-- implement: RP-1 -->"]) {
+      expect(postReview(["12", "s.md"], fakeSeam({ body: () => body }).seam).ok, body).toBe(false);
+    }
+  });
+
+  it("takes a marker on its own line after a closed fence, and a CRLF body", () => {
+    expect(postReview(["12", "s.md"], fakeSeam({ body: () => "```\ncode\n```\n<!-- implement: RP-1 -->\n" }).seam).ok).toBe(true);
+    expect(postReview(["12", "s.md"], fakeSeam({ body: () => "Text.\r\n<!-- implement: RP-1 -->\r\n" }).seam).ok).toBe(true);
+  });
+
+  it("refuses a marker for another key than the branch's, naming both", () => {
+    const { seam, posted } = fakeSeam({ body: () => "<!-- implement: RP-2 -->", branch: () => "RP-1195-pr-tools" });
+    const result = postReview(["12", "s.md"], seam);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("RP-2");
+    expect(result.message).toContain("RP-1195");
+    expect(posted).toEqual([]);
+  });
+
+  it("refuses when the branch name has no RP key, and says so", () => {
+    for (const branch of ["claude/x", "fix-RP-1", "rp-1-x", "RP-1x"]) {
+      const result = postReview(["12", "s.md"], fakeSeam({ branch: () => branch }).seam);
+      expect(result.ok, branch).toBe(false);
+      expect(result.message).toContain(`branch ${branch} has no RP key`);
     }
   });
 
   it("needs no marker on a PR whose changed files are all docs, rule files included", () => {
     const files = ["docs/agents/issue-tracker.md", "CODING_STANDARDS.md", "planning/parallel-sessions.md", "docs/visibility/x.png"];
-    const { seam, posted } = fakeSeam({ body: () => "", changedFiles: () => files });
+    const { seam, posted } = fakeSeam({ body: () => "", branch: () => "claude/docs", changedFiles: () => files });
     expect(postReview(["12", "s.md"], seam).ok).toBe(true);
     expect(posted).toHaveLength(1);
   });

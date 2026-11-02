@@ -13,13 +13,16 @@ import type { Step } from "./verify-steps.ts";
 // Why that is safe: a test file is not code the app runs, so the earlier run's verdict on every code path holds;
 // what can change is only the changed tests themselves, which this run runs. The whole unit project runs again
 // because its repo-wide checks (check-scenario-seams, check-hidden-asserts, ci-green's helper check) read the
-// seam test files as data. Anything else (code, a helper, a fixture, a config, a deleted test, CI's own files)
+// seam test files as data. Anything else (code, a helper, a fixture, a config, a deleted test, CI's own files, a test
+// file another file imports)
 // means the full run. Clean merges of main and the screenshot bot's commits are stepped over, as the gate already
 // accepts an earlier line across them (onlyCleanCommitsSince). CI still runs every suite in full before the merge.
 
 export interface ReuseGit extends ReviewedGit {
   /** What `commit` changes against its first parent: git's status letter (A, M, D, T, …) and the path, renames split (`--no-renames`). */
   changes(commit: string): { status: string; path: string }[];
+  /** The tracked files (`path` itself left out) with an import specifier naming `path`, with or without its extension. */
+  importers(path: string): string[];
 }
 
 /** The steps whose test files a reuse run may run on their own, by vitest.config.ts's projects; infra and mail are no verify step. */
@@ -85,6 +88,11 @@ export function testsOnlyReuse(body: string, head: string, git: ReuseGit): Reuse
       if (step === undefined) return { reuse: false, why: `${path} is not a test file of the unit or seam projects` };
       if (isCiOwnFile(path)) return { reuse: false, why: `${path} is one of CI's own files (scripts/ci-green.ts CI_OWN_FILES)` };
       if (status !== "A" && status !== "M") return { reuse: false, why: `${path} changed in a way other than an edit or an addition (${status})` };
+      const importers = git.importers(path);
+      if (importers.length > 0) {
+        const more = importers.length > 1 ? ` (and ${importers.length - 1} more)` : "";
+        return { reuse: false, why: `${path} is imported by ${importers[0]}${more}, so it is not only a test` };
+      }
       if (!earlier.steps.includes(step)) return { reuse: false, why: `the stamped run on ${earlier.commit} did not run ${step}, which ${path} is in` };
       files.set(path, step);
     }
@@ -162,5 +170,22 @@ export function realReuseGit(cwd: string = process.cwd(), spawn: typeof spawnSyn
           return { status: status.slice(0, 1), path: path.join("\t") };
         });
     },
+    importers(path) {
+      const done = spawn("git", ["grep", "-l", "-E", "-e", importPattern(path), "--", `:(exclude)${path}`], { cwd, encoding: "utf8" });
+      // Exit 1 is git grep's "no match".
+      if (done.status === 1) return [];
+      if (done.status !== 0) throw new Error(`git grep failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
+      return (done.stdout ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+    },
   };
+}
+
+/**
+ * An ERE for an import specifier naming `path` (RP-1195 review): `from`, `import` or `import(` / `require(`, then a
+ * relative specifier ending in its file name without the extension, or with a .ts/.js-like one.
+ */
+function importPattern(path: string): string {
+  const name = (path.split("/").at(-1) ?? path).replace(/\.[cm]?[jt]sx?$/, "");
+  const escaped = name.replace(/[.[\]()*+?{}|^$\\]/g, "\\$&");
+  return `(from|import|require)[[:space:]]*\\(?[[:space:]]*['"][^'"]*/${escaped}(\\.[cm]?[jt]sx?)?['"]`;
 }

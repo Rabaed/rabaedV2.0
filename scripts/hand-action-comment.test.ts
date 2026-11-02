@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { commentOnHandAction, handAction, overHttp, type HandActionGitHub, type PrComment } from "./hand-action-comment.ts";
+import { pnpmQueueComment } from "./queue-marker.ts";
 
 // RP-1195 item 3: a `reviewed` label, auto-merge or a queue entry made by hand gets one comment
 // naming who did it, so the session learns why Reviewed required fails (or what `pnpm queue` skipped).
@@ -51,14 +52,40 @@ describe("handAction", () => {
   });
 
   describe("a queue entry", () => {
-    const marker = (sha: string, user = { login: "mmhaleess90", type: "User" }, author_association = "OWNER") => ({
+    const ENQUEUED_AT = "2026-11-02T10:00:05Z";
+    const marker = (sha: string, user = { login: "mmhaleess90", type: "User" }, author_association = "OWNER", created_at = "2026-11-02T10:00:00Z") => ({
       body: `Queued by \`pnpm queue\`.\n<!-- pnpm-queue: ${sha} -->`,
       user,
       author_association,
+      created_at,
+    });
+    const enqueued = (extra: Record<string, unknown> = {}) => payload("enqueued", { pull_request: { ...payload("x").pull_request, updated_at: ENQUEUED_AT, ...extra } });
+
+    it("says nothing when `pnpm queue` left its marker for the head before the entry", () => {
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD)] })).toBeUndefined();
+      // The same second counts: GitHub's times are whole seconds.
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD, undefined, undefined, ENQUEUED_AT)] })).toBeUndefined();
     });
 
-    it("says nothing when `pnpm queue` left its marker for the head", () => {
-      expect(handAction("pull_request_target", payload("enqueued"), { comments: [marker(HEAD)] })).toBeUndefined();
+    // RP-1195 review: queue-marker.ts builds the marker, this script matches it inline; the two must change together.
+    it("matches the comment queue-marker.ts builds, for that head only", () => {
+      const built = (sha: string) => ({ body: pnpmQueueComment(sha), user: { login: "mmhaleess90", type: "User" }, author_association: "OWNER", created_at: "2026-11-02T10:00:00Z" });
+      expect(handAction("pull_request_target", enqueued(), { comments: [built(HEAD)] })).toBeUndefined();
+      expect(handAction("pull_request_target", enqueued(), { comments: [built("b".repeat(40))] })).toMatchObject({ kind: "queue" });
+    });
+
+    it("does not count a marker posted after the entry, and only the head's newest marker counts", () => {
+      const after = marker(HEAD, undefined, undefined, "2026-11-02T10:01:00Z");
+      expect(handAction("pull_request_target", enqueued(), { comments: [after] })).toMatchObject({ kind: "queue" });
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD), after] })).toMatchObject({ kind: "queue" });
+      // Another head's newer marker does not hide this head's.
+      expect(handAction("pull_request_target", enqueued(), { comments: [marker(HEAD), marker("b".repeat(40), undefined, undefined, "2026-11-02T10:01:00Z")] })).toBeUndefined();
+    });
+
+    it("takes the time it runs when the payload has no updated_at", () => {
+      const event = payload("enqueued");
+      expect(handAction("pull_request_target", event, { comments: [marker(HEAD)], now: new Date("2026-11-02T10:00:30Z") })).toBeUndefined();
+      expect(handAction("pull_request_target", event, { comments: [marker(HEAD)], now: new Date("2026-11-02T09:59:00Z") })).toMatchObject({ kind: "queue" });
     });
 
     it("names who queued it when no marker names the head, and says Reviewed required still passes", () => {
@@ -131,6 +158,22 @@ describe("commentOnHandAction", () => {
     const event = payload("enqueued", { pull_request: { ...payload("x").pull_request, auto_merge: { enabled_by: { login: "mmhaleess90" } } } });
     await commentOnHandAction("pull_request_target", event, seam);
     expect(posted[0]?.body).toContain("without `pnpm queue`: this fails Reviewed required. Remove it from the queue");
+  });
+
+  // RP-1195 review: auto-merge's own comment already says what to undo; the entry it makes needs no second one.
+  it("posts nothing for an auto-merge entry when the head's auto-merge comment is there", async () => {
+    const autoMerged = { body: `<!-- hand-action: auto-merge someone ${HEAD} -->\ntext`, user: { login: "github-actions[bot]", type: "Bot" } };
+    const event = payload("enqueued", { pull_request: { ...payload("x").pull_request, auto_merge: { enabled_by: { login: "mmhaleess90" } } } });
+    const { seam, posted } = github([autoMerged]);
+    expect(await commentOnHandAction("pull_request_target", event, seam)).toBeUndefined();
+    expect(posted).toEqual([]);
+    // Another head's, a person's copy, or a button entry with auto-merge off still gets its comment.
+    const other = github([{ ...autoMerged, body: `<!-- hand-action: auto-merge someone ${"b".repeat(40)} -->` }, { ...autoMerged, user: { login: "someone", type: "User" } }]);
+    await commentOnHandAction("pull_request_target", event, other.seam);
+    expect(other.posted).toHaveLength(1);
+    const button = github([autoMerged]);
+    await commentOnHandAction("pull_request_target", payload("enqueued"), button.seam);
+    expect(button.posted).toHaveLength(1);
   });
 
   it("posts once per action: a re-run finds its own comment", async () => {
