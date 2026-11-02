@@ -11,6 +11,14 @@ import { jpegWithExif } from "../../../../apps/api/src/demo/exif-jpeg.ts";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- api answers are read loosely by the cases
 export type Json = Record<string, any>;
 
+/**
+ * Waits for the create panel's Save Draft (RP-1152): the panel stays open on the new Draft, its
+ * footer reading "Saved hh:mm". A New page link lands on the List with the panel open.
+ */
+export async function draftSaved(page: import("playwright").Page): Promise<void> {
+  await page.getByRole("dialog").getByText(/^(Saved|حُفظ) \d\d:\d\d$/).waitFor({ timeout: 15000 });
+}
+
 /** A small real JPEG (96 x 64) as the demo seed's Sample photo, read from the seed. */
 function samplePhoto(): Buffer {
   const seed = readFileSync(resolve(root, "apps/api/src/demo/seed.ts"), "utf8");

@@ -37,8 +37,8 @@ defineCase("SUB-01", async (t) => {
   await choose(page, "Approved supplier", "Najd Electrical Supplies");
   await t.shot(page, "new-form-filled");
   await main.getByRole("button", { name: "Save Draft" }).click();
-  await page.waitForURL(/\/work-items(\?|$)|\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
-  await settle(page, 800);
+  // RP-1152: the create panel stays open on the new Draft.
+  await H.draftSaved(page);
   await openList(page, tm.projectId);
   const blocked = await notFound(page);
   // At ~1,000 items a Draft (no number yet) is not on page 1: find it with the List's Search.
@@ -914,6 +914,42 @@ defineCase("SUB-29", async (t) => {
   t.check('The List header for Trade reads "Trade" or the anatomy\'s "Discipline"', listHeaders.includes("Trade") || listHeaders.includes("Discipline"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
   t.check('The List header for the holder reads "With", not "Current owner"', listHeaders.includes("With") && !listHeaders.includes("Current owner"), listHeaders.length ? listHeaders.join(" | ") : RP1049);
   t.check("The Kanban uses no Status or Current owner wording", !/Current owner|Discipline/.test(kanbanText));
+});
+
+// RP-1152: "Add Submittal" opens the create panel over the List; the Draft is saved in it, and the
+// panel stays open on it while the List shows it.
+defineCase("SUB-1152", async (t) => {
+  const tm = await H.team("hafiz");
+  const subject = `UAT SUB-1152 SAR in the panel ${H.stamp()}`;
+  const { page } = await pageAs("hafiz");
+  await openList(page, tm.projectId);
+  await settle(page);
+  await page.getByRole("main").getByRole("button", { name: "Add Submittal" }).click();
+  const panel = page.getByRole("dialog");
+  await panel.getByRole("button", { name: /Supplier Approval Request/ }).click();
+  await settle(page, 600);
+  t.check("The panel opens over the List at Wide, the picked Type in the URL", /[?&]new=1/.test(page.url()) && /[?&]size=wide/.test(page.url()) && /[?&]type=SAR/.test(page.url()), page.url());
+  await panel.getByRole("textbox", { name: "Subject" }).fill(subject);
+  await panel.getByLabel("Trade").first().click();
+  await page.getByRole("option", { name: /Electrical Works/ }).first().click();
+  await settle(page, 300);
+  await t.shot(page, "panel-filled");
+  await panel.getByRole("button", { name: "Save Draft" }).click();
+  await H.draftSaved(page);
+  t.check('The footer reads "Saved hh:mm"', true);
+  t.check("The panel is still open, with Open Work Item page", await panel.getByRole("link", { name: "Open Work Item page" }).isVisible());
+  await settle(page, 1200);
+  await t.shot(page, "panel-saved");
+  const inList = (await listRows(page)).some((r) => r.subject === subject);
+  const items = await H.listItems(tm.api.hafiz!, tm.projectId, "q=" + encodeURIComponent(subject));
+  const it = items.find((i) => i.title === subject);
+  t.check("The Draft is a SAR in the Drafts Stage (api)", it?.type?.code === "SAR" && it?.stage?.key === "draft", JSON.stringify({ type: it?.type?.code, stage: it?.stage?.key }));
+  if (!inList) {
+    // At ~1,000 items a Draft (no number yet) may not be on page 1: find it with the List's Search.
+    await go(page, `/projects/${tm.projectId}/work-items?q=${encodeURIComponent(subject)}`);
+    await settle(page, 800);
+  }
+  t.check("The Draft is in the List", inList || (await listRows(page)).some((r) => r.subject === subject));
 });
 
 async function mailBodies(): Promise<{ subject: string; text: string }[]> {

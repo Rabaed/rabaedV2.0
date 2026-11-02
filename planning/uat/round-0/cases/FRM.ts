@@ -34,7 +34,8 @@ defineCase("FRM-01", async (t) => {
   for (const type of ["SAR", "DAR"]) {
     await go(page, `/projects/${tm.projectId}/work-items/new`);
     await settle(page);
-    await page.getByRole("main").getByText(type === "SAR" ? "Supplier Approval Request" : "Document Approval Request", { exact: true }).first().click();
+    // RP-1152: the create panel's Type cards, "Supplier Approval Request (SAR)".
+    await page.getByRole("dialog").getByRole("button", { name: type === "SAR" ? /Supplier Approval Request/ : /Document Approval Request/ }).first().click();
     await settle(page, 600);
     await t.shot(page, `new-${type.toLowerCase()}-form`);
   }

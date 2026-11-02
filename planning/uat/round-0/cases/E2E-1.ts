@@ -150,8 +150,8 @@ async function raiseInForm(s: Story, subject: string, supplier = "Najd Electrica
   await choose(page, "Approved supplier", supplier);
   await s.t.shot(page, "hafiz-new-form");
   await main.getByRole("button", { name: "Save Draft" }).click();
-  await page.waitForURL(/\/work-items(\?|$)|\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
-  await settle(page, 800);
+  // RP-1152: the create panel stays open on the new Draft.
+  await H.draftSaved(page);
   const items = await H.listItems(s.api("hafiz"), s.tm.projectId, `q=${encodeURIComponent(subject)}`);
   const it = items.find((i) => i.title === subject);
   if (!it) throw new Error(`The Draft "${subject}" was not saved by the New form.`);
@@ -601,8 +601,8 @@ defineCase("J5", async (t) => {
   else await hp.keyboard.press("Escape");
   await t.shot(hp, "hafiz-mar-chooses-supplier");
   await main.getByRole("button", { name: "Save Draft" }).click();
-  await hp.waitForURL(/\/work-items(\?|$)|\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 }).catch(() => undefined);
-  await settle(hp, 800);
+  // RP-1152: the create panel stays open on the new Draft.
+  await H.draftSaved(hp);
   const saved = (await H.listItems(hafiz, tm.projectId, `q=${encodeURIComponent(mSubject)}`)).find((i) => i.title === mSubject);
   const sd = saved ? await H.detail(hafiz, saved.id as string) : undefined;
   s.ck("FRM-03", "The MAR Draft saved with that supplier", !!sd && sd.answers.supplier === mine[0]?.id, JSON.stringify(sd?.answers?.supplier));
