@@ -45,6 +45,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     comments: () => [],
     permission: () => "none",
     mergeChecks: () => ({ ok: true, skipped: [] }),
+    overlaps: () => "",
     markQueued: (pr, head) => {
       marked.push([pr, head]);
       return 42;
@@ -1272,6 +1273,80 @@ describe("queuePr: a stale copy of queue-pr.ts or ci-green.ts (RP-1195 item 6)",
   });
 });
 
+describe("queuePr: the open-PR overlap warning (RP-1191)", () => {
+  const warning = "check:claims: other open PRs change files this branch changes:\n  #12 (RP-9-x) would conflict in: a.ts\nMerge order: #12, then #149 (this branch).";
+
+  it("asks about the PR's own head, prints the warning before 'Queued', and still queues", () => {
+    const asked: string[] = [];
+    const { seam, enqueued } = fakeSeam({ overlaps: (head) => (asked.push(head), warning) });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(asked).toEqual(["abc1234"]);
+    expect(result.lines[0]).toBe(warning);
+    expect(result.lines.at(-1)).toMatch(/^Queued PR #149/);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("looks before main's checks on the merge and before the marker comment is posted", () => {
+    const order: string[] = [];
+    const { seam } = fakeSeam({
+      overlaps: () => (order.push("overlaps"), warning),
+      mergeChecks: () => (order.push("mergeChecks"), { ok: true, skipped: [] }),
+      markQueued: () => (order.push("markQueued"), 42),
+    });
+    queuePr(149, seam);
+    expect(order).toEqual(["overlaps", "mergeChecks", "markQueued"]);
+  });
+
+  it("adds nothing when no other open PR shares a file", () => {
+    const { seam } = fakeSeam();
+    expect(queuePr(149, seam).lines).toEqual(["Queued PR #149 at abc1234: position 3, state QUEUED."]);
+  });
+
+  it("says so, and still queues, when GitHub can't be reached", () => {
+    const down = "Warning: check:claims could not look for open PRs that change the same files (gh api failed (exit 4)); it did not check for overlaps.";
+    const { seam, enqueued } = fakeSeam({ overlaps: () => down });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines[0]).toBe(down);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("turns a look that throws into one warning line and still queues", () => {
+    const { seam, enqueued } = fakeSeam({
+      overlaps: () => {
+        throw new Error("spawn EAGAIN");
+      },
+    });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines[0]).toMatch(/^Warning: pnpm queue could not look for open PRs that change the same files \(.*spawn EAGAIN.*\); it did not check for overlaps\.$/);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("leads a refusal that comes after it, and never causes one", () => {
+    const refusedLater = fakeSeam({ overlaps: () => warning, mergeChecks: () => ({ ok: false, failures: [{ name: "check-hidden-asserts", lines: ["x"] }] }) });
+    const result = queuePr(149, refusedLater.seam);
+    expect(result.ok).toBe(false);
+    expect(result.lines[0]).toBe(warning);
+    expect(refusedLater.marked).toEqual([]);
+    // Not looked at when an earlier refusal stops the run first.
+    let asked = false;
+    const early = fakeSeam({ labels: () => [], overlaps: () => ((asked = true), warning) });
+    expect(queuePr(149, early.seam).ok).toBe(false);
+    expect(asked).toBe(false);
+  });
+
+  it("--wait logs it before it waits for the checks, once", async () => {
+    const log: string[] = [];
+    const { seam } = fakeSeam({ overlaps: () => warning, requiredChecks: () => ["build"], checkRuns: () => [{ name: "build", status: "completed", conclusion: "success" }] });
+    const result = await queuePrWhenChecksPass(149, seam, { log: (line) => log.push(line), sleep: async () => {}, now: () => 0 });
+    expect(result.ok).toBe(true);
+    expect(log).toEqual([warning]);
+    expect(result.lines.filter((line) => line === warning)).toEqual([]);
+  });
+});
+
 describe("staleCopyWarnings", () => {
   it("one warning per file origin/main has commits to that this checkout lacks", () => {
     const lines = staleCopyWarnings([
@@ -1498,6 +1573,34 @@ describe("realSeam", () => {
     seam.unmarkQueued(987);
     expect(calls.map(({ args }) => args.join(" "))).toEqual(["api --method DELETE repos/{owner}/{repo}/issues/comments/987"]);
     expect(() => recorded(() => ({ status: 1, stderr: "HTTP 404" })).seam.unmarkQueued(987)).toThrow(/gh api --method DELETE failed:\nHTTP 404/);
+  });
+
+  describe("overlaps (RP-1191)", () => {
+    const lookWith = (answer: { status: number | null; stdout?: string; stderr?: string; error?: Error }) => {
+      const calls: { command: string; args: string[]; options: { cwd?: string; timeout?: number } }[] = [];
+      const spawn = ((command: string, args: string[], options: { cwd?: string; timeout?: number }) => (calls.push({ command, args, options }), answer)) as unknown as typeof spawnSync;
+      return { calls, seam: realSeam("/work", spawn) };
+    };
+
+    it("runs queue-overlap.ts on the PR's head in the given directory, with a timeout, and returns what it printed", () => {
+      const { calls, seam } = lookWith({ status: 0, stdout: "check:claims: other open PRs change files this branch changes:\n  #12 (x) shares a.ts: merges clean\n" });
+      expect(seam.overlaps("abc1234")).toBe("check:claims: other open PRs change files this branch changes:\n  #12 (x) shares a.ts: merges clean");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.command).toBe(process.execPath);
+      expect(calls[0]?.args.map((arg) => arg.replace(/\\/g, "/").replace(/^.*\//, ""))).toEqual(["queue-overlap.ts", "abc1234"]);
+      expect(calls[0]?.options.cwd).toBe("/work");
+      expect(calls[0]?.options.timeout).toBeGreaterThan(0);
+    });
+
+    it("is empty when the look printed nothing", () => {
+      expect(lookWith({ status: 0, stdout: "" }).seam.overlaps("abc1234")).toBe("");
+    });
+
+    it("says it did not look when the look times out, fails or cannot start", () => {
+      const timedOut = lookWith({ status: null, error: new Error("spawnSync node ETIMEDOUT") }).seam.overlaps("abc1234");
+      expect(timedOut).toBe("Warning: pnpm queue could not look for open PRs that change the same files (spawnSync node ETIMEDOUT); it did not check for overlaps.");
+      expect(lookWith({ status: 1, stderr: "boom\nmore" }).seam.overlaps("abc1234")).toContain("(exit 1: boom)");
+    });
   });
 
   // RP-1195 follow-up (Main 6): an older copy of a file they import changes the verdict the same way.
