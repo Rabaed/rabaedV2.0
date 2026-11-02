@@ -1,7 +1,15 @@
 /* eslint-disable rabaed/no-avoid-terms -- package.json dependency fields, git's changed files and GitHub's merge queue, by their own names */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
+
+const isSymlink = (path: string) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
 import { isDoc } from "./reviewed-required.ts";
 import { fileAtVia } from "./git-files.ts";
 
@@ -155,6 +163,12 @@ export function branchMix(repo: string, commit?: string): string[] | undefined {
   const files = [...lines(must("diff", "--name-only", "--no-renames", base, ...(commit ? [commit] : []))), ...(commit ? [] : lines(must("ls-files", "--others", "--exclude-standard")))].filter((file) => !isWorkflow(file));
   // Undefined only where the path is not there; any other git failure throws (RP-1196).
   const show = fileAtVia(repo, spawnSync);
-  const onDisk = (file: string) => (existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : undefined);
+  // A symlink reads as its target, the way git stores it, never followed: so an added script that is a symlink fails
+  // item 7's exemption here too, as it does in `pnpm queue` and the hook (Main 6's Low on #637).
+  const onDisk = (file: string) => {
+    const path = join(repo, file);
+    if (!existsSync(path) && !isSymlink(path)) return undefined;
+    return isSymlink(path) ? readlinkSync(path) : readFileSync(path, "utf8");
+  };
   return sharedFilesMix(files, (file) => ({ before: show(base, file), after: commit ? show(commit, file) : onDisk(file) }));
 }

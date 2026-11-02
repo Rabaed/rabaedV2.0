@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -197,6 +197,15 @@ describe("branchMix: root package.json that only adds scripts for new scripts", 
     git("add", "apps/admin/src/a.ts", "package.json");
     git("commit", "-q", "--no-verify", "-m", "symlink");
     expect(branchMix(repo, git("rev-parse", "HEAD"))?.join("\n") ?? "").toContain("shared: package.json");
+  });
+
+  // Main 6's Low on #637: without a commit, the working tree must read a symlink as git does (its one-line target),
+  // not follow it, so `pnpm verify` agrees with `pnpm queue` and the pre-push hook.
+  // Windows needs a privilege to make a symlink; CI runs this on Linux.
+  it.skipIf(process.platform === "win32")("refuses an added script that is a symlink in the working tree too", () => {
+    write({ "apps/admin/src/a.ts": "export const a = 2;\n", "package.json": root({ ...mainScripts, "check:new": "node scripts/new.ts" }) });
+    symlinkSync("../apps/admin/src/a.ts", join(repo, "scripts/new.ts"));
+    expect(branchMix(repo)?.join("\n") ?? "").toContain("shared: package.json");
   });
 
   it("passes a script renamed into scripts/ under a new name: the lists are --no-renames, so its new path is added", () => {
