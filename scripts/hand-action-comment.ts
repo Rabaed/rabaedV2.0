@@ -13,7 +13,8 @@ import { resolve } from "node:path";
 export interface Payload {
   action?: string;
   label?: { name?: string };
-  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown };
+  /** `updated_at` is the nearest the `enqueued` payload has to the entry's time: it carries no time of its own. */
+  pull_request: { number: number; head: { sha: string; repo?: { full_name?: string } | null }; auto_merge?: unknown; updated_at?: string };
   repository?: { full_name?: string };
   sender: { login: string; type?: string };
 }
@@ -22,11 +23,13 @@ export interface PrComment {
   body?: string | null;
   user?: { login?: string; type?: string } | null;
   author_association?: string;
+  created_at?: string;
 }
 
-/** What the script reads besides the event: the PR's comments. */
+/** What the script reads besides the event: the PR's comments, and the time it runs (for a payload with no time). */
 export interface Facts {
   comments: readonly PrComment[];
+  now?: Date;
 }
 
 export type HandKind = "reviewed" | "auto-merge" | "queue";
@@ -45,13 +48,24 @@ const REVIEWED_ADD_ACTOR = "github-actions[bot]";
 
 const isBot = (sender: Payload["sender"]) => sender.type === "Bot" || sender.login.endsWith("[bot]") || sender.login === REVIEWED_ADD_ACTOR;
 
-// `pnpm queue`'s marker, the same text as scripts/queue-marker.ts's pnpmQueueMarker(sha) (RP-1195, built in
-// parallel); join the two once both are on main.
+// `pnpm queue`'s marker. scripts/queue-marker.ts builds it (pnpmQueueMarker); this is a copy, because this script
+// imports built-ins only (it is one of CI's own files, and stays the only one this workflow adds). The two must change
+// together: hand-action-comment.test.ts checks this matches what queue-marker.ts builds.
 const pnpmQueueMarker = (sha: string) => `<!-- pnpm-queue: ${sha} -->`;
 /** Who can run `pnpm queue` here: the comment's author has access to the repository. */
 const WRITERS = ["OWNER", "MEMBER", "COLLABORATOR"];
-const queuedByPnpm = (comments: readonly PrComment[], head: string) =>
-  comments.some((comment) => comment.user?.type === "User" && WRITERS.includes(comment.author_association ?? "") && (comment.body ?? "").includes(pnpmQueueMarker(head)));
+
+/**
+ * Whether `pnpm queue` made the entry at `at`: the newest marker for the head, by a person with access, was posted at or
+ * before it (RP-1195 review). A marker posted later belongs to a later run; `pnpm queue` takes off one whose enqueue failed.
+ */
+function queuedByPnpm(comments: readonly PrComment[], head: string, at: number): boolean {
+  const times = comments
+    .filter((comment) => comment.user?.type === "User" && WRITERS.includes(comment.author_association ?? "") && (comment.body ?? "").includes(pnpmQueueMarker(head)))
+    .map((comment) => Date.parse(comment.created_at ?? ""));
+  if (times.length === 0 || times.some(Number.isNaN)) return false;
+  return Math.max(...times) <= at;
+}
 
 /** The hand action an event reports, or undefined when there is nothing to say. */
 export function handAction(event: string, payload: Payload, facts: Facts): HandAction | undefined {
@@ -66,7 +80,8 @@ export function handAction(event: string, payload: Payload, facts: Facts): HandA
   }
   // Reviewed required fails while auto-merge is on (it reads auto_merge.enabled_by).
   if (payload.action === "auto_merge_enabled") return { kind: "auto-merge", ...base, failsReviewedRequired: true };
-  if (payload.action === "enqueued" && !queuedByPnpm(facts.comments, pr.head.sha)) {
+  const at = Date.parse(pr.updated_at ?? "");
+  if (payload.action === "enqueued" && !queuedByPnpm(facts.comments, pr.head.sha, Number.isNaN(at) ? (facts.now ?? new Date()).getTime() : at)) {
     // With auto-merge off, Reviewed required passes a button entry: it only skips `pnpm queue`'s checks.
     return { kind: "queue", ...base, failsReviewedRequired: pr.auto_merge != null };
   }
@@ -105,8 +120,11 @@ export async function commentOnHandAction(event: string, payload: Payload, githu
   const comments = await github.comments(payload.pull_request.number);
   const action = handAction(event, payload, { comments });
   if (action === undefined) return undefined;
-  const marker = handActionMarker(action);
-  if (comments.some((comment) => comment.user?.login === REVIEWED_ADD_ACTOR && (comment.body ?? "").includes(marker))) return undefined;
+  const own = comments.filter((comment) => comment.user?.login === REVIEWED_ADD_ACTOR).map((comment) => comment.body ?? "");
+  if (own.some((body) => body.includes(handActionMarker(action)))) return undefined;
+  // An entry auto-merge made follows the auto-merge comment for this head, which already says what to undo (RP-1195 review).
+  const autoMerged = new RegExp(`<!-- hand-action: auto-merge \\S+ ${action.head} -->`);
+  if (action.kind === "queue" && payload.pull_request.auto_merge != null && own.some((body) => autoMerged.test(body))) return undefined;
   const body = handActionComment(action);
   await github.postComment(action.pr, body);
   return body;

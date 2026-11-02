@@ -24,7 +24,6 @@ const fakeGit = (answers: Record<string, GitResult>, calls: string[] = []) => (a
 const report = (over: Partial<PrReport> = {}): PrReport => ({ pr: 7, head: HEAD, implement: "RP-1", markers: [], timeline: [], warnings: [], ...over });
 
 const baseGit = (over: Record<string, GitResult> = {}): Record<string, GitResult> => ({
-  "fetch --no-tags origin main": ok(),
   "fetch --no-tags origin refs/pull/7/head": ok(),
   "rev-parse FETCH_HEAD": ok(`${HEAD}\n`),
   [`merge-base origin/main ${HEAD}`]: ok(`${BASE}\n`),
@@ -49,28 +48,35 @@ const mergeGit = (from: string, remerge: string, ofMain = true): Record<string, 
 });
 
 describe("reviewPr: merges", () => {
-  it("without a review marker, takes every merge since the merge base and calls an empty remerge-diff clean", () => {
+  it("takes every merge since the merge base and calls an empty remerge-diff clean", () => {
     const review = reviewPr(seam(baseGit(mergeGit(BASE, ""))), 7);
     expect(review.ok && review.merges).toEqual({
-      since: { sha: BASE, why: "no review marker" },
+      since: { sha: BASE, why: "the merge base with origin/main" },
       merges: [{ sha: MERGE, subject: "Merge remote-tracking branch 'origin/main' into RP-1-x", ofMain: true, diff: [] }],
     });
   });
 
-  it("takes the merges since the newest person's review marker, and keeps a non-empty remerge-diff", () => {
+  // RP-1195 review: a lane's own lane:ready marker names the head, and anyone can post a marker, so a marker never moves the start.
+  it("starts at the merge base even when a review marker names a later commit", () => {
+    const pr = report({ markers: [marker(REVIEWED, "2026-11-02T00:00:00Z"), marker(HEAD, "2026-11-03T00:00:00Z")] });
+    const review = reviewPr(seam(baseGit(mergeGit(BASE, "")), pr), 7);
+    expect(review.ok && review.merges.since).toEqual({ sha: BASE, why: "the merge base with origin/main" });
+    expect(review.ok && review.merges.merges.map((m) => m.sha)).toEqual([MERGE]);
+  });
+
+  it("takes the merges since --since's commit, and keeps a non-empty remerge-diff", () => {
     const git = baseGit({ [`merge-base --is-ancestor ${REVIEWED} ${HEAD}`]: ok(), ...mergeGit(REVIEWED, "diff --git a/x.ts b/x.ts\n+fixed\n", false) });
-    const pr = report({ markers: [marker(BASE, "2026-11-01T00:00:00Z"), marker(REVIEWED, "2026-11-02T00:00:00Z"), marker(MAIN_TIP, "2026-11-03T00:00:00Z", true)] });
-    const review = reviewPr(seam(git, pr), 7);
+    const review = reviewPr(seam(git), 7, { since: REVIEWED });
     expect(review.ok && review.merges).toEqual({
-      since: { sha: REVIEWED, why: "the last review marker" },
+      since: { sha: REVIEWED, why: "--since" },
       merges: [{ sha: MERGE, subject: "Merge remote-tracking branch 'origin/main' into RP-1-x", ofMain: false, diff: ["diff --git a/x.ts b/x.ts", "+fixed"] }],
     });
   });
 
-  it("falls back to the merge base when the marker's sha is not in the head's history (a force-push)", () => {
+  it("falls back to the merge base when --since's commit is not in the head's history (a force-push)", () => {
     const git = baseGit({ [`merge-base --is-ancestor ${REVIEWED} ${HEAD}`]: { status: 1, stdout: "", stderr: "" } });
-    const review = reviewPr(seam(git, report({ markers: [marker(REVIEWED, "2026-11-02T00:00:00Z")] })), 7);
-    expect(review.ok && review.merges).toEqual({ since: { sha: BASE, why: `the last review marker's ${REVIEWED.slice(0, 7)} is not in the head's history` }, merges: [] });
+    const review = reviewPr(seam(git), 7, { since: REVIEWED });
+    expect(review.ok && review.merges).toEqual({ since: { sha: BASE, why: `--since ${REVIEWED.slice(0, 7)} is not in the head's history; the merge base with origin/main` }, merges: [] });
   });
 });
 
@@ -170,7 +176,7 @@ describe("formatReview and reviewPrMain", () => {
       "  Files:",
       "    M\tscripts/x.ts",
       "",
-      `== 2. Merges since ${BASE.slice(0, 7)} (no review marker): 1`,
+      `== 2. Merges since ${BASE.slice(0, 7)} (the merge base with origin/main): 1`,
       `  ${MERGE.slice(0, 7)} Merge remote-tracking branch 'origin/main' into RP-1-x  (merge of main; remerge-diff: clean)`,
       "",
       "== 3. Timeline",
@@ -187,7 +193,7 @@ describe("formatReview and reviewPrMain", () => {
     const review = {
       ok: true as const,
       head: { sha: HEAD, mergeBase: BASE, stat: [], files: [], warnings: ["w"] },
-      merges: { since: { sha: REVIEWED, why: "the last review marker" }, merges: [{ sha: MERGE, subject: "Merge x", ofMain: false, diff: ["+a"] }] },
+      merges: { since: { sha: REVIEWED, why: "--since" }, merges: [{ sha: MERGE, subject: "Merge x", ofMain: false, diff: ["+a"] }] },
       timeline: { lines: [], implement: undefined, warnings: ["boom"] },
       callers: [{ name: "f", file: "a.ts", hits: ["b.ts:1:f"], more: 4 }],
     };
@@ -196,7 +202,7 @@ describe("formatReview and reviewPrMain", () => {
       "  Warning: w",
       "  Files: none",
       "",
-      `== 2. Merges since ${REVIEWED.slice(0, 7)} (the last review marker): 1`,
+      `== 2. Merges since ${REVIEWED.slice(0, 7)} (--since): 1`,
       `  ${MERGE.slice(0, 7)} Merge x  (not a merge of main; remerge-diff: 1 line)`,
       "    +a",
       "",
@@ -210,22 +216,36 @@ describe("formatReview and reviewPrMain", () => {
       "    b.ts:1:f",
       "    … and 4 more",
     ]);
-    expect(formatReview({ ...review, merges: { ...review.merges, merges: [] }, callers: [] }).slice(4, 6)).toEqual([`== 2. Merges since ${REVIEWED.slice(0, 7)} (the last review marker): none`, ""]);
+    expect(formatReview({ ...review, merges: { ...review.merges, merges: [] }, callers: [] }).slice(4, 6)).toEqual([`== 2. Merges since ${REVIEWED.slice(0, 7)} (--since): none`, ""]);
     expect(formatReview({ ...review, callers: [] }).at(-1)).toBe("  No exported function or const changed.");
   });
 
+  it("takes --since <sha> and says so in the heading", () => {
+    const git = baseGit({ [`merge-base --is-ancestor ${REVIEWED} ${HEAD}`]: ok(), [`rev-list --merges ${REVIEWED}..${HEAD}`]: ok("") });
+    const { code, lines } = reviewPrMain(["7", "--since", REVIEWED], seam(git));
+    expect(code).toBe(0);
+    expect(lines).toContain(`== 2. Merges since ${REVIEWED.slice(0, 7)} (--since): none`);
+  });
+
   it("refuses bad arguments and exits 1 on a failed fetch", () => {
-    expect(reviewPrMain([], seam(baseGit()))).toEqual({ code: 1, lines: ["Usage: node scripts/review-pr.ts <pr number>"] });
+    const usage = "Usage: node scripts/review-pr.ts <pr number> [--since <sha>]";
+    expect(reviewPrMain([], seam(baseGit()))).toEqual({ code: 1, lines: [usage] });
     expect(reviewPrMain(["x"], seam(baseGit())).code).toBe(1);
-    expect(reviewPrMain(["7"], seam(baseGit({ "fetch --no-tags origin main": { status: 1, stdout: "", stderr: "no network" } })))).toEqual({ code: 1, lines: ["git fetch origin main failed: no network"] });
+    for (const args of [["7", "--since"], ["7", "--since", "not-a-sha"], ["7", "--since", REVIEWED, "more"], ["7", "8"]]) expect(reviewPrMain(args, seam(baseGit()))).toEqual({ code: 1, lines: [usage] });
+    expect(reviewPrMain(["7"], seam(baseGit({ "fetch --no-tags origin refs/pull/7/head": { status: 1, stdout: "", stderr: "no network" } })))).toEqual({ code: 1, lines: ["git fetch origin refs/pull/7/head failed: no network"] });
   });
 });
 
 describe("reviewPr: head", () => {
-  it("fetches main and the PR head, and lists the stat and the files against the merge base", () => {
+  // RP-1195 review: pr-status's gate read fetches main already; review-pr fetches only the PR head, after it.
+  it("reads pr-status first, then fetches the PR head (not main again), and lists the stat and the files against the merge base", () => {
     const calls: string[] = [];
-    const review = reviewPr(seam(baseGit(), report(), calls), 7);
-    expect(calls.slice(0, 2)).toEqual(["fetch --no-tags origin main", "fetch --no-tags origin refs/pull/7/head"]);
+    const order: string[] = [];
+    const git = fakeGit(baseGit(), calls);
+    const review = reviewPr({ git: (args) => (order.push("git"), git(args)), report: () => (order.push("report"), report()) }, 7);
+    expect(order[0]).toBe("report");
+    expect(calls[0]).toBe("fetch --no-tags origin refs/pull/7/head");
+    expect(calls).not.toContain("fetch --no-tags origin main");
     expect(review.ok).toBe(true);
     if (!review.ok) return;
     expect(review.head).toEqual({ sha: HEAD, mergeBase: BASE, stat: [" scripts/x.ts | 2 +-", " 1 file changed, 1 insertion(+), 1 deletion(-)"], files: ["M\tscripts/x.ts"], warnings: [] });

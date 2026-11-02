@@ -59,9 +59,9 @@ import { isAncestor } from "./worktrees.ts";
 // with `docker stop`, so its volumes stay (queue-stack-stop.ts says when it leaves one running). --keep-stack
 // skips that; a stop Docker refuses is a warning, never a failed queue.
 // RP-1195 item 6: it stops when this checkout is far behind origin/main (`stopIfBehindOrigin`, as lane:done does),
-// and warns when the running queue-pr.ts or ci-green.ts differs from origin/main's. RP-1195 item 3: right before the
+// and warns when this checkout's queue-pr.ts or ci-green.ts is older than origin/main's. RP-1195 item 3: right before the
 // enqueue it comments `<!-- pnpm-queue: <head> -->` (scripts/queue-marker.ts), so a queue entry made by `pnpm queue`
-// can be told from one made with the PR page's button (both act as the same gh login).
+// can be told from one made with the PR page's button (both act as the same gh login); a failed enqueue takes it off.
 // The git and gh calls sit behind QueueSeam so the tests touch no network.
 
 export interface PullStatus {
@@ -105,9 +105,11 @@ export interface QueueSeam extends ReviewedGit {
   labelWorkflowOnMain(): boolean;
   /** The `reviewed-label` workflow's runs for `commit`, newest first (`gh run list --workflow reviewed-label.yml --commit`). */
   labelRuns(commit: string): { status: string; conclusion: string }[];
-  /** Posts the pnpm-queue marker comment for `head` on the PR (`gh pr comment --body-file -`), RP-1195 item 3. */
-  markQueued(pr: number, head: string): void;
-  /** The running copy's blob (`git hash-object`) and origin/main's (`git rev-parse origin/main:<file>`) of each of STALE_COPY_FILES; undefined where git could not read it. */
+  /** Posts the pnpm-queue marker comment for `head` on the PR (`gh api` POST) and returns the comment's id, RP-1195 item 3. */
+  markQueued(pr: number, head: string): number;
+  /** Takes the marker comment `id` off again after a failed enqueue (`gh api --method DELETE`), RP-1195 review. */
+  unmarkQueued(id: number): void;
+  /** For each of STALE_COPY_FILES, how many of origin/main's commits to it HEAD lacks (`git log HEAD..origin/main -- <file>`); undefined where git could not tell. */
   scriptCopies(): ScriptCopy[];
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
   enqueue(id: string, head: string): { position: number; state: string };
@@ -127,20 +129,23 @@ export interface QueueSeam extends ReviewedGit {
 
 export interface ScriptCopy {
   file: string;
-  running: string | undefined;
-  main: string | undefined;
+  /** origin/main's commits to the file that HEAD does not have; undefined when git could not tell. */
+  behind: number | undefined;
 }
 
 /** The scripts whose stale copy refused or passed what main's would not (RP-1195 item 6). */
 const STALE_COPY_FILES = ["queue-pr.ts", "ci-green.ts"];
 
-/** A warning for each script whose running copy differs from origin/main's; silent where a side was not read. */
+/**
+ * A warning for each script that is older than origin/main's: main has commits to it that this checkout lacks. A copy
+ * that only differs (a branch editing queue-pr.ts itself) is not older, so it gets none (RP-1195 review).
+ */
 export function staleCopyWarnings(copies: ScriptCopy[]): string[] {
   return copies
-    .filter(({ running, main }) => running !== undefined && main !== undefined && running !== main)
+    .filter(({ behind }) => behind !== undefined && behind > 0)
     .map(
-      ({ file }) =>
-        `Warning: this run's ${file} differs from origin/main's, so its checks may not be main's (an older copy refuses or passes what main's would not). Run \`git merge origin/main\` in this checkout, or run \`pnpm queue\` from a fresh worktree of origin/main.`,
+      ({ file, behind }) =>
+        `Warning: origin/main has ${behind} commit${behind === 1 ? "" : "s"} to ${file} that this checkout lacks, so this run's checks may not be main's (an older copy refuses or passes what main's would not). Run \`git merge origin/main\` in this checkout, or run \`pnpm queue\` from a fresh worktree of origin/main.`,
     );
 }
 
@@ -212,13 +217,31 @@ function enqueueAt(pr: number, seam: QueueSeam, { id, head, warnings }: { id: st
   } catch {
     marked = false;
   }
-  if (!marked) seam.markQueued(pr, head);
+  const posted = marked ? undefined : seam.markQueued(pr, head);
+  // RP-1195 review: a failed enqueue takes its own marker off, so a later button press on this head still gets the
+  // hand-action comment. Returns what to add when that fails.
+  const unmark = (): string[] => {
+    if (posted === undefined) return [];
+    try {
+      seam.unmarkQueued(posted);
+      return [];
+    } catch (error) {
+      return [`It could not take its pnpm-queue marker comment (${posted}) off (${error instanceof Error ? error.message.split("\n")[0] : String(error)}): delete that comment by hand.`];
+    }
+  };
   try {
     const entry = seam.enqueue(id, head);
     return { ok: true, lines: [...warnings, `Queued PR #${pr} at ${head}: position ${entry.position}, state ${entry.state}.`] };
   } catch (error) {
-    if (error instanceof Error && HEAD_REFUSED.test(error.message)) return headMoved(pr, head, undefined);
-    if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) throw error;
+    if (error instanceof Error && HEAD_REFUSED.test(error.message)) {
+      const moved = headMoved(pr, head, undefined);
+      return { ...moved, lines: [...moved.lines, ...unmark()] };
+    }
+    if (!(error instanceof Error && ALREADY_QUEUED.test(error.message))) {
+      const left = unmark();
+      if (left.length > 0) throw new Error(`${error instanceof Error ? error.message : String(error)}\n${left.join("\n")}`, { cause: error });
+      throw error;
+    }
     return { ok: true, lines: [...warnings, `PR #${pr} is already in the merge queue (an earlier call queued it); treating it as queued.`] };
   }
 }
@@ -749,17 +772,16 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
         .filter((line) => line.trim() !== "")
         .map((line) => JSON.parse(line) as CommitStatus),
     markQueued: (pr, head) => {
-      const done = spawn("gh", ["pr", "comment", String(pr), "--body-file", "-"], { cwd, encoding: "utf8", input: pnpmQueueComment(head) });
-      if ((done.status ?? 128) !== 0) throw new Error(`gh pr comment ${pr} failed:
-${done.stdout ?? ""}${done.stderr ?? ""}`);
+      const done = spawn("gh", ["api", "--method", "POST", `repos/{owner}/{repo}/issues/${pr}/comments`, "--input", "-"], { cwd, encoding: "utf8", input: JSON.stringify({ body: pnpmQueueComment(head) }) });
+      if ((done.status ?? 128) !== 0) throw new Error(`gh api POST issues/${pr}/comments failed:\n${done.stdout ?? ""}${done.stderr ?? ""}`);
+      return (JSON.parse(done.stdout ?? "") as { id: number }).id;
     },
+    unmarkQueued: (id) => void must("gh", ["api", "--method", "DELETE", `repos/{owner}/{repo}/issues/comments/${id}`]),
     scriptCopies: () =>
       STALE_COPY_FILES.map((name) => {
-        const read = (args: string[]) => {
-          const done = run("git", args);
-          return done.status === 0 ? done.stdout.trim() || undefined : undefined;
-        };
-        return { file: `scripts/${name}`, running: read(["hash-object", join(import.meta.dirname, name)]), main: read(["rev-parse", `origin/main:scripts/${name}`]) };
+        const file = `scripts/${name}`;
+        const done = run("git", ["log", "--format=%H", "HEAD..origin/main", "--", file]);
+        return { file, behind: done.status === 0 ? done.stdout.split("\n").filter((line) => line.trim() !== "").length : undefined };
       }),
     enqueue: (id, head) => {
       const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };

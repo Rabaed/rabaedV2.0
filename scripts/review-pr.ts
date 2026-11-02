@@ -1,6 +1,6 @@
 /* eslint-disable rabaed/no-avoid-terms -- git's own words (file, merge) and the review marker, by their names */
-// RP-1195 item 5: `node scripts/review-pr.ts <n>` prints what a reviewer needs before reading PR <n>: the head and its
-// files against the merge base, the merges since the last review marker (their remerge-diffs), the label, auto-merge,
+// RP-1195 item 5: `node scripts/review-pr.ts <n> [--since <sha>]` prints what a reviewer needs before reading PR <n>: the head and its
+// files against the merge base, the merges since the merge base or `--since` (their remerge-diffs), the label, auto-merge,
 // queue and marker timeline (`prStatus`, item 2) and the callers of every exported name the diff touches. It only
 // reads: exit 0, or 1 on bad arguments or a failed fetch. Not a gate script: keep it out of review-post.ts's imports.
 import { spawnSync } from "node:child_process";
@@ -108,12 +108,17 @@ function callersOf(seam: ReviewPrSeam, must: Must, head: string): Callers[] {
   });
 }
 
-/** The merge commits on the head since the newest person's review marker (the merge base when none, or when it is gone). */
-function mergesSince(seam: ReviewPrSeam, must: Must, pr: PrReport, head: string, mergeBase: string): MergesSection {
-  const last = pr.markers.filter((m) => !m.bot).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
-  let since = { sha: mergeBase, why: "no review marker" };
-  if (last) {
-    since = seam.git(["merge-base", "--is-ancestor", last.sha, head]).status === 0 ? { sha: last.sha, why: "the last review marker" } : { sha: mergeBase, why: `the last review marker's ${last.sha.slice(0, 7)} is not in the head's history` };
+const FROM_BASE = "the merge base with origin/main";
+
+/**
+ * The merge commits on the head since the merge base, or since `--since <sha>` when the reviewer asks for only the
+ * merges since their own last look. Never since a review marker (RP-1195 review): a lane's own `lane:ready` marker
+ * names the head, and anyone can post one, so starting there would hide a bad merge.
+ */
+function mergesSince(seam: ReviewPrSeam, must: Must, head: string, mergeBase: string, asked: string | undefined): MergesSection {
+  let since = { sha: mergeBase, why: FROM_BASE };
+  if (asked !== undefined) {
+    since = seam.git(["merge-base", "--is-ancestor", asked, head]).status === 0 ? { sha: asked, why: "--since" } : { sha: mergeBase, why: `--since ${asked.slice(0, 7)} is not in the head's history; ${FROM_BASE}` };
   }
   const shas = lines(must(["rev-list", "--merges", `${since.sha}..${head}`])).reverse();
   const merges = shas.map((sha) => {
@@ -132,22 +137,23 @@ const lines = (text: string) => text.split("\n").filter((l) => l !== "");
 
 class GitFailed extends Error {}
 
-export function reviewPr(seam: ReviewPrSeam, n: number): Review {
+export function reviewPr(seam: ReviewPrSeam, n: number, options: { since?: string } = {}): Review {
   const must = (args: string[], what = args.slice(0, 3).join(" ")) => {
     const done = seam.git(args);
     if (done.status !== 0) throw new GitFailed(`git ${what} failed: ${(done.stderr || done.stdout).trim()}`);
     return done.stdout;
   };
   try {
-    must(["fetch", "--no-tags", "origin", "main"], "fetch origin main");
+    // pr-status's gate read fetches origin main (and the PR head); this fetches the PR head again only to pin FETCH_HEAD
+    // right before reading it (RP-1195 review).
+    const pr = seam.report(n);
     must(["fetch", "--no-tags", "origin", `refs/pull/${n}/head`], `fetch origin refs/pull/${n}/head`);
     const sha = must(["rev-parse", "FETCH_HEAD"]).trim();
-    const pr = seam.report(n);
     const warnings = pr.head !== undefined && pr.head !== sha ? [`GitHub says the head is ${pr.head}, but origin's refs/pull/${n}/head is ${sha}: someone pushed while this ran; run it again.`] : [];
     const mergeBase = must(["merge-base", "origin/main", sha]).trim();
     const stat = lines(must(["diff", "--stat", `origin/main...${sha}`]));
     const files = lines(must(["diff", "--name-status", "--no-renames", `origin/main...${sha}`]));
-    const merges = mergesSince(seam, must, pr, sha, mergeBase);
+    const merges = mergesSince(seam, must, sha, mergeBase, options.since);
     const timeline = { lines: timelineLines(pr.timeline), implement: pr.implement, warnings: pr.warnings };
     return { ok: true, head: { sha, mergeBase, stat, files, warnings }, merges, timeline, callers: callersOf(seam, must, sha) };
   } catch (error) {
@@ -157,7 +163,7 @@ export function reviewPr(seam: ReviewPrSeam, n: number): Review {
 }
 
 const warn = (warnings: string[]) => warnings.map((w) => `  Warning: ${w}`);
-const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /** The four sections as lines. */
 export function formatReview(review: Review): string[] {
@@ -171,7 +177,7 @@ export function formatReview(review: Review): string[] {
     "",
     `== 2. Merges since ${merges.since.sha.slice(0, 7)} (${merges.since.why}): ${merges.merges.length === 0 ? "none" : merges.merges.length}`,
     ...merges.merges.flatMap((m) => [
-      `  ${m.sha.slice(0, 7)} ${m.subject}  (${m.ofMain ? "merge of main" : "not a merge of main"}; remerge-diff: ${m.diff.length === 0 ? "clean" : count(m.diff.length, "line")})`,
+      `  ${m.sha.slice(0, 7)} ${m.subject}  (${m.ofMain ? "merge of main" : "not a merge of main"}; remerge-diff: ${m.diff.length === 0 ? "clean" : plural(m.diff.length, "line")})`,
       ...m.diff.map((l) => `    ${l}`),
     ]),
     "",
@@ -187,11 +193,13 @@ export function formatReview(review: Review): string[] {
   ];
 }
 
-const USAGE = "Usage: node scripts/review-pr.ts <pr number>";
+const USAGE = "Usage: node scripts/review-pr.ts <pr number> [--since <sha>]";
 
 export function reviewPrMain(args: string[], seam: ReviewPrSeam): { code: number; lines: string[] } {
-  if (args.length !== 1 || !/^[1-9]\d*$/.test(args[0]!)) return { code: 1, lines: [USAGE] };
-  const review = reviewPr(seam, Number(args[0]));
+  const [n = "", flag, since, ...rest] = args;
+  const sinceOk = flag === undefined || (flag === "--since" && /^[0-9a-f]{7,40}$/.test(since ?? ""));
+  if (!/^[1-9]\d*$/.test(n) || !sinceOk || rest.length > 0) return { code: 1, lines: [USAGE] };
+  const review = reviewPr(seam, Number(n), flag === undefined ? {} : { since });
   return { code: review.ok ? 0 : 1, lines: formatReview(review) };
 }
 

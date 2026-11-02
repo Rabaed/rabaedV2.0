@@ -15,10 +15,10 @@ import { acquireLock, liveHolder, lockFile, releaseLock, type LockHolder, type P
 import { machineDir, machineLockFile, oldSlotsOf, removePlaces, waitForTurn } from "./verify-queue.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { verifyOverlap } from "./verify-overlap.ts";
-import { fullRunMessage, realReuseGit, reuseLine, reuseMessage, reuseSteps, testsOnlyReuse, type ReuseDecision } from "./verify-reuse.ts";
+import { fullRunMessage, realReuseGit, reuseLine, reuseMessage, reuseSteps, testsOnlyReuse, type FileStep, type Reuse, type ReuseDecision } from "./verify-reuse.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
 import { openLog, verifyOutput } from "./verify-output.ts";
-import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type Step, type StepRun } from "./verify-steps.ts";
+import { failureEnd, finalLine, headMoved, isSeamStep, runCommand, runStep, selectSteps, startFrom, tail, type StepRun } from "./verify-steps.ts";
 import { snapshotHash, systemFileHash, systemGit, treeChanged, treeSnapshot, watchTree } from "./verify-tree.ts";
 import { isRunning } from "./worktrees-stale.ts";
 import { listWorktrees } from "./worktrees.ts";
@@ -180,12 +180,12 @@ for (const { name, reason } of selected.skipped) out.info(`skip ${name}: ${reaso
 // `--from` (RP-1019): the steps before it are left out, and the last line names them.
 const resumed = options.from === undefined ? selected : startFrom(selected, options.from);
 if ("error" in resumed) stopEarly(resumed.error);
-let { steps }: { steps: (Step & { files?: string[] })[] } = resumed;
+let { steps }: { steps: FileStep[] } = resumed;
 const from = "from" in resumed ? resumed.from : undefined;
 for (const name of from?.notRun ?? []) out.info(`skip ${name}: before --from ${from?.step}`);
 
 // Tests-only reuse (RP-1195 item 8): only with --pr and not --full; any doubt runs everything.
-let reuse: Extract<ReuseDecision, { reuse: true }> | undefined;
+let reuse: Reuse | undefined;
 if (options.pr !== undefined && prBody) {
   let decision: ReuseDecision;
   if (options.full) decision = { reuse: false, why: "--full asked for it" };
@@ -326,12 +326,15 @@ for (const { name, script, files } of steps) {
     setTimer: (tick, ms) => setInterval(tick, ms),
     clearTimer: (timer) => clearInterval(timer as NodeJS.Timeout),
   });
+  // runStep's first call is the step's own run; a later one is a timed-out re-run naming its own files.
+  let firstRun = true;
   const outcome = await runStep(
     script,
     async (args) => {
       if (changedMidStep !== undefined) return { status: 1, output: "" };
-      // A reuse run's seam step runs only its changed files (RP-1195 item 8); a timed-out re-run names its own.
-      const ran = files && args.length === 1 ? [...args, ...files] : args;
+      // A reuse run's seam step runs only its changed files (RP-1195 item 8).
+      const ran = files && firstRun ? [...args, ...files] : args;
+      firstRun = false;
       const result = await runPnpm(ran, (started) => (child = runningChild = started));
       exit = String(result.exit);
       out.stepOutput(["pnpm", ...ran].join(" "), result.output);

@@ -18,6 +18,7 @@ function fakeGit(commits: Record<string, { parents: string[]; changes?: { status
     identity: (commit) => (commits[commit]?.bot ? { author: "41898282+github-actions[bot]@users.noreply.github.com", committer: "41898282+github-actions[bot]@users.noreply.github.com" } : { author: "me@x", committer: "me@x" }),
     changedPaths: (commit) => (commits[commit]?.changes ?? []).map(({ path }) => path),
     changes: (commit) => commits[commit]?.changes ?? [],
+    importers: () => [],
     ...overrides,
   };
 }
@@ -88,6 +89,17 @@ describe("testsOnlyReuse", () => {
       expect(reuse.reuse).toBe(false);
       expect(reuse.reuse ? "" : reuse.why).toMatch(why);
     }
+  });
+
+  // RP-1195 review: a test file another file imports is code that file runs, so changing it can change that file's verdict.
+  it("runs the full verify when another file imports a changed test file", () => {
+    const asked: string[] = [];
+    const git = fakeGit(
+      { h1: { parents: [X], changes: [edit("scripts/a.test.ts"), edit("apps/api/test/links.test.ts")] } },
+      { importers: (path) => (asked.push(path), path === "apps/api/test/links.test.ts" ? ["apps/api/test/more.test.ts", "apps/api/test/other.test.ts"] : []) },
+    );
+    expect(testsOnlyReuse(fullLine(), "h1", git)).toEqual({ reuse: false, why: "apps/api/test/links.test.ts is imported by apps/api/test/more.test.ts (and 1 more), so it is not only a test" });
+    expect(asked).toEqual(["scripts/a.test.ts", "apps/api/test/links.test.ts"]);
   });
 
   it("runs the full verify when the body has no stamped line, or only an unstamped one", () => {
@@ -201,5 +213,28 @@ describe("realReuseGit", () => {
       { status: "D", path: "scripts/c.test.ts" },
     ]);
     expect(calls).toEqual([["git", "diff-tree", "--no-commit-id", "--name-status", "-r", "--no-renames", "abc"]]);
+  });
+
+  it("finds the files whose import specifiers name a test file, by its path without the extension", () => {
+    const calls: string[][] = [];
+    const spawn = ((command: string, args: string[]) => {
+      calls.push([command, ...args]);
+      return { status: 0, stdout: "apps/api/test/more.test.ts\n", stderr: "" };
+    }) as unknown as typeof spawnSync;
+    expect(realReuseGit("/repo", spawn).importers("apps/api/test/nowhere.test.ts")).toEqual(["apps/api/test/more.test.ts"]);
+    const [, , , , , pattern, , exclude] = calls[0]!;
+    expect(calls[0]!.slice(0, 5)).toEqual(["git", "grep", "-l", "-E", "-e"]);
+    expect(exclude).toBe(":(exclude)apps/api/test/nowhere.test.ts");
+    const specifier = new RegExp(pattern!.replaceAll("[[:space:]]", "\\s"));
+    // Quotes from variables, so ci-green.test.ts's import scan does not read these sample lines as imports.
+    const [d, s] = ['"', "'"];
+    for (const line of [`import { a } from ${d}./nowhere.test.ts${d};`, `import { a } from ${s}../test/nowhere.test${s};`, `export * from ${d}./nowhere.test.js${d};`, `const m = await import(${d}./nowhere.test.ts${d});`, `import ${d}./nowhere.test.ts${d};`]) expect(specifier.test(line), line).toBe(true);
+    for (const line of [`import { a } from ${d}./nowhere.ts${d};`, `import { a } from ${d}./xnowhere.test.ts${d};`, `const p = ${d}apps/api/test/nowhere.test.ts${d};`]) expect(specifier.test(line), line).toBe(false);
+  });
+
+  it("finds none on git grep's no-match exit, and fails on any other", () => {
+    const answer = (status: number) => (() => ({ status, stdout: "", stderr: "fatal: bad" })) as unknown as typeof spawnSync;
+    expect(realReuseGit("/repo", answer(1)).importers("scripts/a.test.ts")).toEqual([]);
+    expect(() => realReuseGit("/repo", answer(128)).importers("scripts/a.test.ts")).toThrow(/git grep failed/);
   });
 });
