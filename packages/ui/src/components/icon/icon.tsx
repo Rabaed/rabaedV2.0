@@ -24,6 +24,8 @@ import {
   IconCamera,
   IconCategory,
   IconCheck,
+  IconCircleDashed,
+  IconDeviceFloppy,
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
@@ -161,6 +163,9 @@ const icons = {
   "chevrons-left": IconChevronsLeft,
   "chevrons-right": IconChevronsRight,
   "circle-check": IconCircleCheck,
+  // A required field still empty, and Save Draft (RP-1152).
+  "circle-dashed": IconCircleDashed,
+  "device-floppy": IconDeviceFloppy,
   "circle-x": IconCircleX,
   "clipboard-check": IconClipboardCheck,
   "clipboard-list": IconClipboardList,
