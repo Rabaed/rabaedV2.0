@@ -6,16 +6,21 @@ name: Reviewed add
 # The rule is scripts/reviewed-add.ts; it waits for the head's reviewed-label run first,
 # and re-runs the head's reviewed-required run, since a label added with GITHUB_TOKEN
 # starts no `labeled` run.
-# The script it runs is the default branch's, never the pull request's (on pull_request
-# GitHub reads this file itself from the PR's merge commit, as for verify-gate; on
-# issue_comment from the default branch). The script fetches the PR's head as data and
-# runs none of its code. Full history, for the walk the script makes.
-# A fork's PR is skipped here on pull_request and by the script on issue_comment.
+# The script it runs is the default branch's, never the pull request's, and so is this file on every
+# event it runs on. The script fetches the PR's head as data and runs none of its code. Full history,
+# for the walk the script makes.
+# pull_request_target: GitHub runs main's copy of this file for it (RP-1148 part A). On pull_request a PR
+# ran its own copy, so it could rewrite what adds its `reviewed`. The job checks out only the default
+# branch, and its write token never meets a fork's PR: the if: below skips one.
+# A fork's PR is skipped here on pull_request_target and by the script on issue_comment.
 # Not a required check (it must never be added to the main ruleset; it does not run on
 # merge_group).
+# Step 1 of 2 (RP-1148): pull_request stays beside pull_request_target until this file is on main; step 2 drops it.
 on:
-  pull_request:
+  pull_request_target:
     # `edited`: the body gets its verify line. `synchronize`: a clean merge of main keeps both.
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  pull_request:
     types: [opened, reopened, synchronize, edited, ready_for_review]
   issue_comment:
     # The /code-review summary comment, posted by scripts/review-post.ts.
@@ -36,7 +41,7 @@ jobs:
     # org member with a private membership as CONTRIBUTOR (RP-1159). Keep the marker and the
     # user check in step with `MARKER` and `isTrustedAuthor` there.
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      ((github.event_name == 'pull_request_target' || github.event_name == 'pull_request') && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
       contains(github.event.comment.body, '<!-- code-review: ') &&
       github.event.comment.user.type == 'User') ||
