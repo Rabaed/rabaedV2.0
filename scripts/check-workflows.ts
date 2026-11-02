@@ -8,7 +8,15 @@ import { parseDocument } from "yaml";
 //  1. Every actions/checkout sets persist-credentials: false, unless a comment
 //     above or inside the step reads "# keeps credentials: <reason>" (the
 //     reason is required).
-//  2. No pull_request_target: it hands a write token to a fork's pull request.
+//  2. No pull_request_target: it hands a write token to a fork's pull request. The one
+//     exception is a gate that must run main's copy of its workflow file (RP-1148: on
+//     pull_request a PR runs its own copy, so it could rewrite its own required check).
+//     Such a workflow says why in a "# pull_request_target: <reason>" comment at the left
+//     margin, sets permissions: {} at the top (each job names its least), and checks out
+//     nothing but this repository's default branch (ref: ${{ github.event.repository.default_branch }},
+//     no repository:), so the PR's code never runs: no git or gh checkout in a run: step, no
+//     reusable workflow, container or services. Rule 3 holds its write jobs to the guard.
+//     A lint, not a proof: review still reads what each step does with what it fetches.
 //  3. A job with a write token (or an OIDC token) that checks out code, in a
 //     workflow started by a pull request or by workflow_run, runs only for this
 //     repository's own branches: its `if`, or the `if` of a job it needs,
@@ -18,7 +26,7 @@ import { parseDocument } from "yaml";
 //     infra-diff.yml was, for an OIDC token and pull-requests: write): GitHub gives a fork's
 //     pull_request run a read-only token and no OIDC token anyway, and the
 //     guard stops the job running for forks at all, so fork code never meets
-//     a write token there either. Only pull_request_target is banned.
+//     a write token there either. pull_request_target is held to rule 2 as well.
 //  4. Actions outside actions/ and github/ are pinned to a full commit SHA
 //     (a tag can be moved); docker:// images to a digest. Keep the tag in a
 //     trailing comment.
@@ -63,6 +71,12 @@ type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const sameRepoGuard = /head[._]repo[a-z_.]*\.full_name\s*==\s*github\.repository/;
+/** Rule 2's marker: why a workflow runs on pull_request_target (the reason is required). */
+const targetReason = /^#[ \t]*pull_request_target:[ \t]*\S/m;
+/** A run: command that would check out (and so may run) the PR's code under pull_request_target. */
+const checkoutInRun = /\b(?:git\s+(?:checkout|switch|restore|worktree\s+add|reset\s+--hard)|gh\s+pr\s+checkout)\b/;
+/** The one ref a checkout may take under pull_request_target: this repository's default branch. */
+const DEFAULT_BRANCH_REF = "${{ github.event.repository.default_branch }}";
 const untrustedInScript = new RegExp(
   String.raw`\$\{\{\s*(` +
     [
@@ -390,9 +404,27 @@ export function lintWorkflow(file: string, source: string): Finding[] {
     return lines.slice(first, lineOf(Math.max(range[0], range[1] - 1)) + 1).join("\n");
   };
 
-  // 2. pull_request_target
+  // 2. pull_request_target: only main's copy of a gate (RP-1148), which checks out the default branch alone
   const on = triggers(root.on);
-  if (on.includes("pull_request_target")) add("on", "uses pull_request_target, which runs with a write token on a fork's pull request; use pull_request, or workflow_run for what needs a write token");
+  const targeted = on.includes("pull_request_target");
+  if (targeted) {
+    if (!targetReason.test(source)) {
+      add(
+        "on",
+        "uses pull_request_target, which runs with a write token on a fork's pull request; use pull_request, or workflow_run for what needs a write token. A gate that must run main's copy of its workflow (RP-1148) says why in a `# pull_request_target: <reason>` comment",
+      );
+    }
+    if (!(isObj(root.permissions) && Object.keys(root.permissions).length === 0)) {
+      add("permissions", "uses pull_request_target, so the workflow sets permissions: {} and each job names the least it needs");
+    }
+    // Nothing that could run code this file does not show: another workflow's jobs, or an image.
+    for (const [id, job] of Object.entries(isObj(root.jobs) ? root.jobs : {})) {
+      if (!isObj(job)) continue;
+      if (job.uses !== undefined) add(`job ${id}`, "calls a reusable workflow under pull_request_target, whose steps this check cannot see; run the steps in this file");
+      if (job.container !== undefined) add(`job ${id}`, "runs in a container under pull_request_target; run its steps on the runner");
+      if (job.services !== undefined) add(`job ${id}`, "starts services under pull_request_target; a gate needs none");
+    }
+  }
 
   const stepItems = (path: string[]) => (doc.getIn(path, true) as { items?: unknown[] } | undefined)?.items ?? [];
   const stepGroups: { where: string; steps: unknown[]; nodes: unknown[]; job?: Obj }[] = [];
@@ -408,6 +440,10 @@ export function lintWorkflow(file: string, source: string): Finding[] {
       if (!isObj(step)) return;
       const label = stepLabel(where, step, index);
       // 5. Script injection
+      // 2. Under pull_request_target no run: step checks the PR's code out either (fetching it as data is fine).
+      if (targeted && typeof step.run === "string" && checkoutInRun.test(stripComments(step.run))) {
+        add(label, "checks code out in a run: step under pull_request_target, which could run the PR's code with this workflow's token; fetch it as data only (git fetch, git show, git diff)");
+      }
       if (typeof step.run === "string" && untrustedInScript.test(step.run)) {
         add(label, `writes untrusted text into a run: script (script injection); pass it through env: and read the variable (a string workflow_dispatch input: read it from the event file (jq -r '.inputs.x // ""' "$GITHUB_EVENT_PATH"), as env: prints it in the log)`);
       }
@@ -418,13 +454,20 @@ export function lintWorkflow(file: string, source: string): Finding[] {
         if (!/@sha256:[0-9a-f]{64}$/.test(uses)) add(label, `uses ${uses}, a Docker image not pinned to a @sha256 digest`);
         return;
       }
-      const [action = "", ref = ""] = uses.split("@");
+      const [spelled = "", ref = ""] = uses.split("@");
+      // GitHub takes an owner and repository name in any case: `Actions/Checkout` is actions/checkout.
+      const action = spelled.toLowerCase();
       const owner = action.split("/")[0];
       if (owner !== "actions" && owner !== "github" && !/^[0-9a-f]{40}$/.test(ref)) add(label, `uses ${uses}, a third-party action not pinned to a full commit SHA (keep the tag in a trailing comment)`);
       // 1. Credentials
       if (action === "actions/checkout") {
         checksOut.add(where);
-        const persist = (isObj(step.with) ? step.with : {})["persist-credentials"];
+        const options = isObj(step.with) ? step.with : {};
+        // 2. Under pull_request_target nothing of the PR is checked out: only this repository's default branch.
+        if (targeted && (options.ref !== DEFAULT_BRANCH_REF || options.repository !== undefined)) {
+          add(label, `checks out something other than this repository's default branch under pull_request_target (set ref: ${DEFAULT_BRANCH_REF} and no repository:), which would run the PR's code with this workflow's token`);
+        }
+        const persist = options["persist-credentials"];
         if (persist !== false && persist !== "false" && !keepsCredentials.test(stepText(nodes[index]))) {
           add(label, 'actions/checkout does not set persist-credentials: false (or carry a "# keeps credentials: <reason>" comment)');
         }
@@ -531,7 +574,7 @@ export function lintWorkflow(file: string, source: string): Finding[] {
   }
 
   // 3. Write tokens and fork code
-  if (on.includes("pull_request") || on.includes("workflow_run")) {
+  if (on.includes("pull_request") || on.includes("pull_request_target") || on.includes("workflow_run")) {
     const guarded = (id: string, seen = new Set<string>()): boolean => {
       if (seen.has(id)) return false;
       seen.add(id);

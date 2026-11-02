@@ -97,7 +97,7 @@ export interface AddSeam extends ReviewedGit, CiReads, CommentReads {
   pull(pr: number): Promise<{ body: string; headSha: string; labels: string[]; draft: boolean; sameRepo: boolean; open: boolean }>;
   /** `git fetch origin refs/pull/<pr>/head`, so the head's commits are there to walk. */
   fetchPull(pr: number): void;
-  /** The `reviewed-label` workflow's pull_request runs for `headSha`; undefined when that workflow does not exist. */
+  /** The `reviewed-label` workflow's pull_request_target and pull_request runs for `headSha`; undefined when that workflow does not exist. */
   labelRuns(headSha: string): Promise<{ status: string }[] | undefined>;
   /** The `reviewed-required` workflow's pull_request_target and pull_request runs for `headSha`, newest first. */
   requiredRuns(headSha: string): Promise<{ id: number; status: string; conclusion: string | null }[]>;
@@ -249,7 +249,10 @@ export function overHttp(repository: string, token: string, fetcher: typeof fetc
     },
     ...commentsOverHttp(repository, token, fetcher),
     async labelRuns(headSha) {
-      return (await runs("reviewed-label.yml", headSha))?.workflow_runs.map((run) => ({ status: run.status }));
+      // reviewed-label moves to pull_request_target with the gate workflows (RP-1148): both events count.
+      const answers = await Promise.all(["pull_request_target", "pull_request"].map((event) => runs("reviewed-label.yml", headSha, event)));
+      if (answers.every((answer) => answer === undefined)) return undefined;
+      return answers.flatMap((answer) => answer?.workflow_runs ?? []).map((run) => ({ status: run.status }));
     },
     requiredRuns: (headSha) => gateRuns("reviewed-required.yml", headSha),
     verifyRuns: (headSha) => gateRuns("verify-gate.yml", headSha),

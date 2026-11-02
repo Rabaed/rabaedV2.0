@@ -281,6 +281,10 @@ export const ItemTable: Story = {
     await expect(number.closest("[dir=ltr]")).not.toBeNull();
     const fansRow = within(table).getByRole("link", { name: fans.title }).closest("tr")!;
     await expect(fansRow).toHaveTextContent(l.table.code("A"));
+    // Its columns fit, so the List's tighter fit under 1600 (RP-1177) stays off here (the owner's answer of 2026-11-02).
+    await expect(getComputedStyle(lightsRow.querySelector("td")!).paddingInlineStart).not.toBe("8px");
+    await expect(table.querySelector("thead svg.tabler-icon-grid-dots") === null || getComputedStyle(table.querySelector("thead svg.tabler-icon-grid-dots")!).display !== "none").toBe(true);
+    await expect(getComputedStyle(within(table).getByRole("link", { name: lights.title })).maxWidth).toBe("420px");
   },
 };
 

@@ -142,6 +142,95 @@ describe("checkGapTable", () => {
     expect(errors).toEqual([expect.stringMatching(/row 1.*`\.wl` is not in/)]);
   });
 
+  // RP-1209: some owner pages keep their CSS in a script string, each rule after a literal `\n`.
+  // This page is made up for the test; an owner page never goes into the repo. Its string holds the rules
+  // `.chip`, `.chip.on`, `.note::before` (content "a\"b"), `.opt[data-k="1"]`, `.late` (tab-indented) and `.last`.
+  const PACKED_PAGE = [
+    "<!doctype html>",
+    "<style>.card{padding:8px}</style>",
+    "<script>",
+    'const css = ".chip{color:red}\\n.chip.on{background:blue}\\n.note::before{content:\\"a\\\\\\"b\\"}\\n.opt[data-k=\\"1\\"]{x:y}\\n\\t.late{margin:0}\\n.last{top:0}";',
+    "document.head.append(Object.assign(document.createElement('style'), { textContent: css }));",
+    "</script>",
+    "",
+  ].join("\n");
+
+  it("matches a selector in CSS packed into a script string, each rule after a literal \\n", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table(
+      "| 1 | On chip | packed.html › `.chip.on` | filled | match | | |",
+      "| 2 | Last rule | packed.html › `.last` | top | match | | |",
+      "| 3 | Tab-indented rule | packed.html › `.late` | margin | match | | |",
+    );
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("still matches a selector in a <style> block of a page that also packs CSS", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    expect(check(table("| 1 | Card | packed.html › `.card` | padded | match | | |"))).toEqual([]);
+  });
+
+  it("refuses a selector in neither the <style> block nor the packed string", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const errors = check(table("| 1 | Missing | packed.html › `.nowhere` | x | match | | |", "| 2 | Prefix | packed.html › `.chip.o` | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.nowhere` is not in packed\.html/), expect.stringMatching(/row 2.*`\.chip\.o` is not in packed\.html/)]);
+  });
+
+  it("matches the first rule of the string, which follows its opening quote", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    write(refs, "single.html", "<script>const css = '.one{a:b}\\n.two{c:d}';\nconst more = [`.three{e:f}`];</script>\n");
+    const markdown = table(
+      "| 1 | First rule | packed.html › `.chip` | red | match | | |",
+      "| 2 | Single quotes | single.html › `.one`; single.html › `.two` | x | match | | |",
+      "| 3 | Backticks | single.html › `.three` | x | match | | |",
+    );
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("does not take a selector in a quoted script argument or in a comment for a CSS rule", () => {
+    write(refs, "calls.html", '<script>\nconst rows = document.querySelectorAll(".ghost, .row");\n/* .boxed{a:b} */\nconst css = ".real{a:b}\\n.also,\\n.pair{c:d}";\n</script>\n<style>\n/* .styled{a:b} */\n.shown{a:b}\n</style>\n');
+    const refused = check(table("| 1 | Call | calls.html › `.ghost` | x | match | | |", "| 2 | Comment | calls.html › `.boxed` | x | match | | |", "| 3 | Comment | calls.html › `.styled` | x | match | | |"));
+    expect(refused).toEqual([expect.stringMatching(/row 1.*`\.ghost`/), expect.stringMatching(/row 2.*`\.boxed`/), expect.stringMatching(/row 3.*`\.styled`/)]);
+    expect(check(table("| 1 | Real | calls.html › `.real`; calls.html › `.also`; calls.html › `.pair`; calls.html › `.shown` | x | match | | |"))).toEqual([]);
+  });
+
+  it("takes no selector of a quoted selector list that never reaches a rule's brace, whichever quote or place", () => {
+    write(refs, "lists.html", "<script>\ndocument.querySelectorAll(\".ghost, .row, .x\");\ndocument.querySelectorAll('.one, .two, .three');\nroot.matches(`.a, .b, .c`);\n// .slashed{a:b}\n</script>\n");
+    const cited = [".row", ".x", ".two", ".three", ".b", ".c"];
+    const errors = check(table(...cited.map((selector, i) => `| ${i + 1} | Call | lists.html › \`${selector}\` | x | match | | |`)));
+    expect(errors).toHaveLength(cited.length);
+    expect(check(table("| 1 | Line comment | lists.html › `.slashed` | x | match | | |"))).toEqual([]);
+  });
+
+  it("matches the first selector of a list whose later selector holds a quoted attribute value", () => {
+    write(refs, "attr.html", '<script>const css = ".opt, .opt[data-k=\\"1\\"], .third{x:y}";</script>\n');
+    expect(check(table("| 1 | Opt | attr.html › `.opt`; attr.html › `.third` | x | match | | |"))).toEqual([]);
+  });
+
+  it("matches a selector holding an escaped quote, and scans past one inside a rule", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table("| 1 | Option | packed.html › `.opt[data-k=\"1\"]`; packed.html › `.note::before`; packed.html › `.late` | x | match | | |");
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("reads \\u and \\x escapes and a backslash before a line break", () => {
+    write(refs, "escaped.html", '<script>const css = ".u{a:b}\\u000a.x{c:d}\\x0a.\\\njoined{e:f}";</script>\n');
+    const markdown = table("| 1 | U | escaped.html › `.x`; escaped.html › `.joined` | x | match | | |");
+    expect(check(markdown)).toEqual([]);
+  });
+
+  it("does not take an escaped backslash before an n for a newline", () => {
+    write(refs, "packed.html", '<script>const css = ".a{b:c}\\\\n.hidden{d:e}";</script>\n');
+    const errors = check(table("| 1 | Hidden | packed.html › `.hidden` | x | match | | |"));
+    expect(errors).toEqual([expect.stringMatching(/row 1.*`\.hidden` is not in packed\.html/)]);
+  });
+
+  it("counts a line of a packed page in the file's real lines, not the string's rules", () => {
+    write(refs, "packed.html", PACKED_PAGE);
+    const markdown = table("| 1 | The string | packed.html › line 4 | x | match | | |", "| 2 | Past the end | packed.html › line 8 | x | match | | |");
+    expect(check(markdown)).toEqual([expect.stringMatching(/row 2.*line 8.*6 lines/)]);
+  });
+
   it("refuses line 0 and a range whose first line is after its last", () => {
     const errors = check(table("| 1 | A | Rabaed Settings Workflows.html › line 0 | x | match | | |", "| 2 | B | Rabaed Settings Workflows.html › lines 400–2 | x | match | | |"));
     expect(errors).toEqual([expect.stringMatching(/row 1.*count from 1/), expect.stringMatching(/row 2.*count from 1/)]);

@@ -50,10 +50,71 @@ describe("lintWorkflow", () => {
     });
   });
 
-  it("flags pull_request_target in any form", () => {
+  it("flags pull_request_target in any form, without its reason", () => {
     for (const on of ["pull_request_target", "[push, pull_request_target]", "\n  pull_request_target:\n    types: [labeled]"]) {
-      expect(messages(`on: ${on}\njobs: {}\n`).join()).toContain("pull_request_target");
+      expect(messages(`on: ${on}\npermissions: {}\njobs: {}\n`).join()).toContain("pull_request_target");
     }
+  });
+
+  // RP-1148 part A: the gate workflows run on pull_request_target, so GitHub runs main's copy of them. That is safe
+  // only while no job checks out or runs the PR's code, and every job's token is its own least.
+  describe("pull_request_target, for main's copy of a gate", () => {
+    const reason = "# pull_request_target: GitHub runs main's copy of this file, so a PR cannot edit its own gate.\n";
+    const mainCheckout = "      - uses: actions/checkout@v7\n        with:\n          ref: ${{ github.event.repository.default_branch }}\n          persist-credentials: false\n";
+    const gate = (steps: string, { why = reason, permissions = "permissions: {}", job = "    permissions: { contents: read }\n" } = {}) =>
+      messages(`${why}on:\n  pull_request_target:\n    types: [opened]\n${permissions}\njobs:\n  a:\n${job}    runs-on: ubuntu-latest\n    steps:\n${steps}`);
+
+    it("accepts it with its reason, no workflow-wide permissions, and only the default branch checked out", () => {
+      expect(gate(mainCheckout)).toEqual([]);
+      expect(gate("      - run: node scripts/x.ts\n")).toEqual([]);
+    });
+
+    it("refuses it without the reason comment, or with an empty one", () => {
+      expect(gate(mainCheckout, { why: "" }).join()).toContain("# pull_request_target: <reason>");
+      expect(gate(mainCheckout, { why: "# pull_request_target:\n" }).join()).toContain("# pull_request_target: <reason>");
+    });
+
+    it("refuses a checkout of anything but the default branch: the PR's head, its merge ref, another repository, or no ref", () => {
+      for (const ref of ["${{ github.event.pull_request.head.sha }}", "refs/pull/${{ github.event.number }}/merge", "${{ github.head_ref }}"]) {
+        const step = `      - uses: actions/checkout@v7\n        with:\n          ref: ${ref}\n          persist-credentials: false\n`;
+        expect(gate(step).join(), ref).toContain("default branch");
+      }
+      expect(gate("      - uses: actions/checkout@v7\n        with: { persist-credentials: false }\n").join()).toContain("default branch");
+      const other = "      - uses: actions/checkout@v7\n        with:\n          repository: someone/else\n          ref: ${{ github.event.repository.default_branch }}\n          persist-credentials: false\n";
+      expect(gate(other).join()).toContain("default branch");
+    });
+
+    it("refuses workflow-wide permissions: each job names its own", () => {
+      expect(gate(mainCheckout, { permissions: "permissions: { contents: read }" }).join()).toContain("permissions: {}");
+      expect(gate(mainCheckout, { permissions: "" }).join()).toContain("permissions: {}");
+    });
+
+    it("takes the reason only from a comment of the file itself, at the left margin, never from inside a run: script", () => {
+      const inRun = "      - run: |\n          # pull_request_target: hidden in a script\n          echo hi\n";
+      expect(gate(inRun, { why: "" }).join()).toContain("# pull_request_target: <reason>");
+    });
+
+    it("refuses a checkout under any spelling of the action's name", () => {
+      const step = `      - uses: Actions/Checkout@${SHA}\n        with:\n          ref: \${{ github.event.pull_request.head.sha }}\n          persist-credentials: false\n`;
+      expect(gate(step).join()).toContain("default branch");
+    });
+
+    it("refuses what could run the PR's code another way: a git or gh checkout in a run: step, a reusable workflow, a container or services", () => {
+      for (const command of ["git checkout FETCH_HEAD", "gh pr checkout 7", "git switch --detach FETCH_HEAD", "git worktree add pr FETCH_HEAD", "git reset --hard FETCH_HEAD"]) {
+        expect(gate(`      - run: ${command}\n`).join(), command).toContain("pull_request_target");
+      }
+      expect(gate("      - run: git fetch --no-tags origin refs/pull/7/head\n")).toEqual([]);
+      const reusable = messages(`${reason}on: pull_request_target\npermissions: {}\njobs:\n  a:\n    uses: ./.github/workflows/other.yml\n`);
+      expect(reusable.join()).toContain("reusable workflow");
+      expect(gate(mainCheckout, { job: "    permissions: { contents: read }\n    container: node:24\n" }).join()).toContain("container");
+      expect(gate(mainCheckout, { job: "    permissions: { contents: read }\n    services:\n      db: { image: postgres }\n" }).join()).toContain("services");
+    });
+
+    it("holds a write job to the same-repository guard, as on pull_request", () => {
+      const write = "    permissions: { pull-requests: write }\n";
+      expect(gate(mainCheckout, { job: write }).join()).toContain("job a");
+      expect(gate(mainCheckout, { job: `    if: github.event.pull_request.head.repo.full_name == github.repository\n${write}` })).toEqual([]);
+    });
   });
 
   describe("write tokens and fork code", () => {
