@@ -4,7 +4,7 @@ import { sql } from "kysely";
 import type { FileStore } from "../documents/file-store.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
 import { demoSignaturePng } from "./demo-signature.ts";
-import { DEMO_EMAIL_SUFFIX } from "./seed.ts";
+import { DEMO_EMAIL_SUFFIX } from "./demo-api.ts";
 
 // The demo's images on a file store that lacks them (RP-672). A demo seeded with no file store
 // (UAT's, before RP-672) recorded each Signature, logo and Stamp with nothing stored under its

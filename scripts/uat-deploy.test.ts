@@ -370,16 +370,22 @@ describe("the pnpm commands the deploy runs", () => {
   // --recursive that --filter implies (Deploy UAT run 40388707146): a package's
   // script goes through `run`, a binary through `exec`.
   it("names `run` or `exec` after the package, so no pnpm built-in shadows a script", () => {
-    for (const [command, argument] of [["migrate"], ["app-role-check"], ["defaults"], ["demo", "ensure"], ["demo", "reset"]] as const) {
+    for (const [command, argument] of [["migrate"], ["app-role-check"], ["defaults"], ["demo", "ensure"], ["demo", "reset"], ["demo", "add-sample-project"]] as const) {
       const [filter, , word] = pnpmCommand(command, argument) ?? [];
       expect(filter).toBe("--filter");
       expect(["run", "exec"]).toContain(word);
     }
   });
 
+  // RP-1217: the sample Project, added where the demo already is (no reset), or only counted.
+  it("adds the sample Project, or only says how far it is", () => {
+    expect(pnpmCommand("demo", "add-sample-project")).toEqual(["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", "add-sample-project"]);
+    expect(pnpmCommand("demo", "sample-project-status")).toEqual(["--filter", "@rabaed/api", "exec", "tsx", "src/cli/demo-environment.ts", "sample-project-status"]);
+  });
+
   it("has none for another command, and refuses another demo argument", () => {
     expect(pnpmCommand("project", "web")).toBeUndefined();
-    expect(() => pnpmCommand("demo", "drop")).toThrow("demo ensure|reset");
+    expect(() => pnpmCommand("demo", "drop")).toThrow("demo ensure|reset|add-sample-project|sample-project-status");
   });
 });
 
