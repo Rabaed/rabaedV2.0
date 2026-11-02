@@ -269,6 +269,7 @@ const boardOf = (of: WorkItemRow[]): WorkItemBoardData => ({
   }),
   moves: {},
   layout: { contractorName: false, location: true, creationDate: true },
+  mayRaise: true,
 });
 const board = boardOf(items);
 

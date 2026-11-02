@@ -1241,15 +1241,37 @@ export function boardWorkItems(db: Db, memberId: string, tabScope: QueryScope, q
     const cards = await boardCards(trx, scope, q, now);
     // A search counts no more than the cards it shows ("Search and filters": no totals beyond what is shown).
     const counts = q.q === undefined ? await countByStage(trx, scope, q, now) : new Map([...cards].map(([key, c]) => [key, c.length]));
-    const { stages, filters } = await stagesAndFilters(trx, scope, counts);
+    const { stages: all, filters } = await stagesAndFilters(trx, scope, counts);
+    // The Draft column, first, only for a Member who may raise a Type of the Module (RP-1219): anyone else
+    // gets no Draft Stage at all, not even an empty column or a Stage to filter by.
+    const mayRaise = await mayRaiseIn(trx, tabScope);
+    const isDraft = (s: { category: string }) => s.category === "draft";
+    const stages = mayRaise ? [...all.filter(isDraft), ...all.filter((s) => !isDraft(s))] : all.filter((s) => !isDraft(s));
     const columns = stages.map((s) => {
-      const lanes = boardLanes(cards.get(s.key) ?? []);
+      const inStage = cards.get(s.key) ?? [];
+      const lanes = boardLanes(isDraft(s) ? [...inStage].sort(bySubjectThenId) : inStage);
       return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), steps: ownStepCounts(lanes), lanes };
     });
-    const moves = await boardMoves(trx, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
-    return { stages, filters, columns, moves, layout: await readBoardLayout(trx, tabScope), ...(await typeCounts(trx, scope, q, now)) };
+    const shownCards = stages.flatMap((s) => (cards.get(s.key) ?? []).map((i) => i.card));
+    const moves = await boardMoves(trx, shownCards);
+    return { stages, filters, columns, moves, layout: await readBoardLayout(trx, tabScope), mayRaise, ...(await typeCounts(trx, scope, q, now)) };
   });
 }
+
+/**
+ * Whether the Member may raise a Work Item Type of the scope's Module on its Project (RP-1219): the
+ * rule of the "+ New" Type picker and of the Register Import's 403, app.raisable_type_ids.
+ */
+async function mayRaiseIn(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<boolean> {
+  const { rows } = await sql<{ raisable: boolean }>`
+    select exists (select 1 from app.raisable_type_ids(${projectId}::uuid, ${moduleKey})) as raisable
+  `.execute(trx);
+  return rows[0]?.raisable === true;
+}
+
+/** The Draft column's order: by Subject, byte by byte, then id; never by when a Draft was started (visibility.md row 73, ADR 0015). */
+const bySubjectThenId = (a: BoardCardInput, b: BoardCardInput): number => byBytes(a.card.title, b.card.title) || byBytes(a.card.id, b.card.id);
+const byBytes = (a: string, b: string): number => Buffer.compare(Buffer.from(a), Buffer.from(b));
 
 /**
  * What the List and the Kanban show around their items: every Stage of the
