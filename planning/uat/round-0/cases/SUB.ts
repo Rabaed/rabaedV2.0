@@ -928,7 +928,8 @@ defineCase("SUB-1152", async (t) => {
   const panel = page.getByRole("dialog");
   await panel.getByRole("button", { name: /Supplier Approval Request/ }).click();
   await settle(page, 600);
-  t.check("The panel opens over the List at Wide, the picked Type in the URL", /[?&]new=1/.test(page.url()) && /[?&]size=wide/.test(page.url()) && /[?&]type=SAR/.test(page.url()), page.url());
+  t.check("The panel opens over the List at Wide, the picked Type in the URL", /[?&]new=SAR\b/.test(page.url()) && /[?&]size=wide/.test(page.url()), page.url());
+  const before = (await listRows(page)).length;
   await panel.getByRole("textbox", { name: "Subject" }).fill(subject);
   await panel.getByLabel("Trade").first().click();
   await page.getByRole("option", { name: /Electrical Works/ }).first().click();
@@ -940,7 +941,10 @@ defineCase("SUB-1152", async (t) => {
   t.check("The panel is still open, with Open Work Item page", await panel.getByRole("link", { name: "Open Work Item page" }).isVisible());
   await settle(page, 1200);
   await t.shot(page, "panel-saved");
-  const inList = (await listRows(page)).some((r) => r.subject === subject);
+  const rowsNow = await listRows(page);
+  const inList = rowsNow.some((r) => r.subject === subject);
+  // Picking a Type in the panel never filters the List behind it.
+  t.check("The List behind the panel keeps its rows (and gains the Draft)", rowsNow.length >= before, `${before} rows before, ${rowsNow.length} after`);
   const items = await H.listItems(tm.api.hafiz!, tm.projectId, "q=" + encodeURIComponent(subject));
   const it = items.find((i) => i.title === subject);
   t.check("The Draft is a SAR in the Drafts Stage (api)", it?.type?.code === "SAR" && it?.stage?.key === "draft", JSON.stringify({ type: it?.type?.code, stage: it?.stage?.key }));

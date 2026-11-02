@@ -47,41 +47,43 @@ describe("the Submittal Panel's URL", () => {
   });
 });
 
-// RP-1152: the create panel's place in the URL is `?new=1`, with `&type=SAR` once a Type is picked
-// and the link's size. It and an open item never share the URL: opening one closes the other.
+// RP-1152: the create panel's place in the URL is `?new=1`, or `?new=SAR` once a Type is picked, with
+// the link's size. `type` is the List's own Type filter, so the picked Type never goes there. The
+// panel and an open item never share the URL: opening one closes the other.
 describe("the create panel's URL", () => {
   it("opens the create panel at the link's size, keeping the List's own query", () => {
     expect(newSubmittalPanelHref("/en/projects/p/work-items", "?view=kanban", { size: "wide" })).toBe("/en/projects/p/work-items?view=kanban&new=1&size=wide");
     expect(newSubmittalPanelHref("/en/projects/p/work-items", "", {})).toBe("/en/projects/p/work-items?new=1");
   });
 
-  it("names the picked Type, and swaps it in place", () => {
-    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&size=wide", { type: "SAR" })).toBe("/en/projects/p/work-items?new=1&size=wide&type=SAR");
-    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&type=SAR", { type: "MAR" })).toBe("/en/projects/p/work-items?new=1&type=MAR");
+  it("names the picked Type in place, leaving the List's Type filter alone", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&size=wide", { type: "SAR" })).toBe("/en/projects/p/work-items?new=SAR&size=wide");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?type=MAR&new=SAR", { type: "DAR" })).toBe("/en/projects/p/work-items?type=MAR&new=DAR");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=SAR", { size: "wide" })).toBe("/en/projects/p/work-items?new=SAR&size=wide");
   });
 
   it("closes an open item when it opens", () => {
     expect(newSubmittalPanelHref("/en/projects/p/work-items", `?open=${id}&size=full&page=2`, { size: "wide" })).toBe("/en/projects/p/work-items?page=2&new=1&size=wide");
   });
 
-  it("drops itself, its Type and its size on close", () => {
-    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&new=1&type=SAR&size=wide", null)).toBe("/en/projects/p/work-items?page=2");
+  it("drops itself and its size on close, keeping the List's filters", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&type=MAR&new=SAR&size=wide", null)).toBe("/en/projects/p/work-items?page=2&type=MAR");
   });
 
-  it("is closed when an item opens", () => {
-    expect(submittalPanelHref("/en/projects/p/work-items", "?new=1&type=SAR&size=wide", id)).toBe(`/en/projects/p/work-items?size=wide&open=${id}`);
+  it("is closed when an item opens, keeping the List's Type filter", () => {
+    expect(submittalPanelHref("/en/projects/p/work-items", "?new=SAR&size=wide&type=MAR", id)).toBe(`/en/projects/p/work-items?size=wide&type=MAR&open=${id}`);
   });
 
   it("reads whether the create panel is open and its Type", () => {
-    expect(newItemFrom(new URLSearchParams("new=1&type=SAR"))).toEqual({ type: "SAR" });
+    expect(newItemFrom(new URLSearchParams("new=SAR"))).toEqual({ type: "SAR" });
     expect(newItemFrom(new URLSearchParams("new=1"))).toEqual({ type: null });
     expect(newItemFrom(new URLSearchParams("type=SAR"))).toBeNull();
-    // A Type code is a short Document Number segment: anything else asks the api nothing.
-    expect(newItemFrom(new URLSearchParams("new=1&type=../me"))).toEqual({ type: null });
+    // A Type code is a short Document Number segment: anything else opens it on the first Type and asks the api nothing.
+    expect(newItemFrom(new URLSearchParams("new=../me"))).toEqual({ type: null });
   });
 
   it("lands a direct link to the New page on the List with the panel at Normal (decision 1)", () => {
     expect(newItemLanding("p1")).toBe("/projects/p1/work-items?new=1&size=normal");
-    expect(newItemLanding("p1", "SAR")).toBe("/projects/p1/work-items?new=1&size=normal&type=SAR");
+    expect(newItemLanding("p1", "SAR")).toBe("/projects/p1/work-items?new=SAR&size=normal");
   });
 });
