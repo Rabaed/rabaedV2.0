@@ -13,7 +13,6 @@ function fakeSeam(overrides: Partial<PostSeam> = {}) {
     prHead: () => HEAD,
     read: () => "No findings.\n",
     body: () => "Builds the thing.\n\n<!-- implement: RP-1 -->\n",
-    labels: () => [],
     changedFiles: () => ["scripts/x.ts"],
     post: (pr, body) => void posted.push({ pr, body }),
     ...overrides,
@@ -74,10 +73,10 @@ describe("postReview", () => {
     expect(posted).toHaveLength(1);
   });
 
-  it("needs no marker on a PR labelled docs-only", () => {
-    const { seam, posted } = fakeSeam({ body: () => "", labels: () => ["docs-only"] });
-    expect(postReview(["12", "s.md"], seam).ok).toBe(true);
-    expect(posted).toHaveLength(1);
+  it("still needs the marker on a code PR, whatever its labels: a docs-only label is no exemption", () => {
+    const { seam, posted } = fakeSeam({ body: () => "", changedFiles: () => ["scripts/x.ts"] });
+    expect(postReview(["12", "s.md"], seam).ok).toBe(false);
+    expect(posted).toEqual([]);
   });
 
   it("refuses without a marker when the changed files can't be read, or are none, or one is not a doc", () => {

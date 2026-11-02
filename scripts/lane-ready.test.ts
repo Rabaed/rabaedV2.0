@@ -12,7 +12,6 @@ function fakeSeam(overrides: Partial<ReadySeam> = {}) {
     prHead: () => HEAD,
     read: () => "No findings.\n",
     body: () => "<!-- implement: RP-1 -->",
-    labels: () => [],
     changedFiles: () => ["scripts/x.ts"],
     isDraft: () => true,
     markReady: (pr) => void steps.push(`ready ${pr}`),

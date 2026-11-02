@@ -31,8 +31,6 @@ export interface PostSeam {
   read(file: string): string;
   /** The PR's body on GitHub ("" when it has none). */
   body(pr: number): string;
-  /** The PR's label names. */
-  labels(pr: number): string[];
   /** The paths the PR changes, a rename's old path included; throws when the list can't be read. */
   changedFiles(pr: number): string[];
   post(pr: number, body: string): void;
@@ -46,9 +44,11 @@ const IMPLEMENT_MARKER = /<!-- implement: RP-\d+ -->/;
 // (CODING_STANDARDS.md, planning/parallel-sessions.md, docs/agents/**) are all docs by it.
 const isDoc = (file: string) => file.startsWith("docs/") || file.endsWith(".md");
 
-/** Whether a PR needs no implement marker: labelled docs-only, or changing only docs. Fails closed: an unreadable file list exempts nothing. */
+/**
+ * Whether a PR needs no implement marker: it changes only docs. Judged by its files, never by its `docs-only` label,
+ * which a lane can set on a code PR. Fails closed: an unreadable file list exempts nothing.
+ */
 function markerExempt(pr: number, seam: PostSeam): boolean {
-  if (seam.labels(pr).includes("docs-only")) return true;
   try {
     const files = seam.changedFiles(pr);
     return files.length > 0 && files.every(isDoc);
@@ -108,7 +108,6 @@ export function realSeam(cwd: string = process.cwd()): PostSeam {
     prHead: (pr) => must("gh", ["pr", "view", String(pr), "--json", "headRefOid", "--jq", ".headRefOid"]),
     read: (file) => readFileSync(file, "utf8"),
     body: (pr) => must("gh", ["pr", "view", String(pr), "--json", "body", "--jq", ".body"]),
-    labels: (pr) => must("gh", ["pr", "view", String(pr), "--json", "labels", "--jq", ".labels[].name"]).split("\n").filter(Boolean),
     // The REST list pages past gh pr view's 100 files; a rename's old path counts, as everywhere (RP-606).
     changedFiles: (pr) =>
       must("gh", ["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/files`, "--jq", ".[] | .filename, (.previous_filename // empty)"]).split("\n").filter(Boolean),
