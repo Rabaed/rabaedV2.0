@@ -1495,15 +1495,42 @@ describe("realSeam", () => {
     expect(() => recorded(() => ({ status: 1, stderr: "HTTP 404" })).seam.unmarkQueued(987)).toThrow(/gh api --method DELETE failed:\nHTTP 404/);
   });
 
-  it("counts origin/main's commits to queue-pr.ts and ci-green.ts that HEAD lacks (RP-1195 item 6)", () => {
-    const { calls, seam } = recorded((_command, args) => {
-      if (args.at(-1) === "scripts/ci-green.ts") return { status: 128, stderr: "fatal: bad revision" };
-      return { status: 0, stdout: "1111111111111111111111111111111111111111\n2222222222222222222222222222222222222222\n" };
-    });
+  // RP-1195 follow-up (Main 6): an older copy of a file they import changes the verdict the same way.
+  it("counts origin/main's commits HEAD lacks to queue-pr.ts, ci-green.ts and every file they import (RP-1195 item 6)", () => {
+    const texts: Record<string, string> = {
+      "scripts/queue-pr.ts": 'import { a } from "./verify-gate.ts";\nimport { b } from "./ci-green.ts";\nimport { spawnSync } from "node:child_process";',
+      "scripts/ci-green.ts": 'import { c } from "./git-files.ts";',
+      "scripts/verify-gate.ts": 'import { c } from "./git-files.ts";',
+      "scripts/git-files.ts": "export const c = 1;",
+    };
+    const calls: string[] = [];
+    // `git log --format= --name-only`: each commit's touched files, a blank line between commits.
+    const spawn = ((_command: string, args: string[]) => (calls.push(args.join(" ")), { status: 0, stdout: "scripts/queue-pr.ts\nscripts/git-files.ts\n\nscripts/queue-pr.ts\n" })) as unknown as typeof spawnSync;
+    const seam = realSeam("/work", spawn, (path) => texts[path]);
     expect(seam.scriptCopies()).toEqual([
       { file: "scripts/queue-pr.ts", behind: 2 },
+      { file: "scripts/ci-green.ts", behind: 0 },
+      { file: "scripts/verify-gate.ts", behind: 0 },
+      { file: "scripts/git-files.ts", behind: 1 },
+    ]);
+    expect(calls).toEqual(["log --format= --name-only HEAD..origin/main -- scripts/queue-pr.ts scripts/ci-green.ts scripts/verify-gate.ts scripts/git-files.ts"]);
+    // Each stale file is named in its own warning.
+    expect(staleCopyWarnings(seam.scriptCopies()).map((line) => line.match(/to (\S+) that/)?.[1])).toEqual(["scripts/queue-pr.ts", "scripts/git-files.ts"]);
+  });
+
+  it("knows no count for any file when git log fails", () => {
+    const spawn = (() => ({ status: 128, stdout: "", stderr: "fatal: bad revision" })) as unknown as typeof spawnSync;
+    const copies = realSeam("/work", spawn, (path) => (path === "scripts/queue-pr.ts" ? "" : path === "scripts/ci-green.ts" ? "" : undefined)).scriptCopies();
+    expect(copies).toEqual([
+      { file: "scripts/queue-pr.ts", behind: undefined },
       { file: "scripts/ci-green.ts", behind: undefined },
     ]);
-    expect(calls.map(({ args }) => args.join(" "))).toEqual(["log --format=%H HEAD..origin/main -- scripts/queue-pr.ts", "log --format=%H HEAD..origin/main -- scripts/ci-green.ts"]);
+  });
+
+  it("reads the closure from the running copy by default", () => {
+    let listed: string[] = [];
+    const spawn = ((_command: string, args: string[]) => ((listed = args.slice(args.indexOf("--") + 1)), { status: 0, stdout: "" })) as unknown as typeof spawnSync;
+    realSeam("/work", spawn).scriptCopies();
+    expect(listed).toEqual(expect.arrayContaining(["scripts/queue-pr.ts", "scripts/ci-green.ts", "scripts/verify-gate.ts", "scripts/reviewed-label.ts", "scripts/shared-files.ts", "scripts/merge-checks.ts", "scripts/git-files.ts"]));
   });
 });
