@@ -46,6 +46,39 @@ function onlyDependencyFieldsChanged(before: string | undefined, after: string |
   }
 }
 
+/** An added root script: exactly `node scripts/<file>`, nothing after it, no subfolder. */
+const NEW_SCRIPT_COMMAND = /^node scripts\/([\w.-]+)$/;
+
+/**
+ * RP-1195 item 7: true when root package.json only adds `scripts` entries `node scripts/<file>` whose file this change
+ * adds (`isAdded`); every other field and every existing entry unchanged. Both versions must exist and parse (fails closed).
+ */
+function onlyNewScriptEntries(before: string | undefined, after: string | undefined, isAdded: (file: string) => boolean): boolean {
+  if (before === undefined || after === undefined) return false;
+  try {
+    const parse = (text: string) => {
+      const json: unknown = JSON.parse(text);
+      if (typeof json !== "object" || json === null || Array.isArray(json)) throw new Error("not an object");
+      const { scripts = {}, ...rest } = json as Record<string, unknown>;
+      if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) throw new Error("scripts not an object");
+      return { scripts: scripts as Record<string, unknown>, rest: JSON.stringify(rest) };
+    };
+    const [old, next] = [parse(before), parse(after)];
+    if (old.rest !== next.rest) return false;
+    if (Object.entries(old.scripts).some(([name, command]) => !Object.hasOwn(next.scripts, name) || next.scripts[name] !== command)) return false;
+    const added = Object.entries(next.scripts).filter(([name]) => !Object.hasOwn(old.scripts, name));
+    return (
+      added.length > 0 &&
+      added.every(([, command]) => {
+        const file = typeof command === "string" ? NEW_SCRIPT_COMMAND.exec(command)?.[1] : undefined;
+        return file !== undefined && isAdded(`scripts/${file}`);
+      })
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** A workspace package.json's text where the change starts and where it ends; undefined where it does not exist. */
 export type PackageJsonVersions = (file: string) => { before: string | undefined; after: string | undefined };
 
@@ -55,7 +88,15 @@ export type PackageJsonVersions = (file: string) => { before: string | undefined
  * belongs to a dependencies-only PR beside the lockfile (RP-573). Callers add their heading and next step.
  */
 export function sharedFilesMix(files: string[], versions: PackageJsonVersions): string[] | undefined {
-  const breach = rootSharedFilesBreach(files, (file) => {
+  // RP-1195 item 7: a root package.json that only adds scripts for scripts this change adds is not a root shared change.
+  const isAdded = (file: string) => {
+    if (!files.includes(file)) return false;
+    const { before, after } = versions(file);
+    return before === undefined && after !== undefined;
+  };
+  const rootPackageJson = files.includes("package.json") ? versions("package.json") : undefined;
+  const exempt = rootPackageJson !== undefined && onlyNewScriptEntries(rootPackageJson.before, rootPackageJson.after, isAdded);
+  const breach = rootSharedFilesBreach(exempt ? files.filter((file) => file !== "package.json") : files, (file) => {
     if (!isWorkspacePackageJson(file)) return false;
     const { before, after } = versions(file);
     return onlyDependencyFieldsChanged(before, after);
