@@ -226,8 +226,10 @@ describe("realReuseGit", () => {
     expect(calls[0]!.slice(0, 5)).toEqual(["git", "grep", "-l", "-E", "-e"]);
     expect(exclude).toBe(":(exclude)apps/api/test/nowhere.test.ts");
     const specifier = new RegExp(pattern!.replaceAll("[[:space:]]", "\\s"));
-    for (const line of ['import { a } from "./nowhere.test.ts";', "import { a } from '../test/nowhere.test';", 'export * from "./nowhere.test.js";', 'const m = await import("./nowhere.test.ts");', 'import "./nowhere.test.ts";']) expect(specifier.test(line), line).toBe(true);
-    for (const line of ['import { a } from "./nowhere.ts";', 'import { a } from "./xnowhere.test.ts";', 'const p = "apps/api/test/nowhere.test.ts";']) expect(specifier.test(line), line).toBe(false);
+    // Quotes from variables, so ci-green.test.ts's import scan does not read these sample lines as imports.
+    const [d, s] = ['"', "'"];
+    for (const line of [`import { a } from ${d}./nowhere.test.ts${d};`, `import { a } from ${s}../test/nowhere.test${s};`, `export * from ${d}./nowhere.test.js${d};`, `const m = await import(${d}./nowhere.test.ts${d});`, `import ${d}./nowhere.test.ts${d};`]) expect(specifier.test(line), line).toBe(true);
+    for (const line of [`import { a } from ${d}./nowhere.ts${d};`, `import { a } from ${d}./xnowhere.test.ts${d};`, `const p = ${d}apps/api/test/nowhere.test.ts${d};`]) expect(specifier.test(line), line).toBe(false);
   });
 
   it("finds none on git grep's no-match exit, and fails on any other", () => {
