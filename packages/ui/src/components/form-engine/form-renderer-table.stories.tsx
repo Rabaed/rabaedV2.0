@@ -53,7 +53,7 @@ const copy = {
   removeRow2: { en: "Remove row 2", ar: "حذف الصف 2" },
   row2: { en: "Row 2", ar: "الصف 2" },
   totalQuantity: { en: "Total Quantity", ar: "إجمالي الكمية" },
-  noRows: { en: "No rows yet.", ar: "لا توجد صفوف بعد." },
+  noRows: { en: "No items yet. Add the first row.", ar: "لا بنود بعد. أضف الصف الأول." },
   tooFew: { en: "Add at least 1 row.", ar: "أضف صفًا واحدًا على الأقل." },
   tooMany: { en: "Use at most 4 rows.", ar: "استخدم 4 صفوف على الأكثر." },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },

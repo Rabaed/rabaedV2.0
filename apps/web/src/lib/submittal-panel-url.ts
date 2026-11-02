@@ -21,6 +21,7 @@ export function submittalPanelHref(pathname: string, search: string, id: string 
   } else {
     // An item and the create panel never share the URL (RP-1152).
     params.delete(newParam);
+    params.delete(draftParam);
     params.set(openParam, id);
   }
   return withQuery(pathname, params);
@@ -34,19 +35,21 @@ const withQuery = (pathname: string, params: URLSearchParams) => {
 /**
  * The create panel's place in the URL (RP-1152): `?new=1` on the List and the Kanban, `?new=SAR`
  * once a Type is picked (`type` is the List's own Type filter), and the link's size (`&size=wide`
- * from "Add Submittal", `normal` from a direct link). Like `?open=`, a reload or a shared link
- * reopens it, and the size is the link's.
+ * from "Add Submittal", `normal` from a direct link). After the first save, `&draft=<id>` holds the
+ * new Draft (row 38). Like `?open=`, a reload or a shared link reopens it, and the size is the link's.
  */
 const newParam = "new";
+const draftParam = "draft";
 /** A Type code is a short Document Number segment. */
 const typeCode = /^[A-Z0-9]{1,10}$/;
 
 /** The page's URL with the create panel open (its Type and size changed where given), or closed (null). Opening it closes an open item. */
-export function newSubmittalPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey } | null): string {
+export function newSubmittalPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey; draft?: string } | null): string {
   const params = new URLSearchParams(search);
   if (open === null) {
     params.delete(newParam);
     params.delete(sizeParam);
+    params.delete(draftParam);
     return withQuery(pathname, params);
   }
   if (params.has(openParam)) {
@@ -55,14 +58,19 @@ export function newSubmittalPanelHref(pathname: string, search: string, open: { 
   }
   params.set(newParam, open.type ?? params.get(newParam) ?? "1");
   if (open.size !== undefined) params.set(sizeParam, open.size);
+  if (open.draft !== undefined) params.set(draftParam, open.draft);
   return withQuery(pathname, params);
 }
 
-/** Whether the URL opens the create panel, and the Type it names (null when none, or not a Type code). */
-export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: string | null } | null {
+/**
+ * Whether the URL opens the create panel, the Type it names (null when none, or not a Type code),
+ * and the Draft saved in it (null before the first save, or when not an id an item can have).
+ */
+export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: string | null; draft: string | null } | null {
   const value = params.get(newParam);
   if (value === null || value === "") return null;
-  return { type: value !== "1" && typeCode.test(value) ? value : null };
+  const draft = params.get(draftParam);
+  return { type: value !== "1" && typeCode.test(value) ? value : null, draft: draft !== null && uuid.test(draft) ? draft : null };
 }
 
 /** Where a direct link to the Submittals' New page lands: the List with the create panel at Normal (decision 1). */

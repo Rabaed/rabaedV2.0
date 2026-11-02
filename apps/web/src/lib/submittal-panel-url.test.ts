@@ -75,11 +75,31 @@ describe("the create panel's URL", () => {
   });
 
   it("reads whether the create panel is open and its Type", () => {
-    expect(newItemFrom(new URLSearchParams("new=SAR"))).toEqual({ type: "SAR" });
-    expect(newItemFrom(new URLSearchParams("new=1"))).toEqual({ type: null });
+    expect(newItemFrom(new URLSearchParams("new=SAR"))).toEqual({ type: "SAR", draft: null });
+    expect(newItemFrom(new URLSearchParams("new=1"))).toEqual({ type: null, draft: null });
     expect(newItemFrom(new URLSearchParams("type=SAR"))).toBeNull();
     // A Type code is a short Document Number segment: anything else opens it on the first Type and asks the api nothing.
-    expect(newItemFrom(new URLSearchParams("new=../me"))).toEqual({ type: null });
+    expect(newItemFrom(new URLSearchParams("new=../me"))).toEqual({ type: null, draft: null });
+  });
+
+  // Row 38: after the first save the URL holds the new Draft (`&draft=<id>`), so a reload keeps it.
+  it("holds the saved Draft beside its Type, keeping the size and the List's query", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&new=MAR&size=wide", { type: "MAR", draft: id })).toBe(
+      `/en/projects/p/work-items?page=2&new=MAR&size=wide&draft=${id}`,
+    );
+  });
+
+  it("drops the Draft with the panel on close, and when an item opens", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", `?page=2&new=MAR&draft=${id}&size=wide`, null)).toBe("/en/projects/p/work-items?page=2");
+    expect(submittalPanelHref("/en/projects/p/work-items", `?new=MAR&draft=${id}`, "0a0b0c0d-0000-4000-8000-000000000001")).toBe(
+      "/en/projects/p/work-items?open=0a0b0c0d-0000-4000-8000-000000000001",
+    );
+  });
+
+  it("reads the saved Draft: only an id that can be an item's, and only with the panel open", () => {
+    expect(newItemFrom(new URLSearchParams(`new=MAR&draft=${id}`))).toEqual({ type: "MAR", draft: id });
+    expect(newItemFrom(new URLSearchParams("new=MAR&draft=../members"))).toEqual({ type: "MAR", draft: null });
+    expect(newItemFrom(new URLSearchParams(`draft=${id}`))).toBeNull();
   });
 
   it("lands a direct link to the New page on the List with the panel at Normal (decision 1)", () => {

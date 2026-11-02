@@ -90,7 +90,20 @@ const sizeLabels = (locale: Locale): SubmittalPanelSizeLabels => ({
 
 const draftRoute = submittalRoute({ definition: submittalOwnerWorkflow, stages: workflowStages, position: { kind: "own", stepKey: "draft" } });
 
-function CreatePanel({ context, width, layout = "slide-over", savedAt: initialSave = null }: { context: StoryContext; width: number; layout?: SubmittalPanelLayout; savedAt?: string | null }) {
+function CreatePanel({
+  context,
+  width,
+  layout = "slide-over",
+  savedAt: initialSave = null,
+  rail: railOn = true,
+}: {
+  context: StoryContext;
+  width: number;
+  layout?: SubmittalPanelLayout;
+  savedAt?: string | null;
+  /** Off (row 13): no side band at Wide and Full; "Before you send" stays in the flow. */
+  rail?: boolean;
+}) {
   const locale = storyLocale(context);
   const toast = useToast();
   const ids = useSubmittalPanelIds();
@@ -146,6 +159,7 @@ function CreatePanel({ context, width, layout = "slide-over", savedAt: initialSa
           </NewItemIdentity>
         }
         rail={
+          railOn && (
           <>
             {checklist(true)}
             {route}
@@ -156,6 +170,7 @@ function CreatePanel({ context, width, layout = "slide-over", savedAt: initialSa
               labels={{ author: copy.onlyYou[locale], company: copy.onlyCompany[locale], heading: copy.whoSees[locale] }}
             />
           </>
+          )
         }
         actions={
           <NewItemFooter
@@ -184,7 +199,7 @@ function CreatePanel({ context, width, layout = "slide-over", savedAt: initialSa
           onToggleAll={() => setFolded(!folded)}
         />
         <div className="flex flex-col gap-2 px-5 @[880px]/sdp:px-7">
-          <BeforeYouSend heading={copy.before[locale]} checklist={checklist(false)} route={route} open={!folded} onOpenChange={(o) => setFolded(!o)} />
+          <BeforeYouSend heading={copy.before[locale]} checklist={checklist(false)} route={route} inflow={railOn} />
           {!folded && savedAt === null && (
             <section aria-label={copy.documents[locale]} className="rounded-[12px] p-4 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
               <LockedDocuments
@@ -253,6 +268,30 @@ export const Normal: Story = {
     await expect(visible(panel.querySelector(".sdp-rail"))).toBe(false);
     await expect(visible(panel.querySelector("[data-before-you-send]"))).toBe(true);
     await expect(within(panel).getByRole("button", { name: storyText(context, copy.before) })).toHaveAttribute("aria-expanded", "true");
+  },
+};
+
+/** "Collapse all" folds the Form Sections only: "Before you send" is a panel block and opens and closes on its own (row 12). */
+export const CollapseAllLeavesBeforeYouSend: Story = {
+  render: (_args, context) => <CreatePanel context={context} width={640} />,
+  play: async (context) => {
+    const panel = panelOf(context);
+    const before = within(panel).getByRole("button", { name: storyText(context, copy.before) });
+    await userEvent.click(within(panel).getByRole("button", { name: storyText(context, bi("Collapse all", "طي الكل")) }));
+    await expect(before).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(before);
+    await expect(before).toHaveAttribute("aria-expanded", "false");
+    await expect(within(panel).getByRole("button", { name: storyText(context, bi("Expand all", "توسيع الكل")) })).toBeVisible();
+  },
+};
+
+/** Rail off (row 13, RP-1221 and RP-1222): at Wide there is no side band, and "Before you send" stays in the flow. */
+export const RailOff: Story = {
+  render: (_args, context) => <CreatePanel context={context} width={960} rail={false} />,
+  play: async (context) => {
+    const panel = panelOf(context);
+    await expect(panel.querySelector(".sdp-rail")).toBeNull();
+    await expect(visible(panel.querySelector("[data-before-you-send]"))).toBe(true);
   },
 };
 

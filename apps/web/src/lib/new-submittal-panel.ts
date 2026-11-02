@@ -6,6 +6,7 @@ import {
   isUnanswered,
   type FormSchema,
   type Locale,
+  type ModuleKey,
   type NewItemRoutePreview,
 } from "@rabaed/domain";
 import type { NewItemRequiredItem, SubmittalPanelLayout } from "@rabaed/ui";
@@ -82,9 +83,45 @@ export function savedClock(at: string, locale: Locale): string {
   return formatDate(new Date(at), locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-/** The media queries the layout follows: a phone below 768px, a tablet below 1200px (decision 1). */
+/** The media queries the layout follows: a phone below 768px, a tablet from 768px to 1023px; from 1024px the slide-over (decision 1). */
 export const phoneQuery = "(max-width: 767px)";
-export const tabletQuery = "(max-width: 1199px)";
+export const tabletQuery = "(max-width: 1023px)";
+
+/** The read of the Types a Module (the Submittals by default) lets the viewer raise on a Project: one rule for the server's read and the browser's. */
+export function raisableTypesPath(projectId: string, module: ModuleKey = "submittals"): string {
+  const query = module === "submittals" ? "" : `?module=${module}`;
+  return `/v1/projects/${encodeURIComponent(projectId)}/raisable-types${query}`;
+}
+
+/**
+ * The saved Draft in the URL (row 38). After the first save the create panel's URL holds the new
+ * item's id beside its Type, `?new=MAR&draft=<id>` (`newSubmittalPanelHref`, `newItemFrom`), so a
+ * reload or Esc keeps it: the panel reopens after its save, read from `GET /v1/work-items/:id` and
+ * its Form. It reopens only the viewer's own first Draft, still unnumbered, of a Type they may raise
+ * on this Project; anything else (hidden, gone, Submitted, another's) is a fresh create panel that
+ * names nothing. Closing the panel drops `new` and `draft` together.
+ */
+export function resumableDraft(
+  item: {
+    projectId: string;
+    type: { code: string };
+    documentNumber: string | null;
+    revisionNo: number;
+    stage: { category: string };
+    actions: { saveAnswers: boolean };
+  } | null,
+  { projectId, types }: { projectId: string; types: readonly { code: string }[] },
+): boolean {
+  if (item === null) return false;
+  return (
+    item.projectId === projectId &&
+    item.stage.category === "draft" &&
+    item.documentNumber === null &&
+    item.revisionNo === 0 &&
+    item.actions.saveAnswers &&
+    types.some((t) => t.code === item.type.code)
+  );
+}
 
 /** The panel's layout: a page on a phone, the full width on a tablet, the slide-over with its grip and sizes on a desktop. */
 export function createSubmittalPanelLayout({ phone, tablet }: { phone: boolean; tablet: boolean }): SubmittalPanelLayout {

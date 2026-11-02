@@ -6,7 +6,7 @@ import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
-import { Icon } from "../icon/icon.tsx";
+import { Icon, type IconName } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { PoolMark } from "../views/kanban-card.tsx";
 import { submittalPanelKey, type SubmittalPanelWith } from "./panel-model.ts";
@@ -59,6 +59,8 @@ export type SubmittalPanelProps = {
   layout?: SubmittalPanelLayout;
   /** The open item's number as the breadcrumb shows it (a `DocNo`, with its revision), or what a Draft says instead. */
   crumb: ReactNode;
+  /** The Module's icon before its name in the breadcrumb; a file by default. */
+  crumbIcon?: IconName;
   /** Its place among the loaded rows; none for an item that isn't on the loaded page. */
   position?: { index: number; total: number };
   /** The previous and next loaded rows; absent at either edge, which disables the button. */
@@ -85,7 +87,11 @@ export type SubmittalPanelProps = {
   facts?: ReactNode;
   /** The tabs, sticky at the top of the scrolling body (RP-1066). */
   tabs?: ReactNode;
-  /** The side rail of the Wide and Full bands, 300px and 360px wide (`.sdp-rail`; RP-1064, RP-1067 fill it). */
+  /**
+   * The side rail of the Wide and Full bands, 300px and 360px wide (`.sdp-rail`; RP-1064, RP-1067 fill it).
+   * `false`: the panel has no rail band at all, and the main column keeps the whole width (a create
+   * panel with its rail off, RP-1152 row 13). Left out, the band is an empty slot.
+   */
   rail?: ReactNode;
   /** The fixed footer's actions; the primary one last. */
   actions?: ReactNode;
@@ -110,6 +116,7 @@ export function SubmittalPanel({
   mode = "item",
   layout = "slide-over",
   crumb,
+  crumbIcon = "file-text",
   position: itemPosition,
   onPrevious: itemPrevious,
   onNext: itemNext,
@@ -205,7 +212,7 @@ export function SubmittalPanel({
         <p className="sdp-crumb me-auto flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
           {!page && (
             <>
-              <Icon name="file-text" size={15} className="shrink-0" />
+              <Icon name={crumbIcon} size={15} className="shrink-0" />
               {/* The Module and the place are left out in the Compact band (`.sdp-crumb-label`). */}
               <span className="sdp-crumb-label whitespace-nowrap">{labels.module}</span>
               <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="sdp-crumb-label shrink-0" />
@@ -249,7 +256,7 @@ export function SubmittalPanel({
             {children}
           </div>
           {/* Shown from the Wide band up; an empty slot until RP-1064 and RP-1067 fill it. */}
-          <div className="sdp-rail">{rail}</div>
+          {rail !== false && <div className="sdp-rail">{rail}</div>}
         </div>
       </div>
       <div className="sdp-actions flex shrink-0 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface px-4 py-3">

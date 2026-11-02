@@ -941,6 +941,16 @@ defineCase("SUB-1152", async (t) => {
   t.check("The panel is still open, with Open Work Item page", await panel.getByRole("link", { name: "Open Work Item page" }).isVisible());
   await settle(page, 1200);
   await t.shot(page, "panel-saved");
+  // Row 38: the URL holds the new Draft, so a reload reopens the panel after its save.
+  t.check("The URL holds the saved Draft beside its Type", /[?&]new=SAR\b/.test(page.url()) && /[?&]draft=[0-9a-f-]{36}/.test(page.url()), page.url());
+  await page.reload();
+  await settle(page, 1500);
+  const subjectBox = panel.getByRole("textbox", { name: "Subject" });
+  await subjectBox.waitFor({ timeout: 15000 }).catch(() => {});
+  const reopened = (await subjectBox.count()) > 0 ? await subjectBox.inputValue() : "";
+  t.check("After a reload the panel shows the saved Draft: its Subject, read-only", reopened === subject && !(await subjectBox.isEditable()), JSON.stringify(reopened));
+  t.check("After a reload the footer still reads Saved, with Open Work Item page", (await panel.getByRole("link", { name: "Open Work Item page" }).isVisible()) && /Saved/.test(await panel.innerText()));
+  await t.shot(page, "panel-reloaded");
   const rowsNow = await listRows(page);
   const inList = rowsNow.some((r) => r.subject === subject);
   // Picking a Type in the panel never filters the List behind it.

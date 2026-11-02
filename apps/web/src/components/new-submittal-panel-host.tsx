@@ -23,6 +23,8 @@ import {
   type Scopes,
   type SignedInMember,
   type SupplierChoice,
+  type WorkItemDetail,
+  type WorkItemLinks,
 } from "@rabaed/domain";
 import {
   BeforeYouSend,
@@ -57,6 +59,7 @@ import {
   withAllSubmittalPanelSections,
   writeSubmittalPanelPreferences,
   type BuiltInChoices,
+  type IconName,
   type NewItemRoutePreviewLabels,
   type SubmittalPanelLayout,
   type SubmittalPanelSizeLabels,
@@ -68,7 +71,7 @@ import { Link, getPathname, useRouter } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { useCreateRefusal } from "@/lib/create-refusal";
 import { useFormRendererLabels } from "@/lib/form-labels";
-import { linkSearch } from "@/lib/link-search";
+import { hiddenLinkHrefs, linkSearch, linkTargetNames } from "@/lib/link-search";
 import {
   afterSaveAnswers,
   canRaise,
@@ -76,12 +79,15 @@ import {
   draftStepKey,
   lockedDocumentSections,
   phoneQuery,
+  raisableTypesPath,
   requiredItems,
+  resumableDraft,
   savedClock,
   tabletQuery,
   typedSomething,
 } from "@/lib/new-submittal-panel";
 import { newItemFrom, newSubmittalPanelHref, sizeFrom } from "@/lib/submittal-panel-url";
+import type { Reading } from "@/lib/transition-gate";
 import { useApiRead } from "@/lib/use-api-read";
 import { useDocuments, useImageUrls } from "./use-documents";
 import { WorkItemFormProvider, useWorkItemForm } from "./work-item-form";
@@ -105,12 +111,28 @@ export type NewSubmittalPanelHooks = {
   keep?: readonly string[];
 };
 
+/** The create panel's own words and look, from the Module that mounts it (row 13). */
+export type NewSubmittalPanelLook = {
+  /** The breadcrumb's Module name, e.g. "Submittals". */
+  module: string;
+  /** The phone page's back arrow, e.g. "Back to Submittals". */
+  back: string;
+  /** The breadcrumb's icon. */
+  icon: IconName;
+};
+
 export type NewSubmittalPanelHostProps = NewSubmittalPanelHooks & {
   projectId: string;
+  /** The Module whose raisable Types the panel offers (the Submittals by default). */
   module?: ModuleKey;
-  /** The Type the URL names (`&type=`); the first one the viewer may raise when none or not theirs. */
+  look: NewSubmittalPanelLook;
+  /** The Type the URL names (`?new=SAR`); the first one the viewer may raise when none or not theirs. */
   type: string | null;
   onTypeChange: (code: string) => void;
+  /** The Draft the URL holds after its first save (`&draft=<id>`, row 38): a reload reopens it after its save. */
+  draft?: string | null;
+  /** After the first save of a Draft that stays open: its id, for the URL to hold. */
+  onDraftSaved?: (id: string) => void;
   onClose: () => void;
   locale: Locale;
   /** Changes when the page's rows are read again: the new Draft's Documents are read again too. */
@@ -135,9 +157,10 @@ export function NewSubmittalPanelHost(props: NewSubmittalPanelHostProps) {
 }
 
 /**
- * The create panel's place in the page's URL (`?new=1&type=`, RP-1152): whether it is open, its
- * Type, and opening or closing it. As `?open=` does, the URL changes in place, so the List or the
- * Kanban is not read again, and a reload reopens it.
+ * The create panel's place in the page's URL (`?new=1`, `?new=SAR`, then `&draft=<id>` after the
+ * first save; RP-1152): whether it is open, its Type and Draft, and opening or closing it. As
+ * `?open=` does, the URL changes in place, so the List or the Kanban is not read again, and a
+ * reload reopens it.
  */
 export function useOpenNewSubmittal() {
   const params = useSearchParams();
@@ -147,7 +170,12 @@ export function useOpenNewSubmittal() {
     (open: Parameters<typeof newSubmittalPanelHref>[2]) => window.history.replaceState(null, "", newSubmittalPanelHref(pathname, window.location.search, open)),
     [pathname],
   );
-  return { newItem, open: (open: { type?: string; size?: "wide" } = {}) => show(open), close: () => show(null) };
+  return {
+    newItem,
+    open: (open: { type?: string; size?: "wide" } = {}) => show(open),
+    saved: (draft: string) => show({ draft }),
+    close: () => show(null),
+  };
 }
 
 /** "Add Submittal" (row 41): opens the create panel at Wide (row 4), with no page load. The page shows it only to a Member who may raise (decision 6). */
@@ -165,24 +193,55 @@ export function AddSubmittalButton({ label }: { label: string }) {
 const keptWidth = () => readSubmittalPanelPreferences(submittalPanelStorage()).width;
 const noStorageEvents = () => () => {};
 
-function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChange, onClose, locale, refreshKey, ...hooks }: NewSubmittalPanelHostProps) {
+/** Every reading loaded: the one list of what the panel needs before it shows the Form. */
+const allLoaded = <T extends readonly Reading<unknown>[]>(readings: T): readings is { [K in keyof T]: Extract<T[K], { state: "loaded" }> } =>
+  readings.every((r) => r.state === "loaded");
+
+function NewSubmittalPanel({
+  projectId,
+  module = "submittals",
+  look,
+  type,
+  onTypeChange,
+  draft = null,
+  onDraftSaved,
+  onClose,
+  locale,
+  refreshKey,
+  ...hooks
+}: NewSubmittalPanelHostProps) {
   const t = useTranslations("newSubmittal");
-  const tabs = useTranslations("projectTabs");
   const [attempt, setAttempt] = useState(0);
   const project = `/v1/projects/${encodeURIComponent(projectId)}`;
   const me = useApiRead<SignedInMember>("/v1/me", true, attempt);
   const covered = useApiRead<DimensionValues>(`${project}/visibility`, true, attempt);
   const scopes = useApiRead<Scopes>(`${project}/scopes`, true, attempt);
-  const raisable = useApiRead<RaisableTypes>(`${project}/raisable-types${module === "submittals" ? "" : `?module=${module}`}`, true, attempt);
+  const raisable = useApiRead<RaisableTypes>(raisableTypesPath(projectId, module), true, attempt);
   const people = useApiRead<FormChoices>(`${project}/form-choices`, true, attempt);
   const optionLists = useApiRead<{ optionLists: OptionList[] }>("/v1/option-lists", true, attempt);
   const suppliers = useApiRead<ApprovedSuppliers>(`${project}/approved-suppliers`, true, attempt);
   const templates = useApiRead<ChecklistTemplates>(`${project}/checklist-templates`, true, attempt);
-  const chosen = raisable.state === "loaded" ? (raisable.value.types.find((x) => x.code === type) ?? raisable.value.types[0]) : undefined;
+  // Row 38: the Draft the URL holds. One saved in this panel is already on screen; only one the URL
+  // brought (a reload, a link) is read, with its Form. Anything but the viewer's own first Draft of a
+  // Type they may raise here is a fresh create panel, which names nothing.
+  const [savedHere, setSavedHere] = useState<string | null>(null);
+  const resumeId = draft !== null && draft !== savedHere ? draft : null;
+  const itemPath = `/v1/work-items/${encodeURIComponent(resumeId ?? "")}`;
+  const item = useApiRead<WorkItemDetail>(itemPath, resumeId !== null, attempt);
+  const resumable = item.state === "loaded" && raisable.state === "loaded" && resumableDraft(item.value, { projectId, types: raisable.value.types });
+  const itemForm = useApiRead<FormToFill>(`${itemPath}/form`, resumable, attempt);
+  const itemLinks = useApiRead<WorkItemLinks>(`${itemPath}/links`, resumable, attempt);
+  const resuming =
+    resumeId !== null && (item.state === "loading" || (item.state === "loaded" && raisable.state === "loading") || (resumable && itemForm.state === "loading"));
+  const resumed = resumable && item.state === "loaded" && itemForm.state === "loaded" ? item.value : null;
+  const types = raisable.state === "loaded" ? raisable.value.types : [];
+  const chosen = resumed ? types.find((x) => x.code === resumed.type.code) : (types.find((x) => x.code === type) ?? types[0]);
   const typePath = chosen ? `${project}/work-item-types/${encodeURIComponent(chosen.code)}` : "";
   // A newer Form Version arrived meanwhile (`form_version_not_latest`): the Form is read again.
   const [formRead, setFormRead] = useState(0);
-  const form = useApiRead<FormToFill>(`${typePath}/form`, chosen !== undefined, `${attempt}:${formRead}`);
+  const typeForm = useApiRead<FormToFill>(`${typePath}/form`, chosen !== undefined && resumed === null && !resuming, `${attempt}:${formRead}`);
+  // A reopened Draft keeps its own Form Version (ADR 0006).
+  const form = resumed ? itemForm : typeForm;
   const route = useApiRead<RoutePreviewData>(`${typePath}/route-preview`, chosen !== undefined, attempt);
 
   const layout = createSubmittalPanelLayout({ phone: useMediaQuery(phoneQuery, false), tablet: useMediaQuery(tabletQuery, false) });
@@ -204,10 +263,11 @@ function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChang
   const frame: Frame = (content) => (
     <SubmittalPanel
       locale={locale}
-      labels={{ module: tabs(module), position: () => "", previous: "", next: "", close: t("close"), hint: "", back: t("back") }}
+      labels={{ module: look.module, position: () => "", previous: "", next: "", close: t("close"), hint: "", back: look.back }}
       mode="create"
       layout={layout}
       crumb={crumb}
+      crumbIcon={look.icon}
       onClose={content.onCloseOverride ?? onClose}
       width={size.width}
       resizing={size.resizing}
@@ -219,15 +279,15 @@ function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChang
       identity={content.identity}
       rail={content.rail}
       actions={content.actions}
-      // `rail` off (row 13): no side band at Wide and Full; "Before you send" stays in the flow.
-      className={content.noRail ? "[&_.sdp-rail]:!hidden" : undefined}
     >
       {content.children}
     </SubmittalPanel>
   );
 
-  const required = [me, covered, scopes, raisable, people] as const;
-  if (required.some((r) => r.state === "failed") || form.state === "failed" || (hooks.routePreview !== false && route.state === "failed" && chosen)) {
+  // What the panel needs before it shows the Form: the route only where it is previewed.
+  const required = [me, covered, scopes, raisable, people, form] as const;
+  const routeNeeded = hooks.routePreview !== false && chosen !== undefined;
+  if (required.some((r) => r.state === "failed") || (routeNeeded && route.state === "failed")) {
     // A Member who may raise no Type reads no Form and no route: that is the empty state, not a failure.
     if (raisable.state !== "loaded" || raisable.value.types.length > 0) {
       return frame({
@@ -261,16 +321,7 @@ function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChang
       ),
     });
   }
-  const ready =
-    me.state === "loaded" &&
-    covered.state === "loaded" &&
-    scopes.state === "loaded" &&
-    raisable.state === "loaded" &&
-    people.state === "loaded" &&
-    form.state === "loaded" &&
-    chosen !== undefined &&
-    (hooks.routePreview === false || route.state === "loaded");
-  if (!ready) {
+  if (!allLoaded(required) || chosen === undefined || resuming || (routeNeeded && route.state !== "loaded")) {
     return frame({
       label: t("loading"),
       busy: true,
@@ -281,21 +332,38 @@ function NewSubmittalPanel({ projectId, module = "submittals", type, onTypeChang
       ),
     });
   }
+  const [meRead, coveredRead, scopesRead, raisableRead, peopleRead, formToFill] = required;
+  const links = itemLinks.state === "loaded" ? itemLinks.value.links : [];
   return (
     <DraftRounds
-      key={`${chosen.code}`}
+      key={resumed ? resumed.id : chosen.code}
       frame={frame}
       projectId={projectId}
       locale={locale}
-      types={raisable.value.types}
+      types={raisableRead.value.types}
       typeCode={chosen.code}
       onTypeChange={onTypeChange}
-      form={form.value}
+      form={formToFill.value}
       route={hooks.routePreview === false || route.state !== "loaded" ? null : route.value}
-      companyName={me.value.company.legalName[locale]}
-      choices={fillingChoices(covered.value, scopes.value.scopes, locale)}
-      startTradeId={defaultTradeId(form.value.schema, covered.value.trade)}
-      people={people.value}
+      companyName={meRead.value.company.legalName[locale]}
+      choices={fillingChoices(coveredRead.value, scopesRead.value.scopes, locale)}
+      startTradeId={defaultTradeId(formToFill.value.schema, coveredRead.value.trade)}
+      resumed={
+        resumed && {
+          id: resumed.id,
+          subject: resumed.title,
+          answers: resumed.answers,
+          named: resumed.namedAnswers,
+          fieldTimes: resumed.fieldTimes,
+          linkTargets: linkTargetNames(links),
+          hiddenLinks: hiddenLinkHrefs(resumed.id, links),
+        }
+      }
+      onDraftSaved={(id) => {
+        setSavedHere(id);
+        onDraftSaved?.(id);
+      }}
+      people={peopleRead.value}
       optionLists={optionLists.state === "loaded" ? optionLists.value.optionLists : []}
       suppliers={suppliers.state === "loaded" ? suppliers.value.suppliers.map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name })) : []}
       checklistTemplates={templates.state === "loaded" ? checklistTemplateChoices(templates.value.templates) : []}
@@ -316,9 +384,19 @@ type Frame = (content: {
   actions?: ReactNode;
   labelledBy?: string;
   onCloseOverride?: () => void;
-  noRail?: boolean;
   children: ReactNode;
 }) => ReactNode;
+
+/** A Draft the URL held on arrival, reopened after its save (row 38). */
+type ResumedDraft = {
+  id: string;
+  subject: string;
+  answers: Record<string, unknown>;
+  named: WorkItemDetail["namedAnswers"];
+  fieldTimes: WorkItemDetail["fieldTimes"];
+  linkTargets: ReturnType<typeof linkTargetNames>;
+  hiddenLinks: Readonly<Record<string, string>>;
+};
 
 type DraftProps = NewSubmittalPanelHooks & {
   frame: Frame;
@@ -332,6 +410,8 @@ type DraftProps = NewSubmittalPanelHooks & {
   companyName: string;
   choices: BuiltInChoices;
   startTradeId: string | undefined;
+  resumed: ResumedDraft | null;
+  onDraftSaved: (id: string) => void;
   people: FormChoices;
   optionLists: readonly OptionList[];
   suppliers: readonly SupplierChoice[];
@@ -344,7 +424,10 @@ type DraftProps = NewSubmittalPanelHooks & {
 
 /** One Draft after another: with `afterSave: "clear"`, a save starts the next one, keeping the `keep` answers. */
 function DraftRounds(props: DraftProps) {
-  const [round, setRound] = useState<{ n: number; start: Record<string, unknown> }>({ n: 0, start: props.startTradeId ? { trade: props.startTradeId } : {} });
+  const [round, setRound] = useState<{ n: number; start: Record<string, unknown> }>({
+    n: 0,
+    start: props.resumed ? props.resumed.answers : props.startTradeId ? { trade: props.startTradeId } : {},
+  });
   return (
     <WorkItemFormProviderFor key={round.n} {...props} start={round.start} onCleared={(start) => setRound((r) => ({ n: r.n + 1, start }))} />
   );
@@ -352,26 +435,29 @@ function DraftRounds(props: DraftProps) {
 
 /** The Form's state is the item page's own (`WorkItemFormProvider`): once the Draft exists, its answers autosave with `PUT /answers`. */
 function WorkItemFormProviderFor(props: DraftProps & { start: Record<string, unknown>; onCleared: (start: Record<string, unknown>) => void }) {
-  const [created, setCreated] = useState<{ id: string; at: string } | null>(null);
+  // A reopened Draft is after its save from the start: its last save is the read's (`fieldTimes`).
+  const [created, setCreated] = useState<{ id: string; at: string | null } | null>(props.resumed ? { id: props.resumed.id, at: null } : null);
+  // Only the first round reopens a Draft; a cleared one starts empty.
+  const resumed = props.resumed?.id === created?.id ? props.resumed : null;
   return (
     <WorkItemFormProvider
       // Until the first save there is no item: nothing autosaves, and Save Draft creates it.
       workItemId={created?.id ?? ""}
       projectId={props.projectId}
       documentNumber={null}
-      linkTargets={{}}
-      hiddenLinks={{}}
+      linkTargets={resumed?.linkTargets ?? {}}
+      hiddenLinks={resumed?.hiddenLinks ?? {}}
       schema={props.form.schema}
       choices={props.choices}
       answers={props.start}
-      named={{}}
+      named={resumed?.named ?? {}}
       people={props.people}
       optionLists={props.optionLists}
       suppliers={props.suppliers}
       checklistTemplates={props.checklistTemplates}
       editable
       editableSections={props.form.editableSections}
-      fieldTimes={{}}
+      fieldTimes={resumed?.fieldTimes ?? {}}
       autosave={created !== null}
     >
       <DraftSubmittalPanel {...props} created={created} onCreated={setCreated} />
@@ -390,6 +476,8 @@ function DraftSubmittalPanel({
   route,
   companyName,
   start,
+  resumed,
+  onDraftSaved,
   created,
   onCreated,
   onCleared,
@@ -405,8 +493,8 @@ function DraftSubmittalPanel({
   keep,
 }: DraftProps & {
   start: Record<string, unknown>;
-  created: { id: string; at: string } | null;
-  onCreated: (created: { id: string; at: string }) => void;
+  created: { id: string; at: string | null } | null;
+  onCreated: (created: { id: string; at: string | null }) => void;
   onCleared: (start: Record<string, unknown>) => void;
 }) {
   const t = useTranslations("newSubmittal");
@@ -416,12 +504,13 @@ function DraftSubmittalPanel({
   const toast = useToast();
   const ids = useSubmittalPanelIds();
   const state = useWorkItemForm()!;
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(resumed?.subject ?? "");
   const [subjectMissing, setSubjectMissing] = useState(false);
   // A missing Trade is marked when the Draft is saved, not while the Form is being filled (as the New page did).
   const [requiredMarked, setRequiredMarked] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The Form Sections' folds; "Before you send" keeps its own (row 12: a panel block, not a Form Section).
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [discarding, setDiscarding] = useState(false);
   // The new Draft's Documents (decision 8): read once it exists, and again whenever the page is read again (an upload refreshes it).
@@ -463,7 +552,7 @@ function DraftSubmittalPanel({
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/projects/${projectId}/work-items`, {
+      const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/work-items`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         // Hidden fields' answers are cleared on save, here as on the server.
@@ -477,6 +566,8 @@ function DraftSubmittalPanel({
         onSaved?.(id, answers);
         if (afterSave === "clear") return onCleared(afterSaveAnswers(answers, { mode: "clear", keep }));
         onCreated({ id, at: new Date().toISOString() });
+        // The URL holds the new Draft, so a reload or Esc keeps it (row 38).
+        onDraftSaved(id);
         return;
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
@@ -496,24 +587,11 @@ function DraftSubmittalPanel({
   }
   // After the first save, Save Draft saves now (row 39); autosave runs too.
   const save = () => void (created === null ? create() : state.save(false));
-  const savedAt = created === null ? null : savedClock(state.savedAt ?? created.at, locale);
+  // "Saved 10:42"; a reopened Draft whose read gives no save time reads "Saved" (row 38).
+  const lastSave = created === null ? null : (state.savedAt ?? created.at);
+  const savedAt = created === null ? null : lastSave === null ? "" : savedClock(lastSave, locale);
 
-  const routeView =
-    routePreview && route
-      ? (() => {
-          const stepKey = draftStepKey(route);
-          const shown = submittalRoute({ definition: route.definition, stages: route.stages, position: stepKey === null ? null : { kind: "own", stepKey } });
-          const labels: NewItemRoutePreviewLabels = {
-            role: (role) => t(`roles.${role}`),
-            route: t("workflow"),
-            now: t("now"),
-            review: (role) => t("review", { role: t(`roles.${role}`) }),
-            private: t("private"),
-            outcome: t("outcome"),
-          };
-          return <NewItemRoutePreview locale={locale} route={shown} labels={labels} heading={t("workflow")} />;
-        })()
-      : null;
+  const routeView = routePreview && route ? <DraftRoutePreview route={route} locale={locale} /> : null;
   const draftsVisibleTo = route?.draftsVisibleTo ?? null;
   const whoSees = { author: t("onlyYou"), company: t("onlyCompany"), heading: t("whoSees") };
   const checklist = (incomplete: boolean) => <RequiredChecklist locale={locale} heading={t("required")} items={items} incomplete={incomplete ? t("incomplete") : undefined} />;
@@ -549,7 +627,7 @@ function DraftSubmittalPanel({
             <DraftWhoSees look="banner" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={whoSees} />
           </NewItemIdentity>
         ),
-        noRail: !rail,
+        // `rail` off (row 13): no side band at Wide and Full; "Before you send" stays in the flow.
         rail: rail && (
           <>
             {checklist(true)}
@@ -565,7 +643,13 @@ function DraftSubmittalPanel({
             onCancel={close}
             onSave={save}
             saving={creating || state.pending}
-            labels={{ notSaved: t("notSaved"), saved: (time) => t("saved", { time }), cancel: t("cancel"), saveDraft: t("saveDraft"), openPage: t("openPage") }}
+            labels={{
+              notSaved: t("notSaved"),
+              saved: (time) => (time === "" ? t("savedNoTime") : t("saved", { time })),
+              cancel: t("cancel"),
+              saveDraft: t("saveDraft"),
+              openPage: t("openPage"),
+            }}
           />
         ),
         children: (
@@ -579,14 +663,8 @@ function DraftSubmittalPanel({
               onToggleAll={() => setCollapsed(withAllSubmittalPanelSections(shownSections, collapsed, !allFolded))}
             />
             {/* Where the rail is hidden (Normal, Compact, tablet, phone), or off: the checklist and the route in the flow (row 12). */}
-            <div className={rail ? "px-5 pb-2 @[880px]/sdp:px-7" : "px-5 pb-2 @[880px]/sdp:px-7 [&_.sdp-inflow]:!block"}>
-              <BeforeYouSend
-                heading={t("before")}
-                checklist={checklist(false)}
-                route={routeView ?? undefined}
-                open={!allFolded}
-                onOpenChange={(open) => setCollapsed(withAllSubmittalPanelSections(shownSections, collapsed, !open))}
-              />
+            <div className="px-5 pb-2 @[880px]/sdp:px-7">
+              <BeforeYouSend heading={t("before")} checklist={checklist(false)} route={routeView ?? undefined} inflow={rail} />
             </div>
             <FormRenderer
               schema={schema}
@@ -606,7 +684,12 @@ function DraftSubmittalPanel({
                 setError(null);
               }}
               idPrefix="answer"
-              links={{ targets: {}, search: linkSearch(projectId), hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : null), linkAs: Link }}
+              links={{
+                targets: state.linkTargets,
+                search: linkSearch(projectId),
+                hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : (state.hiddenLinks[choice.documentNumber] ?? null)),
+                linkAs: Link,
+              }}
               {...(created && docs
                 ? {
                     // Decision 8: the Form's Documents fields are the new item's own upload fields, as on its page.
@@ -667,11 +750,27 @@ function DraftSubmittalPanel({
   );
 }
 
+/** The route a new Draft of the Type will take, by role only (decision 3), from the Draft Step on. */
+function DraftRoutePreview({ route, locale }: { route: RoutePreviewData; locale: Locale }) {
+  const t = useTranslations("newSubmittal");
+  const stepKey = draftStepKey(route);
+  const shown = submittalRoute({ definition: route.definition, stages: route.stages, position: stepKey === null ? null : { kind: "own", stepKey } });
+  const labels: NewItemRoutePreviewLabels = {
+    role: (role) => t(`roles.${role}`),
+    route: t("workflow"),
+    now: t("now"),
+    review: (role) => t("review", { role: t(`roles.${role}`) }),
+    private: t("private"),
+    outcome: t("outcome"),
+  };
+  return <NewItemRoutePreview locale={locale} route={shown} labels={labels} heading={t("workflow")} />;
+}
+
 /** A changing key as a stable string: the page's rows object is compared by identity. */
 const seen = new WeakMap<object, number>();
-let next = 0;
+let nextKeyId = 0;
 function refreshKeyId(key: unknown): string {
   if (typeof key !== "object" || key === null) return String(key);
-  if (!seen.has(key)) seen.set(key, next++);
+  if (!seen.has(key)) seen.set(key, nextKeyId++);
   return String(seen.get(key));
 }

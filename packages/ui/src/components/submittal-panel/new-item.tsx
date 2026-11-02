@@ -326,18 +326,21 @@ export type BeforeYouSendProps = {
   checklist?: ReactNode;
   /** The route preview (`NewItemRoutePreview`); none for a Form whose route isn't previewed. */
   route?: ReactNode;
-  /** Unfolded; follows "Collapse all" when the caller controls it. */
+  /** Unfolded, when the caller controls it; left out, the block opens and closes on its own. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** True (default): hidden from the Wide band, where the rail shows the same. False: always in the flow, for a panel with no rail (`rail={false}`). */
+  inflow?: boolean;
   className?: string;
 };
 
 /**
  * "Before you send" (row 12): the rail's checklist and route in the flow, above the Form Sections,
  * where the rail is hidden (Normal, Compact, the tablet and the phone). A panel block, not a Form
- * Section: from the Wide band the rail shows them and this block hides (`.sdp-inflow`).
+ * Section, so "Collapse all" leaves it alone: from the Wide band the rail shows them and this block
+ * hides (`.sdp-inflow`), unless the panel has no rail (`inflow={false}`).
  */
-export function BeforeYouSend({ heading, checklist, route, open: controlled, onOpenChange, className }: BeforeYouSendProps) {
+export function BeforeYouSend({ heading, checklist, route, open: controlled, onOpenChange, inflow = true, className }: BeforeYouSendProps) {
   const [own, setOwn] = useState(true);
   const open = controlled ?? own;
   const bodyId = useId();
@@ -346,7 +349,7 @@ export function BeforeYouSend({ heading, checklist, route, open: controlled, onO
     onOpenChange?.(!open);
   };
   return (
-    <section data-before-you-send="" className={cn("sdp-before sdp-inflow rounded-[12px] bg-surface shadow-[inset_0_0_0_1px_var(--border-subtle)]", className)}>
+    <section data-before-you-send="" className={cn("sdp-before rounded-[12px]", inflow && "sdp-inflow", "bg-surface shadow-[inset_0_0_0_1px_var(--border-subtle)]", className)}>
       <h3>
         <button
           type="button"

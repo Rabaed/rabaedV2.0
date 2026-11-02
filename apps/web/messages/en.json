@@ -1087,7 +1087,7 @@
         "addRow": "Add row",
         "row": "Row {n}",
         "removeRow": "Remove row {n}",
-        "noRows": "No rows yet.",
+        "noRows": "No items yet. Add the first row.",
         "limitReached": "The most rows allowed is {max}.",
         "total": "Total {column}",
         "wrongType": "This row isn't valid here."
@@ -3361,6 +3361,7 @@
     "add": "Add",
     "notSaved": "Not saved yet",
     "saved": "Saved {time}",
+    "savedNoTime": "Saved",
     "cancel": "Cancel",
     "saveDraft": "Save Draft",
     "openPage": "Open Work Item page",
