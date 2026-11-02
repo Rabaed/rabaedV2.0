@@ -75,7 +75,9 @@ try {
  */
 async function sampleProject(action: "sample-project-status" | "add-sample-project") {
   const before = await sampleProjectStatus(migrator);
-  console.log(`demo: the sample Project is ${before.project ? "there" : "not there"}, with ${before.present} of its ${before.planned} item(s)`);
+  console.log(
+    `demo: the sample Project is ${before.project ? "there" : "not there"}, with ${before.present} of its ${before.planned} item(s) and ${before.packages.present} of its ${before.packages.planned} Package(s)`,
+  );
   if (action === "sample-project-status") return;
   if (!files) throw new Error("the sample Project needs the file store: its Submittals leave Draft with their Datasheets; nothing was changed");
   const app = await buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer: demoMailbox().mailer, files });

@@ -278,14 +278,18 @@ describe("filters apply to the board as to the List", () => {
 
   for (const [i, query] of queries.entries()) {
     it(`shows the List's items, by Stage, for query ${i}`, async () => {
-      for (const by of [c1Engineer, k1ManagerA, c2Engineer]) {
+      for (const [who, by] of [["C1 engineer", c1Engineer], ["K1 manager A", k1ManagerA], ["C2 engineer", c2Engineer]] as const) {
         const b = await board(by, query);
         const { first, items } = await listAll(by, query);
-        const label = JSON.stringify(query);
-        expect(b.stages, label).toEqual(first.stages);
+        const label = `${who} ${JSON.stringify(query)}`;
+        // The List's Stages, but the Draft Stage only for a Member who may raise in the Module, first (RP-1219).
+        const isDraft = (s: { category: string }) => s.category === "draft";
+        const boardStages = b.mayRaise ? [...first.stages.filter(isDraft), ...first.stages.filter((s) => !isDraft(s))] : first.stages.filter((s) => !isDraft(s));
+        expect(b.stages, label).toEqual(boardStages);
         expectCountsAddUp(b, label);
-        // Within the last 30 days, every item is on the board.
-        expect(cardIds(b).sort(), label).toEqual(items.map((r) => r.id).sort());
+        // Within the last 30 days, every item of a Stage the board shows is on it.
+        const shown = new Set(b.stages.map((s) => s.key));
+        expect(cardIds(b).sort(), label).toEqual(items.filter((r) => shown.has(r.stage.key)).map((r) => r.id).sort());
         // Each card as its List row, in the List's order within a lane.
         for (const lane of b.columns.flatMap((c) => c.lanes)) {
           const order = items.map((r) => r.id).filter((id) => lane.cards.some((c) => c.id === id));

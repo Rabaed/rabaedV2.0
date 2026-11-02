@@ -116,15 +116,12 @@ export type WorkItemBoardProps = {
 
 type Dragging = { card: WorkItemRow; targets: Map<string, WorkItemMove> };
 
-/** The Stages the board shows: every one but Drafts, which stay on the List, Need My Action and its Stage filter (RP-410). */
-export function boardStages(board: Pick<WorkItemBoardData, "stages">): WorkItemBoardData["stages"] {
-  return board.stages.filter((s) => s.category !== "draft");
-}
-
 /**
  * The Kanban of a Module's Work Items (spec RP-344, RP-349; rebuilt to the
  * owner's Kanban Board Anatomy, RP-410): a grey canvas with a white column per
- * Stage (no Drafts), running in the reading direction. Inside a column, a
+ * Stage the api gives, running in the reading direction: the Draft column first,
+ * of the viewer's own Drafts, only for a Member who may raise in the Module
+ * (`mayRaise`, RP-1219); nobody else gets the Draft Stage. Inside a column, a
  * collapsible group per Step of the viewer's own Company (its role), one per
  * other Company by its name only (V5, V14), and the closed items. A closed
  * column shows the items closed in the last 30 days, with its total and "Show
@@ -189,7 +186,7 @@ export function WorkItemBoard({
         </p>
       )}
       <ol className="flex w-max items-start gap-[18px]">
-        {boardStages(board).map((stage) => {
+        {board.stages.map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
           const closed = !isOpenStageCategory(stage.category);

@@ -480,8 +480,8 @@ function WorkItemListBody({
       />
     ),
   });
-  // The Kanban has no Drafts column, so its Stage field leaves Drafts out; the List keeps them (RP-410).
-  const stageChoices = (board ? list.stages.filter((s) => s.category !== "draft") : list.stages).map((s) => ({
+  // The Stages the api gives: on the Kanban, Draft only with its column, for a Member who may raise (RP-1219).
+  const stageChoices = list.stages.map((s) => ({
     value: s.key,
     label: s.name[locale],
     mark: <StageDot stage={stageColour(s)} />,

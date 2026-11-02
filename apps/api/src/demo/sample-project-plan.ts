@@ -330,3 +330,253 @@ export function sampleSnags(): SampleSnag[] {
   }));
   return [...snags, ...observations];
 }
+
+/** A Package's status as it reads once the seed is done (GLOSSARY.md Package). */
+export type PackageStatus = "open" | "in_progress" | "done";
+
+/** A Draft put in an Open Package: never sent, so no Document Number. */
+export interface SampleDraft {
+  title: string;
+  trade: TradeCode;
+  location: string;
+  product: Product;
+}
+
+export interface SamplePackage {
+  name: BilingualText;
+  /** Its owning Contractor Participant: TMC (Ali puts it together) or Beta Build (Yousef). */
+  owner: "tmc" | "beta";
+  status: PackageStatus;
+  /** Subjects of the Project's own Submittals (sampleSubmittals) it takes in, already where they end. */
+  existing: string[];
+  /** Its own submittals: raised, sent for review and Submitted together by Submit Package, then each to its end. */
+  submitted: SampleSubmittal[];
+  /** Its own Drafts (an Open Package). */
+  drafts: SampleDraft[];
+}
+
+/** One of a Package's own submittals: a MAR of `trade` at `location`, ending at `end`. */
+function own(title: string, trade: TradeCode, location: string, end: SubmittalEnd, item: Product, extra: Partial<SampleSubmittal> = {}): SampleSubmittal {
+  return { title, type: "MAR", trade, location, end, product: item, ...(CODES[end] ? { recommendedCode: CODES[end] } : {}), ...extra };
+}
+
+const BETA = {
+  glazing: product("Double glazed units", "Saint-Gobain", "SGG Cool-Lite SKN 165", "08 80 00", "Double glazed units, 6 mm solar control, 16 mm argon, 6 mm clear.", "Glazed unit", 640, "m2"),
+  brackets: product("Curtain wall brackets", "Halfen", "HCW 3D", "08 44 13", "Adjustable stainless steel curtain wall brackets.", "Bracket", 860, "pcs"),
+  silicone: product("Structural silicone", "Dow", "DOWSIL 993", "07 92 00", "Two-part structural glazing silicone.", "Cartridge", 300, "pcs"),
+  spandrel: product("Spandrel glass", "Guardian", "SunGuard SN 70", "08 81 00", "Opacified spandrel glass for the floor edges.", "Spandrel glass", 410, "m2"),
+  stairs: product("Precast stair flights", "Precast Arabia", "PSF 1200", "03 41 00", "Precast concrete stair flights, 1200 mm wide.", "Stair flight", 18, "pcs"),
+  nosings: product("Stair nosings", "Gradus", "SPN 50", "06 43 00", "Aluminium anti-slip stair nosings.", "Nosing", 220, "m"),
+  anchors: product("Handrail anchors", "Hilti", "HST3 M12", "05 52 00", "Stainless steel wedge anchors for the handrails.", "Anchor", 480, "pcs"),
+  waterstops: product("Bentonite waterstops", "Volclay", "Waterstop-RX 101", "07 13 00", "Bentonite waterstop strips for the basement joints.", "Waterstop", 360, "m"),
+  protection: product("Protection board", "Sika", "SikaProof Protection 4", "07 13 26", "Protection board for the basement membrane.", "Board", 1200, "m2"),
+};
+
+const TMC_DRAFTS = {
+  valves: product("Sprinkler valve sets", "Viking", "Model J-1 alarm valve", "21 13 13", "Wet alarm valve sets with trim.", "Valve set", 4, "set"),
+  reels: product("Fire hose reels", "Firestorm", "FHR 30", "21 12 00", "Swinging hose reels, 30 m, 25 mm.", "Hose reel", 22, "pcs"),
+  extinguishers: product("Fire extinguishers", "Kidde", "EZA 6 kg", "21 11 00", "6 kg dry powder extinguishers with wall brackets.", "Extinguisher", 60, "pcs"),
+};
+
+/**
+ * The sample Project's Packages (RP-1220): for TMC, two of the Project's own Submittals grouped as they stand
+ * (one Done, one In Progress with a Code C waiting for its Revision) and an Open one of new Drafts; for Beta Build,
+ * the second Contractor, its own submittals Submitted by Submit Package (one In Progress with a Code C, one Done)
+ * and an Open one of Drafts. Each Contractor numbers its own (PKG-001…).
+ */
+export function samplePackages(): SamplePackage[] {
+  const submittals = sampleSubmittals().filter((s) => !s.revision && s.type === "MAR");
+  const taken = new Set<string>();
+  const pick = (n: number, wanted: (s: SampleSubmittal) => boolean) => {
+    const found = submittals.filter((s) => !taken.has(s.title) && wanted(s)).slice(0, n).map((s) => s.title);
+    if (found.length < n) throw new Error(`sample Packages: only ${found.length} of ${n} submittals to take`);
+    for (const title of found) taken.add(title);
+    return found;
+  };
+  const closed = (s: SampleSubmittal) => closesPackage(s.end);
+  return [
+    {
+      name: { en: "Lighting and power – Block A", ar: "الإنارة والطاقة – المبنى أ" },
+      owner: "tmc",
+      status: "done",
+      existing: pick(5, (s) => s.trade === "EL" && closed(s)),
+      submitted: [],
+      drafts: [],
+    },
+    {
+      name: { en: "Chilled water and HVAC – Block A", ar: "المياه المبردة والتكييف – المبنى أ" },
+      owner: "tmc",
+      status: "in_progress",
+      existing: [
+        ...pick(2, (s) => s.trade === "ME" && s.end === "with_consultant_engineer"),
+        ...pick(1, (s) => s.trade === "ME" && s.end === "with_consultant_manager"),
+        ...pick(1, (s) => s.trade === "ME" && s.end === "code_c"),
+        ...pick(1, (s) => s.trade === "ME" && s.end === "code_a"),
+      ],
+      submitted: [],
+      drafts: [],
+    },
+    {
+      name: { en: "Fire protection – Podium", ar: "الحماية من الحريق – المنصة" },
+      owner: "tmc",
+      status: "open",
+      existing: [],
+      submitted: [],
+      drafts: [
+        { title: "Sprinkler valve sets – Podium Ground Floor", trade: "ME", location: "PGF", product: TMC_DRAFTS.valves },
+        { title: "Fire hose reels – Podium Level 01", trade: "ME", location: "P01", product: TMC_DRAFTS.reels },
+        { title: "Fire extinguishers – Podium Basement 1", trade: "ME", location: "PB1", product: TMC_DRAFTS.extinguishers },
+      ],
+    },
+    {
+      name: { en: "Facade glazing – Tower A", ar: "زجاج الواجهات – البرج أ" },
+      owner: "beta",
+      status: "in_progress",
+      existing: [],
+      submitted: [
+        own("Double glazed units – Tower A Level 04", "CV", "A04", "code_a", BETA.glazing, { consultantEngineer: "ahmed" }),
+        own("Curtain wall brackets – Tower A Level 05", "CV", "A05", "code_c", BETA.brackets, { consultantEngineer: "ahmed" }),
+        own("Structural silicone – Tower A Level 06", "CV", "A06", "with_consultant_engineer", BETA.silicone, { consultantEngineer: "ahmed" }),
+        own("Spandrel glass – Tower A Level 03", "CV", "A03", "with_consultant_manager", BETA.spandrel, { consultantEngineer: "ahmed", recommendedCode: "A" }),
+      ],
+      drafts: [],
+    },
+    {
+      name: { en: "Precast stairs – Podium", ar: "الدرج الجاهز – المنصة" },
+      owner: "beta",
+      status: "done",
+      existing: [],
+      submitted: [
+        own("Precast stair flights – Podium Ground Floor", "CV", "PGF", "code_a", BETA.stairs, { consultantEngineer: "ahmed" }),
+        own("Stair nosings – Podium Level 01", "CV", "P01", "code_b", BETA.nosings, {
+          consultantEngineer: "ahmed",
+          comments: [{ comment: "Confirm the nosing colour with the Architect: Stair nosings, Podium Level 01.", reference: "Room finishes drawing", end: "open" }],
+        }),
+        own("Handrail anchors – Podium Basement 1", "CV", "PB1", "code_d", BETA.anchors, { consultantEngineer: "ahmed" }),
+      ],
+      drafts: [],
+    },
+    {
+      name: { en: "Basement waterproofing", ar: "عزل القبو المائي" },
+      owner: "beta",
+      status: "open",
+      existing: [],
+      submitted: [],
+      drafts: [
+        { title: "Bentonite waterstops – Podium Basement 1", trade: "CV", location: "PB1", product: BETA.waterstops },
+        { title: "Protection board – Podium Basement 1", trade: "CV", location: "PB1", product: BETA.protection },
+      ],
+    },
+  ];
+}
+
+/** Whether a submittal ending at `end` lets its Package be Done: closed at Code A, B or D (a Code C waits for its Revision). */
+export const closesPackage = (end: SubmittalEnd): boolean => end === "code_a" || end === "code_b" || end === "code_d";
+
+/** A check item of a Checklist Template: Pass, Fail or N/A, a comment allowed; a Failed one raises nothing of its own. */
+export interface SampleCheck {
+  key: string;
+  text: BilingualText;
+}
+
+/** Each Trade's Checklist Template on the sample Project, which its Inspections pick (RP-1220). */
+export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks: SampleCheck[] }> = {
+  EL: {
+    name: { en: "Cable containment and wiring", ar: "حوامل الكابلات والتمديدات" },
+    checks: [
+      { key: "supports", text: { en: "Supports at the spacing on the drawing", ar: "الدعامات بالمسافات المبينة في المخطط" } },
+      { key: "earthing", text: { en: "Containment bonded to earth", ar: "الحوامل موصولة بالتأريض" } },
+      { key: "labels", text: { en: "Cables labelled at both ends", ar: "الكابلات معلّمة من الطرفين" } },
+    ],
+  },
+  ME: {
+    name: { en: "Pipework installation", ar: "تركيب الأنابيب" },
+    checks: [
+      { key: "supports", text: { en: "Pipe supports at the spacing on the drawing", ar: "دعامات الأنابيب بالمسافات المبينة في المخطط" } },
+      { key: "pressure_test", text: { en: "Pressure test held for two hours", ar: "اختبار الضغط ثابت لمدة ساعتين" } },
+      { key: "insulation", text: { en: "Insulation complete and sealed", ar: "العزل مكتمل ومحكم" } },
+    ],
+  },
+  CV: {
+    name: { en: "Concrete pour", ar: "صب الخرسانة" },
+    checks: [
+      { key: "formwork", text: { en: "Formwork level, tight and clean", ar: "القوالب مستوية ومحكمة ونظيفة" } },
+      { key: "rebar_cover", text: { en: "Rebar cover as per drawing", ar: "غطاء حديد التسليح حسب المخطط" } },
+      { key: "embedded_items", text: { en: "Sleeves and embedded items in place", ar: "الأكمام والقطع المدفونة في أماكنها" } },
+    ],
+  },
+};
+
+/** Where an Inspection ends in the seed: as a Submittal does, or still a Draft. */
+export type InspectionEnd = SubmittalEnd | "draft";
+
+/** A Work Inspection Request (WIR) on the current WIR Workflow, which closes with a Review Code (ADR 0025). */
+export interface SampleInspection {
+  title: string;
+  /** Its raising Contractor. */
+  owner: "tmc" | "beta";
+  trade: TradeCode;
+  location: string;
+  end: InspectionEnd;
+  description: string;
+  consultantEngineer?: ConsultantEngineer;
+  /** From the Consultant Engineer on: the Code they recommend (the Code issued, once there is one). */
+  recommendedCode?: "A" | "B" | "C" | "D";
+  /** Its Checklist's check items the Consultant Engineer answers Fail; every other one Passes. */
+  failing?: string[];
+  /** Code B only: the Comments its Code raises. */
+  comments?: { comment: string; reference: string; end: "open" }[];
+  /** Code C only: re-inspected as Rev 1, which is still with the Consultant Engineer (`open`) or passed at Code A. */
+  revision?: "open" | "passed";
+}
+
+const inspection = (
+  title: string,
+  trade: TradeCode,
+  location: string,
+  end: InspectionEnd,
+  extra: Partial<SampleInspection> = {},
+): SampleInspection => ({
+  title,
+  owner: "tmc",
+  trade,
+  location,
+  end,
+  description: `${title}: ready for inspection.`,
+  ...(CODES[end as SubmittalEnd] ? { recommendedCode: CODES[end as SubmittalEnd] } : {}),
+  ...(end !== "draft" && end !== "with_pm" && end !== "returned" && end !== "with_consultant_engineer" ? { consultantEngineer: trade === "ME" ? "sara" : "ahmed" } : {}),
+  ...extra,
+});
+
+/**
+ * The sample Project's Inspections (RP-1220): raised by the Contractors (TMC, and Beta Build too), carried out by
+ * Design Consultants on the current WIR Workflow, ending with a Review Code; at every Stage, with a Code C
+ * re-inspected twice over (one Revision still open, one passed) and a Rejected one.
+ */
+export function sampleInspections(): SampleInspection[] {
+  return [
+    inspection("Cable tray installation – Tower A Level 02", "EL", "A02", "draft"),
+    inspection("Blinding concrete – Podium Basement 1", "CV", "PB1", "draft"),
+    inspection("Lighting circuits wiring – Tower A Level 03", "EL", "A03", "with_pm"),
+    inspection("Chilled water risers – Tower A Level 04", "ME", "A04", "with_pm"),
+    inspection("Column reinforcement – Podium Ground Floor", "CV", "PGF", "returned"),
+    inspection("Slab reinforcement – Podium Level 01", "CV", "P01", "with_consultant_engineer", { consultantEngineer: "ahmed" }),
+    inspection("Sprinkler pipework – Podium Ground Floor", "ME", "PGF", "with_consultant_engineer", { consultantEngineer: "sara" }),
+    inspection("Earthing system – Podium Basement 1", "EL", "PB1", "with_consultant_engineer"),
+    inspection("Duct pressure test – Tower A Level 05", "ME", "A05", "with_consultant_manager", { recommendedCode: "A" }),
+    inspection("Wall formwork – Podium Basement 1", "CV", "PB1", "with_consultant_manager", { recommendedCode: "C", failing: ["formwork"] }),
+    inspection("Distribution board installation – Podium Ground Floor", "EL", "PGF", "code_a"),
+    inspection("Drainage pipework – Podium Basement 1", "ME", "PB1", "code_a"),
+    inspection("Lighting fixtures – Podium Level 01", "EL", "P01", "code_b", {
+      comments: [{ comment: "Fix the loose fixture covers at gridline 4: Lighting fixtures, Podium Level 01.", reference: "Inspection", end: "open" }],
+    }),
+    inspection("Roof slab pour – Tower A Level 06", "CV", "A06", "code_b", {
+      comments: [{ comment: "Cure the slab edges for seven more days: Roof slab pour, Tower A Level 06.", reference: "Inspection", end: "open" }],
+    }),
+    inspection("Fan coil unit connections – Tower A Level 03", "ME", "A03", "code_c", { failing: ["pressure_test"], revision: "passed" }),
+    inspection("Transfer beam reinforcement – Podium Level 01", "CV", "P01", "code_c", { failing: ["rebar_cover"], revision: "open" }),
+    inspection("Busbar riser installation – Tower A Level 04", "EL", "A04", "code_d", { failing: ["supports", "earthing"] }),
+    inspection("Curtain wall anchors – Tower A Level 05", "CV", "A05", "code_a", { owner: "beta" }),
+    inspection("Glazing sealant – Tower A Level 06", "CV", "A06", "with_consultant_engineer", { owner: "beta", consultantEngineer: "ahmed" }),
+  ];
+}

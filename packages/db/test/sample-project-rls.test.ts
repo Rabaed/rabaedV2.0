@@ -76,16 +76,19 @@ describe("the sample Project, as the app role (seam 2)", () => {
       await expectHiddenFrom({ read: submittals, target, seenBy: [id.ali, id.hafiz], hiddenFrom: [id.ahmed, id.mohammed, id.faisal], name: named, label: "RP-1217-1" });
     }
     // Every Submitted original (a revised Code C item's Rev 1 is not Submitted yet, so the Consultant reads the original).
-    const submitted = await items("t.module_key = 'submittals' and w.revision_no = 0 and w.current_stage_key <> 'internal_review'");
+    const submitted = await items("t.module_key = 'submittals' and w.revision_no = 0 and w.current_stage_key not in ('internal_review', 'draft')");
     const seen = new Set((await submittals(id.ahmed)).map((r) => r.id));
     expect(submitted.length).toBeGreaterThan(0);
     expect(submitted.filter((s) => !seen.has(s))).toEqual([]); // not hidden-from: what Ahmed must read, none missing
   });
 
   it("RP-1217-2: Beta Build, a Contractor on it too, reads none of TMC's items, though it reads the Project", async () => {
-    const tmc = await items("true");
+    // TMC's own items: Beta Build raises some of its own since RP-1220 (its Packages).
+    const byTmc = `w.raised_by_participant_id = (select pa.id from participant pa join company c on c.id = pa.company_id
+                     where pa.project_id = w.project_id and c.legal_name ->> 'en' = 'TMC Constructions')`;
+    const tmc = await items(byTmc);
     expect((await project(id.yousef)).map((r) => r.id)).toEqual([projectId]);
-    const [submittal] = await items("t.module_key = 'submittals'");
+    const [submittal] = await items(`t.module_key = 'submittals' and ${byTmc}`);
     const [snag] = await items("t.code = 'SNG' and w.current_stage_key <> 'draft'");
     await expectHiddenFrom({ read: workItem(submittal!), target: submittal!, seenBy: id.hafiz, hiddenFrom: id.yousef, name: named, label: "RP-1217-2" });
     await expectHiddenFrom({ read: snagList, target: snag!, seenBy: id.hafiz, hiddenFrom: id.yousef, name: named, label: "RP-1217-2" });
