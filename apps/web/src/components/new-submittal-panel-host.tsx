@@ -603,6 +603,7 @@ function DraftSubmittalPanel({
         onCloseOverride: close,
         identity: (
           <NewItemIdentity
+            locale={locale}
             noNumber={t("noNumber")}
             draft={t("draft")}
             subject={subject}

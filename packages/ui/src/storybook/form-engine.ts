@@ -134,6 +134,7 @@ const attachments: Record<Locale, AttachmentsFieldLabels> = {
   en: {
     none: "No Documents yet.",
     notYet: "Documents can be added once the Draft is saved.",
+    add: "Add Document",
     uploading: "Uploading…",
     open: (name) => `Open ${name}`,
     remove: (name) => `Remove ${name}`,
@@ -147,6 +148,7 @@ const attachments: Record<Locale, AttachmentsFieldLabels> = {
   ar: {
     none: "لا توجد مستندات بعد.",
     notYet: "يمكن إضافة المستندات بعد حفظ المسودة.",
+    add: "إضافة مستند",
     uploading: "جارٍ الرفع…",
     open: (name) => `فتح \u2068${name}\u2069`,
     remove: (name) => `إزالة \u2068${name}\u2069`,

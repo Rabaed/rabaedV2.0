@@ -140,6 +140,7 @@ function CreatePanel({
         topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels(locale)} />}
         identity={
           <NewItemIdentity
+            locale={locale}
             noNumber={copy.noNumber[locale]}
             draft={copy.draft[locale]}
             subject={subject}
@@ -331,5 +332,12 @@ export const PhoneSaved: Story = {
     await expect(visible(panel.querySelector("[data-before-you-send]"))).toBe(true);
     await expect(within(panel).getByRole("link", { name: storyText(context, copy.openPage) })).not.toHaveTextContent(storyText(context, copy.openPage));
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+    // The List behind the phone's page doesn't scroll while it is open (row 7); closing gives the scroll back.
+    const before = document.body.style.overflow;
+    await expect(getComputedStyle(document.body).overflow).toBe("hidden");
+    await userEvent.click(within(panel).getByRole("button", { name: storyText(context, copy.back) }));
+    await waitFor(() => expect(within(context.canvasElement).queryByRole("dialog")).toBeNull());
+    await expect(document.body.style.overflow).not.toBe("hidden");
+    await expect(before).toBe("hidden");
   },
 };

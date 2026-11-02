@@ -103,7 +103,12 @@ type Story = StoryObj<typeof meta>;
 function TypeCardsDemo({ context, list }: { context: StoryContext; list: NewItemType[] }) {
   const locale = storyLocale(context);
   const [value, setValue] = useState(list[0]!.code);
-  return <NewItemTypeCards locale={locale} heading={copy.types[locale]} types={list} value={value} onChange={setValue} className="p-5" />;
+  // Inside a Wide panel's column (`@container/sdp`), where the cards once sat side by side.
+  return (
+    <div className="@container/sdp w-[960px] max-w-full">
+      <NewItemTypeCards locale={locale} heading={copy.types[locale]} types={list} value={value} onChange={setValue} className="p-5" />
+    </div>
+  );
 }
 
 /** One card per Type (rows 17–19): name and code, the one-line description, a check on the chosen one; a click chooses another. */
@@ -117,6 +122,11 @@ export const TypeCards: Story = {
     await expect(cards[0]).toHaveAttribute("aria-pressed", "true");
     await expect(cards[0]).toHaveTextContent(`${storyText(context, types[0]!.name)} (MAR)`);
     await expect(cards[0]).toHaveTextContent(storyText(context, types[0]!.description!));
+    // One vertical stack, each card the column's full width (row 17, `.nwtype`).
+    const boxes = cards.map((card) => card.getBoundingClientRect());
+    const column = group.getBoundingClientRect();
+    await expect(boxes.every((box) => Math.abs(box.width - column.width) < 1 && Math.abs(box.left - column.left) < 1)).toBe(true);
+    await expect(boxes.every((box, i) => i === 0 || box.top >= boxes[i - 1]!.bottom)).toBe(true);
     await userEvent.click(cards[1]!);
     await expect(cards[1]).toHaveAttribute("aria-pressed", "true");
     await expect(cards[0]).toHaveAttribute("aria-pressed", "false");
@@ -140,6 +150,7 @@ function IdentityDemo({ context }: { context: StoryContext }) {
   const [subject, setSubject] = useState("");
   return (
     <NewItemIdentity
+      locale={locale}
       noNumber={copy.noNumber[locale]}
       draft={copy.draft[locale]}
       subject={subject}
@@ -159,6 +170,11 @@ export const Identity: Story = {
     await expect(canvas.getByText(storyText(context, copy.draft))).toBeVisible();
     const subject = canvas.getByRole("textbox", { name: storyText(context, copy.subject) });
     await expect(subject).toHaveAttribute("maxLength", "200");
+    // Empty, it reads in the page's direction, so the Arabic placeholder starts at the right (rows 14, 16);
+    // typed text still takes its own direction from its first letter.
+    await expect(subject).toHaveAttribute("dir", storyLocale(context) === "ar" ? "rtl" : "ltr");
+    await expect(getComputedStyle(subject).unicodeBidi).toBe("plaintext");
+    await expect(getComputedStyle(subject).textAlign).toBe("start");
     await userEvent.type(subject, "LED light fixtures");
     await expect(subject).toHaveValue("LED light fixtures");
   },

@@ -999,6 +999,7 @@
       "attachmentsField": {
         "none": "No Documents yet.",
         "notYet": "Documents can be added once the Draft is saved.",
+        "add": "Add Document",
         "uploading": "Uploading…",
         "open": "Open {name}",
         "remove": "Remove {name}",

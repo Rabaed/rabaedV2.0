@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, type BaseRole, type BilingualText, type DraftsVisibleTo, type Locale } from "@rabaed/domain";
+import { directionOf, formatNumber, type BaseRole, type BilingualText, type DraftsVisibleTo, type Locale } from "@rabaed/domain";
 import { useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
@@ -47,7 +47,8 @@ export function NewItemTypeCards({ locale, heading, types, value, onChange, icon
       <p id={headingId} className="text-[12px] text-muted">
         {heading}
       </p>
-      <div role="group" aria-labelledby={headingId} className="grid grid-cols-1 gap-2 @[560px]/sdp:flex @[560px]/sdp:flex-wrap">
+      {/* One vertical stack, each card the column's full width, as `.nwtype` (row 17). */}
+      <div role="group" aria-labelledby={headingId} className="flex flex-col gap-2">
         {types.map((type) => {
           const on = type.code === value;
           return (
@@ -57,7 +58,7 @@ export function NewItemTypeCards({ locale, heading, types, value, onChange, icon
               aria-pressed={on}
               onClick={() => onChange(type.code)}
               className={cn(
-                "flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-start @[560px]/sdp:w-auto @[560px]/sdp:min-w-[240px]",
+                "flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-start",
                 on ? "bg-brand-tint shadow-[inset_0_0_0_1.5px_var(--brand)]" : "bg-surface shadow-[inset_0_0_0_1px_var(--border-strong)] hover:bg-hover",
                 focusRing,
               )}
@@ -81,6 +82,8 @@ export function NewItemTypeCards({ locale, heading, types, value, onChange, icon
 }
 
 export type NewItemIdentityProps = {
+  /** The page's language: the Subject reads in its direction while empty. */
+  locale: Locale;
   /** "No number yet": a Draft has no Document Number. */
   noNumber: string;
   /** The Draft chip's word. */
@@ -108,7 +111,7 @@ export const newItemSubjectMaxLength = 200;
  * the start, then the large Subject input (at most 200 characters). The Type cards and the banner
  * go under it as `children`.
  */
-export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, readOnly, children }: NewItemIdentityProps) {
+export function NewItemIdentity({ locale, noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, readOnly, children }: NewItemIdentityProps) {
   return (
     <div className="sdp-identity flex flex-col gap-2 px-5 pt-[18px] pb-4">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -122,7 +125,8 @@ export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, sub
       </div>
       <input
         type="text"
-        dir="auto"
+        // The page's direction while empty (the placeholder starts at the right in Arabic); typed text takes its own from its first letter (`plaintext`).
+        dir={directionOf(locale)}
         value={subject}
         onChange={(event) => onSubjectChange(event.target.value)}
         maxLength={newItemSubjectMaxLength}
@@ -132,7 +136,7 @@ export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, sub
         readOnly={readOnly}
         placeholder={placeholder}
         className={cn(
-          "sdp-new-subject my-1 min-h-11 w-full rounded-[10px] bg-transparent px-2.5 py-1.5 text-[20px] font-bold tracking-[-0.01em] text-text shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none @[880px]/sdp:text-[24px]",
+          "sdp-new-subject my-1 min-h-11 w-full rounded-[10px] text-start [unicode-bidi:plaintext] bg-transparent px-2.5 py-1.5 text-[20px] font-bold tracking-[-0.01em] text-text shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none @[880px]/sdp:text-[24px]",
           "placeholder:font-semibold placeholder:text-muted focus:shadow-[inset_0_0_0_1.5px_var(--brand)] aria-invalid:shadow-[inset_0_0_0_1.5px_var(--danger-fg)]",
         )}
       />

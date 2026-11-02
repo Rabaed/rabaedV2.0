@@ -38,6 +38,7 @@ const copy = {
   openDatasheet: { en: "Open RESCLITE-PRO datasheet.pdf", ar: "فتح \u2068RESCLITE-PRO datasheet.pdf\u2069" },
   removeDatasheet: { en: "Remove RESCLITE-PRO datasheet.pdf", ar: "إزالة \u2068RESCLITE-PRO datasheet.pdf\u2069" },
   unanswered: { en: "Not answered", ar: "لم تتم الإجابة" },
+  add: { en: "Add Document", ar: "إضافة مستند" },
 };
 
 const document = (id: string, fieldKey: string | null, fileName: string, sizeBytes: number, frozen = false): DocumentSummary => ({
@@ -88,6 +89,9 @@ export const Empty: Story = {
     await expect(input).toHaveAttribute("type", "file");
     await expect(input).toHaveAttribute("accept", "application/pdf");
     await expect(input).toBeRequired();
+    // The upload is a button in the page's language, never the browser's own "Choose File" (RP-1152 rows 29, 38).
+    await expect(canvas.getAllByText(storyText(context, copy.add))).toHaveLength(2);
+    await expect(input).toHaveClass("sr-only");
     await expect(canvas.queryByText("Cover letter.pdf")).toBeNull();
   },
 };

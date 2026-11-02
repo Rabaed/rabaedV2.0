@@ -151,6 +151,16 @@ export function SubmittalPanel({
     ref.current?.focus({ preventScroll: true });
   }, []);
 
+  // The phone's page covers the screen: the page behind it doesn't scroll while it is open (RP-1152 row 7).
+  useEffect(() => {
+    if (!page) return;
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = before;
+    };
+  }, [page]);
+
   // Reads the latest handlers, so the one key listener never calls stale ones.
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     const target = document.activeElement;
