@@ -151,6 +151,33 @@ describe("queuePr", () => {
     expect(enqueued).toEqual([]);
   });
 
+  it("queues a root package.json beside code when it only adds `node scripts/x.ts` and the PR adds scripts/x.ts (RP-1195 item 7)", () => {
+    const before = JSON.stringify({ scripts: { lint: "eslint ." } });
+    const after = JSON.stringify({ scripts: { lint: "eslint .", x: "node scripts/x.ts" } });
+    const answers: Record<string, { before: string | undefined; after: string | undefined }> = {
+      "package.json": { before, after },
+      "scripts/x.ts": { before: undefined, after: "export {};\n" },
+    };
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["package.json", "scripts/x.ts", "apps/api/src/a.ts"],
+      packageJsonVersions: (_commit, file) => answers[file] ?? { before: "old", after: "new" },
+    });
+    expect(queuePr(163, seam).ok).toBe(true);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("still refuses that PR when scripts/x.ts is already on main, with the same rule-3 refusal", () => {
+    const { seam, enqueued } = fakeSeam({
+      changedFiles: () => ["package.json", "scripts/x.ts", "apps/api/src/a.ts"],
+      packageJsonVersions: (_commit, file) =>
+        file === "package.json" ? { before: JSON.stringify({ scripts: {} }), after: JSON.stringify({ scripts: { x: "node scripts/x.ts" } }) } : { before: "old", after: "new" },
+    });
+    const text = queuePr(163, seam).lines.join("\n");
+    expect(text).toContain("breaks planning/parallel-sessions.md rule 3");
+    expect(text).toContain("shared: package.json");
+    expect(enqueued).toEqual([]);
+  });
+
   it("queues an own PR that touches only root shared files and docs", () => {
     const { seam, enqueued } = fakeSeam({ changedFiles: () => ["package.json", "pnpm-lock.yaml", ".github/workflows/ci.yml", "docs/tech-stack.md"] });
     expect(queuePr(163, seam).ok).toBe(true);
