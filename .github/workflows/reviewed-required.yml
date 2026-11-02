@@ -20,14 +20,20 @@ name: Reviewed required
 # fork's PR runs too, and the script judges it (only docs-only can pass it). Under merge_group GitHub runs
 # the merge commit's copy, which includes the PR's change; the script names the gate files a PR changes
 # on both events (a warning until GATE_PATHS_BLOCK in scripts/reviewed-required.ts is turned on).
+# Step 1 of 2 (RP-1148): pull_request stays beside it until this file is on main. Main's copy listens only to
+# pull_request, so without it nothing would report this check on the PR that makes the switch. Step 2 drops it,
+# and only then can a PR no longer edit what judges it. Both runs read the PR through the API, so they agree.
 on:
   pull_request_target:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, auto_merge_enabled, auto_merge_disabled]
+  pull_request:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, auto_merge_enabled, auto_merge_disabled]
   merge_group:
 permissions: {}
 concurrency:
   # A newer event on the same PR answers for the same head; the queue's entries each have their own ref.
-  group: reviewed-required-${{ github.event.pull_request.number || github.ref }}
+  # The event in the name: while both PR triggers run (step 1), one must not cancel the other (a cancelled required check fails).
+  group: reviewed-required-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   reviewed-required:
