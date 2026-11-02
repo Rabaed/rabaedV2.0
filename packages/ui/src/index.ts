@@ -274,7 +274,6 @@ export { type SubmitPackageCall, type SubmitPackageLabels, type SubmitPackageRes
 export { outcomesOfType } from "./components/views/outcomes-of-type.ts";
 export {
   WorkItemBoard,
-  boardStages,
   WorkItemViewSwitch,
   type WorkItemBoardLabels,
   type WorkItemBoardProps,
