@@ -222,12 +222,15 @@ describe("its Packages (RP-1220)", () => {
     }
   });
 
-  it("added to a Project that has its 129 items, adds only the Packages and the Inspections, then nothing", async () => {
-    // A Project of the same make, first given what RP-1217 added (UAT has it): its 129 items, no Packages, no Inspections.
-    const full = sampleRecords();
+  it("added to a Project that has its RP-1217 items, adds only the Packages and the Inspections, then nothing", { timeout: 600_000 }, async () => {
+    // A Project of the same make, first given RP-1217's kind of items (UAT has all 129) but no Packages or Inspections.
+    // Only the Submittals TMC's Packages take in, so CI builds 10 items here, not 129 (all 129 timed out at 3 minutes).
+    const whole = sampleRecords();
+    const taken = new Set(whole.packages.flatMap((p) => p.existing));
+    const full = { ...whole, submittals: whole.submittals.filter((s) => taken.has(s.title)), snags: [] };
     const project = { code: "NKP", name: { en: "Al Nakheel District – Packages seam test", ar: "مجمع النخيل – اختبار الحزم" } };
     const status = () => sampleProjectStatus(migrator, { records: full, project });
-    const items = full.submittals.length + full.snags.length;
+    const items = full.submittals.length;
     const own = full.packages.flatMap((p) => [...p.submitted, ...p.drafts]).length;
 
     const first = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: { ...full, inspections: [], packages: [] }, project }));
