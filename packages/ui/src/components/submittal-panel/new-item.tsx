@@ -95,6 +95,8 @@ export type NewItemIdentityProps = {
   numberId?: string;
   /** Marks the Subject as missing. */
   invalid?: boolean;
+  /** The Subject is set once the Draft exists (no call changes it): it reads, and can't be typed in. */
+  readOnly?: boolean;
   children?: ReactNode;
 };
 
@@ -106,7 +108,7 @@ export const newItemSubjectMaxLength = 200;
  * the start, then the large Subject input (at most 200 characters). The Type cards and the banner
  * go under it as `children`.
  */
-export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, children }: NewItemIdentityProps) {
+export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, readOnly, children }: NewItemIdentityProps) {
   return (
     <div className="sdp-identity flex flex-col gap-2 px-5 pt-[18px] pb-4">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -127,6 +129,7 @@ export function NewItemIdentity({ noNumber, draft, subject, onSubjectChange, sub
         aria-label={subjectLabel}
         aria-required="true"
         aria-invalid={invalid || undefined}
+        readOnly={readOnly}
         placeholder={placeholder}
         className={cn(
           "sdp-new-subject my-1 min-h-11 w-full rounded-[10px] bg-transparent px-2.5 py-1.5 text-[20px] font-bold tracking-[-0.01em] text-text shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none @[880px]/sdp:text-[24px]",
@@ -288,7 +291,7 @@ export function NewItemRoutePreview({ locale, route, labels, heading, className 
           const title = row.kind === "step" ? row.name[locale] : row.kind === "private" ? labels.review(row.role) : labels.outcome;
           const line = current ? labels.now : row.kind === "private" ? labels.private : labels.role(row.role);
           return (
-            <li key={i} data-route-row={row.kind} aria-current={current ? "step" : undefined} className={cn("relative grid grid-cols-[20px_minmax(0,1fr)] gap-2.5", !last && "pb-3.5")}>
+            <li key={i} data-route-row={row.kind} aria-current={current ? "step" : undefined} className={cn("relative grid grid-cols-[20px_minmax(0,1fr)] gap-2.5", !last && "pb-[14px]")}>
               {!last && <span aria-hidden="true" className="absolute start-[9px] top-5 bottom-0 w-0.5 bg-border-subtle" />}
               <span
                 aria-hidden="true"

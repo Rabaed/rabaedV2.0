@@ -43,7 +43,7 @@ const typeParam = "type";
 const typeCode = /^[A-Z0-9]{1,10}$/;
 
 /** The page's URL with the create panel open (its Type and size changed where given), or closed (null). Opening it closes an open item. */
-export function newItemPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey } | null): string {
+export function newSubmittalPanelHref(pathname: string, search: string, open: { type?: string; size?: SubmittalPanelSizeKey } | null): string {
   const params = new URLSearchParams(search);
   if (open === null) {
     for (const key of [newParam, typeParam, sizeParam]) params.delete(key);
@@ -68,7 +68,7 @@ export function newItemFrom(params: Pick<URLSearchParams, "get">): { type: strin
 
 /** Where a direct link to the Submittals' New page lands: the List with the create panel at Normal (decision 1). */
 export function newItemLanding(projectId: string, type?: string): string {
-  return newItemPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...(type !== undefined && typeCode.test(type) ? { type } : {}) });
+  return newSubmittalPanelHref(`/projects/${projectId}/work-items`, "", { size: "normal", ...(type !== undefined && typeCode.test(type) ? { type } : {}) });
 }
 
 /** The item the URL opens: only an id that can be an item's, so an edited link asks the api nothing else. */

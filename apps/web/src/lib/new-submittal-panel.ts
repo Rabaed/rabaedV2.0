@@ -1,20 +1,19 @@
 import {
+  formatDate,
   formFields,
   isFileField,
   isRequired,
   isUnanswered,
-  type DimensionValues,
   type FormSchema,
   type Locale,
   type NewItemRoutePreview,
-  type RaisableTypes,
 } from "@rabaed/domain";
 import type { NewItemRequiredItem, SubmittalPanelLayout } from "@rabaed/ui";
 
 // The create panel's logic (RP-1152), apart from React so it is tested on its own.
 
 /** "Add Submittal" shows, and the panel offers a Form, only to a Member who may raise a Submittals Type and whose Visibility covers a Trade (decision 6). */
-export function canRaise(raisable: Pick<RaisableTypes, "types"> | null, covered: Pick<DimensionValues, "trade"> | null): boolean {
+export function canRaise(raisable: { types: readonly unknown[] } | null, covered: { trade: readonly unknown[] } | null): boolean {
   return (raisable?.types.length ?? 0) > 0 && (covered?.trade.length ?? 0) > 0;
 }
 
@@ -78,11 +77,16 @@ export function typedSomething({ subject, answers, start }: { subject: string; a
   return Object.entries(answers).some(([key, value]) => !(isUnanswered(value) && isUnanswered(start[key])) && JSON.stringify(value) !== JSON.stringify(start[key]));
 }
 
+/** "10:42": when the Draft was last saved (`at`, ISO), in Saudi time, 24-hour, Latin digits in both languages (row 38). */
+export function savedClock(at: string, locale: Locale): string {
+  return formatDate(new Date(at), locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+}
+
 /** The media queries the layout follows: a phone below 768px, a tablet below 1200px (decision 1). */
 export const phoneQuery = "(max-width: 767px)";
 export const tabletQuery = "(max-width: 1199px)";
 
 /** The panel's layout: a page on a phone, the full width on a tablet, the slide-over with its grip and sizes on a desktop. */
-export function createPanelLayout({ phone, tablet }: { phone: boolean; tablet: boolean }): SubmittalPanelLayout {
+export function createSubmittalPanelLayout({ phone, tablet }: { phone: boolean; tablet: boolean }): SubmittalPanelLayout {
   return phone ? "page" : tablet ? "tablet-full" : "slide-over";
 }

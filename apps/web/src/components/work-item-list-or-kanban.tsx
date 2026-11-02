@@ -41,6 +41,7 @@ import { useState, type ReactNode } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname): next/link keeps navigation
 // client-side without adding the locale again.
 import NextLink from "next/link";
+import { NewSubmittalPanelHost, useOpenNewSubmittal } from "@/components/new-submittal-panel-host";
 import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-panel-host";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
@@ -247,6 +248,9 @@ export function WorkItemListOrKanban(
   const submittal = module === "submittals" ? opened : null;
   const openId = submittal?.openId ?? undefined;
   const onOpen = submittal ? (row: WorkItemRow) => submittal.open(row.id) : undefined;
+  // The create panel (RP-1152, `?new=1`): only the Submittals' for now; opening one closes the other.
+  const raising = useOpenNewSubmittal();
+  const newSubmittal = module === "submittals" && !openId ? raising.newItem : null;
   const loaded = props.view === "list" ? props.list : props.board;
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
   const post = (path: string, body: unknown) =>
@@ -392,6 +396,16 @@ export function WorkItemListOrKanban(
         onClose={submittal.close}
         locale={locale}
         filters={loaded.filters}
+        refreshKey={loaded}
+      />
+    )}
+    {newSubmittal && (
+      <NewSubmittalPanelHost
+        projectId={projectId}
+        type={newSubmittal.type}
+        onTypeChange={(code) => raising.open({ type: code })}
+        onClose={raising.close}
+        locale={locale}
         refreshKey={loaded}
       />
     )}

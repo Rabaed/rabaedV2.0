@@ -213,6 +213,10 @@
     border-inline-start: 1px solid var(--border-subtle);
     background: var(--surface-subtle);
   }
+  /* A create panel without a rail (RP-1152 row 13: `rail` off) leaves no empty band. */
+  .sdp-rail:empty {
+    display: none;
+  }
   .sdp-inflow {
     display: none;
   }

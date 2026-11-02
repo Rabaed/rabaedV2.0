@@ -1,7 +1,7 @@
 import { formSchema, type DimensionValues, type NewItemRoutePreview } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { afterSaveAnswers, canRaise, createPanelLayout, draftStepKey, lockedDocumentSections, requiredItems, typedSomething } from "./new-item-panel.ts";
+import { afterSaveAnswers, canRaise, createSubmittalPanelLayout, draftStepKey, lockedDocumentSections, requiredItems, savedClock, typedSomething } from "./new-submittal-panel.ts";
 
 // RP-1152: the create panel's logic, apart from React. MAR Form Version 7 is the worked example:
 // its required fields are the gap table's row 25 (Subject, Trade, Approved supplier, Location,
@@ -88,8 +88,15 @@ describe("Cancel before the first save (row 37)", () => {
 
 describe("the layout by screen width (decision 1)", () => {
   it("is a page on a phone, the full width on a tablet, a slide-over on a desktop", () => {
-    expect(createPanelLayout({ phone: true, tablet: true })).toBe("page");
-    expect(createPanelLayout({ phone: false, tablet: true })).toBe("tablet-full");
-    expect(createPanelLayout({ phone: false, tablet: false })).toBe("slide-over");
+    expect(createSubmittalPanelLayout({ phone: true, tablet: true })).toBe("page");
+    expect(createSubmittalPanelLayout({ phone: false, tablet: true })).toBe("tablet-full");
+    expect(createSubmittalPanelLayout({ phone: false, tablet: false })).toBe("slide-over");
+  });
+});
+
+describe("Saved hh:mm (row 38)", () => {
+  it("is Saudi time, 24-hour, in Latin digits in both languages", () => {
+    expect(savedClock("2026-11-02T07:42:00Z", "en")).toBe("10:42");
+    expect(savedClock("2026-11-02T13:05:00Z", "ar")).toBe("16:05");
   });
 });

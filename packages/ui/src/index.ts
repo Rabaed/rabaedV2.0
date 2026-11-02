@@ -164,6 +164,7 @@ export {
 } from "./components/settings/settings-layout.tsx";
 export { WatermarkSetting, type WatermarkSettingLabels, type WatermarkSettingProps, type WatermarkText } from "./components/settings/watermark-setting.tsx";
 export { cn } from "./lib/cn.ts";
+export { useMediaQuery } from "./lib/use-media-query.ts";
 export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,

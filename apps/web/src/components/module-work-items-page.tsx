@@ -10,7 +10,9 @@ import { newItemHref } from "@/lib/new-item-route";
 import { Link, getPathname, redirect } from "@/i18n/navigation";
 import { ReadFailed } from "@/components/read-failed";
 import { pageOutcome, valueOf } from "@/lib/api-read";
-import { getMe, readPackages, getRegisterImports, getRaisableTypes, readWorkItemBoard, readWorkItems, readProject } from "@/lib/session";
+import { getMe, getMyVisibility, readPackages, getRegisterImports, getRaisableTypes, readWorkItemBoard, readWorkItems, readProject } from "@/lib/session";
+import { AddSubmittalButton } from "@/components/new-submittal-panel-host";
+import { canRaise } from "@/lib/new-submittal-panel";
 
 /**
  * A Module tab of a Project (RP-346): one page of the work item query over the
@@ -88,7 +90,7 @@ export async function ModuleWorkItemsPage({
     ...(view === "list" ? { ...listQuery, sort: snags && searchParams.sort === undefined ? snagListSort : listQuery.sort } : workItemQueryFromSearchParams(searchParams)),
     module,
   };
-  const [me, projectRead, listRead, boardRead, raisable, packagesRead, registerImports] = await Promise.all([
+  const [me, projectRead, listRead, boardRead, raisable, packagesRead, registerImports, covered] = await Promise.all([
     getMe(),
     readProject(projectId),
     // Names sort in the reader's language.
@@ -103,6 +105,8 @@ export async function ModuleWorkItemsPage({
     // One import's Drafts (RP-954, "Open the Drafts"): the import named by its file name, from the
     // Imports page's list, which holds only the Member's own Company's. No time.
     query.importId ? getRegisterImports(projectId) : null,
+    // Whose Visibility covers a Trade may raise a Submittal (RP-1152, decision 6).
+    module === "submittals" ? getMyVisibility(projectId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   // A slow or failed read of the Project or its items says so and offers Try again; only the
@@ -127,20 +131,20 @@ export async function ModuleWorkItemsPage({
     );
   }
 
-  // The MAR's Draft Step is held by Contractors; the API refuses anyone else too. An Inspection
-  // (a WIR) is raised from its own tab, by a Member who may raise one of its Types, on the New
-  // WIR page, never the Submittals' New page (RP-1179).
-  const newLink = (to: "submittals" | "inspections", label: string) => (
-    <Link href={newItemHref(project.id, to)} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
-      <Icon name="plus" />
-      {label}
-    </Link>
-  );
+  // "Add Submittal" opens the create panel over the List (RP-1152), only for a Member who may raise
+  // a Submittals Type and whose Visibility covers a Trade (decision 6); the API refuses anyone else
+  // too. An Inspection (a WIR) is raised from its own tab, by a Member who may raise one of its
+  // Types, on the New WIR page, never the Submittals' New page (RP-1179).
   const action =
-    module === "submittals" && project.projectRole.baseRole === "contractor"
-      ? newLink("submittals", t("addSubmittal"))
+    module === "submittals" && canRaise(raisable, covered)
+      ? <AddSubmittalButton label={t("addSubmittal")} />
       : module === "inspections" && (raisable?.types.length ?? 0) > 0
-        ? newLink("inspections", t("newInspection"))
+        ? (
+            <Link href={newItemHref(project.id, "inspections")} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
+              <Icon name="plus" />
+              {t("newInspection")}
+            </Link>
+          )
         : undefined;
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
   // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every

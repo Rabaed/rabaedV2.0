@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newItemFrom, newItemLanding, newItemPanelHref, openIdFrom, sizeFrom, submittalPanelHref } from "./submittal-panel-url.ts";
+import { newItemFrom, newItemLanding, newSubmittalPanelHref, openIdFrom, sizeFrom, submittalPanelHref } from "./submittal-panel-url.ts";
 
 // RP-1061: the Submittal Panel's state is `?open=<id>` on the List and the Kanban, so a reload
 // or a shared link reopens it. Every other part of the URL (filters, page, view) is kept.
@@ -51,21 +51,21 @@ describe("the Submittal Panel's URL", () => {
 // and the link's size. It and an open item never share the URL: opening one closes the other.
 describe("the create panel's URL", () => {
   it("opens the create panel at the link's size, keeping the List's own query", () => {
-    expect(newItemPanelHref("/en/projects/p/work-items", "?view=kanban", { size: "wide" })).toBe("/en/projects/p/work-items?view=kanban&new=1&size=wide");
-    expect(newItemPanelHref("/en/projects/p/work-items", "", {})).toBe("/en/projects/p/work-items?new=1");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?view=kanban", { size: "wide" })).toBe("/en/projects/p/work-items?view=kanban&new=1&size=wide");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "", {})).toBe("/en/projects/p/work-items?new=1");
   });
 
   it("names the picked Type, and swaps it in place", () => {
-    expect(newItemPanelHref("/en/projects/p/work-items", "?new=1&size=wide", { type: "SAR" })).toBe("/en/projects/p/work-items?new=1&size=wide&type=SAR");
-    expect(newItemPanelHref("/en/projects/p/work-items", "?new=1&type=SAR", { type: "MAR" })).toBe("/en/projects/p/work-items?new=1&type=MAR");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&size=wide", { type: "SAR" })).toBe("/en/projects/p/work-items?new=1&size=wide&type=SAR");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&type=SAR", { type: "MAR" })).toBe("/en/projects/p/work-items?new=1&type=MAR");
   });
 
   it("closes an open item when it opens", () => {
-    expect(newItemPanelHref("/en/projects/p/work-items", `?open=${id}&size=full&page=2`, { size: "wide" })).toBe("/en/projects/p/work-items?page=2&new=1&size=wide");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", `?open=${id}&size=full&page=2`, { size: "wide" })).toBe("/en/projects/p/work-items?page=2&new=1&size=wide");
   });
 
   it("drops itself, its Type and its size on close", () => {
-    expect(newItemPanelHref("/en/projects/p/work-items", "?page=2&new=1&type=SAR&size=wide", null)).toBe("/en/projects/p/work-items?page=2");
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&new=1&type=SAR&size=wide", null)).toBe("/en/projects/p/work-items?page=2");
   });
 
   it("is closed when an item opens", () => {
