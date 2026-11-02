@@ -163,8 +163,8 @@ describe("what each Company sees of it (docs/visibility.md)", () => {
     const listOf = async (by: Caller) => {
       const res = await by.get(`/v1/projects/${projectId}/modules/submittals/work-items`);
       if (res.statusCode === 200) return [{ id: projectId }];
-      await expectHidden(res);
-      return []; // not hidden-from: the read expectHiddenFrom calls, the plain 404 being no row
+      await expectHidden(res); // not hidden-from: inside the read expectHiddenFrom calls below, as readById does
+      return [];
     };
     await expectHiddenFrom({ read: listOf, target: projectId, seenBy: as.ali, hiddenFrom: as.nasser, name: nameOf, label: "RP-1217-5" });
   });

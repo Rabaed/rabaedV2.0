@@ -82,7 +82,8 @@ async function sampleProject(action: "sample-project-status" | "add-sample-proje
   try {
     await addSampleProject(app, migrator, password, { log: (line) => console.log(`demo: ${line}`) });
   } catch (error) {
-    throw new Error(`the sample Project stopped: ${publicFailure(error)}`);
+    // The cause stays for a debugger; the catch above prints the message alone.
+    throw new Error(`the sample Project stopped: ${publicFailure(error)}`, { cause: error });
   } finally {
     await app.close();
   }

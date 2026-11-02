@@ -78,7 +78,8 @@ describe("the sample Project, as the app role (seam 2)", () => {
     // Every Submitted original (a revised Code C item's Rev 1 is not Submitted yet, so the Consultant reads the original).
     const submitted = await items("t.module_key = 'submittals' and w.revision_no = 0 and w.current_stage_key <> 'internal_review'");
     const seen = new Set((await submittals(id.ahmed)).map((r) => r.id));
-    expect(submitted.filter((s) => !seen.has(s))).toEqual([]);
+    expect(submitted.length).toBeGreaterThan(0);
+    expect(submitted.filter((s) => !seen.has(s))).toEqual([]); // not hidden-from: what Ahmed must read, none missing
   });
 
   it("RP-1217-2: Beta Build, a Contractor on it too, reads none of TMC's items, though it reads the Project", async () => {
@@ -88,8 +89,9 @@ describe("the sample Project, as the app role (seam 2)", () => {
     const [snag] = await items("t.code = 'SNG' and w.current_stage_key <> 'draft'");
     await expectHiddenFrom({ read: workItem(submittal!), target: submittal!, seenBy: id.hafiz, hiddenFrom: id.yousef, name: named, label: "RP-1217-2" });
     await expectHiddenFrom({ read: snagList, target: snag!, seenBy: id.hafiz, hiddenFrom: id.yousef, name: named, label: "RP-1217-2" });
+    // The rest of TMC's items as well, each proved above by Hafiz's read of the same kind.
     const lists = [...(await submittals(id.yousef)), ...(await snagList(id.yousef))].map((r) => r.id);
-    expect(lists.filter((x) => tmc.includes(x))).toEqual([]);
+    expect(lists.filter((x) => tmc.includes(x))).toEqual([]); // not hidden-from: the sweep after the by-id proofs above
   });
 
   it("RP-1217-3: the Recommended Code and Internal Note events stay with Design Consultants", async () => {
@@ -109,7 +111,7 @@ describe("the sample Project, as the app role (seam 2)", () => {
     const mechanical = new Set(await items("d.code = 'ME'"));
     const seen = (await submittals(id.sara)).map((r) => r.id);
     expect(seen.length).toBeGreaterThan(0);
-    expect(seen.filter((s) => !mechanical.has(s))).toEqual([]);
+    expect(seen.filter((s) => !mechanical.has(s))).toEqual([]); // not hidden-from: every item Sara reads is Mechanical
   });
 
   it("RP-1217-5: Nasser, who is not on it, reads neither the Project nor its items", async () => {
