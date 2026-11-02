@@ -155,6 +155,32 @@ describe("runChecks", () => {
   });
 });
 
+describe("runChecks docker daemon (RP-1197)", () => {
+  const withProbe = (dockerProbe: DoctorEnv["dockerProbe"]) => runChecks({ ...fakeEnv({ [userSettings]: enabled }), dockerProbe });
+
+  it("has no daemon check when the env has no probe", () => {
+    expect(runChecks(fakeEnv({ [userSettings]: enabled })).some((c) => c.name === "docker daemon")).toBe(false);
+  });
+
+  it("passes when the daemon answers", () => {
+    const check = withProbe(() => ({ ok: true })).find((c) => c.name === "docker daemon");
+    expect(check?.ok).toBe(true);
+  });
+
+  it("fails with the wait-don't-restart message when Docker hangs", () => {
+    const checks = withProbe(() => ({ ok: false, kind: "hang", message: "Docker not answering: wait, don't restart it (RP-1099)" }));
+    const check = checks.find((c) => c.name === "docker daemon");
+    expect(check).toMatchObject({ ok: false, message: "Docker not answering: wait, don't restart it (RP-1099)" });
+    expect(exitCodeOf(checks)).toBe(1);
+  });
+
+  it("fails with the start-Docker message when Docker is not running", () => {
+    const checks = withProbe(() => ({ ok: false, kind: "down", message: "Docker is not running: start Docker Desktop, then run this again" }));
+    expect(checks.find((c) => c.name === "docker daemon")).toMatchObject({ ok: false, message: "Docker is not running: start Docker Desktop, then run this again" });
+    expect(exitCodeOf(checks)).toBe(1);
+  });
+});
+
 describe("lineAndColumn", () => {
   it("counts lines from a character position, columns from 1", () => {
     expect(lineAndColumn("ab\ncd\nef", 0)).toEqual({ line: 1, column: 1 });

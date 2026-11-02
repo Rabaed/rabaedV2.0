@@ -30,8 +30,11 @@ export function runningStacks(containers: Container[]): RunningStack[] {
   return projects.map((project) => ({ project, dirs: [...new Set(containers.filter((c) => c.project === project).map((c) => c.workingDir))] }));
 }
 
-const describeStack = ({ project, dirs }: RunningStack) =>
-  `${project} (${dirs.join(", ") || "no folder"}${protectedLaneReason(project) === undefined ? "" : "; Main 7's, never stop it"})`;
+/** The idle time to print for a stack (RP-1197), e.g. "idle 3 h"; see stack-idle.ts. */
+export type IdleOf = (stack: RunningStack) => string;
+
+const describeStack = (stack: RunningStack, idleOf?: IdleOf) =>
+  `${stack.project} (${stack.dirs.join(", ") || "no folder"}${idleOf === undefined ? "" : `; ${idleOf(stack)}`}${protectedLaneReason(stack.project) === undefined ? "" : "; Main 7's, never stop it"})`;
 
 export type CapVerdict = { level: "ok" } | { level: "warn" | "refuse"; message: string };
 
@@ -39,11 +42,12 @@ export type CapVerdict = { level: "ok" } | { level: "warn" | "refuse"; message: 
  * Whether lane n's stack fits under the cap of `max` running stacks. The lane's own stack (and its
  * twin's, which shares its ports) is not another one: rewriting a lane's .env, or a --db run on it,
  * adds none. Warns when it would leave one slot or none, refuses when the cap is already reached.
+ * With `idleOf` (RP-1197) each listed stack also says how long it has been idle, so whoever is refused sees which one to ask about.
  */
-export function stackCap(n: number, containers: Container[], max: number): CapVerdict {
+export function stackCap(n: number, containers: Container[], max: number, idleOf?: IdleOf): CapVerdict {
   const own = laneProjects(n);
   const others = runningStacks(containers).filter((s) => !own.includes(s.project));
-  const list = others.map((s) => `  - ${describeStack(s)}`).join("\n");
+  const list = others.map((s) => `  - ${describeStack(s, idleOf)}`).join("\n");
   const help = [
     "`pnpm lanes:prune --stale` lists stopped stacks and stray containers. Ask your Main which finished lane can stop its stack",
     "(`docker compose stop` in that lane's worktree); never stop lane 7 (Main 7's harness data).",

@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { branchClaims } from "./check-claims.ts";
+import { dockerStop, probeDocker } from "./docker-probe.ts";
 import { composeProjectOfEnv, envValue, readWorktreeEnv } from "./lanes.ts";
 import { mergeRefusal, readMergeState } from "./merge-in-progress.ts";
 import { samePath } from "./paths.ts";
@@ -10,7 +11,8 @@ import { postgresDown, postgresOfEnv, tcpReachable } from "./test-services.ts";
 import { filesProblem, healthStop, listServiceStates, stackHealthProblems, type HealthDeps } from "./verify-health.ts";
 import { laneDatabaseRefusal } from "./verify-lane-db.ts";
 import { processAncestors, processStart } from "./process-start.ts";
-import { acquireLock, liveHolder, lockFile, mainSlot, releaseLock, waitForLock, type LockHolder, type Processes } from "./verify-lock.ts";
+import { acquireLock, liveHolder, lockFile, releaseLock, type LockHolder, type Processes } from "./verify-lock.ts";
+import { machineDir, machineLockFile, oldSlotsOf, removePlaces, waitForTurn } from "./verify-queue.ts";
 import { verifyOptions } from "./verify-options.ts";
 import { verifyOverlap } from "./verify-overlap.ts";
 import { prHeadRefusal, realPrBodySeam, writeVerifyLine } from "./verify-pr-body.ts";
@@ -32,13 +34,13 @@ import { listWorktrees } from "./worktrees.ts";
 // A shared module changed with no open RP-603 claim for the branch's key stops it (RP-1008),
 // and so does a merge in progress (MERGE_HEAD), naming its conflicted files (RP-1101).
 // Before the first step it checks Docker, the db and rustfs (Postgres only when no seam step runs) and stops with what is down, then
-// waits for its Main's one verify slot: a run in another of the Main's lanes waits for this one (RP-1096).
+// waits its turn in the machine-wide verify line: one full verify runs on the machine at a time (RP-1197; was one per Main, RP-1096).
 // `--pr <n>` writes the stamped last line into PR n's body after a full, clean run, and refuses unless HEAD is the PR's head (RP-1171).
 // `--from <step>` starts at that step, and the last line names the steps it left out;
 // `--log <file>` writes everything to the file and prints only the last line (RP-1019).
 // HEAD moving during the run (a pull, Auto-fix merging main) stops it after that step, with no verify line (RP-1103).
 // RP-1169: so does the working tree changing (verify-tree.ts: the tracked and untracked files that differ from HEAD), checked
-// after every step, once more after waiting for the Main's slot, and every 15 s during a step, which is killed at once
+// after every step, once more after waiting for its turn, and every 15 s during a step, which is killed at once
 // (a merge by the app's base-branch sync half-done). A live verify in another worktree on the same lane database (same
 // compose project or Postgres port) stops it before the first step (verify-lane-db.ts).
 
@@ -61,6 +63,11 @@ function stopEarly(message: string, code = 1): never {
   out.end(["pnpm verify stopped before its first step."], true);
   process.exit(code);
 }
+
+// RP-1197: Docker not answering stops the run here, before it queues for the lock, so a jammed Docker never holds a place in line (RP-1099).
+const dockerProbe = probeDocker();
+const dockerStopped = dockerStop(dockerProbe, "any");
+if (dockerStopped !== undefined) stopEarly(dockerStopped);
 
 // One verify per worktree, before any other check (RP-996): a second run would share the
 // lane's databases and fail both. Released on every exit; Ctrl-C and SIGTERM exit non-zero.
@@ -214,25 +221,26 @@ const checkStack = async () => {
 };
 await checkStack();
 
-// One verify per Main at a time (RP-1096; the owner chose per Main): a run in another of the Main's
-// lanes waits for this one. The slot is a lock in the clone's common git folder; released on every exit.
-const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root, encoding: "utf8" });
-if (common.status !== 0) stopEarly("git could not find this clone's common git folder, which holds the Mains' verify slots.");
-const slot = mainSlot(common.stdout.trim(), postgres.lane);
-process.on("exit", () => releaseLock(slot.file, process.pid));
+// One full verify at a time on the whole machine (RP-1197, which replaces RP-1096's one per Main): a run waits
+// its turn in a line in a folder outside every clone and prints its place. Held to the last step, released on every exit.
+const line = machineDir();
+process.on("exit", () => {
+  releaseLock(machineLockFile(line), process.pid);
+  removePlaces(line, process.pid);
+});
 // With --log the waiting lines go to the terminal too, so a run that waits is not silent there; the last line is still verify's.
 const reportWait = (line: string) => {
   out.info(line);
   if (options.log !== undefined) terminal.stderr(line);
 };
-const turn = await waitForLock(
-  slot.file,
-  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}` },
-  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, slot: slot.name },
+const turn = await waitForTurn(
+  line,
+  { pid: process.pid, started: new Date(), pidStarted, command: `pnpm verify in ${root}`, lane: postgres.lane, pr: options.pr, worktree: root },
+  { processes, now: Date.now, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), report: reportWait, oldSlots: oldSlotsOf(root) },
 );
 if (turn.tookOver) out.info(`verify ${turn.tookOver}`);
 if (turn.waitedMs > 0) {
-  out.info(`Got ${slot.name} after ${Math.round(turn.waitedMs / 60_000)} min.`);
+  out.info(`Got the machine's verify turn after ${Math.round(turn.waitedMs / 60_000)} min.`);
   // The stack may have gone down while this run waited.
   await checkStack();
   // And the branch may have moved: the run starts on what it waited with, not on what it began as.

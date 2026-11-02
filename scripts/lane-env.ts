@@ -20,6 +20,8 @@
 // a lane with another worktree, but only the lane owner's own implementer subagents use it:
 // a session whose lane another session holds takes --free or runs lanes:prune. Without --db
 // the .env is as before.
+// RP-1197: before any docker call it probes Docker (docker-probe.ts) and stops only if it hangs, with "Docker not answering: wait, don't restart it (RP-1099)"; Docker down keeps the old warning.
+// The stack cap's refusal names each running stack with its idle time (stack-idle.ts).
 // It also refuses, even with --force, a worktree locked by another live `claude session` (RP-501).
 // It also warns (never refuses) when another local branch, worktree or origin branch starts with the
 // same RP-nnn- key as this worktree's branch: another session may already have claimed that ticket (RP-499).
@@ -47,6 +49,7 @@
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { DOCKER_PROBE_TIMEOUT_MS, dockerStop, probeDocker } from "./docker-probe.ts";
 import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
 import {
   chooseTakeover,
@@ -73,6 +76,8 @@ import {
 import { startStack, systemCompose } from "./lane-env-start.ts";
 import { acquireLaneLock, laneLockFile, systemLockDeps } from "./lanes-lock.ts";
 import { maxStacks, stackCap, type CapVerdict } from "./machine-load.ts";
+import { idleOfStack } from "./stack-idle.ts";
+import { DOCKER_TIMEOUT_MS } from "./verify-health.ts";
 import { samePath } from "./paths.ts";
 import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { currentRoot, gitDirty, gitError, judgeWorktree, listWorktrees, NOT_FINISHED, refExists, systemLiveness, type Verdict, type Worktree } from "./worktrees.ts";
@@ -143,7 +148,16 @@ const hasOriginMain = allWorktrees.length > 0 && refExists("origin/main", mainRo
 const verdictOf = (w: Worktree): Verdict =>
   w.branch === "main" || samePath(w.path, mainRoot) ? NOT_FINISHED : judgeWorktree(w, "origin/main", mainRoot, live);
 
-const containers = listContainers();
+// RP-1197: a jammed Docker hangs every docker call, so probe it first (24 s at most) and stop with what to do (RP-1099).
+// Only a hang stops it; Docker down keeps the old path below (ports checked, .env written, with the warning).
+const dockerProbe = probeDocker();
+const dockerStopped = dockerStop(dockerProbe, "hang");
+if (dockerStopped !== undefined) {
+  console.error(dockerStopped);
+  process.exit(1);
+}
+// A healthy probe means Docker answers within the probe's timeout, so the listing waits no longer than that.
+const containers = listContainers(dockerProbe.ok ? DOCKER_PROBE_TIMEOUT_MS : DOCKER_TIMEOUT_MS);
 if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
 const check = {
   containers: containers ?? [],
@@ -282,7 +296,7 @@ if (clashes.length > 0) {
 if (containers) {
   let cap: CapVerdict;
   try {
-    cap = stackCap(lane, containers, maxStacks(process.env));
+    cap = stackCap(lane, containers, maxStacks(process.env), idleOfStack());
   } catch (error) {
     console.error((error as Error).message);
     process.exit(1);

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { probeDocker, type DockerProbe } from "./docker-probe.ts";
 
 // Is this machine set up for the lane workflow? Read-only: it prints one line per check and never
 // writes or edits a file. RP-1173: on 2026-10-31 the owner's ~/.claude/settings.json was invalid JSON
@@ -21,6 +22,8 @@ export type DoctorEnv = {
   readFile: (path: string) => string | undefined;
   /** The command's standard output when it exits 0, undefined when it fails or is not on PATH. */
   run: (file: string, args: string[]) => string | undefined;
+  /** Whether Docker answers (docker-probe.ts, RP-1197). Left out, the daemon check is skipped. */
+  dockerProbe?: () => DockerProbe;
 };
 
 export type Check = { name: string; ok: boolean; message: string };
@@ -118,6 +121,11 @@ export function runChecks(env: DoctorEnv): Check[] {
     );
   }
 
+  if (env.dockerProbe !== undefined) {
+    const probe = env.dockerProbe();
+    checks.push({ name: "docker daemon", ok: probe.ok, message: probe.ok ? "docker: the daemon answers." : probe.message });
+  }
+
   if (!ghInstalled) {
     checks.push({ name: "gh login", ok: false, message: "gh login: cannot test, gh is missing." });
   } else if (env.run("gh", ["auth", "status"]) === undefined) {
@@ -148,6 +156,7 @@ const realEnv: DoctorEnv = {
     const result = spawnSync(file, args, { encoding: "utf8", windowsHide: true, timeout: 20_000 });
     return result.status === 0 ? result.stdout.trim() : undefined;
   },
+  dockerProbe: () => probeDocker(),
 };
 
 function main(): void {
