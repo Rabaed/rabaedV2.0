@@ -1,7 +1,7 @@
 "use client";
 
 import { directionOf, formatNumber, type BaseRole, type BilingualText, type DraftsVisibleTo, type Locale } from "@rabaed/domain";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
@@ -100,6 +100,8 @@ export type NewItemIdentityProps = {
   invalid?: boolean;
   /** The Subject is set once the Draft exists (no call changes it): it reads, and can't be typed in. */
   readOnly?: boolean;
+  /** Focus the Subject when it shows: a form that clears after each save (RP-1222 row 10) is ready for the next one. */
+  focusSubject?: boolean;
   children?: ReactNode;
 };
 
@@ -111,7 +113,11 @@ export const newItemSubjectMaxLength = 200;
  * the start, then the large Subject input (at most 200 characters). The Type cards and the banner
  * go under it as `children`.
  */
-export function NewItemIdentity({ locale, noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, readOnly, children }: NewItemIdentityProps) {
+export function NewItemIdentity({ locale, noNumber, draft, subject, onSubjectChange, subjectLabel, placeholder, numberId, invalid, readOnly, focusSubject = false, children }: NewItemIdentityProps) {
+  const subjectRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusSubject) subjectRef.current?.focus();
+  }, [focusSubject]);
   return (
     <div className="sdp-identity flex flex-col gap-2 px-5 pt-[18px] pb-4">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -124,6 +130,7 @@ export function NewItemIdentity({ locale, noNumber, draft, subject, onSubjectCha
         </span>
       </div>
       <input
+        ref={subjectRef}
         type="text"
         // The page's direction while empty (the placeholder starts at the right in Arabic); typed text takes its own from its first letter (`plaintext`).
         dir={directionOf(locale)}
@@ -457,6 +464,11 @@ export function LockedDocuments({ labels, slots }: LockedDocumentsProps) {
 export type NewItemFooterProps = {
   /** The time of the last save as the reader reads it, e.g. "10:42"; null before the first save. */
   savedAt: string | null;
+  /**
+   * A form that clears after each save (the New Snag's short form, RP-1222 row 28): how many it has
+   * saved since it opened, e.g. "3 Snags saved", said in place of "Not saved yet". Before the first, none.
+   */
+  savedCount?: string;
   /** The new item's Work Item page; shown once it is saved. */
   openHref?: string;
   onCancel?: () => void;
@@ -482,14 +494,15 @@ export type NewItemFooterProps = {
  * first save, "Not saved yet", Cancel and Save Draft (primary, last); after it, "Saved hh:mm", the
  * Work Item page link and Save Draft as "save now". On the phone, no Cancel and the link is an icon.
  */
-export function NewItemFooter({ savedAt, openHref, onCancel, onSave, saving = false, layout = "slide-over", labels }: NewItemFooterProps) {
+export function NewItemFooter({ savedAt, savedCount, openHref, onCancel, onSave, saving = false, layout = "slide-over", labels }: NewItemFooterProps) {
   const page = layout === "page";
   const saved = savedAt !== null;
+  const done = saved || savedCount !== undefined;
   return (
     <>
       <span role="status" className={cn("me-auto inline-flex items-center gap-1.5 text-[12.5px] text-muted", page && "w-full")}>
-        <Icon name={saved ? "circle-check" : "circle-dashed"} size={15} className={saved ? "text-success" : undefined} />
-        <bdi>{saved ? labels.saved(savedAt) : labels.notSaved}</bdi>
+        <Icon name={done ? "circle-check" : "circle-dashed"} size={15} className={done ? "text-success" : undefined} />
+        <bdi>{saved ? labels.saved(savedAt) : (savedCount ?? labels.notSaved)}</bdi>
       </span>
       {!saved && !page && onCancel && (
         <Button variant="secondary" onClick={onCancel}>

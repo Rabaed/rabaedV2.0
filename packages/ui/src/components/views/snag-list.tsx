@@ -165,6 +165,11 @@ export type SnagListProps = {
   swipe?: SnagSwipe;
   /** On a phone, "+"'s page for a Type (the camera-first New Snag, RP-630); defaults to `newHref`. */
   phoneNewHref?: (typeCode: string) => string;
+  /**
+   * Off a phone, "+ New" opens the create panel over the List for a Type (RP-1222 row 1), with no
+   * page load: a button, not `newHref`'s link. The phone keeps `phoneNewHref` (row 4).
+   */
+  onNew?: (typeCode: string) => void;
 };
 
 /** An item's Type, as a chip: its shape, its name. */
@@ -197,6 +202,7 @@ export function SnagList({
   linkAs: Link = "a",
   swipe,
   phoneNewHref = newHref,
+  onNew,
 }: SnagListProps) {
   const list: SnagListData = data.view === "list" ? data.list : data.board;
   const n = (value: number) => formatNumber(value, locale);
@@ -337,7 +343,7 @@ export function SnagList({
     ]),
   ];
 
-  const newAction = <NewMenu types={newTypes} locale={locale} labels={labels} newHref={newHref} linkAs={Link} />;
+  const newAction = <NewMenu types={newTypes} locale={locale} labels={labels} newHref={newHref} onNew={onNew} linkAs={Link} />;
   const clearLink = (
     <Link href={hrefFor(withoutFilters(query))} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
       {labels.clearFilters}
@@ -486,17 +492,44 @@ export function SnagList({
   );
 }
 
-/** "+ New": one Type's link, or a menu of the Types the viewer may raise. */
-function NewMenu({ types, locale, labels, newHref, linkAs: Link }: { types: readonly SnagNewType[]; locale: Locale; labels: SnagListLabels; newHref: (code: string) => string; linkAs: ElementType }) {
+/** "+ New": one Type's link, or a menu of the Types the viewer may raise; with `onNew`, buttons that open the create panel. */
+function NewMenu({
+  types,
+  locale,
+  labels,
+  newHref,
+  onNew,
+  linkAs: Link,
+}: {
+  types: readonly SnagNewType[];
+  locale: Locale;
+  labels: SnagListLabels;
+  newHref: (code: string) => string;
+  onNew?: (code: string) => void;
+  linkAs: ElementType;
+}) {
   const id = useId();
   const look = cn(buttonVariants(), "h-[34px] px-3");
+  /** One Type's way in: the panel's button, or the New page's link. */
+  const raise = (code: string, className: string, children: ReactNode) =>
+    onNew ? (
+      <button type="button" className={className} onClick={() => onNew(code)}>
+        {children}
+      </button>
+    ) : (
+      <Link href={newHref(code)} className={className}>
+        {children}
+      </Link>
+    );
   if (types.length === 1) {
     const only = types[0]!;
-    return (
-      <Link href={newHref(only.code)} className={look}>
+    return raise(
+      only.code,
+      look,
+      <>
         <Icon name="plus" />
         {labels.newOfType(only.name[locale])}
-      </Link>
+      </>,
     );
   }
   return (
@@ -516,10 +549,14 @@ function NewMenu({ types, locale, labels, newHref, linkAs: Link }: { types: read
           {types.map((t) => (
             <li key={t.code}>
               <PopoverClose asChild>
-                <Link href={newHref(t.code)} className={menuItem}>
-                  <Icon name={lookOf(t.code).icon} size={16} className={lookOf(t.code).mark} />
-                  {t.name[locale]}
-                </Link>
+                {raise(
+                  t.code,
+                  cn(menuItem, "w-full"),
+                  <>
+                    <Icon name={lookOf(t.code).icon} size={16} className={lookOf(t.code).mark} />
+                    {t.name[locale]}
+                  </>,
+                )}
               </PopoverClose>
             </li>
           ))}
