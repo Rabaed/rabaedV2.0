@@ -73,6 +73,7 @@ const types: NewItemType[] = [
   { code: "MAR", name: bi("Material Approval Request", "طلب اعتماد مواد"), description: bi("Materials and products for approval", "المواد والمنتجات للاعتماد") },
   { code: "SAR", name: bi("Supplier Approval Request", "طلب اعتماد مورد"), description: bi("Suppliers and manufacturers for approval", "الموردون والمصنعون للاعتماد") },
   { code: "DAR", name: bi("Document Approval Request", "طلب اعتماد مستند"), description: null },
+  // An Inspection's Type: the New Inspection panel (RP-1221) shows the same cards.
   { code: "WIR", name: bi("Work Inspection Request", "طلب فحص أعمال"), description: bi("Work ready for inspection", "أعمال جاهزة للفحص") },
 ];
 
