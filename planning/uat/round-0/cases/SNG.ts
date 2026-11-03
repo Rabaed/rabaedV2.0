@@ -2,7 +2,7 @@ import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
 import { Api, notFoundFor, openProject, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
-import { act, createSnagItem, findByTitle, isNotFoundPage, keysOf, moduleItems, mustAct, RP1049, runTag, team, upload, testPhoto, type Json, type Team } from "../harness/helpers-sng.ts";
+import { act, createSnagItem, findByTitle, isNotFoundPage, keysOf, moduleItems, mustAct, RP1049, runTag, snagSaved, team, upload, testPhoto, type Json, type Team } from "../harness/helpers-sng.ts";
 import { goRetry as go } from "../harness/helpers-sng.ts";
 
 // Part SNG: the Snag List (RP-28). Items are made through the api as the people do; the pages are
@@ -104,18 +104,25 @@ defineCase("SNG-02", async (t) => {
   const subject = `UAT SNG-02 Cable tray not bonded ${tag}`;
   const { page } = await pageAs("mohammed");
   const projectId = await openProject(page);
+  // RP-1222: the New page link lands on the Snag List with the New Snag short form open (row 5).
   await go(page, `/projects/${projectId}/work-items/new?module=snag_list&type=SNG`);
   await settle(page);
-  await page.getByLabel(/^Subject/).fill(subject);
-  await page.getByLabel(/^Description/).fill("Cable tray on Floor 02 is not bonded to earth.");
+  const panel = page.getByRole("dialog");
+  t.check("The New page link opens the short form over the Snag List, at Normal", /\/snag-list\?/.test(page.url()) && /[?&]new=SNG\b/.test(page.url()) && /[?&]size=normal/.test(page.url()), page.url());
+  await panel.getByRole("textbox", { name: "Subject" }).fill(subject);
+  await panel.getByLabel(/^Description/).fill("Cable tray on Floor 02 is not bonded to earth.");
   await pickOption(page, "answer-trade", /Electrical Works/);
   await pickOption(page, "answer-location", /Tower 1 Floor 02/);
-  await page.getByRole("button", { name: "Save Draft" }).click();
-  await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 20000 });
+  // The photo is picked before Save Draft and uploaded to the new Draft straight after (row 25).
+  await page.locator("#answer-photos").setInputFiles({ name: "before.jpg", mimeType: "image/jpeg", buffer: testPhoto() });
+  await panel.getByRole("button", { name: "Save Draft" }).click();
+  await snagSaved(page, 1);
   await settle(page);
-  const id = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())![1]!;
   await t.shot(page, "draft-saved");
-  await upload(tm.api.mohammed!, id, { fieldKey: "photos", fileName: "before.jpg", contentType: "image/jpeg", body: testPhoto() });
+  const saved = await findByTitle(tm.api.mohammed!, projectId, "snag_list", subject);
+  t.check("The Draft is saved and the form clears for the next Snag, keeping the Trade and Location", !!saved && (await panel.getByRole("textbox", { name: "Subject" }).inputValue()) === "" && /Electrical Works/.test(await panel.innerText()) && /Tower 1 Floor 02/.test(await panel.innerText()), JSON.stringify(saved?.id));
+  const id = saved!.id as string;
+  t.check("The Draft holds the photo picked before Save Draft", ((await tm.api.mohammed!.get(`/work-items/${id}/documents`)).body as Json).documents.some((d: Json) => d.fieldKey === "photos"));
   await go(page, `/work-items/${id}`);
   await settle(page);
   await takeTransition(page, "Raise");
@@ -291,8 +298,12 @@ defineCase("SNG-07", async (t) => {
     t.check("The New menu lists Snag and no Comment", /Snag/.test(menu) && !/Comment/.test(menu), menu);
     await t.shot(page, "new-menu");
   }
+  // RP-1222: the New page link lands on the Snag List's create panel, which offers only the Types Ali may raise.
   const cmt = await go(page, `/projects/${tm.projectId}/work-items/new?module=snag_list&type=CMT`);
-  t.note(`Opening New with type=CMT by URL answers ${cmt}; the page: ${(await page.getByRole("main").innerText()).replace(/\n+/g, " | ").slice(0, 160)}`);
+  await settle(page, 1200);
+  const panelText = (await page.getByRole("dialog").innerText().catch(() => "")).replace(/\n+/g, " | ");
+  t.check("Opening New with type=CMT by URL offers no Comment: the panel opens on a Type Ali may raise", !/Comment/.test(panelText) && /Snag/.test(panelText), panelText.slice(0, 200));
+  t.note(`Opening New with type=CMT by URL answers ${cmt}, landing on ${page.url()}`);
 });
 
 defineCase("SNG-08", async (t) => {

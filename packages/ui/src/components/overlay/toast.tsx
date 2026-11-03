@@ -32,6 +32,8 @@ export type ToastProviderProps = {
   duration?: number;
   /** Where toasts sit: the bottom inline-end corner (default), or the bottom centre, clear of side panels. */
   placement?: "end" | "center";
+  /** Lifted clear of a panel's footer bar (72px), so a toast never covers what the footer says (the New Snag's count, RP-1222 rows 27, 28). */
+  aboveFooter?: boolean;
   /** `dark`: a dark pill with light text (the Workflow builder's, as its reference), in every theme. */
   look?: "default" | "dark";
   children: ReactNode;
@@ -42,7 +44,7 @@ export type ToastProviderProps = {
  * Toasts appear at the bottom inline-end corner and are announced to screen
  * readers: politely, or at once for `tone: "danger"`.
  */
-export function ToastProvider({ label, closeLabel, duration = 5000, placement = "end", look = "default", children }: ToastProviderProps) {
+export function ToastProvider({ label, closeLabel, duration = 5000, placement = "end", aboveFooter = false, look = "default", children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<(ToastInput & { id: number })[]>([]);
   const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: nextToastId++ }]), []);
   // Swiped away towards the inline-end corner they sit in.
@@ -81,7 +83,11 @@ export function ToastProvider({ label, closeLabel, duration = 5000, placement = 
         ))}
         {/* Above dialogs (z-50), so feedback from inside a dialog is visible. */}
         <ToastPrimitive.Viewport
-          className={cn("fixed bottom-0 z-[60] flex w-full max-w-sm flex-col gap-2 p-4 outline-none", placement === "center" ? "inset-x-0 mx-auto" : "end-0")}
+          className={cn(
+            "fixed z-[60] flex w-full max-w-sm flex-col gap-2 p-4 outline-none",
+            aboveFooter ? "bottom-[72px]" : "bottom-0",
+            placement === "center" ? "inset-x-0 mx-auto" : "end-0",
+          )}
         />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
