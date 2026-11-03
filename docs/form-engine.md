@@ -28,7 +28,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **2.10 The MAR Form Version 3 (as built, RP-294)**: read when you need what MAR Form Version 3 added (References).
   - **2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)**: read when you work on the MAR, SAR or DAR Form.
   - **2.12 The `approved_supplier` field and the MAR Form Version 6 (as built, RP-595, spec RP-598)**: read when you touch the `approved_supplier` field.
-  - **2.12a The MAR Form Version 7 (as built, RP-1152)**: read when you need the MAR Form's current section order.
+  - **2.12a The MAR Form Version 7 (as built, RP-1152)**: read when you need the MAR Form's current section order, or the SNG Form's (RP-1222).
   - **2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)**: read when a link question limits its items by Module, Type or outcome, or a Project makes one required.
 - **3. Checklists**: read when you work on `checklist` fields and their check items.
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
@@ -251,6 +251,7 @@ Settled with the owner (2026-10-15): a MAR's supplier must be approved. It is a 
 - **MAR Form Version 7** (`apps/admin/forms/MAR.json`, published by `pnpm defaults:publish`) is Version 6 in the New item's order (owner's decision 5, 2026-11-02): **Classification** first, holding Trade, then `supplier` (Approved supplier, moved from Material details), Location and Scopes; then **Material details** (Manufacturer, Model, Specification section, Description), **Items**, **Documents**, and **Links** ("الروابط", the References section retitled; its key stays `references`, with `related_submittals`).
 - Every field and section keeps its key, type and required flag, so answers and Documental Records carry over; Items' Quantity stays `total: true`. The supplier's choices still follow the `trade` answer, wherever its field sits (§2.12). It is Version 7 wherever Version 6 was published; a database seeded fresh numbers it 5 (§2.12). MARs on an earlier Version keep theirs.
 - Seam 1: `apps/api/test/mar-form-v7.test.ts`.
+- **The SNG Form, Classification first (as built, RP-1222 gap row 17).** `apps/admin/forms/SNG.json`'s next Version, published by `pnpm defaults:publish`, puts **Classification** (Trade, Location, Scopes) before **Snag** (Description, Photos), so the New Snag's short form asks the Trade and Location first and keeps them for the next Snag. Every field keeps its key, type and required flag; Snags on an earlier Version keep theirs. Seam 1: `apps/api/test/sng-form-classification-first.test.ts`.
 
 ### 2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)
 

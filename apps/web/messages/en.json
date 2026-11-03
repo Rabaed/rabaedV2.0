@@ -81,6 +81,14 @@
     "settings": "Settings"
   },
   "snagList": {
+    "newSnag": {
+      "back": "Back to Snag List",
+      "subjectPlaceholder": "Subject *  e.g. Cable tray not bonded",
+      "subjectOnly": "Subject *",
+      "saved": "{count, plural, one {1 Snag saved} other {{n} Snags saved}}",
+      "toast": "Snag saved as a Draft",
+      "open": "Open"
+    },
     "newItem": "New",
     "newOfType": "New {type}",
     "types": "Types",
@@ -3375,6 +3383,7 @@
     "saveDraft": "Save Draft",
     "openPage": "Open Work Item page",
     "toast": "Draft saved — still “No number yet”",
+    "documentsNotUploaded": "The Draft is saved, but some photos or Documents didn’t upload. Save Draft again to try them, or remove them.",
     "discardTitle": "Discard this Draft?",
     "discardBody": "Nothing has been saved.",
     "discard": "Discard",

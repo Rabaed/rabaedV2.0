@@ -145,11 +145,12 @@ export const SingleType: Story = {
   },
 };
 
-function IdentityDemo({ context }: { context: StoryContext }) {
+function IdentityDemo({ context, focusSubject }: { context: StoryContext; focusSubject?: boolean }) {
   const locale = storyLocale(context);
   const [subject, setSubject] = useState("");
   return (
     <NewItemIdentity
+      focusSubject={focusSubject}
       locale={locale}
       noNumber={copy.noNumber[locale]}
       draft={copy.draft[locale]}
@@ -177,6 +178,17 @@ export const Identity: Story = {
     await expect(getComputedStyle(subject).textAlign).toBe("start");
     await userEvent.type(subject, "LED light fixtures");
     await expect(subject).toHaveValue("LED light fixtures");
+  },
+};
+
+/** The New Snag's short form after it clears (RP-1222 row 10): the next Subject is typed straight away. */
+export const IdentityFocusedForTheNext: Story = {
+  render: (_args, context) => <IdentityDemo context={context} focusSubject />,
+  play: async (context) => {
+    const subject = within(context.canvasElement).getByRole("textbox", { name: storyText(context, copy.subject) });
+    await expect(subject).toHaveFocus();
+    await userEvent.keyboard("Cable tray not bonded");
+    await expect(subject).toHaveValue("Cable tray not bonded");
   },
 };
 
@@ -356,13 +368,14 @@ export const DocumentsLocked: Story = {
   },
 };
 
-function FooterDemo({ context, savedAt, layout }: { context: StoryContext; savedAt: string | null; layout?: "page" }) {
+function FooterDemo({ context, savedAt, layout, savedCount }: { context: StoryContext; savedAt: string | null; layout?: "page"; savedCount?: Bi }) {
   const locale = storyLocale(context);
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle px-4 py-3">
       <NewItemFooter
         layout={layout}
         savedAt={savedAt}
+        savedCount={savedCount?.[locale]}
         openHref="#/work-items/42"
         onCancel={fn()}
         onSave={fn()}
@@ -399,6 +412,19 @@ export const FooterSaved: Story = {
     await expect(canvas.getByRole("link", { name: storyText(context, copy.openPage) })).toHaveAttribute("href", "#/work-items/42");
     await expect(canvas.queryByRole("button", { name: storyText(context, copy.cancel) })).toBeNull();
     await expect(canvas.getByRole("button", { name: storyText(context, copy.saveDraft) })).toBeVisible();
+  },
+};
+
+/** The New Snag's short form after it clears (RP-1222 row 28): how many it has saved, then Cancel and Save Draft for the next one. */
+export const FooterSavedCount: Story = {
+  render: (_args, context) => <FooterDemo context={context} savedAt={null} savedCount={bi("3 Snags saved", "حُفظت 3 عيوب")} />,
+  play: async (context) => {
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent(storyLocale(context) === "ar" ? "حُفظت 3 عيوب" : "3 Snags saved");
+    await expect(canvas.queryByText(storyText(context, copy.notSaved))).toBeNull();
+    const buttons = canvas.getAllByRole("button");
+    await expect(buttons.map((b) => b.textContent)).toEqual([storyText(context, copy.cancel), storyText(context, copy.saveDraft)]);
+    await expect(canvas.queryByRole("link")).toBeNull();
   },
 };
 

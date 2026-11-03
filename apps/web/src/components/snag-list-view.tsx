@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatNumber,
   moduleTabPaths,
   workItemSearchParams,
   type Locale,
@@ -13,9 +14,10 @@ import {
   type WorkItemQuery,
   type WorkItemView,
 } from "@rabaed/domain";
-import { SnagList, WorkItemViewSwitch, type SnagBulk, type SnagBulkLabels, type SnagListLabels, type SnagNewType } from "@rabaed/ui";
+import { SnagList, WorkItemViewSwitch, useMediaQuery, type SnagBulk, type SnagBulkLabels, type SnagListLabels, type SnagNewType } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname).
 import NextLink from "next/link";
 import { getPathname } from "@/i18n/navigation";
@@ -23,6 +25,9 @@ import { useSnagSwipe } from "@/components/snag-swipe";
 import { usePhotoUrls } from "@/components/use-documents";
 import { listSearchParams, snagListSort } from "@/lib/list-url";
 import { newItemHref } from "@/lib/new-item-route";
+import { phoneQuery } from "@/lib/new-submittal-panel";
+import { givenLocation } from "@/lib/submittal-panel-url";
+import { NewSubmittalPanelHost, useOpenNewSubmittal, type NewSubmittalPanelHooks } from "@/components/new-submittal-panel-host";
 
 /** The views' words, from the app's messages. */
 function useSnagLabels(tableLabel: string): SnagListLabels {
@@ -233,6 +238,11 @@ export function SnagListView(
   // On a phone: each card's Transitions behind a swipe (RP-630).
   const { swipe, dialog } = useSnagSwipe(locale);
   const pathname = usePathname();
+  const cameraHref = useCallback(
+    (code: string) => getPathname({ href: `/projects/${projectId}/${moduleTabPaths.snag_list}/new?type=${encodeURIComponent(code)}`, locale }),
+    [projectId, locale],
+  );
+  const raising = useNewSnag({ projectId, locale, newTypes, cameraHref, refreshKey: props.view === "list" ? props.list : props.board });
   const hrefIn = (v: WorkItemView, q: WorkItemQuery) => {
     // The tab's path names the Module. The List's own sort (by Stage) stays out of the URL; the Kanban has no pages.
     const params =
@@ -259,8 +269,10 @@ export function SnagListView(
         onQueryChange={(q) => router.push(hrefIn(view, q))}
         newTypes={newTypes}
         newHref={(code) => getPathname({ href: newItemHref(projectId, "snag_list", code), locale })}
-        // On a phone, "+" opens the camera-first New page (RP-630).
-        phoneNewHref={(code) => getPathname({ href: `/projects/${projectId}/${moduleTabPaths.snag_list}/new?type=${encodeURIComponent(code)}`, locale })}
+        // Off a phone, "+ New" opens the create panel over the List, at Wide as the Submittals' (RP-1222 rows 1, 2).
+        onNew={raising.open}
+        // On a phone, "+" opens the camera-first New page (RP-630; RP-1222 row 4).
+        phoneNewHref={cameraHref}
         swipe={swipe}
         photoUrls={photoUrls}
         linkAs={NextLink}
@@ -276,6 +288,80 @@ export function SnagListView(
         }
       />
       {dialog}
+      {raising.slideOver}
     </>
   );
+}
+
+/** The Snag's own short form (RP-1222): the Snag Type only; another Snag List Type gets the panel as the Submittals have it (row 11). */
+const snagTypeCode = "SNG";
+
+/**
+ * The create panel over the Snag List (RP-1222, on RP-1152's panel): `?new=SNG` opens it, as on the
+ * Submittals, with `&location=<id>` when a Floor plan gives the Location (row 23). A Snag gets the
+ * short form: no route, no rail, no Documents lock; photos wait until Save Draft; after each save
+ * it clears for the next Snag, keeping the Trade and Location. On a phone the camera-first New Snag
+ * stays (row 4), so a panel link sends the phone there.
+ */
+function useNewSnag({
+  projectId,
+  locale,
+  newTypes,
+  cameraHref,
+  refreshKey,
+}: {
+  projectId: string;
+  locale: Locale;
+  newTypes: readonly SnagNewType[];
+  cameraHref: (code: string) => string;
+  refreshKey: unknown;
+}) {
+  const t = useTranslations("snagList.newSnag");
+  const tTabs = useTranslations("projectTabs");
+  const router = useRouter();
+  const raising = useOpenNewSubmittal();
+  const location = givenLocation(useSearchParams());
+  const phone = useMediaQuery(phoneQuery, false);
+  const newItem = raising.newItem;
+  // The Type the panel opens on: the link's when the viewer may raise it, else the Snag where they may, else their first.
+  // (A link naming another Type, such as a Comment, opens what they may raise, as the panel itself does.)
+  const linked = newTypes.some((x) => x.code === newItem?.type) ? (newItem?.type ?? null) : null;
+  const type = linked ?? (newTypes.some((x) => x.code === snagTypeCode) ? snagTypeCode : (newTypes[0]?.code ?? null));
+  // A Snag on a phone: the camera-first New Snag. Another Type (no photos to take first) gets the panel's phone page, as the camera page sends it here.
+  const camera = phone && newItem !== null && type === snagTypeCode;
+  useEffect(() => {
+    if (camera) router.replace(cameraHref(snagTypeCode));
+  }, [camera, router, cameraHref]);
+  const shortForm: NewSubmittalPanelHooks = {
+    routePreview: false,
+    rail: false,
+    documentsLock: false,
+    requiredChecklist: false,
+    filesBeforeSave: true,
+    afterSave: "clear",
+    keep: ["trade", "location"],
+    given: location === null ? undefined : { location },
+    savedCount: (n) => t("saved", { count: n, n: formatNumber(n, locale) }),
+    savedToast: { title: t("toast"), open: t("open") },
+  };
+  return {
+    open: (code: string) => raising.open({ type: code, size: "wide" }),
+    slideOver: newItem && !camera && (
+      <NewSubmittalPanelHost
+        projectId={projectId}
+        module="snag_list"
+        // A Snag's example; another Snag List Type (a Site Observation, a Question) has none of its own, so no Submittal's either.
+        look={{ module: tTabs("snag_list"), back: t("back"), icon: "alert-triangle", subjectPlaceholder: t(type === snagTypeCode ? "subjectPlaceholder" : "subjectOnly") }}
+        type={type}
+        onTypeChange={(code) => raising.open({ type: code })}
+        // The short form clears after each save and keeps no Draft in the URL, so a `draft=` link opens it fresh.
+        draft={type === snagTypeCode ? null : newItem.draft}
+        onDraftSaved={raising.saved}
+        onClose={raising.close}
+        locale={locale}
+        refreshKey={refreshKey}
+        {...(type === snagTypeCode ? shortForm : {})}
+      />
+    ),
+  };
 }

@@ -7,6 +7,7 @@ import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { newPageWords } from "@/lib/new-item-route";
 import { newInspectionLanding, newItemLanding } from "@/lib/submittal-panel-url";
+import { snagListLanding } from "@/lib/new-panel-hooks";
 import {
   getMe,
   getMyVisibility,
@@ -32,10 +33,10 @@ export default async function NewWorkItemPage({
   searchParams,
 }: {
   params: Promise<{ locale: Locale; projectId: string }>;
-  searchParams: Promise<{ type?: string; module?: string }>;
+  searchParams: Promise<{ type?: string; module?: string; location?: string }>;
 }) {
   const { locale, projectId } = await params;
-  const { type: requested, module: moduleParam } = await searchParams;
+  const { type: requested, module: moduleParam, location } = await searchParams;
   // The Module whose Types it offers: the Submittals, unless "+ New" names another (the Snag List, RP-94).
   const moduleKey = moduleKeySchema.safeParse(moduleParam).data ?? "submittals";
   // A Submittal is raised in the create panel over the List (RP-1152): a direct link lands there at Normal (decision 1).
@@ -47,6 +48,8 @@ export default async function NewWorkItemPage({
     if (!project) notFound();
     return redirect({ href: newInspectionLanding(projectId, { inSubmittals: inspectionsInSubmittals(project) }, requested), locale });
   }
+  // So is a Snag List item, over the Snag List (RP-1222 row 5); a phone goes on to the camera-first New Snag there (row 4).
+  if (moduleKey === "snag_list") return redirect({ href: snagListLanding(projectId, requested, location), locale });
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");

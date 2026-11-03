@@ -46,6 +46,15 @@ const draftParam = "draft";
 const newModuleParam = "newModule";
 /** A Type code is a short Document Number segment. */
 const typeCode = /^[A-Z0-9]{1,10}$/;
+export const isTypeCode = (value: string): boolean => typeCode.test(value);
+/** The Location the panel opens with (RP-1222 row 23, a Floor plan's way in): `&location=<id>`. */
+const locationParam = "location";
+
+/** The Location given on opening: only an id a Location can have, so an edited link fills nothing. */
+export function givenLocation(params: Pick<URLSearchParams, "get">): string | null {
+  const id = params.get(locationParam);
+  return id !== null && uuid.test(id) ? id : null;
+}
 
 /** The page's URL with the create panel open (its Type and size changed where given), or closed (null). Opening it closes an open item. */
 export function newSubmittalPanelHref(
@@ -60,6 +69,7 @@ export function newSubmittalPanelHref(
     params.delete(sizeParam);
     params.delete(draftParam);
     params.delete(newModuleParam);
+    params.delete(locationParam);
     return withQuery(pathname, params);
   }
   if (params.has(openParam)) {

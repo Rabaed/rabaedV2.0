@@ -8,6 +8,7 @@ import {
   formVisibility,
   isUnanswered,
   type ApprovedSuppliers,
+  type BilingualText,
   type ChecklistTemplateChoice,
   type ChecklistTemplates,
   type DimensionValues,
@@ -67,7 +68,7 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, getPathname, useRouter } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { useCreateRefusal } from "@/lib/create-refusal";
@@ -87,10 +88,11 @@ import {
   tabletQuery,
   typedSomething,
 } from "@/lib/new-submittal-panel";
+import { draftRoute, pickedDocuments, saveThenUpload, startAnswers, type PickedFile } from "@/lib/new-panel-hooks";
 import { newItemFrom, newItemModuleFrom, newSubmittalPanelHref, sizeFrom } from "@/lib/submittal-panel-url";
 import type { Reading } from "@/lib/transition-gate";
 import { useApiRead } from "@/lib/use-api-read";
-import { useDocuments, useImageUrls } from "./use-documents";
+import { uploadToWorkItem, useDocuments, useImageUrls } from "./use-documents";
 import { WorkItemFormProvider, useWorkItemForm } from "./work-item-form";
 
 /**
@@ -104,12 +106,22 @@ export type NewSubmittalPanelHooks = {
   rail?: boolean;
   /** Documents locked until the first save (on); off, the Form's own note stands. */
   documentsLock?: boolean;
+  /** The "Required before Send for Review" checklist (on); off, the required marks stay on the fields alone (RP-1222 row 15). */
+  requiredChecklist?: boolean;
   /** After each first save of a Draft: its id and the answers it was saved with. */
   onSaved?: (id: string, answers: Readonly<Record<string, unknown>>) => void;
   /** "stay" (default): the new Draft stays open and autosaves; "clear": the Form empties for the next one, keeping `keep`. */
   afterSave?: "stay" | "clear";
   /** With `afterSave: "clear"`, the fields kept for the next one, e.g. `["trade", "location"]`. */
   keep?: readonly string[];
+  /** Answers given on opening (RP-1222 row 23, a Floor plan's way in): a Location, filled only where the Member's Visibility covers it. */
+  given?: { location?: string };
+  /** Files picked before the first save wait in the browser, then upload to the new Draft (RP-1222 row 25; with `documentsLock` off). */
+  filesBeforeSave?: boolean;
+  /** With `afterSave: "clear"`: the footer's count of the items saved since the panel opened, e.g. "3 Snags saved" (RP-1222 row 28). */
+  savedCount?: (n: number) => string;
+  /** The toast after each save, with a link that opens the new item, e.g. "Snag saved as a Draft" and "Open" (RP-1222 row 27). */
+  savedToast?: { title: string; open: string };
 };
 
 /** The create panel's own words and look, from the Module that mounts it (row 13). */
@@ -120,6 +132,8 @@ export type NewSubmittalPanelLook = {
   back: string;
   /** The breadcrumb's icon. */
   icon: IconName;
+  /** The Subject's example, e.g. "Subject *  e.g. Cable tray not bonded" (RP-1222 row 10); the Submittals' by default. */
+  subjectPlaceholder?: string;
   /** The Module's own words where they differ from a Submittal's (RP-1221, the Inspections); each left out keeps the panel's. */
   words?: NewSubmittalPanelWords;
   /**
@@ -133,8 +147,6 @@ export type NewSubmittalPanelLook = {
 export type NewSubmittalPanelWords = {
   /** The breadcrumb's and the phone bar's title, e.g. "New Inspection", in place of "New <Type>". */
   crumb?: string;
-  /** The Subject's placeholder. */
-  subjectPlaceholder?: string;
   /** The route's line for another role's Steps, e.g. "Consultant inspection". */
   review?: (role: string) => string;
   /** The route's last line, e.g. "Review Code: close or revise". */
@@ -172,7 +184,8 @@ export function NewSubmittalPanelHost(props: NewSubmittalPanelHostProps) {
   const t = useTranslations("newSubmittal");
   return (
     // The panel's own toasts: dark, centred over the List (row 38).
-    <ToastProvider label={t("notifications")} closeLabel={t("close")} placement="center" look="dark">
+    // A panel that clears after each save keeps its toasts above the footer, clear of its count (RP-1222 rows 27, 28).
+    <ToastProvider label={t("notifications")} closeLabel={t("close")} placement="center" aboveFooter={props.afterSave === "clear"} look="dark">
       <NewSubmittalPanel {...props} />
     </ToastProvider>
   );
@@ -311,9 +324,10 @@ function NewSubmittalPanel({
     </SubmittalPanel>
   );
 
-  // What the panel needs before it shows the Form: the route only where it is previewed.
+  // What the panel needs before it shows the Form. The route read too, previewed or not: the "who
+  // sees this Draft" line follows its Draft Step's setting (V1; RP-1222).
   const required = [me, covered, scopes, raisable, people, form] as const;
-  const routeNeeded = hooks.routePreview !== false && chosen !== undefined;
+  const routeNeeded = chosen !== undefined;
   if (required.some((r) => r.state === "failed") || (routeNeeded && route.state === "failed")) {
     // A Member who may raise no Type reads no Form and no route: that is the empty state, not a failure.
     if (raisable.state !== "loaded" || raisable.value.types.length > 0) {
@@ -371,8 +385,10 @@ function NewSubmittalPanel({
       typeCode={chosen.code}
       onTypeChange={onTypeChange}
       form={formToFill.value}
-      route={hooks.routePreview === false || route.state !== "loaded" ? null : route.value}
+      route={route.state !== "loaded" ? null : route.value}
       companyName={meRead.value.company.legalName[locale]}
+      companyLegalName={meRead.value.company.legalName}
+      subjectPlaceholder={look.subjectPlaceholder}
       choices={fillingChoices(coveredRead.value, scopesRead.value.scopes, locale)}
       startTradeId={defaultTradeId(formToFill.value.schema, coveredRead.value.trade)}
       resumed={
@@ -437,6 +453,10 @@ type DraftProps = NewSubmittalPanelHooks & {
   form: FormToFill;
   route: RoutePreviewData | null;
   companyName: string;
+  /** The viewer's own Company's name in both languages, on files picked before the first save. */
+  companyLegalName: BilingualText;
+  /** The Subject's example, from the mounting Module's `look`. */
+  subjectPlaceholder?: string;
   choices: BuiltInChoices;
   startTradeId: string | undefined;
   resumed: ResumedDraft | null;
@@ -457,15 +477,22 @@ type DraftProps = NewSubmittalPanelHooks & {
 function DraftRounds(props: DraftProps) {
   const [round, setRound] = useState<{ n: number; start: Record<string, unknown> }>({
     n: 0,
-    start: props.resumed ? props.resumed.answers : props.startTradeId ? { trade: props.startTradeId } : {},
+    start: props.resumed ? props.resumed.answers : startAnswers({ tradeId: props.startTradeId, given: props.given, choices: props.choices }),
   });
   return (
-    <WorkItemFormProviderFor key={round.n} {...props} start={round.start} onCleared={(start) => setRound((r) => ({ n: r.n + 1, start }))} />
+    <WorkItemFormProviderFor key={round.n} {...props} start={round.start} saves={round.n} onCleared={(start) => setRound((r) => ({ n: r.n + 1, start }))} />
   );
 }
 
+type RoundProps = DraftProps & {
+  start: Record<string, unknown>;
+  /** How many Drafts this panel has saved and cleared since it opened. */
+  saves: number;
+  onCleared: (start: Record<string, unknown>) => void;
+};
+
 /** The Form's state is the item page's own (`WorkItemFormProvider`): once the Draft exists, its answers autosave with `PUT /answers`. */
-function WorkItemFormProviderFor(props: DraftProps & { start: Record<string, unknown>; onCleared: (start: Record<string, unknown>) => void }) {
+function WorkItemFormProviderFor(props: RoundProps) {
   // A reopened Draft is after its save from the start: its last save is the read's (`fieldTimes`).
   const [created, setCreated] = useState<{ id: string; at: string | null } | null>(props.resumed ? { id: props.resumed.id, at: null } : null);
   // Only the first round reopens a Draft; a cleared one starts empty.
@@ -524,11 +551,16 @@ function DraftSubmittalPanel({
   onSaved,
   afterSave = "stay",
   keep,
-}: DraftProps & {
-  start: Record<string, unknown>;
+  filesBeforeSave = false,
+  requiredChecklist = true,
+  savedCount,
+  savedToast,
+  companyLegalName,
+  subjectPlaceholder,
+  saves,
+}: RoundProps & {
   created: { id: string; at: string | null } | null;
   onCreated: (created: { id: string; at: string | null }) => void;
-  onCleared: (start: Record<string, unknown>) => void;
 }) {
   const t = useTranslations("newSubmittal");
   const formLabels = useFormRendererLabels();
@@ -552,6 +584,8 @@ function DraftSubmittalPanel({
   const docs = documents.state === "loaded" ? documents.value : null;
   const files = useDocuments(created?.id ?? "", docs?.limits ?? { maxBytes: 1, contentTypes: [] }, { onChanged: () => setFilesRead((n) => n + 1) });
   const imageUrls = useImageUrls(created?.id ?? "", docs?.documents.filter((d) => d.contentType.startsWith("image/")) ?? []);
+  // RP-1222 row 25: files picked before the Draft exists wait here, then upload to it.
+  const picks = usePickedFiles(filesBeforeSave);
   const schema = form.schema;
   const tradeKey = formFields(schema).find((f) => f.type === "trade")?.key;
   const items = requiredItems({
@@ -565,7 +599,11 @@ function DraftSubmittalPanel({
   const locked = documentsLock && created === null ? new Map(lockedDocumentSections(schema, locale).map((s) => [s.sectionKey, s.slots])) : new Map();
   const shownSections = schema.sections.filter((s) => formVisibility(schema, state.answers).sections.has(s.key)).map((s) => s.key);
   const allFolded = allSubmittalPanelSectionsCollapsed(shownSections, collapsed);
-  const typed = typedSomething({ subject, answers: state.answers, start });
+  const typed = typedSomething({ subject, answers: state.answers, start }) || picks.files.length > 0;
+  const [pickedAt] = useState(() => new Date().toISOString());
+  const picked = pickedDocuments(picks.files, { at: pickedAt, company: companyLegalName });
+  /** A clearing panel after one or more saves: ready for the next item (RP-1222 rows 10, 28). */
+  const cleared = afterSave === "clear" && saves > 0;
 
   const close = () => (created === null && typed ? setDiscarding(true) : onClose());
 
@@ -586,28 +624,15 @@ function DraftSubmittalPanel({
     }
     setCreating(true);
     setError(null);
-    try {
+    /** The create call; a refusal is shown here, and nothing exists. */
+    const post = async (): Promise<{ ok: true; id: string } | { ok: false; error?: string }> => {
       const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/work-items`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         // Hidden fields' answers are cleared on save, here as on the server.
         body: JSON.stringify({ type: typeCode, title: subject.trim(), answers }),
       });
-      if (res.status === 201) {
-        const { id } = (await res.json()) as { id: string };
-        toast({ title: t("toast"), tone: "success" });
-        // The List is read again once, so the new Draft shows.
-        router.refresh();
-        onSaved?.(id, answers);
-        if (afterSave === "clear") return onCleared(afterSaveAnswers(answers, { mode: "clear", keep }));
-        // Without this, the typing before the create left the Form "unsaved", and autosave re-sent every
-        // answer moments later, over an edit made meanwhile elsewhere (RP-1221, UAT J9).
-        state.markSaved(sent);
-        onCreated({ id, at: new Date().toISOString() });
-        // The URL holds the new Draft, so a reload or Esc keeps it (row 38).
-        onDraftSaved(id);
-        return;
-      }
+      if (res.status === 201) return { ok: true, id: ((await res.json()) as { id: string }).id };
       const body = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
       const message = refusal(body.error);
       if (body.error === "invalid_answers" && body.fields) state.showErrors(body.fields, message);
@@ -617,20 +642,66 @@ function DraftSubmittalPanel({
         onNewVersion();
         router.refresh();
       }
+      return { ok: false, error: body.error };
+    };
+    try {
+      // A Draft made by an earlier Save Draft whose files failed (row 25): its answers are saved, then the files left are tried again.
+      const draft = created;
+      const result = await saveThenUpload({
+        picked: picks.files,
+        create: draft === null ? post : async () => ((await state.save(false)) ? { ok: true, id: draft.id } : { ok: false }),
+        upload: uploadToWorkItem,
+      });
+      if (result.kind === "refused") return;
+      // The List is read again once, so the new Draft shows.
+      router.refresh();
+      if (result.kind === "photosFailed") {
+        // The Draft exists: the panel stays on it with what is left to upload, and says so (row 25).
+        if (draft === null) {
+          state.markSaved(sent);
+          onCreated({ id: result.id, at: new Date().toISOString() });
+        }
+        picks.keepOnly(result.picked);
+        setError(t("documentsNotUploaded"));
+        return;
+      }
+      const { id } = result;
+      toast(
+        savedToast
+          ? {
+              title: savedToast.title,
+              description: (
+                <Link href={`/work-items/${id}`} className="font-semibold underline underline-offset-2">
+                  {savedToast.open}
+                </Link>
+              ),
+              tone: "success",
+            }
+          : { title: t("toast"), tone: "success" },
+      );
+      onSaved?.(id, answers);
+      if (afterSave === "clear") return onCleared(afterSaveAnswers(answers, { mode: "clear", keep }));
+      // The create saved the answers sent: without this, the typing before it left the Form "unsaved", and
+      // autosave re-sent every answer moments later, over an edit made meanwhile elsewhere (RP-1221, UAT J9).
+      if (draft === null) state.markSaved(sent);
+      onCreated({ id, at: new Date().toISOString() });
+      // The URL holds the new Draft, so a reload or Esc keeps it (row 38).
+      onDraftSaved(id);
     } catch {
       setError(t("unavailable"));
     } finally {
       setCreating(false);
     }
   }
-  // After the first save, Save Draft saves now (row 39); autosave runs too.
-  const save = () => void (created === null ? create() : state.save(false));
+  // After the first save, Save Draft saves now (row 39); autosave runs too. A clearing panel whose
+  // Draft exists only because its files failed (row 25) finishes that Draft, then clears.
+  const save = () => void (created === null || afterSave === "clear" ? create() : state.save(false));
   // "Saved 10:42"; a reopened Draft whose read gives no save time reads "Saved" (row 38).
   const lastSave = created === null ? null : (state.savedAt ?? created.at);
   const savedAt = created === null ? null : lastSave === null ? "" : savedClock(lastSave, locale);
 
-  const routeView = routePreview && route ? <DraftRoutePreview route={route} locale={locale} words={words} /> : null;
-  const draftsVisibleTo = route?.draftsVisibleTo ?? null;
+  const { preview, draftsVisibleTo } = draftRoute({ routePreview, read: route });
+  const routeView = preview ? <DraftRoutePreview route={preview} locale={locale} words={words} /> : null;
   const whoSees = { author: t("onlyYou"), company: t("onlyCompany"), heading: t("whoSees") };
   const checklist = (incomplete: boolean) => <RequiredChecklist locale={locale} heading={t("required")} items={items} incomplete={incomplete ? t("incomplete") : undefined} />;
 
@@ -650,10 +721,12 @@ function DraftSubmittalPanel({
               if (value.trim() !== "") setSubjectMissing(false);
             }}
             subjectLabel={t("subject")}
-            placeholder={words?.subjectPlaceholder ?? t("subjectPlaceholder")}
+            placeholder={subjectPlaceholder ?? t("subjectPlaceholder")}
             numberId={ids.numberId}
             invalid={subjectMissing}
             readOnly={created !== null}
+            // A clearing panel is ready for the next one (RP-1222 row 10).
+            focusSubject={cleared}
           >
             {/* Switching Type before the first save swaps the Form; after it, the Type is the Draft's. */}
             <NewItemTypeCards
@@ -669,7 +742,7 @@ function DraftSubmittalPanel({
         // `rail` off (row 13): no side band at Wide and Full; "Before you send" stays in the flow.
         rail: rail && (
           <>
-            {checklist(true)}
+            {requiredChecklist && checklist(true)}
             {routeView}
             <DraftWhoSees look="box" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={{ ...whoSees, ...words?.whoSeesBox }} />
           </>
@@ -678,6 +751,7 @@ function DraftSubmittalPanel({
           <NewItemFooter
             layout={layout === "page" ? "page" : "slide-over"}
             savedAt={savedAt}
+            savedCount={cleared ? savedCount?.(saves) : undefined}
             openHref={created ? getPathname({ href: `/work-items/${created.id}`, locale }) : undefined}
             onCancel={close}
             onSave={save}
@@ -701,10 +775,13 @@ function DraftSubmittalPanel({
               allCollapsed={allFolded}
               onToggleAll={() => setCollapsed(withAllSubmittalPanelSections(shownSections, collapsed, !allFolded))}
             />
-            {/* Where the rail is hidden (Normal, Compact, tablet, phone), or off: the checklist and the route in the flow (row 12). */}
-            <div className="px-5 pb-2 @[880px]/sdp:px-7">
-              <BeforeYouSend heading={t("before")} checklist={checklist(false)} route={routeView ?? undefined} inflow={rail} />
-            </div>
+            {/* Where the rail is hidden (Normal, Compact, tablet, phone), or off: the checklist and the route in the flow (row 12).
+                With neither (RP-1222 rows 14, 15: the required marks stay on the fields), no block at all. */}
+            {(requiredChecklist || routeView) && (
+              <div className="px-5 pb-2 @[880px]/sdp:px-7">
+                <BeforeYouSend heading={t("before")} checklist={requiredChecklist ? checklist(false) : undefined} route={routeView ?? undefined} inflow={rail} />
+              </div>
+            )}
             <FormRenderer
               schema={schema}
               answers={state.answers}
@@ -732,19 +809,34 @@ function DraftSubmittalPanel({
               }}
               {...(created && docs
                 ? {
-                    // Decision 8: the Form's Documents fields are the new item's own upload fields, as on its page.
+                    // Decision 8: the Form's Documents fields are the new item's own upload fields, as on its page;
+                    // beside them, any picked before the save that are still to upload (RP-1222 row 25).
                     files: {
-                      documents: docs.documents,
+                      documents: [...docs.documents, ...picked],
                       canChange: docs.canChange,
                       pending: files.pending,
-                      imageUrls,
-                      onUpload: (fieldKey: string, picked: File[], itemKey?: string) => void files.upload(picked, fieldKey, itemKey),
-                      onOpen: (documentId: string) => void files.open(documentId),
-                      onRemove: (fieldKey: string, documentId: string, itemKey?: string) => void files.remove(documentId, fieldKey, itemKey),
+                      imageUrls: { ...imageUrls, ...picks.urls },
+                      onUpload: (fieldKey: string, chosen: File[], itemKey?: string) => void files.upload(chosen, fieldKey, itemKey),
+                      onOpen: (documentId: string) => (picks.has(documentId) ? picks.open(documentId) : void files.open(documentId)),
+                      onRemove: (fieldKey: string, documentId: string, itemKey?: string) =>
+                        picks.has(documentId) ? picks.remove(documentId) : void files.remove(documentId, fieldKey, itemKey),
                       onSaveAnnotated: files.annotatesIn(docs.documents),
                     },
                   }
-                : {})}
+                : filesBeforeSave
+                  ? {
+                      // RP-1222 row 25: no Documents lock; the files wait in the browser until Save Draft (and stay
+                      // shown while a Draft whose upload failed reads its own Documents).
+                      files: {
+                        documents: picked,
+                        canChange: true,
+                        imageUrls: picks.urls,
+                        onUpload: (fieldKey: string, chosen: File[]) => picks.add(fieldKey, chosen),
+                        onOpen: (documentId: string) => picks.open(documentId),
+                        onRemove: (_fieldKey: string, documentId: string) => picks.remove(documentId),
+                      },
+                    }
+                  : {})}
               sectionsAs={(sections) => (
                 <SubmittalPanelSections
                   locale={locale}
@@ -788,6 +880,40 @@ function DraftSubmittalPanel({
       />
     </>
   );
+}
+
+/**
+ * Files picked before the Draft exists (RP-1222 row 25), kept in the browser with a preview URL
+ * each (its thumbnail, and what Open shows), until Save Draft uploads them. `on` false: none.
+ */
+function usePickedFiles(on: boolean) {
+  // Each pick gets its preview URL once, when picked; it is let go when the pick goes (removed, uploaded) or the panel closes.
+  const [picks, setPicks] = useState<readonly { pick: PickedFile; url: string }[]>([]);
+  const live = useRef(picks);
+  useEffect(() => {
+    live.current = picks;
+  }, [picks]);
+  useEffect(() => () => live.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
+  const shown = on ? picks : [];
+  const letGo = (gone: (p: { pick: PickedFile }) => boolean) => {
+    picks.filter(gone).forEach((p) => URL.revokeObjectURL(p.url));
+    setPicks(picks.filter((p) => !gone(p)));
+  };
+  return {
+    files: shown.map((p) => p.pick),
+    urls: Object.fromEntries(shown.map((p) => [p.pick.id, p.url])),
+    has: (id: string) => shown.some((p) => p.pick.id === id),
+    add: (fieldKey: string, chosen: readonly File[]) => {
+      const added = chosen.map((file) => ({ pick: { id: crypto.randomUUID(), fieldKey, file }, url: URL.createObjectURL(file) }));
+      setPicks((current) => [...current, ...added]);
+    },
+    remove: (id: string) => letGo((p) => p.pick.id === id),
+    open: (id: string) => {
+      const url = shown.find((p) => p.pick.id === id)?.url;
+      if (url) window.open(url, "_blank", "noopener");
+    },
+    keepOnly: (left: readonly PickedFile[]) => letGo((p) => !left.some((l) => l.id === p.pick.id)),
+  };
 }
 
 /** The route a new Draft of the Type will take, by role only (decision 3), from the Draft Step on. */

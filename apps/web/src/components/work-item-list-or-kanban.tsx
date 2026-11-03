@@ -274,9 +274,9 @@ export function WorkItemListOrKanban(
           module: tTabs(module),
           back: tInspection("back", { tab: tTabs(module) }),
           icon: "clipboard-check",
+          subjectPlaceholder: tInspection("subjectPlaceholder"),
           words: {
             crumb: tInspection("crumb"),
-            subjectPlaceholder: tInspection("subjectPlaceholder"),
             review: (role) => tInspection("review", { role }),
             outcome: tInspection("outcome"),
             whoSeesBox: { author: tInspection("whoSeesAuthor"), company: tInspection("whoSeesCompany") },

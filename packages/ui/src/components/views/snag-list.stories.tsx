@@ -395,6 +395,27 @@ export const NewMenu: Story = {
   },
 };
 
+/** "+ New Snag" opens the create panel over the List (RP-1222 row 1), with no page load: a button, not a link. */
+export const NewOpensThePanel: Story = {
+  args: { onNew: fn() },
+  play: async (context) => {
+    const name = labels[storyLocale(context)].newOfType(snag.name[storyLocale(context)]);
+    await expect(context.canvas.queryByRole("link", { name })).toBeNull();
+    await userEvent.click(context.canvas.getByRole("button", { name }));
+    await expect(context.args.onNew).toHaveBeenCalledWith("SNG");
+  },
+};
+
+/** With several Types, the menu's choice opens the panel for that Type. */
+export const NewMenuOpensThePanel: Story = {
+  args: { newTypes: [comment, snag], onNew: fn() },
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: labels[storyLocale(context)].newItem }));
+    await userEvent.click(await within(document.body).findByRole("button", { name: comment.name[storyLocale(context)] }));
+    await expect(context.args.onNew).toHaveBeenCalledWith(comment.code);
+  },
+};
+
 export const NothingToRaise: Story = {
   args: { newTypes: [] },
   play: async (context) => {
@@ -723,6 +744,18 @@ export const Phone: Story = {
     await expect(within(cards).getByRole("link", { name: text.newOfType(snag.name[storyLocale(context)]) })).toHaveAttribute("href", "#camera-SNG");
     const chips = within(cards).getByRole("navigation", { name: text.types });
     await expect(within(chips).getByRole("link", { name: text.needMyAction })).toHaveAttribute("href", expect.stringContaining("needMyAction=true"));
+  },
+};
+
+/** On a phone, "+" keeps the camera-first New Snag (RP-1222 row 4), even where the desktop opens the panel. */
+export const PhoneNewKeepsTheCamera: Story = {
+  parameters: phoneParameters,
+  args: { phoneNewHref: (code: string) => `#camera-${code}`, onNew: fn() },
+  render: (args, context) => <SnagList {...args} locale={storyLocale(context)} labels={labels[storyLocale(context)]} swipe={swipeStub()} />,
+  play: async (context) => {
+    const text = labels[storyLocale(context)];
+    const cards = context.canvas.getByRole("region", { name: text.table });
+    await expect(within(cards).getByRole("link", { name: text.newOfType(snag.name[storyLocale(context)]) })).toHaveAttribute("href", "#camera-SNG");
   },
 };
 

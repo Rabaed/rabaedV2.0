@@ -105,6 +105,10 @@ describe("the create panel's URL", () => {
     );
   });
 
+  it("drops the Location given on opening with the panel on close (RP-1222 row 23)", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/snag-list", `?page=2&new=SNG&location=${id}&size=normal`, null)).toBe("/en/projects/p/snag-list?page=2");
+  });
+
   it("reads the saved Draft: only an id that can be an item's, and only with the panel open", () => {
     expect(newItemFrom(new URLSearchParams(`new=MAR&draft=${id}`))).toEqual({ type: "MAR", draft: id });
     expect(newItemFrom(new URLSearchParams("new=MAR&draft=../members"))).toEqual({ type: "MAR", draft: null });
