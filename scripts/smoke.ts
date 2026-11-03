@@ -1,8 +1,8 @@
 // The post-deploy smoke test: checks a deployed environment from the outside,
-// as a browser would. `scripts/uat-smoke.ts` runs it after every deploy; any failure
+// as a browser would. `scripts/deploy-smoke.ts` runs it after every deploy; any failure
 // fails the deploy workflow. In a demo environment it also signs in as two
 // demo people and checks visibility holds (RP-213). Given Rabaed Admin's
-// address, it checks Rabaed Admin answers there, and that the customer
+// address, it checks Rabaed Admin answers there, and that web's
 // address serves none of it (ADR 0010, RP-254).
 
 export interface SmokeTestOptions {
@@ -129,7 +129,7 @@ async function healthCheck({ url, who, version, headers = {}, fetch: get }: { ur
 export type SmokeRun = { stage: "web"; options: Omit<SmokeTestOptions, "fetch"> } | { stage: "api"; options: Omit<ApiSmokeTestOptions, "fetch"> } | { error: string };
 
 /**
- * What scripts/uat-smoke.ts runs, from its environment: web's smoke given SMOKE_URL (after
+ * What scripts/deploy-smoke.ts runs, from its environment: web's smoke given SMOKE_URL (after
  * every deploy), or the api's given SMOKE_API_URL (on Vercel, before web is deployed).
  * Blank values count as unset.
  */
@@ -149,7 +149,7 @@ export function smokeRunFromEnv(env: NodeJS.ProcessEnv): SmokeRun {
 }
 
 /**
- * Rabaed Admin's routes, and where the customer api served them before Rabaed
+ * Rabaed Admin's routes, and where the api served them before Rabaed
  * Admin moved out, as they would look on web's address. None may answer there.
  */
 export const ADMIN_PATHS = [

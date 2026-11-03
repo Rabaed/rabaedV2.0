@@ -327,14 +327,14 @@ describe("Rabaed Admin checks", () => {
   const adminUrl = "https://rabaed-uat-admin.vercel.app";
   const adminHealth = (body: unknown) => ({ [`${adminUrl}/health`]: { status: 200, body } });
 
-  // The customer address as it should be: every admin path is unknown to it.
-  function customer(overrides: Record<string, Route> = {}) {
+  // Web's address as it should be: every admin path is unknown to it.
+  function webOnly(overrides: Record<string, Route> = {}) {
     const notFound = Object.fromEntries(ADMIN_PATHS.map((p) => [`${url}${p.path}`, { status: 404, body: { error: "not_found" } }]));
     return deployment({ ...notFound, ...adminHealth({ status: "ok", database: "ok", version }), ...overrides });
   }
 
   it("pass when Rabaed Admin answers on its own address and web's address serves none of it", async () => {
-    expect(await smokeTest({ url, adminUrl, version, fetch: customer() })).toEqual([]);
+    expect(await smokeTest({ url, adminUrl, version, fetch: webOnly() })).toEqual([]);
   });
 
   it("fail when Rabaed Admin runs another version or cannot reach its database", async () => {
@@ -342,11 +342,11 @@ describe("Rabaed Admin checks", () => {
       url,
       adminUrl,
       version,
-      fetch: customer({ [`${adminUrl}/health`]: { status: 503, body: { status: "degraded", database: "unavailable", version: "0ld" } } }),
+      fetch: webOnly({ [`${adminUrl}/health`]: { status: 503, body: { status: "degraded", database: "unavailable", version: "0ld" } } }),
     });
     expect(failures).toEqual([expect.stringContaining(`${adminUrl}/health answered 503`)]);
 
-    const stale = await smokeTest({ url, adminUrl, version, fetch: customer(adminHealth({ status: "ok", database: "ok", version: "0ld" })) });
+    const stale = await smokeTest({ url, adminUrl, version, fetch: webOnly(adminHealth({ status: "ok", database: "ok", version: "0ld" })) });
     expect(stale).toEqual([`Rabaed Admin runs 0ld, expected ${version}`]);
   });
 
@@ -358,7 +358,7 @@ describe("Rabaed Admin checks", () => {
   it.each(ADMIN_PATHS.map((p) => [p.method, p.path, p.path.startsWith("/api/") ? 401 : 200] as const))(
     "fail when web's address answers %s %s",
     async (method, path, status) => {
-      const failures = await smokeTest({ url, adminUrl, version, fetch: customer({ [`${url}${path}`]: { status } }) });
+      const failures = await smokeTest({ url, adminUrl, version, fetch: webOnly({ [`${url}${path}`]: { status } }) });
       expect(failures).toEqual([`web's address answered ${method} ${path} with ${status}: it must not serve Rabaed Admin`]);
     },
   );
@@ -367,7 +367,7 @@ describe("Rabaed Admin checks", () => {
   // project's Protection Bypass for Automation secret (ADR 0026, RP-1043).
   it("reach a password-protected Rabaed Admin with the protection bypass header, sent to Admin only", async () => {
     const bypass = "a".repeat(32);
-    const open = customer();
+    const open = webOnly();
     const sentBypassTo: string[] = [];
     const protectedAdmin = (async (input: string | URL, init: RequestInit = {}) => {
       const given = new Headers(init.headers).get("x-vercel-protection-bypass");
@@ -382,18 +382,18 @@ describe("Rabaed Admin checks", () => {
 
   // Given a bypass, Admin is meant to be protected: a request without it must be refused.
   it("fail when a protected Rabaed Admin answers without its password", async () => {
-    const failures = await smokeTest({ url, adminUrl, adminBypass: "a".repeat(32), version, fetch: customer() });
+    const failures = await smokeTest({ url, adminUrl, adminBypass: "a".repeat(32), version, fetch: webOnly() });
     expect(failures).toEqual([`Rabaed Admin answered ${adminUrl}/health with 200 without its password: Password Protection is off`]);
   });
 
   it("accept a redirect for a page path (web adds the language), but never a 2xx", async () => {
     const page = ADMIN_PATHS.find((p) => !p.path.startsWith("/api/"))!;
-    const redirected = customer({ [`${url}${page.path}`]: { status: 307, location: `/en${page.path}` } });
+    const redirected = webOnly({ [`${url}${page.path}`]: { status: 307, location: `/en${page.path}` } });
     expect(await smokeTest({ url, adminUrl, version, fetch: redirected })).toEqual([]);
   });
 });
 
-describe("the smoke's environment (scripts/uat-smoke.ts)", () => {
+describe("the smoke's environment (scripts/deploy-smoke.ts)", () => {
   it("checks web, as after every deploy, given SMOKE_URL", () => {
     expect(
       smokeRunFromEnv({

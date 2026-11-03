@@ -2,11 +2,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { apiSmokeTest, smokeRunFromEnv, smokeTest, type SmokeRun } from "./smoke.ts";
 
 // Usage, web (after every deploy):
-//   SMOKE_URL=https://… SMOKE_VERSION=<commit> [SMOKE_ADMIN_URL=https://…] [SMOKE_ADMIN_BYPASS=…] [SMOKE_ARABIC_FONT="Thmanyah Sans"] [SMOKE_DEMO_PASSWORD=…] node scripts/uat-smoke.ts
+//   SMOKE_URL=https://… SMOKE_VERSION=<commit> [SMOKE_ADMIN_URL=https://…] [SMOKE_ADMIN_BYPASS=…] [SMOKE_ARABIC_FONT="Thmanyah Sans"] [SMOKE_DEMO_PASSWORD=…] node scripts/deploy-smoke.ts
 // With SMOKE_ADMIN_URL, it checks Rabaed Admin answers there and web's address serves none of it.
 // With SMOKE_DEMO_PASSWORD (a demo environment), it also checks visibility as two demo people.
 // Usage, the api before web is deployed (UAT on Vercel, RP-1043):
-//   SMOKE_API_URL=https://… SMOKE_VERSION=<commit> SMOKE_DEMO_PASSWORD=… [SMOKE_ADMIN_URL=https://…] [SMOKE_ADMIN_BYPASS=…] node scripts/uat-smoke.ts
+//   SMOKE_API_URL=https://… SMOKE_VERSION=<commit> SMOKE_DEMO_PASSWORD=… [SMOKE_ADMIN_URL=https://…] [SMOKE_ADMIN_BYPASS=…] node scripts/deploy-smoke.ts
 // It checks the api's version and database, and visibility asked of the api itself.
 // SMOKE_ADMIN_BYPASS is Admin's Vercel Protection Bypass for Automation secret, sent to Admin only;
 // set only while Admin is behind Password Protection, it also checks Admin refuses a request without it.
