@@ -34,6 +34,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { Link, useRouter } from "@/i18n/navigation";
 import { formBesideReplyChecklists, type AnsweredChecklists } from "@/lib/checklist-once";
 import { useFormRendererLabels } from "@/lib/form-labels";
+import { autosavesNow, unsavedAfterSave } from "@/lib/form-unsaved";
 import { linkSearch } from "@/lib/link-search";
 import { saveButton } from "@/lib/save-button";
 import { useDocuments, useImageUrls } from "./use-documents";
@@ -93,6 +94,11 @@ type WorkItemFormState = {
   change(changes: Readonly<Record<string, FormValue | undefined>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
   save(auto?: boolean): Promise<boolean>;
+  /**
+   * The answers `sent` (the `answers` object as it was) were saved elsewhere, such as the New item
+   * panel's create (RP-1221): nothing is unsaved unless typed since, so autosave never re-sends them.
+   */
+  markSaved(sent: Readonly<Record<string, unknown>>): void;
   /** Shows the API's per-field errors on the Form. */
   showErrors(errors: readonly FieldError[], message: string): void;
 };
@@ -234,7 +240,7 @@ export function WorkItemFormProvider({
         const theirs = Object.fromEntries(saved.keptFromOthers.map((k) => [k.field, k.value]));
         // Typed while this save was out stays as typed, and stays unsaved.
         const sent = answers;
-        const typedMeanwhile = answersRef.current !== sent;
+        const typedMeanwhile = unsavedAfterSave(answersRef.current, sent);
         setAnswers((cur) => {
           const merged = { ...(cur === sent ? shownAnswers : cur), ...theirs };
           for (const k of saved.keptFromOthers) if (k.value === null) delete merged[k.field];
@@ -272,11 +278,16 @@ export function WorkItemFormProvider({
     return false;
   }
 
+  function markSaved(sent: Readonly<Record<string, unknown>>) {
+    // Typed while it was being saved? Then that is still unsaved; the next save carries it.
+    setDirty(unsavedAfterSave(answersRef.current, sent));
+  }
+
   // Autosave: a few seconds after the last change, in the first Draft only.
   const saveRef = useRef(save);
   saveRef.current = save;
   useEffect(() => {
-    if (!autosave || !editable || !dirty || pending) return;
+    if (!autosavesNow({ autosave, editable, dirty, pending })) return;
     const timer = setTimeout(() => void saveRef.current(true), AUTOSAVE_MS);
     return () => clearTimeout(timer);
   }, [autosave, editable, dirty, pending, answers]);
@@ -313,6 +324,7 @@ export function WorkItemFormProvider({
         message,
         change,
         save,
+        markSaved,
         showErrors,
       }}
     >

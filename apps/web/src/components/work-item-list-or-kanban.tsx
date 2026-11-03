@@ -8,6 +8,7 @@ import {
   type BoardCardLayout,
   type BoardCardLayoutChange,
   type Locale,
+  type ModuleKey,
   type ModuleView,
   type PackageSummary,
   type WorkItemBoard as WorkItemBoardData,
@@ -41,7 +42,7 @@ import { useState, type ReactNode } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname): next/link keeps navigation
 // client-side without adding the locale again.
 import NextLink from "next/link";
-import { NewSubmittalPanelHost, useOpenNewSubmittal } from "@/components/new-submittal-panel-host";
+import { NewSubmittalPanelHost, useOpenNewSubmittal, type NewSubmittalPanelLook } from "@/components/new-submittal-panel-host";
 import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-panel-host";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
@@ -212,6 +213,8 @@ export function WorkItemListOrKanban(
     packages?: PackageSummary[];
     /** One import's Drafts (RP-954): the chip naming the import the List is filtered to. */
     importFilter?: WorkItemImportFilter;
+    /** Another Module whose items this tab shows too, and whose create panel it opens (RP-1221: the Inspections on the Submittals tab, ADR 0025). */
+    alsoRaises?: ModuleKey;
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, moreActions, projectId, module, hints, projectName } = props;
@@ -250,9 +253,38 @@ export function WorkItemListOrKanban(
   const submittal = module === "submittals" ? opened : null;
   const openId = submittal?.openId ?? undefined;
   const onOpen = submittal ? (row: WorkItemRow) => submittal.open(row.id) : undefined;
-  // The create panel (RP-1152, `?new=1`, `?new=SAR`, `&draft=<id>` once saved): only the Submittals' for now; opening one closes the other.
+  // The create panel (RP-1152, `?new=1`, `?new=SAR`, `&draft=<id>` once saved); opening one closes the other. The Submittals', and
+  // the Inspections' (RP-1221, gap row 2): on their own tab, or on the Submittals tab of a Project that shows them there (ADR 0025),
+  // where `&newModule=inspections` names them.
   const raising = useOpenNewSubmittal();
-  const newSubmittal = module === "submittals" && !openId ? raising.newItem : null;
+  const raisingModule: ModuleKey | null =
+    module === "inspections"
+      ? "inspections"
+      : module === "submittals"
+        ? raising.module !== null && raising.module === props.alsoRaises
+          ? raising.module
+          : "submittals"
+        : null;
+  const newSubmittal = raisingModule !== null && !openId ? raising.newItem : null;
+  const tInspection = useTranslations("newInspection");
+  // The New Inspection's own words (RP-1221, rows 3, 11, 14, 23 and 24): the breadcrumb names the tab it opens over.
+  const newItemLook: NewSubmittalPanelLook =
+    raisingModule === "inspections"
+      ? {
+          module: tTabs(module),
+          back: tInspection("back", { tab: tTabs(module) }),
+          icon: "clipboard-check",
+          subjectPlaceholder: tInspection("subjectPlaceholder"),
+          words: {
+            crumb: tInspection("crumb"),
+            review: (role) => tInspection("review", { role }),
+            outcome: tInspection("outcome"),
+            whoSeesBox: { author: tInspection("whoSeesAuthor"), company: tInspection("whoSeesCompany") },
+          },
+          // The picked Checklist Template's items under its card at every width (row 25).
+          form: { checklistTemplate: "cards-preview" },
+        }
+      : { module: tTabs("submittals"), back: tNew("back"), icon: "file-text" };
   const loaded = props.view === "list" ? props.list : props.board;
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
   const post = (path: string, body: unknown) =>
@@ -401,11 +433,13 @@ export function WorkItemListOrKanban(
         refreshKey={loaded}
       />
     )}
-    {newSubmittal && (
+    {newSubmittal && raisingModule && (
       <NewSubmittalPanelHost
+        // A switch of Module (a Submittal's panel, then an Inspection's) starts afresh.
+        key={raisingModule}
         projectId={projectId}
-        module="submittals"
-        look={{ module: tTabs("submittals"), back: tNew("back"), icon: "file-text" }}
+        module={raisingModule}
+        look={newItemLook}
         type={newSubmittal.type}
         onTypeChange={(code) => raising.open({ type: code })}
         draft={newSubmittal.draft}

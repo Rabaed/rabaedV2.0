@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { newItemFrom, newItemLanding, newSubmittalPanelHref, openIdFrom, sizeFrom, submittalPanelHref } from "./submittal-panel-url.ts";
+import {
+  newInspectionLanding,
+  newItemFrom,
+  newItemLanding,
+  newItemModuleFrom,
+  newSubmittalPanelHref,
+  openIdFrom,
+  sizeFrom,
+  submittalPanelHref,
+} from "./submittal-panel-url.ts";
 
 // RP-1061: the Submittal Panel's state is `?open=<id>` on the List and the Kanban, so a reload
 // or a shared link reopens it. Every other part of the URL (filters, page, view) is kept.
@@ -109,5 +118,55 @@ describe("the create panel's URL", () => {
   it("lands a direct link to the New page on the List with the panel at Normal (decision 1)", () => {
     expect(newItemLanding("p1")).toBe("/projects/p1/work-items?new=1&size=normal");
     expect(newItemLanding("p1", "SAR")).toBe("/projects/p1/work-items?new=SAR&size=normal");
+  });
+});
+
+// RP-1221 (gap row 2): a New Inspection opens over the tab the Project shows Inspections in. On
+// the Inspections tab the tab names the Module; on the Submittals tab, when the Project shows them
+// there (ADR 0025), `&newModule=inspections` does.
+describe("the create panel's URL for another Module", () => {
+  it("names the Module beside `new`, and drops it on close", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2", { size: "wide", module: "inspections" })).toBe(
+      "/en/projects/p/work-items?page=2&new=1&size=wide&newModule=inspections",
+    );
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections&size=wide", null)).toBe("/en/projects/p/work-items");
+  });
+
+  it("keeps the Module through a Type pick and a save", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=1&newModule=inspections", { type: "WIR" })).toBe(
+      "/en/projects/p/work-items?new=WIR&newModule=inspections",
+    );
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections", { draft: id })).toBe(
+      `/en/projects/p/work-items?new=WIR&newModule=inspections&draft=${id}`,
+    );
+  });
+
+  it("opening the tab's own Module's panel (module null) drops it, and the other Module's Type with it", () => {
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?page=2&new=WIR&newModule=inspections&size=wide", { size: "wide", module: null })).toBe(
+      "/en/projects/p/work-items?page=2&new=1&size=wide",
+    );
+    // Switching to another Module starts on its first Type too.
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=SAR", { module: "inspections" })).toBe("/en/projects/p/work-items?new=1&newModule=inspections");
+    // The same Module, named again, keeps its Type.
+    expect(newSubmittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections", { module: "inspections" })).toBe(
+      "/en/projects/p/work-items?new=WIR&newModule=inspections",
+    );
+  });
+
+  it("is dropped when an item opens", () => {
+    expect(submittalPanelHref("/en/projects/p/work-items", "?new=WIR&newModule=inspections", id)).toBe(`/en/projects/p/work-items?open=${id}`);
+  });
+
+  it("reads the Module only with the panel open, and only a Module's key", () => {
+    expect(newItemModuleFrom(new URLSearchParams("new=1&newModule=inspections"))).toBe("inspections");
+    expect(newItemModuleFrom(new URLSearchParams("new=1"))).toBeNull();
+    expect(newItemModuleFrom(new URLSearchParams("newModule=inspections"))).toBeNull();
+    expect(newItemModuleFrom(new URLSearchParams("new=1&newModule=../me"))).toBeNull();
+  });
+
+  it("lands a direct link to the New Inspection on the tab the Project shows Inspections in, at Normal", () => {
+    expect(newInspectionLanding("p1", { inSubmittals: false })).toBe("/projects/p1/inspections?new=1&size=normal");
+    expect(newInspectionLanding("p1", { inSubmittals: false }, "WIR")).toBe("/projects/p1/inspections?new=WIR&size=normal");
+    expect(newInspectionLanding("p1", { inSubmittals: true })).toBe("/projects/p1/work-items?new=1&size=normal&newModule=inspections");
   });
 });

@@ -1,13 +1,18 @@
-import { moduleViewFromSearchParams, workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
-import { Icon, buttonVariants, cn } from "@rabaed/ui";
+import {
+  inspectionsInSubmittals,
+  moduleViewFromSearchParams,
+  workItemQueryFromSearchParams,
+  workItemViewFromSearchParams,
+  type Locale,
+  type ModuleKey,
+} from "@rabaed/domain";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { PackagesBoardView } from "@/components/packages-board-view";
 import { SnagListView } from "@/components/snag-list-view";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
 import { listQueryFromSearchParams, snagListSort } from "@/lib/list-url";
-import { newItemHref } from "@/lib/new-item-route";
-import { Link, getPathname, redirect } from "@/i18n/navigation";
+import { getPathname, redirect } from "@/i18n/navigation";
 import { ReadFailed } from "@/components/read-failed";
 import { pageOutcome, valueOf } from "@/lib/api-read";
 import { getMe, getMyVisibility, readPackages, getRegisterImports, getRaisableTypes, readWorkItemBoard, readWorkItems, readProject } from "@/lib/session";
@@ -105,8 +110,8 @@ export async function ModuleWorkItemsPage({
     // One import's Drafts (RP-954, "Open the Drafts"): the import named by its file name, from the
     // Imports page's list, which holds only the Member's own Company's. No time.
     query.importId ? getRegisterImports(projectId) : null,
-    // Whose Visibility covers a Trade may raise a Submittal (RP-1152, decision 6).
-    module === "submittals" ? getMyVisibility(projectId) : null,
+    // Whose Visibility covers a Trade may raise a Submittal (RP-1152, decision 6), or an Inspection (RP-1221).
+    module === "submittals" || module === "inspections" ? getMyVisibility(projectId) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   // A slow or failed read of the Project or its items says so and offers Try again; only the
@@ -133,19 +138,24 @@ export async function ModuleWorkItemsPage({
 
   // "Add Submittal" opens the create panel over the List (RP-1152), only for a Member who may raise
   // a Submittals Type and whose Visibility covers a Trade (decision 6); the API refuses anyone else
-  // too. An Inspection (a WIR) is raised from its own tab, by a Member who may raise one of its
-  // Types, on the New WIR page, never the Submittals' New page (RP-1179).
+  // too. "New Inspection" opens the Inspections' panel the same way (RP-1221), never the
+  // Submittals' (RP-1179): on the Inspections tab, or on the Submittals tab of a Project that shows
+  // them there (gap row 2, ADR 0025), beside "Add Submittal".
+  const raisesHere = canRaise(raisable, covered);
+  // The Inspections' Types are read only for a Project that shows them in the Submittals tab (RP-1221, gap row 2; ADR 0025).
+  const inspectionsHere =
+    module === "submittals" && inspectionsInSubmittals(project) && canRaise(await getRaisableTypes(projectId, "inspections"), covered);
   const action =
-    module === "submittals" && canRaise(raisable, covered)
-      ? <AddSubmittalButton label={t("addSubmittal")} />
-      : module === "inspections" && (raisable?.types.length ?? 0) > 0
-        ? (
-            <Link href={newItemHref(project.id, "inspections")} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
-              <Icon name="plus" />
-              {t("newInspection")}
-            </Link>
-          )
-        : undefined;
+    module === "submittals" ? (
+      raisesHere || inspectionsHere ? (
+        <>
+          {raisesHere && <AddSubmittalButton label={t("addSubmittal")} />}
+          {inspectionsHere && <AddSubmittalButton label={t("newInspection")} module="inspections" />}
+        </>
+      ) : undefined
+    ) : module === "inspections" && raisesHere ? (
+      <AddSubmittalButton label={t("newInspection")} />
+    ) : undefined;
   // The Submittal Register Import (RP-637): offered only to a Member who may raise a Submittals Type
   // (story 4; the API refuses anyone else). Its Imports page, their Company's own, to every
   // Member on the Project (story 32).
@@ -191,6 +201,7 @@ export async function ModuleWorkItemsPage({
           hints={hints}
           packages={packages?.packages}
           importFilter={importFilter}
+          alsoRaises={inspectionsHere ? "inspections" : undefined}
         />
       ) : (
         list && (
@@ -208,6 +219,7 @@ export async function ModuleWorkItemsPage({
             hints={hints}
             packages={packages?.packages}
             importFilter={importFilter}
+            alsoRaises={inspectionsHere ? "inspections" : undefined}
           />
         )
       )}

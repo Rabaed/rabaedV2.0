@@ -62,6 +62,14 @@ describe("the Types a Member may raise", () => {
     });
   });
 
+  it("include the Inspections' WIR with its own one-line description, for its Type card (RP-1221, gap row 12)", async () => {
+    const { types } = (await ok(engineer.get(`/v1/projects/${projectId}/raisable-types?module=inspections`), 200)).json() as RaisableTypes;
+    expect(types.find((t) => t.code === "WIR")?.description).toEqual({
+      en: "Ask the Consultant to inspect work that is ready on site",
+      ar: "اطلب من الاستشاري معاينة أعمال جاهزة في الموقع",
+    });
+  });
+
   it("don't include a Type the Member's role doesn't raise: a Consultant holds no Draft", async () => {
     expect((await raisable(k1Engineer)).types).toEqual([]);
   });

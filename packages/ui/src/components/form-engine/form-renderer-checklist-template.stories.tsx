@@ -171,6 +171,43 @@ export const Cards: Story = {
   },
 };
 
+/**
+ * The New item panel's look (RP-1221, gap row 25): the same radio cards, with the picked one's
+ * preview under them at every width, since the panel has no column beside the Form for it. Hide
+ * items folds it.
+ */
+export const CardsWithPreview: Story = {
+  args: {
+    checklistTemplates: cardTemplates,
+    look: { checklistTemplate: "cards-preview" },
+    choices: { trades: [{ id: civil, label: "Civil" }], locations: [], scopes: [] },
+  },
+  render: function Render(args, context) {
+    const locale = storyLocale(context);
+    const [values, setValues] = useState<Record<string, unknown>>({ trade: civil, location, checklist_template: blockwork });
+    return (
+      <FormRenderer
+        {...args}
+        choices={{ ...args.choices!, trades: [{ id: civil, label: locale === "ar" ? "مدني" : "Civil" }] }}
+        locale={locale}
+        labels={formRendererLabels[locale]}
+        answers={values}
+        onChange={(changes) => setValues((current) => ({ ...current, ...changes }))}
+      />
+    );
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    await expect(canvas.getAllByRole("radio")).toHaveLength(2);
+    // A wide screen (the story's) still shows the preview, under the cards.
+    const hide = canvas.getByRole("button", { name: storyText(context, cardCopy.hide) });
+    await expect(hide).toBeVisible();
+    await expect(canvas.getByText(storyText(context, cardCopy.notice))).toBeVisible();
+    await userEvent.click(hide);
+    await expect(canvas.queryByText(storyText(context, cardCopy.notice))).toBeNull();
+  },
+};
+
 /** The picked template at a glance (the WIR request's Template preview): name, Version and count, what a Fail asks for, the checks numbered. */
 export const Preview: Story = {
   render: (_args, context) => {

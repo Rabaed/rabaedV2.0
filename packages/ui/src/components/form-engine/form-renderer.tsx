@@ -253,10 +253,11 @@ export type FormRendererProps = {
   /**
    * An opt-in look for one page (RP-655, the WIR request): `sections: "cards"` puts each section
    * in a card; `checklistTemplate: "cards"` offers the Checklist Template pick as radio cards, with
-   * its preview on a phone only (the page shows it beside the Form on a wide screen). Left out,
-   * the Form renders as every other.
+   * its preview on a phone only (the page shows it beside the Form on a wide screen);
+   * `checklistTemplate: "cards-preview"` (RP-1221, the New item panel) shows it under the cards at
+   * every width. Left out, the Form renders as every other.
    */
-  look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards"; answers?: "plain" | "page" };
+  look?: { sections?: "plain" | "cards"; checklistTemplate?: "select" | "cards" | "cards-preview"; answers?: "plain" | "page" };
   /**
    * The page lays the sections out itself (the Work Item page's folding cards, RP-1151): each shown
    * section's key, title, one-line summary and content, in order; the attention banner stays above.
@@ -697,7 +698,7 @@ export function FormRenderer({
   sectionsAs,
   className,
 }: FormRendererProps) {
-  const templateCards = look.checklistTemplate === "cards";
+  const templateCards = look.checklistTemplate === "cards" || look.checklistTemplate === "cards-preview";
   // The Work Item page's read answers (RP-1188, gap table rows 47–48): file cards, the Trade chip, the Location chip, Scopes tags.
   const pageAnswers = look.answers === "page";
   const fieldId = (key: string) => `${idPrefix}-${key}`;
@@ -813,7 +814,7 @@ export function FormRenderer({
           locale={locale}
           labels={labels.checklistTemplate}
           onChange={(v) => onChange?.({ [field.key]: v })}
-          look={templateCards ? "cards" : "select"}
+          look={look.checklistTemplate ?? "select"}
         />
       ),
     };

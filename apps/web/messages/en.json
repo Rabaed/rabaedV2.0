@@ -1202,7 +1202,6 @@
     "inspection": {
       "breadcrumb": "Breadcrumb",
       "request": {
-        "newWir": "New WIR",
         "raisedBy": "Raised by \u2068{company}\u2069",
         "goesTo": "Goes to \u2068{name}\u2069",
         "numberOnSubmit": "Number given on submit",
@@ -3329,6 +3328,15 @@
       "draft": "Draft",
       "revision": "Revision {n}"
     }
+  },
+  "newInspection": {
+    "crumb": "New Inspection",
+    "back": "Back to {tab}",
+    "subjectPlaceholder": "Subject *  e.g. Blockwork before plastering — Tower 1, Floor 3",
+    "review": "{role} inspection",
+    "outcome": "Review Code: close or revise",
+    "whoSeesAuthor": "Only you see this Draft. The Consultant sees it once it is Submitted.",
+    "whoSeesCompany": "Only your Company sees this Draft. The Consultant sees it once it is Submitted."
   },
   "newSubmittal": {
     "crumb": "New {type}",

@@ -60,6 +60,7 @@ import {
   withAllSubmittalPanelSections,
   writeSubmittalPanelPreferences,
   type BuiltInChoices,
+  type FormRendererProps,
   type IconName,
   type NewItemRoutePreviewLabels,
   type SubmittalPanelLayout,
@@ -88,7 +89,7 @@ import {
   typedSomething,
 } from "@/lib/new-submittal-panel";
 import { draftRoute, pickedDocuments, saveThenUpload, startAnswers, type PickedFile } from "@/lib/new-panel-hooks";
-import { newItemFrom, newSubmittalPanelHref, sizeFrom } from "@/lib/submittal-panel-url";
+import { newItemFrom, newItemModuleFrom, newSubmittalPanelHref, sizeFrom } from "@/lib/submittal-panel-url";
 import type { Reading } from "@/lib/transition-gate";
 import { useApiRead } from "@/lib/use-api-read";
 import { uploadToWorkItem, useDocuments, useImageUrls } from "./use-documents";
@@ -133,6 +134,25 @@ export type NewSubmittalPanelLook = {
   icon: IconName;
   /** The Subject's example, e.g. "Subject *  e.g. Cable tray not bonded" (RP-1222 row 10); the Submittals' by default. */
   subjectPlaceholder?: string;
+  /** The Module's own words where they differ from a Submittal's (RP-1221, the Inspections); each left out keeps the panel's. */
+  words?: NewSubmittalPanelWords;
+  /**
+   * The Form's own look in the panel (RP-1221, row 25): the Inspections' Checklist Template as cards with
+   * the picked one's items under them, since the panel has no column beside the Form. Left out, the Form's default.
+   */
+  form?: FormRendererProps["look"];
+};
+
+/** A Module's own words in the create panel (RP-1221). Wording only: who the who-sees line names is the panel's (RP-1222). */
+export type NewSubmittalPanelWords = {
+  /** The breadcrumb's and the phone bar's title, e.g. "New Inspection", in place of "New <Type>". */
+  crumb?: string;
+  /** The route's line for another role's Steps, e.g. "Consultant inspection". */
+  review?: (role: string) => string;
+  /** The route's last line, e.g. "Review Code: close or revise". */
+  outcome?: string;
+  /** The rail's "Who sees this Draft" box, for a Draft only its author sees and one their Company sees. */
+  whoSeesBox?: { author: string; company: string };
 };
 
 export type NewSubmittalPanelHostProps = NewSubmittalPanelHooks & {
@@ -187,17 +207,22 @@ export function useOpenNewSubmittal() {
   );
   return {
     newItem,
-    open: (open: { type?: string; size?: "wide" } = {}) => show(open),
+    /** The Module the URL names beside the panel (RP-1221): null on a tab whose own Module it is. */
+    module: newItemModuleFrom(params),
+    open: (open: { type?: string; size?: "wide"; module?: ModuleKey | null } = {}) => show(open),
     saved: (draft: string) => show({ draft }),
     close: () => show(null),
   };
 }
 
-/** "Add Submittal" (row 41): opens the create panel at Wide (row 4), with no page load. The page shows it only to a Member who may raise (decision 6). */
-export function AddSubmittalButton({ label }: { label: string }) {
+/**
+ * "Add Submittal" (row 41): opens the create panel at Wide (row 4), with no page load. The page shows it only to a Member who may raise (decision 6).
+ * With `module`, it opens another Module's panel over this tab, e.g. "New Inspection" on the Submittals tab of a Project that shows them there (RP-1221).
+ */
+export function AddSubmittalButton({ label, module }: { label: string; module?: ModuleKey }) {
   const { open } = useOpenNewSubmittal();
   return (
-    <Button className="h-[34px] px-3.5" onClick={() => open({ size: "wide" })}>
+    <Button className="h-[34px] px-3.5" onClick={() => open({ size: "wide", module: module ?? null })}>
       <Icon name="plus" />
       {label}
     </Button>
@@ -274,7 +299,7 @@ function NewSubmittalPanel({
     sizes: { compact: tp("size.compact"), normal: tp("size.normal"), wide: tp("size.wide"), full: tp("size.full") },
     grip: tp("size.grip"),
   };
-  const crumb = chosen ? t("crumb", { type: chosen.name[locale] }) : t("crumbNoType");
+  const crumb = look.words?.crumb ?? (chosen ? t("crumb", { type: chosen.name[locale] }) : t("crumbNoType"));
   const frame: Frame = (content) => (
     <SubmittalPanel
       locale={locale}
@@ -389,6 +414,8 @@ function NewSubmittalPanel({
       onNewVersion={() => setFormRead((n) => n + 1)}
       onClose={onClose}
       refreshKey={refreshKey}
+      words={look.words}
+      formLook={look.form}
       {...hooks}
     />
   );
@@ -442,6 +469,8 @@ type DraftProps = NewSubmittalPanelHooks & {
   onClose: () => void;
   refreshKey?: unknown;
   layout: SubmittalPanelLayout;
+  words?: NewSubmittalPanelWords;
+  formLook?: FormRendererProps["look"];
 };
 
 /** One Draft after another: with `afterSave: "clear"`, a save starts the next one, keeping the `keep` answers. */
@@ -514,6 +543,8 @@ function DraftSubmittalPanel({
   onClose,
   refreshKey,
   layout,
+  words,
+  formLook,
   routePreview = true,
   rail = true,
   documentsLock = true,
@@ -577,7 +608,9 @@ function DraftSubmittalPanel({
   const close = () => (created === null && typed ? setDiscarding(true) : onClose());
 
   async function create() {
-    const answers = formVisibility(schema, state.answers).answers;
+    // The answers as sent: once created, they are saved, so autosave sends only what is typed after.
+    const sent = state.answers;
+    const answers = formVisibility(schema, sent).answers;
     const missing: FieldError[] = tradeKey !== undefined && isUnanswered(answers[tradeKey]) ? [{ key: tradeKey, code: "required" }] : [];
     setSubjectMissing(subject.trim() === "");
     // A Draft needs a Subject and a Trade (row 26): they are marked, not refused.
@@ -624,7 +657,10 @@ function DraftSubmittalPanel({
       router.refresh();
       if (result.kind === "photosFailed") {
         // The Draft exists: the panel stays on it with what is left to upload, and says so (row 25).
-        if (draft === null) onCreated({ id: result.id, at: new Date().toISOString() });
+        if (draft === null) {
+          state.markSaved(sent);
+          onCreated({ id: result.id, at: new Date().toISOString() });
+        }
         picks.keepOnly(result.picked);
         setError(t("documentsNotUploaded"));
         return;
@@ -645,6 +681,9 @@ function DraftSubmittalPanel({
       );
       onSaved?.(id, answers);
       if (afterSave === "clear") return onCleared(afterSaveAnswers(answers, { mode: "clear", keep }));
+      // The create saved the answers sent: without this, the typing before it left the Form "unsaved", and
+      // autosave re-sent every answer moments later, over an edit made meanwhile elsewhere (RP-1221, UAT J9).
+      if (draft === null) state.markSaved(sent);
       onCreated({ id, at: new Date().toISOString() });
       // The URL holds the new Draft, so a reload or Esc keeps it (row 38).
       onDraftSaved(id);
@@ -662,7 +701,7 @@ function DraftSubmittalPanel({
   const savedAt = created === null ? null : lastSave === null ? "" : savedClock(lastSave, locale);
 
   const { preview, draftsVisibleTo } = draftRoute({ routePreview, read: route });
-  const routeView = preview ? <DraftRoutePreview route={preview} locale={locale} /> : null;
+  const routeView = preview ? <DraftRoutePreview route={preview} locale={locale} words={words} /> : null;
   const whoSees = { author: t("onlyYou"), company: t("onlyCompany"), heading: t("whoSees") };
   const checklist = (incomplete: boolean) => <RequiredChecklist locale={locale} heading={t("required")} items={items} incomplete={incomplete ? t("incomplete") : undefined} />;
 
@@ -705,7 +744,7 @@ function DraftSubmittalPanel({
           <>
             {requiredChecklist && checklist(true)}
             {routeView}
-            <DraftWhoSees look="box" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={whoSees} />
+            <DraftWhoSees look="box" draftsVisibleTo={draftsVisibleTo} companyName={companyName} labels={{ ...whoSees, ...words?.whoSeesBox }} />
           </>
         ),
         actions: (
@@ -761,6 +800,7 @@ function DraftSubmittalPanel({
                 setError(null);
               }}
               idPrefix="answer"
+              {...(formLook ? { look: formLook } : {})}
               links={{
                 targets: state.linkTargets,
                 search: linkSearch(projectId),
@@ -877,7 +917,7 @@ function usePickedFiles(on: boolean) {
 }
 
 /** The route a new Draft of the Type will take, by role only (decision 3), from the Draft Step on. */
-function DraftRoutePreview({ route, locale }: { route: RoutePreviewData; locale: Locale }) {
+function DraftRoutePreview({ route, locale, words }: { route: RoutePreviewData; locale: Locale; words?: NewSubmittalPanelWords }) {
   const t = useTranslations("newSubmittal");
   const stepKey = draftStepKey(route);
   const shown = submittalRoute({ definition: route.definition, stages: route.stages, position: stepKey === null ? null : { kind: "own", stepKey } });
@@ -885,9 +925,9 @@ function DraftRoutePreview({ route, locale }: { route: RoutePreviewData; locale:
     role: (role) => t(`roles.${role}`),
     route: t("workflow"),
     now: t("now"),
-    review: (role) => t("review", { role: t(`roles.${role}`) }),
+    review: (role) => (words?.review ? words.review(t(`roles.${role}`)) : t("review", { role: t(`roles.${role}`) })),
     private: t("private"),
-    outcome: t("outcome"),
+    outcome: words?.outcome ?? t("outcome"),
   };
   return <NewItemRoutePreview locale={locale} route={shown} labels={labels} heading={t("workflow")} />;
 }
