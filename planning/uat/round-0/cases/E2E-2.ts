@@ -310,11 +310,14 @@ defineCase("J9", async (t) => {
   await mo.post(`/work-items/${wir}/pick-up`);
   const mp = await c.page("mohammed");
   await c.show(t, mp, `/work-items/${wir}`);
-  await mp.getByRole("main").getByRole("button", { name: /Revise/ }).first().click();
+  // RP-1226: since RP-655 the Manager's decision bar has one "Issue code" button; its pop-up starts on the proposed Code.
+  await mp.getByRole("main").getByRole("button", { name: "Issue code", exact: true }).first().click();
   const dlg = mp.getByRole("dialog");
   await dlg.waitFor({ state: "visible" });
+  await settle(mp, 600);
   const dtext = (await dlg.innerText()).replace(/\s+/g, " ");
-  t.check("[INS-11] Mohammed's Code pop-up says the checklist proposes C and names the Snag that will be raised", /checklist proposes .*C/i.test(dtext) && /A Snag is raised/i.test(dtext) && /Supports at the spacing/.test(dtext), dtext.slice(0, 260));
+  const issueLabel = (await dlg.getByRole("button", { name: /^Issue code:/ }).innerText()).replace(/\s+/g, " ");
+  t.check("[INS-11] Mohammed's Code pop-up proposes C and names the Snag that will be raised for item 1, to TMC", /Revise & Resubmit · C Proposed/.test(dtext) && /Revise & Resubmit · C$/.test(issueLabel) && /Snags that will be raised/.test(dtext) && /Supports at the spacing on the drawing Item 1 · to TMC Constructions/.test(dtext), `${issueLabel} | ${dtext.slice(0, 400)}`);
   await t.shot(mp, "5-mohammed-codes-wir");
   await mp.keyboard.press("Escape");
   const mid = JSON.stringify(await H.detail(hafiz, wir)) + (await hafiz.get(`/work-items/${wir}/history`)).text;
