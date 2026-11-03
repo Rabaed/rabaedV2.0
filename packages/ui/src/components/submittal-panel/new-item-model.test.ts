@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { submittalOwnerWorkflow as definition } from "../../storybook/submittal-route.ts";
 import { workflowStages as stages } from "../../storybook/workflow.ts";
-import { newItemRequired, newItemRouteRows } from "./new-item-model.ts";
+import { newItemRequired, newItemRouteRows, newItemTypeIcon } from "./new-item-model.ts";
 import { submittalRoute } from "./route-model.ts";
 
 // The route a Draft will take, as the create panel previews it (RP-1152 rows 34, 35): the caller
@@ -47,5 +47,16 @@ describe("the required checklist's count (RP-1152 rows 25, 33)", () => {
       ]),
     ).toEqual({ done: 2, total: 3 });
     expect(newItemRequired([])).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe("the Type cards' icons (RP-1227)", () => {
+  it("gives each Type its own icon, from its code", () => {
+    expect(["MAR", "SAR", "DAR", "WIR"].map(newItemTypeIcon)).toEqual(["building-factory", "truck", "file-text", "clipboard-check"]);
+  });
+
+  it("falls back to a file for a Type it does not know", () => {
+    expect(newItemTypeIcon("SNG")).toBe("file-text");
+    expect(newItemTypeIcon("toString")).toBe("file-text");
   });
 });

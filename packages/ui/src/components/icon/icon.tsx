@@ -14,6 +14,8 @@ import {
   IconBell,
   IconBriefcase,
   IconBuilding,
+  IconBuildingFactory,
+  IconTruck,
   IconCalendarEvent,
   IconMap,
   IconStairs,
@@ -148,6 +150,9 @@ const icons = {
   "bell-ringing": IconBellRinging,
   briefcase: IconBriefcase,
   building: IconBuilding,
+  // The Type cards' MAR and SAR (RP-1227).
+  "building-factory": IconBuildingFactory,
+  truck: IconTruck,
   "calendar-event": IconCalendarEvent,
   buildings: IconBuildings,
   "building-skyscraper": IconBuildingSkyscraper,
