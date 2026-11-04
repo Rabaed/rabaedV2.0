@@ -1,7 +1,20 @@
 import type { BaseRole, BilingualText } from "@rabaed/domain";
+import type { IconName } from "../icon/icon.tsx";
 import type { SubmittalRoute } from "./route-model.ts";
 
 // The create panel's pure parts (RP-1152), worked out apart from React so they can be tested.
+
+const typeIcons: ReadonlyMap<string, IconName> = new Map<string, IconName>([
+  ["MAR", "building-factory"],
+  ["SAR", "truck"],
+  ["DAR", "file-text"],
+  ["WIR", "clipboard-check"],
+]);
+
+/** A Type card's icon, from the Type's code (RP-1227): a file for a Type without one of its own. */
+export function newItemTypeIcon(code: string): IconName {
+  return typeIcons.get(code) ?? "file-text";
+}
 
 /**
  * A row of the new item's route preview (rows 34, 35; V15): the viewer's own Company's Steps by
