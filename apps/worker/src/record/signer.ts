@@ -46,7 +46,7 @@ export async function localSealSigner(): Promise<SealSigner> {
 }
 
 export interface KmsSealSignerSettings {
-  /** The key's alias, `alias/<prefix>-pdf-sealing` (AWS KMS; RP-1230). */
+  /** The key's alias, `alias/<prefix>-pdf-sealing` (packages/infra storage stack). */
   readonly keyId: string;
   readonly region: string;
   /** Rabaed's certificate for that key, then its issuers (DER). */

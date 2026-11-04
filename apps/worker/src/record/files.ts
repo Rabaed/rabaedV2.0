@@ -5,7 +5,7 @@ import { documentalRecordPrefix, objectStoreClientConfig, objectStoreFromEnv, PR
 // Where the worker keeps a record's files: the Project files bucket, under the
 // item's own prefix (ADR 0007), the same store the api signs Document links for
 // (apps/api/src/documents/file-store.ts). In AWS the worker's task role may read
-// Documents and write records there (RP-1230 decides its successor); locally and in
+// Documents and write records there (packages/infra app stack); locally and in
 // CI it is the S3-compatible store in Docker, so no run calls AWS.
 
 export interface RecordFiles {

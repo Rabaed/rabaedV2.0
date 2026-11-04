@@ -16,7 +16,7 @@ const tokenSources = ["packages/ui/src/tokens/palette.ts", "packages/ui/src/toke
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/storybook-static/**", "prototypes/**", "design/**"],
+    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/storybook-static/**", "**/cdk.out/**", "prototypes/**", "design/**"],
   },
   forJsTs(js.configs.recommended),
   ...tseslint.configs.recommended.map(forJsTs),
@@ -124,7 +124,7 @@ export default tseslint.config(
     // Buffer#slice shares memory (Node's pool for a small Buffer), unlike Array and Uint8Array: a pooled view broke every
     // .xlsx test on Linux CI (RP-1025). The rule reads types, so the Node code is linted with the project service; that
     // needs a tsconfig, which scripts/ and the packages' tool configs (vite.config.ts) don't have.
-    files: ["apps/{api,worker,admin}/**/*.ts", "packages/{auth,db,domain,mailer}/**/*.ts"],
+    files: ["apps/{api,worker,admin}/**/*.ts", "packages/{auth,db,domain,infra,mailer}/**/*.ts"],
     ignores: ["**/*.config.ts"],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     plugins: { rabaed },
@@ -177,6 +177,7 @@ export default tseslint.config(
       "scripts/queue-pr.ts", // GitHub's merge queue and the database migration checks, by their own names
       "scripts/queue-drop-comment.ts", // GitHub's merge queue, its CI checks and Actions logs, by their own names
       "scripts/reviewed-required.ts", // GitHub's merge queue, required checks and a PR's changed files, by their own names
+      "packages/infra/**", // AWS's own vocabulary: account, region, environment, subscriber
       "scripts/check-workflows.ts", // GitHub Actions' own vocabulary: pull_request, a git tag, a CI check
       "packages/eslint-plugin/**", // it names the terms it bans
       "packages/ui/src/components/icon/icon.tsx", // Tabler's icon names: user, users

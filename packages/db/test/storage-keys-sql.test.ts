@@ -1,5 +1,5 @@
 // Seam 2: the keys the database builds for what the api stores stay inside the IAM key patterns the
-// infrastructure granted the api on AWS (RP-1104). The api's task role could write
+// infrastructure grants the api (packages/infra app stack, RP-1104). The api's task role may write
 // only Documents and register imports under projects/, so a key built anywhere else would be refused
 // in AWS while working locally, where the file store checks no IAM.
 import { sql } from "kysely";
@@ -33,7 +33,7 @@ describe("the Project files keys the database builds (RP-1104)", () => {
     expect(iamPatternMatches(REGISTER_IMPORT_OBJECTS, rows[0]!.key)).toBe(true);
   });
 
-  it("are spelt out by those two functions only: a new key needs its own grant", async () => {
+  it("are spelt out by those two functions only: a new key needs its own grant (packages/infra/test/iam-grants.test.ts)", async () => {
     // Every function in the live catalog that spells out a Project files key.
     const { rows } = await sql<{ name: string }>`
       select distinct p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace

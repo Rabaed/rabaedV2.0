@@ -40,7 +40,7 @@ services:
       retries: 30
 
   # The S3-compatible store Documents' files go to locally (apps/api file-store.ts),
-  # so local runs and tests never call a hosted store; on UAT it is Cloudflare R2.
+  # so local runs and tests never call AWS; in AWS it is the Project files bucket.
   # The api creates the bucket on start. Keys are local-only placeholders (.env.example).
   files:
     image: rustfs/rustfs:1.0.0

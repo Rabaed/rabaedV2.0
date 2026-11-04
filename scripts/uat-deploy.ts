@@ -227,7 +227,7 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
 /**
  * The UAT Records container's secrets (RP-1042, ADR 0026), from the same `uat` environment: the
  * app role over the transaction pooler, the Project files store (the records are stored beside
- * the files) and the web's address the records' QR links to. deploy-records-uat.yml
+ * the files, as in AWS) and the web's address the records' QR links to. deploy-records-uat.yml
  * imports them as the Fly app's secrets; its sealing settings are in its Fly config, and the UAT
  * authority is the owner's own Fly secret, never here.
  */

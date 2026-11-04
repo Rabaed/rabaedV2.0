@@ -4,8 +4,8 @@ import { isLocalFileStore } from "./file-store.ts";
 
 // The UAT files bucket's CORS on Cloudflare R2 (ADR 0026, RP-1041): browsers
 // PUT a Document to a URL the api signed and GET it back, from the UAT web
-// origin only. They are the rules a browser upload needs,
-// naming one origin, never `*`. The
+// origin only. The rules match the AWS storage stack's
+// (packages/infra/src/storage-stack.ts) but name one origin, never `*`. The
 // owner sets them once in the Cloudflare dashboard; cli/r2-cors.ts is an
 // optional way to do it, with an R2 admin key of its own. The app's key
 // (FILE_STORE_ACCESS_KEY_ID) is Object Read & Write only, and the api itself

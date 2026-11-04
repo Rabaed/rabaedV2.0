@@ -4,13 +4,14 @@ import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-// Four suites, each run on its own in CI:
+// Five suites, each run on its own in CI:
 // - unit:  pure logic, no database.
 // - seam1: the API called as a given signed-in Member, and Rabaed Admin as a
 //   signed-in Rabaed Engineer, against a real Postgres.
 // - seam2: the database as the app role with a Member set (RLS defence in depth).
 // Both run against the seeded setup: the demo Project `pnpm demo` builds is seeded
 // into the test database first (RP-196).
+// - infra: assertions on the synthesised AWS CloudFormation templates.
 // - mail:  the mailer against the local mail catcher (Mailpit).
 // Seam tests drive whole Workflows through the API or the database; 5 s is too tight on CI.
 // With other lanes' runs on the machine (RP-607) a test that makes 50 items took over 20 s, and
@@ -65,6 +66,13 @@ export default defineConfig({
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["scripts/test-services.ts", "packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
+        },
+      },
+      {
+        test: {
+          name: "infra",
+          include: ["packages/infra/test/**/*.test.ts"],
+          testTimeout: 30_000,
         },
       },
       {

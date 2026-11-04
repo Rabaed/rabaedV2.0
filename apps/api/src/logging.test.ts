@@ -3,8 +3,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { describe, expect, it } from "vitest";
 import { loggerOptions } from "./logging.ts";
 
-// The api's log is JSON lines that a monitor reads (CloudWatch's alarms
-// while AWS ran it). No customer content: no
+// The api's log is JSON lines that CloudWatch keeps and the monitoring stack
+// reads (packages/infra/src/monitoring-stack.ts). No customer content: no
 // query strings, no values from database errors.
 
 // Shaped like pg's DatabaseError: the message and detail can quote the row.

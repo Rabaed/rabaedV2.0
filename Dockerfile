@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 #
 # One image per service: `docker build --target web|api|admin|worker .`
-# On UAT only the worker's image runs, as the Records container
-# (deploy-records-uat.yml); web, api and Admin run on Vercel (ADR 0026).
-# Configuration and secrets come from the host at runtime, never from the image.
+# Migrations run from the api image (packages/infra/src/migrations-stack.ts).
+# The deploy workflow builds these on every merge to main; configuration and
+# secrets come from the task definition at runtime, never from the image.
 
 FROM node:24-slim AS base
 ENV COREPACK_HOME=/opt/corepack \

@@ -40,6 +40,7 @@ describe("projectOf", () => {
     expect(projectOf("apps/api/test/support/seed.ts")).toBeUndefined();
     expect(projectOf("packages/ui/test/stories.test.tsx")).toBeUndefined();
     expect(projectOf("apps/web/src/page.test.tsx")).toBeUndefined();
+    expect(projectOf("packages/infra/test/stack.test.ts")).toBeUndefined();
     expect(projectOf("packages/mailer/test/send.test.ts")).toBeUndefined();
     expect(projectOf("docs/visibility/hidden-asserts/apps/api/test/links.test.ts.txt")).toBeUndefined();
   });
@@ -79,6 +80,7 @@ describe("testsOnlyReuse", () => {
       ["a fixture", edit("scripts/queue-pr.fixtures.ts"), /is not a test file/],
       ["a repo-wide check's own test", edit("scripts/check-hidden-asserts.test.ts"), /CI's own files/],
       ["a story test", edit("packages/ui/test/stories.test.tsx"), /is not a test file/],
+      ["an infra test", edit("packages/infra/test/stack.test.ts"), /is not a test file/],
       ["a deleted test", { status: "D", path: "scripts/a.test.ts" }, /scripts\/a\.test\.ts is deleted/],
     ];
     for (const [, change, why] of cases) {

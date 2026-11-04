@@ -8,7 +8,7 @@
 //   tsx apps/api/src/cli/demo-environment.ts sample-project-status   only counts how much of it is there
 //
 // It refuses to run unless the environment is a demo one (RABAED_DEMO=on, set
-// by the deploy only for a demo environment, such as UAT).
+// by the infrastructure only where `demo` is on in packages/infra/src/config.ts).
 // Every demo person signs in with DEMO_PASSWORD, which ECS injects from Secrets
 // Manager; it is never in the repo. A demo environment holds demo data only:
 // there is no way to import anything else.

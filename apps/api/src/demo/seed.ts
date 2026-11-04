@@ -683,7 +683,7 @@ export async function seedDemo(
   // A second Project: Beta Build's own, with only its Authorized Person on it
   // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
   // nothing else, so each sees only their own Project (the deploy's
-  // visibility check on UAT, scripts/smoke.ts).
+  // visibility check in dev, packages/infra/src/smoke.ts).
   await beta.caller("PATCH", `/v1/members/${beta.authorizedPersonId}`, { canCreateProjects: true });
   const { projectId: otherProjectId } = await beta.caller<{ projectId: string }>("POST", "/v1/projects", {
     name: bi("Jeddah Corniche Villas", "فلل كورنيش جدة"),

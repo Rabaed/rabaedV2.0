@@ -35,7 +35,7 @@ import { uatSigner } from "./uat-signer.ts";
 
 /** Where Rabaed's sealing certificate (PEM, its chain after it) is kept in the build assets bucket. */
 export const SEALING_CERTIFICATE_KEY = "sealing/pdf-sealing.pem";
-/** Where the licensed Thmanyah fonts are kept in the build assets bucket (as the api's fonts:fetch reads them). */
+/** Where the licensed Thmanyah fonts are kept in the build assets bucket (packages/infra FONTS_PREFIX). */
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
 
 const env = z.object({

@@ -1,6 +1,6 @@
 import type { OutboxStats } from "@rabaed/db";
 
-// An outbox alarm (CloudWatch's, while AWS ran it) reads this line
+// The outbox alarms (packages/infra/src/monitoring-stack.ts) read this line
 // from the api's log, not the worker's: measured in the database, it keeps
 // arriving when the worker has stopped, and the age it reports keeps growing
 // (RP-245). Keep the field names. When the api is down or cannot read the

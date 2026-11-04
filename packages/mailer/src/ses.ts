@@ -2,7 +2,7 @@ import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { SENDER_NAME, type MailTransport } from "./mailer.ts";
 
 export interface SesTransportOptions {
-  /** Bounces and complaints are published through it (RP-1230). */
+  /** Bounces and complaints are published through it (packages/infra, app stack). */
   configurationSet: string;
   /** The region and credentials come from the task's environment and role. */
   client?: { send(command: SendEmailCommand): Promise<unknown> };
@@ -10,7 +10,7 @@ export interface SesTransportOptions {
 
 /**
  * Sends through Amazon SES. The task role may send only from the configured
- * From address (RP-1230).
+ * From address (packages/infra/src/app-stack.ts).
  */
 export function sesTransport({ configurationSet, client = new SESv2Client({}) }: SesTransportOptions): MailTransport {
   const utf8 = (Data: string) => ({ Data, Charset: "UTF-8" });
