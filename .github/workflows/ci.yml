@@ -232,7 +232,7 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
-      # The same file store as docker-compose.yml: CI never calls a hosted one (R2).
+      # The same file store as docker-compose.yml: CI never calls a hosted file store (R2).
       files:
         image: rustfs/rustfs:1.0.0
         env:

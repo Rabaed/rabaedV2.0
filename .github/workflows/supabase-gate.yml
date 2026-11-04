@@ -1,5 +1,6 @@
 # The Supabase gate (RP-1037, ADR 0026): proves UAT's Supabase project runs
-# Rabaed as the lanes' plain PostgreSQL 16 does. `pnpm --filter @rabaed/db gate:supabase` first checks that
+# Rabaed as the lanes' plain PostgreSQL 16 does.
+# `pnpm --filter @rabaed/db gate:supabase` first checks that
 # Supabase's Data API is off (it needs no database), then builds a database of
 # its own (rabaed_gate) and checks, stopping at the first failure:
 #   - the bootstrap, rabaed_admin's BYPASSRLS included;
