@@ -71,9 +71,14 @@ const roles: Record<BaseRole, Bi> = {
 
 const types: NewItemType[] = [
   { code: "MAR", name: bi("Material Approval Request", "طلب اعتماد مواد"), description: bi("Materials and products for approval", "المواد والمنتجات للاعتماد") },
-  { code: "SAR", name: bi("Shop Drawing Approval Request", "طلب اعتماد مخططات تنفيذية"), description: bi("Shop drawings for approval", "المخططات التنفيذية للاعتماد") },
+  { code: "SAR", name: bi("Supplier Approval Request", "طلب اعتماد مورد"), description: bi("Suppliers and manufacturers for approval", "الموردون والمصنعون للاعتماد") },
   { code: "DAR", name: bi("Document Approval Request", "طلب اعتماد مستند"), description: null },
+  // An Inspection's Type: the New Inspection panel (RP-1221) shows the same cards.
+  { code: "WIR", name: bi("Work Inspection Request", "طلب فحص أعمال"), description: bi("Work ready for inspection", "أعمال جاهزة للفحص") },
 ];
+
+/** Each card's own icon (RP-1227), as Tabler names its drawing. */
+const cardIcons = (cards: HTMLElement[]) => cards.map((card) => /tabler-icon-([\w-]+)/.exec(card.querySelector("svg")!.getAttribute("class") ?? "")?.[1]);
 
 const ownCompany = bi("TMC Constructions", "تي إم سي للمقاولات");
 
@@ -100,33 +105,35 @@ const meta = { title: "Views/Submittal Panel/New item" } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function TypeCardsDemo({ context, list }: { context: StoryContext; list: NewItemType[] }) {
+function TypeCardsDemo({ context, list, width = 960 }: { context: StoryContext; list: NewItemType[]; width?: number }) {
   const locale = storyLocale(context);
   const [value, setValue] = useState(list[0]!.code);
-  // Inside a Wide panel's column (`@container/sdp`), where the cards once sat side by side.
+  // Inside the panel's column (`@container/sdp`): the cards follow the panel's width, not the viewport's.
   return (
-    <div className="@container/sdp w-[960px] max-w-full">
+    <div className="@container/sdp max-w-full" style={{ width }}>
       <NewItemTypeCards locale={locale} heading={copy.types[locale]} types={list} value={value} onChange={setValue} className="p-5" />
     </div>
   );
 }
 
-/** One card per Type (rows 17–19): name and code, the one-line description, a check on the chosen one; a click chooses another. */
+/** One card per Type (rows 17–19): its own icon, name and code, the one-line description, a check on the chosen one; a click chooses another. */
 export const TypeCards: Story = {
   render: (_args, context) => <TypeCardsDemo context={context} list={types} />,
   play: async (context) => {
     const canvas = within(context.canvasElement);
     const group = canvas.getByRole("group", { name: storyText(context, copy.types) });
     const cards = within(group).getAllByRole("button");
-    await expect(cards).toHaveLength(3);
+    await expect(cards).toHaveLength(4);
     await expect(cards[0]).toHaveAttribute("aria-pressed", "true");
     await expect(cards[0]).toHaveTextContent(`${storyText(context, types[0]!.name)} (MAR)`);
     await expect(cards[0]).toHaveTextContent(storyText(context, types[0]!.description!));
-    // One vertical stack, each card the column's full width (row 17, `.nwtype`).
+    // Each Type its own icon (RP-1227).
+    await expect(cardIcons(cards)).toEqual(["building-factory", "truck", "file-text", "clipboard-check"]);
+    // At 560px of panel and wider the cards wrap in a row, each at least 240px (`.nwtype`, RP-1227).
     const boxes = cards.map((card) => card.getBoundingClientRect());
     const column = group.getBoundingClientRect();
-    await expect(boxes.every((box) => Math.abs(box.width - column.width) < 1 && Math.abs(box.left - column.left) < 1)).toBe(true);
-    await expect(boxes.every((box, i) => i === 0 || box.top >= boxes[i - 1]!.bottom)).toBe(true);
+    await expect(Math.abs(boxes[1]!.top - boxes[0]!.top) < 1).toBe(true);
+    await expect(boxes.every((box) => box.width >= 240 - 0.5 && box.width < column.width - 1)).toBe(true);
     await userEvent.click(cards[1]!);
     await expect(cards[1]).toHaveAttribute("aria-pressed", "true");
     await expect(cards[0]).toHaveAttribute("aria-pressed", "false");
@@ -135,13 +142,27 @@ export const TypeCards: Story = {
   },
 };
 
-/** A single Type: one selected card (decision 2). */
+/** A panel under 560px wide (Compact, the phone page): one stack, each card the column's full width (`.nwtype`, RP-1227). */
+export const TypeCardsNarrow: Story = {
+  render: (_args, context) => <TypeCardsDemo context={context} list={types} width={480} />,
+  play: async (context) => {
+    const group = within(context.canvasElement).getByRole("group", { name: storyText(context, copy.types) });
+    const cards = within(group).getAllByRole("button");
+    const boxes = cards.map((card) => card.getBoundingClientRect());
+    const column = group.getBoundingClientRect();
+    await expect(boxes.every((box) => Math.abs(box.width - column.width) < 1 && Math.abs(box.left - column.left) < 1)).toBe(true);
+    await expect(boxes.every((box, i) => i === 0 || box.top >= boxes[i - 1]!.bottom)).toBe(true);
+  },
+};
+
+/** A single Type: one selected card (decision 2), with its own icon. */
 export const SingleType: Story = {
   render: (_args, context) => <TypeCardsDemo context={context} list={[types[0]!]} />,
   play: async (context) => {
     const cards = within(context.canvasElement).getAllByRole("button");
     await expect(cards).toHaveLength(1);
     await expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+    await expect(cardIcons(cards)).toEqual(["building-factory"]);
   },
 };
 

@@ -8,7 +8,7 @@ import { Avatar } from "../data/avatar.tsx";
 import { focusRing, touchArea } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
-import { newItemRequired, newItemRouteRows, type NewItemRequiredItem } from "./new-item-model.ts";
+import { newItemRequired, newItemRouteRows, newItemTypeIcon, type NewItemRequiredItem } from "./new-item-model.ts";
 import type { SubmittalRoute } from "./route-model.ts";
 import { RoleIcon } from "./route-strip.tsx";
 
@@ -31,24 +31,23 @@ export type NewItemTypeCardsProps = {
   /** The chosen Type's code. */
   value: string | null;
   onChange: (code: string) => void;
-  /** The Type's icon tile; a file by default. */
-  icon?: IconName;
   className?: string;
 };
 
 /**
- * The Type cards (rows 17–19, decision 2, `.nwtype`): one per Type, its name with the code, the
- * one-line description, and a check on the chosen one. With one Type, a single chosen card.
+ * The Type cards (rows 17–19, decision 2, `.nwtype`): one per Type, its own icon (RP-1227), its
+ * name with the code, the one-line description, and a check on the chosen one. With one Type, a
+ * single chosen card.
  */
-export function NewItemTypeCards({ locale, heading, types, value, onChange, icon = "file-text", className }: NewItemTypeCardsProps) {
+export function NewItemTypeCards({ locale, heading, types, value, onChange, className }: NewItemTypeCardsProps) {
   const headingId = useId();
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <p id={headingId} className="text-[12px] text-muted">
         {heading}
       </p>
-      {/* One vertical stack, each card the column's full width, as `.nwtype` (row 17). */}
-      <div role="group" aria-labelledby={headingId} className="flex flex-col gap-2">
+      {/* `.nwtype` (RP-1227): the cards wrap in a row, each at least 240px; under 560px of panel width, one full-width stack. */}
+      <div role="group" aria-labelledby={headingId} className="flex flex-wrap gap-2">
         {types.map((type) => {
           const on = type.code === value;
           return (
@@ -58,13 +57,13 @@ export function NewItemTypeCards({ locale, heading, types, value, onChange, icon
               aria-pressed={on}
               onClick={() => onChange(type.code)}
               className={cn(
-                "flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-start",
+                "flex min-h-11 min-w-[240px] items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-start @max-[560px]/sdp:w-full @max-[560px]/sdp:min-w-0",
                 on ? "bg-brand-tint shadow-[inset_0_0_0_1.5px_var(--brand)]" : "bg-surface shadow-[inset_0_0_0_1px_var(--border-strong)] hover:bg-hover",
                 focusRing,
               )}
             >
               <span aria-hidden="true" className="flex size-[30px] shrink-0 items-center justify-center rounded-[8px] bg-surface text-brand-fg shadow-[inset_0_0_0_1px_var(--border-subtle)]">
-                <Icon name={icon} size={16} />
+                <Icon name={newItemTypeIcon(type.code)} size={16} />
               </span>
               <span className="min-w-0">
                 <b className="block text-[13.5px] font-semibold">

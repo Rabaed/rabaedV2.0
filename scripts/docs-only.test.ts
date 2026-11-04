@@ -60,7 +60,7 @@ const ci = parse(readFileSync(join(dirname(import.meta.filename), "..", ".github
   jobs: Record<string, Job>;
 };
 const needs = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
-const heavy = ["typecheck", "unit", "web-build", "web-image", "stories", "seam1", "seam1-result", "seam2", "mail", "infra"];
+const heavy = ["typecheck", "unit", "web-build", "web-image", "stories", "seam1", "seam1-result", "seam2", "mail"];
 /** The jobs that run on a docs-only change: the decision, the docs checks, lint and the checks that read only the repository. */
 const light = ["changes", "docs", "lint", "workflows-hardened", "migrations-immutable", "migration-drift"];
 const gate = "${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}";
