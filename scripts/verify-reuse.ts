@@ -25,7 +25,7 @@ export interface ReuseGit extends ReviewedGit {
   importers(path: string): string[];
 }
 
-/** The steps whose test files a reuse run may run on their own, by vitest.config.ts's projects; infra and mail are no verify step. */
+/** The steps whose test files a reuse run may run on their own, by vitest.config.ts's projects; mail is no verify step. */
 type TestStep = "test:unit" | "test:seam1" | "test:seam2";
 
 // vitest.config.ts's include globs, as patterns (only `.test.ts`: no project there includes `.tsx`).

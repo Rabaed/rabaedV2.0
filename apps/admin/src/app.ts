@@ -93,8 +93,7 @@ const securityHeaders = {
 
 export async function buildAdminApp({ db, config, mailer, now = () => new Date(), logger = true, onRoute }: AdminAppOptions): Promise<FastifyInstance> {
   await dummyHash();
-  // Only one proxy reaches the service: the load balancer in AWS (network stack), or
-  // Vercel, which overwrites X-Forwarded-For with the client's address and forwards
+  // Only one proxy reaches the service: Vercel, which overwrites X-Forwarded-For with the client's address and forwards
   // no address a client wrote (docs/tech-stack.md › Dev and UAT). Trusting one hop
   // takes the address that proxy saw. Locally there is none, and the header is unset.
   const app = Fastify({

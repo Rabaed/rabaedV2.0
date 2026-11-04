@@ -2,7 +2,7 @@
 // the api stores, by key prefix (ADR 0007). Defined once, so the code that
 // writes these keys (apps/worker record/files.ts, snag-report/job.ts; the SQL
 // key builders for the api's) and the infrastructure that grants each role
-// only its own prefixes (packages/infra app stack, RP-1084, RP-1104) agree: a
+// only its own prefixes (on AWS, RP-1084, RP-1104) agree: a
 // renamed prefix moves both. No imports: the infrastructure loads this file on
 // its own.
 
