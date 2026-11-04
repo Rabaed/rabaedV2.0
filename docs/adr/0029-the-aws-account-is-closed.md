@@ -14,4 +14,4 @@ Where it runs today is ADR 0026's table: Vercel for web, the api and Rabaed Admi
 
 ## Consequences
 
-ADR 0005 (two independent Instances, one in KSA) still stands. Where production and the KSA Instance run is the open Decide ticket RP-1215. Choosing AWS there would mean writing infrastructure code again; the old code stays in git history only (before RP-1214). The owner deletes by hand the GitHub variables the retired AWS workflows used and the `dev` environment. Older ADRs that describe AWS (0005, 0010, 0011, 0023, 0026) are left as they were written.
+ADR 0005 (two independent Instances, one in KSA) still stands. Where production and the KSA Instance run is the open Decide ticket RP-1215. Choosing AWS there would mean writing infrastructure code again; the old code stays in git history only (before RP-1214). The product owner deletes by hand the GitHub variables the retired AWS workflows used and the `dev` environment. Older ADRs that describe AWS (0005, 0010, 0011, 0023, 0026) are left as they were written.

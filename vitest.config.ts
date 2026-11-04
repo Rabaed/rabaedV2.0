@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-// Five suites, each run on its own in CI:
+// Four suites, each run on its own in CI:
 // - unit:  pure logic, no database.
 // - seam1: the API called as a given signed-in Member, and Rabaed Admin as a
 //   signed-in Rabaed Engineer, against a real Postgres.
