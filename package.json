@@ -54,7 +54,6 @@
     "test:stories:linux": "node scripts/test-stories-linux.ts",
     "storybook": "node scripts/pnpm.ts --filter @rabaed/ui storybook",
     "prototype:puck": "node scripts/pnpm.ts --filter @rabaed/ui prototype:puck",
-    "test:infra": "vitest run --project infra",
     "test:mail": "vitest run --project mail",
     "engineer:create": "node scripts/pnpm.ts --filter @rabaed/admin run engineer:create",
     "form:publish": "node scripts/pnpm.ts --filter @rabaed/admin run form:publish",
