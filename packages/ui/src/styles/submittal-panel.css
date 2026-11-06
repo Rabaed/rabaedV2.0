@@ -191,6 +191,13 @@
   }
 }
 
+/* Below Wide: no keyboard hint, so the action bar keeps its row (RP-1237 row 22: the hint only at Wide and Full). */
+@container sdp (max-width: 879px) {
+  .sdp-hint {
+    display: none;
+  }
+}
+
 /* Normal (560–879): fields in 2 columns. */
 @container sdp (min-width: 560px) {
   .sdp-fields {

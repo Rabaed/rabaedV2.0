@@ -33,6 +33,8 @@ export type SubmittalPanelLabels = {
   close: string;
   /** The action bar's keyboard hint, e.g. "Esc to close · ↑ ↓ to move through the list". */
   hint: string;
+  /** The hint when ↑ ↓ have nothing to move to (an item opened from outside the List, RP-1237 row 41): "Esc to close"; the full hint without it. */
+  hintClose?: string;
   /** The phone page's back arrow (`layout="page"`), e.g. "Back to Submittals"; Close's name without it. */
   back?: string;
 };
@@ -270,9 +272,9 @@ export function SubmittalPanel({
           {rail !== false && <div className="sdp-rail">{rail}</div>}
         </div>
       </div>
-      <div className="sdp-actions flex shrink-0 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface px-4 py-3">
+      <div className="sdp-actions flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border-subtle bg-surface px-4 py-3">
         {/* No keyboard hint in create mode or on the phone's page: the footer's save status leads there (`NewItemFooter`). */}
-        {!page && !creating && <span className="sdp-hint me-auto text-caption text-muted">{labels.hint}</span>}
+        {!page && !creating && <span className="sdp-hint me-auto text-caption text-muted">{onPrevious || onNext ? labels.hint : (labels.hintClose ?? labels.hint)}</span>}
         {actions}
       </div>
     </div>

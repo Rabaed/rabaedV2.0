@@ -346,6 +346,14 @@ export {
 export { SubmittalPanelNumberCard, type SubmittalPanelNumberCardLabels, type SubmittalPanelNumberCardProps } from "./components/submittal-panel/number-card.tsx";
 export { submittalNumberCard, submittalNumberPlace, type SubmittalNumberSegment } from "./components/submittal-panel/number-card-model.ts";
 export { submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
+export { submittalPanelBar, type SubmittalPanelBar, type SubmittalPanelBarChip, type SubmittalPanelBarTransition } from "./components/submittal-panel/action-bar-model.ts";
+export {
+  SubmittalPanelWaiting,
+  SubmittalPanelCodeMenu,
+  type SubmittalPanelBarChipLabels,
+  type SubmittalPanelCodeMenuItem,
+  type SubmittalPanelCodeMenuProps,
+} from "./components/submittal-panel/action-bar.tsx";
 export { submittalPanelKey, submittalPanelNumber, submittalPanelPosition, submittalPanelWith, type SubmittalPanelKeyPress, type SubmittalPanelWith } from "./components/submittal-panel/panel-model.ts";
 export {
   defaultSubmittalPanelPreferences,
