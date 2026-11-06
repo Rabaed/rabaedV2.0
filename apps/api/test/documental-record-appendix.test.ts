@@ -329,13 +329,14 @@ const recordJobs = { ours: 0, leftForOthers: 0 };
 
 /**
  * `handle`, for this file's items only (RP-1233). Every item that closes in the test database queues
- * a record job, and the seeded demo alone leaves 73: making those here, each a Chromium print and a
- * veraPDF run, took 157 s of this hook on a lane and past its 300 s on a slow CI runner. Another
- * file's job fails here as it does in any file without a record handler, and waits its backoff.
+ * a record job, and the seeded demo alone leaves dozens: making them here, each a Chromium print and
+ * a veraPDF run, took most of this hook (157 s of 165 s on a lane, 73 jobs) and passed its 300 s on a
+ * slow CI runner. Another file's job fails here as it does in any file without a record handler, and
+ * waits its backoff. A record job names its item `closed_work_item_id`, a Re-produce `work_item_id`.
  */
-function forOwnItems(handle: OutboxHandler, itemKey: "closed_work_item_id" | "work_item_id"): OutboxHandler {
+function forOwnItems(handle: OutboxHandler): OutboxHandler {
   return async (trx, row) => {
-    if (!ownItems.has(String(row.payload[itemKey]))) {
+    if (!ownItems.has(String(row.payload.closed_work_item_id ?? row.payload.work_item_id))) {
       recordJobs.leftForOthers++;
       throw new Error(`${row.kind} of another test file's item: not made by documental-record-appendix.test.ts`);
     }
@@ -379,7 +380,7 @@ beforeAll(async () => {
   const c2Participant = await api.addParticipant(at.admin!, at.projectId, c2.company, "contractor");
   await ok(at.admin!.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
   c2Engineer = (await memberOnProject(api, c2, c2Participant, ["engineer"])).caller;
-  handler = forOwnItems(await recordHandler(), "closed_work_item_id");
+  handler = forOwnItems(await recordHandler());
   mark("Companies, tower, Stamps, logo, Members and Signatures");
 
   const draft = async (title: string) => {
@@ -633,7 +634,7 @@ describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps
   let engineer: Awaited<ReturnType<typeof admin.signedInEngineer>>;
   const reproduce = async (id: string, rendering: PdfRenderer = renderer) => {
     expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(202);
-    await drainOutbox(worker, { documental_record_reproduce: forOwnItems(reproduceHandler(await recordDeps(rendering)), "work_item_id") });
+    await drainOutbox(worker, { documental_record_reproduce: forOwnItems(reproduceHandler(await recordDeps(rendering))) });
   };
   /** The Record Data's facts: without where things land on the pages (the worker's LAYOUT_DERIVED). */
   const facts = (xml: string) =>
