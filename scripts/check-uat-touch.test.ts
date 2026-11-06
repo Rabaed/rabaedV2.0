@@ -5,7 +5,7 @@ import { casesOf, changedMessages, flattenMessages, keyUsed, literalPieces, miss
 const fixture = {
   file: "planning/uat/round-0/cases/FIX.ts",
   text: [
-    'import { defineCase } from "../harness/case.ts";',
+    "// A fixture case file: helpers first, then the cases.",
     "const helper = () => page.getByText(/^Send for review\\.$/);",
     'defineCase("FIX-01", async (t) => {',
     '  await page.getByRole("button", { name: "Save draft" }).click();',
