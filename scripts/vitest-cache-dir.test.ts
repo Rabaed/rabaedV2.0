@@ -1,4 +1,4 @@
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import config from "../vitest.config.ts";
@@ -11,7 +11,8 @@ describe("vitest cacheDir", () => {
     const cacheDir = config.cacheDir;
 
     expect(cacheDir).toBeTypeOf("string");
-    const outside = relative(repo, cacheDir ?? "");
-    expect(isAbsolute(outside) || outside.startsWith("..")).toBe(true);
+    const relativeCacheDir = relative(repo, cacheDir ?? "");
+    const outside = isAbsolute(relativeCacheDir) || relativeCacheDir === ".." || relativeCacheDir.startsWith(`..${sep}`);
+    expect(outside).toBe(true);
   });
 });
