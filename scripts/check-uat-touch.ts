@@ -15,6 +15,8 @@ import { fileVersionsVia } from "./git-files.ts";
 //   placeholders matches whole; one with placeholders needs every literal piece of 3+ letters. Comparison
 //   ignores case, runs of whitespace and the backslashes of string and regex escapes. A message under 4
 //   characters is too common to match by text (only its key can).
+// - or the case looks for a piece of the old text that the new text no longer has: a string literal, or the plain
+//   run inside a regex literal, 6+ characters (a case that checks "We can't find this page" with a regex).
 // - a match before the file's first `defineCase` (a helper in the case file) names `<FILE>-helpers`.
 // Not looked at: `planning/uat/*/harness/*` (shared helpers) and a case that finds text by role or test id.
 //
@@ -70,6 +72,24 @@ export function textUsed(value: string, source: string): boolean {
   return pieces.length > 0 && pieces.every((piece) => text.includes(normalize(piece)));
 }
 
+/**
+ * The pieces of text a case's source looks for: its string literals, and the plain runs inside its regex literals
+ * (`/^Send for review\./` gives "Send for review"), 6+ characters with 4+ letters, normalized.
+ */
+export function searchedTexts(source: string): string[] {
+  const strings = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
+  const regexes = [...source.matchAll(/(?<=[(,:=]\s*)\/((?:[^/\\\n]|\\.)+)\/[a-z]*/g)].flatMap((m) => m[1]!.split(/\\[sSdDwWbB]|[\\.*+?()|[\]{}^$]+/));
+  return [...new Set([...strings, ...regexes].map(normalize).map((t) => t.trim()))].filter((t) => t.length >= 6 && (t.match(/\p{L}/gu) ?? []).length >= 4);
+}
+
+/** Whether a case looks for text the change takes away: a piece it searches is in the old message and not in the new. */
+export function textBroken(before: string | undefined, after: string | undefined, source: string): boolean {
+  if (before === undefined) return false;
+  const was = normalize(before);
+  const now = after === undefined ? "" : normalize(after);
+  return searchedTexts(source).some((t) => was.includes(t) && !now.includes(t));
+}
+
 /** Whether the case source names the key in quotes, as a whole dotted word. */
 export function keyUsed(key: string, source: string): boolean {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -92,7 +112,8 @@ export function touchedCases(messages: Message[], files: CaseFile[]): CaseHit[] 
   const hits: CaseHit[] = [];
   for (const c of files.flatMap(casesOf)) {
     const used = messages.filter(
-      (m) => keyUsed(m.key, c.source) || [m.before, m.after].some((value) => value !== undefined && textUsed(value, c.source)),
+      (m) => keyUsed(m.key, c.source) || [m.before, m.after].some((value) => value !== undefined && textUsed(value, c.source)) ||
+        textBroken(m.before, m.after, c.source),
     );
     if (used.length > 0) hits.push({ id: c.id, file: c.file, messages: [...new Set(used.map((m) => `${m.locale}:${m.key}`))] });
   }

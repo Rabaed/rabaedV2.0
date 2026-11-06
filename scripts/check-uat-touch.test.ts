@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { casesOf, changedMessages, flattenMessages, keyUsed, literalPieces, missingFromBody, textUsed, touchedCases, verdict } from "./check-uat-touch.ts";
+import { casesOf, changedMessages, flattenMessages, keyUsed, literalPieces, missingFromBody, searchedTexts, textBroken, textUsed, touchedCases, verdict } from "./check-uat-touch.ts";
 
 // A fixture case file in the shape of planning/uat/round-0/cases/*.ts.
 const fixture = {
@@ -131,5 +131,27 @@ describe("the PR body line", () => {
     const hits = [{ id: "FIX-01", file: fixture.file, messages: ["en:a.save"] }];
     expect(verdict(hits, undefined).ok).toBe(true);
     expect(verdict(hits, undefined).comment).toContain("`FIX-01`");
+  });
+});
+
+describe("a case that looks for a piece of the old text", () => {
+  const before = "We can't find this page. It may not exist.";
+  const source = 'await expect(page.getByText(/can\'t find this page/i)).toBeVisible();\nawait page.getByText("It may not exist").click();';
+
+  it("finds the pieces a case searches, from strings and regex literals", () => {
+    expect(searchedTexts(source).sort()).toEqual(["can't find this page", "it may not exist"]);
+  });
+
+  it("is broken when a searched piece is in the old text and not the new", () => {
+    expect(textBroken(before, "We cannot find this page. It may not exist.", source)).toBe(true);
+    expect(textBroken(before, "Sorry. It may not exist.", source)).toBe(true);
+    expect(textBroken(before, "Oops: We can't find this page. It may not exist.", source)).toBe(false);
+    expect(textBroken(undefined, "We can't find this page.", source)).toBe(false);
+  });
+
+  it("names the case in touchedCases", () => {
+    const file = { file: "planning/uat/round-0/cases/NF.ts", text: `defineCase("NF-01", async () => {\n${source}\n});` };
+    const messages = changedMessages("en", JSON.stringify({ m: before }), JSON.stringify({ m: "We cannot find this page. It may not exist." }));
+    expect(touchedCases(messages, [file])).toEqual([{ id: "NF-01", file: file.file, messages: ["en:m"] }]);
   });
 });
