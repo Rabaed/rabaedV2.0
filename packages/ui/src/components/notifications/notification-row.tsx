@@ -71,11 +71,11 @@ export function NotificationRow({
       href={href}
       onClick={onOpen}
       className={cn(
-        "grid items-start gap-x-3 border-t border-border-subtle text-start first:border-t-0 hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
-        menu ? "grid-cols-[8px_32px_minmax(0,1fr)_auto] px-[14px] py-2.5" : "grid-cols-[10px_36px_minmax(0,1fr)_auto] px-4 py-[14px]",
+        "grid items-start border-t border-border-subtle text-start first:border-t-0 hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        menu ? "grid-cols-[8px_32px_minmax(0,1fr)_auto] gap-x-2.5 px-[14px] py-2.5" : "grid-cols-[10px_36px_minmax(0,1fr)_auto] gap-x-2.5 px-[14px] py-3",
         // A phone (the design's `.nph-root .nr`): the time goes under the text.
         "max-[559px]:grid-cols-[8px_34px_minmax(0,1fr)] max-[559px]:p-3",
-        unread && "bg-[color-mix(in_oklch,var(--brand-tint)_55%,var(--surface))] hover:bg-brand-tint",
+        unread && "bg-brand-tint hover:bg-[color-mix(in_oklch,var(--brand-tint)_80%,var(--hover))]",
       )}
     >
       <span aria-hidden="true" className={cn("size-2 rounded-full", menu ? "mt-3" : "mt-[14px]", unread && "bg-primary")} />

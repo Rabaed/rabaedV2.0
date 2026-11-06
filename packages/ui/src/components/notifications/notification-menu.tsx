@@ -8,6 +8,10 @@ import { useMediaQuery } from "../../lib/use-media-query.ts";
 import { Button, IconButton, buttonVariants } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 
+/** The design's plain button (`.nbtn`): white, outlined. */
+export const notificationOutlinedButton = "bg-surface shadow-[inset_0_0_0_1px_var(--border)] hover:bg-hover";
+const outlined = notificationOutlinedButton;
+
 /** Under this width the bell opens a full-screen sheet instead of a dropdown (the design's phone, 402 px). */
 export const notificationSheetQuery = "(max-width: 559px)";
 
@@ -52,7 +56,7 @@ const BellButton = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { la
     >
       <Icon name="bell" />
       {count > 0 && (
-        <span aria-hidden="true" className="absolute -end-0.5 -top-0.5 min-w-5 rounded-full bg-primary px-1 text-center text-xs font-semibold text-on-primary">
+        <span aria-hidden="true" className="absolute end-0.5 top-[3px] h-[18px] min-w-[18px] rounded-full bg-primary px-1 text-center text-[11px] leading-[18px] font-bold text-on-primary shadow-[0_0_0_2px_var(--surface)]">
           <bdi dir="ltr">{count > 99 ? "99+" : count}</bdi>
         </span>
       )}
@@ -80,7 +84,7 @@ export function NotificationMenu(props: NotificationMenuProps) {
             <Header {...props} sheet titleAs={DialogPrimitive.Title} />
             <List>{props.children}</List>
             <div className="grid grid-cols-2 gap-2 border-t border-border-subtle bg-surface-subtle px-3 pt-3 pb-7">
-              <Button variant="secondary" disabled={props.markAll.disabled} onClick={props.markAll.onClick}>
+              <Button variant="secondary" className={outlined} disabled={props.markAll.disabled} onClick={props.markAll.onClick}>
                 {props.markAll.label}
               </Button>
               <ViewAll {...props} />
@@ -99,7 +103,7 @@ export function NotificationMenu(props: NotificationMenuProps) {
           aria-label={title}
           align="end"
           sideOffset={10}
-          className="z-50 flex max-h-[min(640px,calc(100vh-6rem))] w-[420px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[14px] border border-menu-border bg-surface text-text shadow-lg focus-visible:outline-none"
+          className="z-50 flex max-h-[min(620px,calc(100vh-120px))] w-[420px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[14px] border border-menu-border bg-surface text-text shadow-lg focus-visible:outline-none"
         >
           <Header {...props} sheet={false} titleAs="b" />
           <List>{props.children}</List>
@@ -142,10 +146,11 @@ function List({ children }: { children: ReactNode }) {
 }
 
 function ViewAll({ viewAll, linkAs: Link = "a", small = false }: NotificationMenuProps & { small?: boolean }) {
+  // The dropdown's has an arrow; the sheet's, a full-width button, none (the design's `.ndf`).
   return (
     <Link href={viewAll.href} className={buttonVariants({ variant: "primary", size: small ? "sm" : "md" })}>
       {viewAll.label}
-      <Icon name="arrow-right" />
+      {small && <Icon name="arrow-right" />}
     </Link>
   );
 }

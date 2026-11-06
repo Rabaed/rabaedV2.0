@@ -103,7 +103,7 @@ export {
 } from "./components/notifications/notification-settings.tsx";
 export { NotificationRow, type NotificationRowProps, type NotificationTone } from "./components/notifications/notification-row.tsx";
 export { NotificationCard, NotificationEmpty, NotificationGroup, type NotificationGroupProps } from "./components/notifications/notification-list.tsx";
-export { NotificationMenu, notificationSheetQuery, type NotificationMenuProps } from "./components/notifications/notification-menu.tsx";
+export { NotificationMenu, notificationOutlinedButton, notificationSheetQuery, type NotificationMenuProps } from "./components/notifications/notification-menu.tsx";
 export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
 export { SignatureEditor, type SaveSignatureCall, type SignatureEditorLabels, type SignatureEditorProps } from "./components/signature/signature-editor.tsx";
 export { SignatureRequiredDialog, type SignatureRequiredDialogProps, type SignatureRequiredLabels } from "./components/signature/signature-required-dialog.tsx";
