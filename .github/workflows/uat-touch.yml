@@ -51,14 +51,21 @@ jobs:
           cat "$RUNNER_TEMP/uat-touch/comment.md"
           echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Hand the comment to the comment job
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: uat-touch-comment
           path: ${{ runner.temp }}/uat-touch/comment.md
+          if-no-files-found: ignore
           retention-days: 1
       - name: Fail unless the PR body names every case touched
         if: steps.check.outputs.status != '0'
         run: |
+          # The script always prints something on a real answer; an empty file means it crashed (its error is in the log above).
+          if [ ! -s "$RUNNER_TEMP/uat-touch/comment.md" ]; then
+            echo "::error::scripts/check-uat-touch.ts failed before it could answer; see its error above."
+            exit 1
+          fi
           echo "::error::Add a line \"UAT cases touched: <case ids>\" to the PR body, naming every case listed above, and say what you did about each (case updated, or still passes)."
           exit 1
 
@@ -72,15 +79,23 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      # No artifact when the check died before writing: the next step then leaves the comment alone.
       - uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           name: uat-touch-comment
           path: ${{ runner.temp }}/uat-touch
       - name: Post or update the comment
         run: |
           file="$RUNNER_TEMP/uat-touch/comment.md"
+          # Keep in step with `commentTag` in scripts/check-uat-touch.ts.
           marker='<!-- uat-touch -->'
-          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.user.type == \"Bot\" and (.body | startswith(\"$marker\"))) | .id")
+          # A missing or empty file means the check crashed: it said nothing about the cases, so leave any earlier comment alone.
+          if [ ! -s "$file" ]; then
+            echo "The check gave no answer; the comment is left as it was."
+            exit 0
+          fi
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
           id=${ids%%$'\n'*}
           if grep -qF "$marker" "$file"; then
             body_file="$file"
