@@ -85,8 +85,10 @@ const runWorker = () => drainOutbox(worker, { working_copy: handler });
 const shared = async (by: Caller, id: string): Promise<SharedWorkItem> => (await ok(by.get(`/v1/work-items/${id}/shared`), 200)).json();
 const squeeze = (s: string) => s.replace(/\s+/g, "");
 
-/** How long the row menu's Download waits for the Working Copy: a busy runner prints it late (RP-1213). */
+/** About how long the row menu's Download waits for the Working Copy (checked once per round, so a round may run past it): a busy runner prints it late (RP-1213). */
 const WORKING_COPY_WAIT_MS = 30_000;
+/** The pause between two rounds of drain and ask, so a wait does not spin. */
+const WORKING_COPY_ROUND_PAUSE_MS = 250;
 
 /**
  * What the row menu's Download does for `by`: asks for the Working Copy (as apps/web/src/lib/item-pdf.ts does) until it is ready, then opens the file.
@@ -100,9 +102,9 @@ async function rowMenuDownload(by: Caller, id: string): Promise<string> {
   while (answer.status === "preparing" && Date.now() < giveUpAt) {
     await runWorker();
     answer = await ask();
-    if (answer.status === "preparing") await new Promise((resolve) => setTimeout(resolve, 250));
+    if (answer.status === "preparing") await new Promise((resolve) => setTimeout(resolve, WORKING_COPY_ROUND_PAUSE_MS));
   }
-  if (answer.status !== "ready") throw new Error(`Working Copy of ${id} not ready after ${WORKING_COPY_WAIT_MS} ms: last status ${answer.status}`);
+  if (answer.status !== "ready") throw new Error(`Working Copy of ${id} not ready after about ${WORKING_COPY_WAIT_MS} ms: last status ${answer.status}`);
   const res = await fetch(answer.url);
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("application/pdf");
