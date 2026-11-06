@@ -56,7 +56,7 @@ const BellButton = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { la
     >
       <Icon name="bell" />
       {count > 0 && (
-        <span aria-hidden="true" className="absolute end-0.5 top-[3px] h-[18px] min-w-[18px] rounded-full bg-primary px-1 text-center text-[11px] leading-[18px] font-bold text-on-primary shadow-[0_0_0_2px_var(--surface)]">
+        <span aria-hidden="true" className="absolute -end-1 top-0 h-[18px] min-w-[18px] rounded-full bg-primary px-1 text-center text-[11px] leading-[18px] font-bold text-on-primary shadow-[0_0_0_2px_var(--surface)]">
           <bdi dir="ltr">{count > 99 ? "99+" : count}</bdi>
         </span>
       )}
