@@ -152,7 +152,7 @@ export function ActivityFeedPage({
       </div>
 
       {entries.length === 0 && !hasMore ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface px-6 py-14 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface px-6 py-12 text-center">
           <span className="flex size-11 items-center justify-center rounded-[12px] border border-border bg-surface-subtle text-muted">
             <Icon name="clock" size={22} />
           </span>
