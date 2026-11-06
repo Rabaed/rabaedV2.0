@@ -85,15 +85,24 @@ const runWorker = () => drainOutbox(worker, { working_copy: handler });
 const shared = async (by: Caller, id: string): Promise<SharedWorkItem> => (await ok(by.get(`/v1/work-items/${id}/shared`), 200)).json();
 const squeeze = (s: string) => s.replace(/\s+/g, "");
 
-/** What the row menu's Download does for `by`: asks for the Working Copy (as apps/web/src/lib/item-pdf.ts does) until it is ready, then opens the file. */
+/** How long the row menu's Download waits for the Working Copy: a busy runner prints it late (RP-1213). */
+const WORKING_COPY_WAIT_MS = 30_000;
+
+/**
+ * What the row menu's Download does for `by`: asks for the Working Copy (as apps/web/src/lib/item-pdf.ts does) until it is ready, then opens the file.
+ * Several Downloads of one item run at once, and the drain that takes the job holds it while it prints: the others' drains find nothing to take
+ * and their next ask still says preparing, so each drains and asks again, until the answer is ready or WORKING_COPY_WAIT_MS has gone.
+ */
 async function rowMenuDownload(by: Caller, id: string): Promise<string> {
   const ask = async () => (await ok(by.post(`/v1/work-items/${id}/working-copy`), 200)).json() as WorkingCopyAnswer;
+  const giveUpAt = Date.now() + WORKING_COPY_WAIT_MS;
   let answer = await ask();
-  if (answer.status === "preparing") {
+  while (answer.status === "preparing" && Date.now() < giveUpAt) {
     await runWorker();
     answer = await ask();
+    if (answer.status === "preparing") await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  if (answer.status !== "ready") throw new Error(`not ready: ${answer.status}`);
+  if (answer.status !== "ready") throw new Error(`Working Copy of ${id} not ready after ${WORKING_COPY_WAIT_MS} ms: last status ${answer.status}`);
   const res = await fetch(answer.url);
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("application/pdf");
