@@ -37,6 +37,9 @@ const entry = (n: number, over: Partial<ActivityFeedEntry> & { minutesAgo: numbe
     by: { companyName: c1, memberName: null },
     transition: b("Submit", "تقديم"),
     outcome: null,
+    outcomeChip: null,
+    onItem: false,
+    byMe: false,
     workItem: { id: id(n), documentNumber: `TWR-C1-EL-MAR-000${n}`, title: "Cable tray, galvanised 300 mm", type: mar },
     ...rest,
   };

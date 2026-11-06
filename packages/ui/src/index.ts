@@ -296,6 +296,7 @@ export {
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export { ActivityFeedPage, type ActivityFeedPageLabels, type ActivityFeedPageProps } from "./components/views/activity-feed-page.tsx";
 export {
   SubmittalPanel,
   SubmittalPanelFacts,
