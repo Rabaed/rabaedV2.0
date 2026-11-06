@@ -3,9 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkBehindOrigin, stopIfBehindOrigin } from "./behind-origin.ts";
 import type { Holders } from "./claude-sessions.ts";
+
+// Each test clones and fetches real repositories; with other lanes' runs on the machine that passes 5 s (RP-1123).
+// The unit project's default stays as it is.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A bare origin, a clone of it left at its first commit (the stale checkout), and four commits
 // pushed to origin from a second clone, so the stale checkout is 4 behind once it fetches.
@@ -43,6 +47,12 @@ beforeEach(() => {
 }, 30_000);
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+describe("timeouts", () => {
+  it("leave room for building real repositories under load (RP-1123)", ({ task }) => {
+    expect(task.timeout).toBeGreaterThanOrEqual(30_000);
+  });
+});
 
 describe("checkBehindOrigin, on real repositories", () => {
   it("fetches, stops past the limit and names the worktree of this clone that has origin/main", () => {

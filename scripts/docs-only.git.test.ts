@@ -3,8 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changedSince, decideDocsOnly } from "./docs-only.ts";
+
+// Each test clones and commits in real repositories; with other lanes' runs on the machine that passes 5 s (RP-1123).
+// The unit project's default stays as it is.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A throwaway origin and a one-commit-deep checkout of it, as CI's checkout leaves one. In the
 // checkout, a code commit and then a docs commit stand for a merge group: a code PR, then a
@@ -35,6 +39,12 @@ beforeEach(() => {
 }, 30_000);
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+describe("timeouts", () => {
+  it("leave room for building real repositories under load (RP-1123)", ({ task }) => {
+    expect(task.timeout).toBeGreaterThanOrEqual(30_000);
+  });
+});
 
 describe("changedSince, from a shallow checkout", () => {
   it("lists a code PR ahead of a docs PR in the group, so the entry is not docs-only", () => {
