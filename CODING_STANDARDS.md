@@ -41,10 +41,6 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **User-facing errors and logs never include another item's title, number or Company.**
 - **An error or log line names a resource, never its AWS ARN or account id:** "the secret", not its ARN (checked: `rabaed/no-aws-ids-in-errors`, on string and template literals in thrown errors, `Error(…)` or `XxxError(…)` with or without `new`, and log or console calls, not tests; a phone number such as `+9665…` is not an account id).
 
-## Infrastructure (`packages/infra`)
-
-- **Review `packages/infra` against the ADRs, like app code.** An IAM role gets only the S3 prefixes and actions its code uses. RP-1084 granted an infra role wider S3 access than its code needs, and no review compared `packages/infra` with the ADRs (RP-1104). (checked: `packages/infra/test/iam-grants.test.ts` lists every role's allowed prefixes and actions and fails on anything wider; the ADR comparison is judgement)
-
 ## UI (`packages/ui/README.md`)
 
 - **Use the shared piece, not a copy:** `@rabaed/ui` components (`AgeDots`, `StagePill`, `WithChip`, form controls inside `Field`, …), its `focusRing` and tone helpers, and the shared test fixtures under each package's `test/support/` (RP-237, RP-289).
@@ -63,7 +59,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 ## Tests
 
-- **Test behaviour from outside,** at the agreed seams (seam 1 API, seam 2 database, pure domain modules, UI stories, infra assertions). A visibility rule ships with its scenario test.
+- **Test behaviour from outside,** at the agreed seams (seam 1 API, seam 2 database, pure domain modules, UI stories). A visibility rule ships with its scenario test.
 - **Derive the list under test from the source** (every template, icon, Form Version), so a new one can't be left out, and give each test its own setup.
 - **A rule enforced in SQL and in TypeScript has one definition per layer,** both tested against the same cases. A rule shared by api and web lives once in `@rabaed/domain`.
 - **Each case a ticket's Acceptance names has a test that sets up that case** (the checkout, the data, the role), not only a nearby one. The reviewer checks the Acceptance list against the test names. RP-454's acceptance said `pnpm queue` works "from the main folder or another worktree"; no test ran it from an older `main`, and the false "HEAD is behind" warning surfaced only in the spec review (RP-504). (judgement)
