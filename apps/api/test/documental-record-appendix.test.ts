@@ -311,12 +311,52 @@ function appendixOf(xml: string): { n: string; name: string; sha256: string | nu
   });
 }
 
+/** RP-1233: prints how long the beforeAll took since its last mark, so a slow run's log shows where its time went. */
+function stepMarks(): (step: string) => void {
+  const started = performance.now();
+  let last = started;
+  return (step) => {
+    const now = performance.now();
+    console.log(`RP-1233 hook step ${step}: ${Math.round(now - last)} ms (${Math.round(now - started)} ms in all)`);
+    last = now;
+  };
+}
+
+/** This file's items: the only ones its drains make records for. */
+const ownItems = new Set<string>();
+/** The record jobs this file's drains took: run for its own items, or left for another file's. */
+const recordJobs = { ours: 0, leftForOthers: 0 };
+
+/**
+ * `handle`, for this file's items only (RP-1233). Every item that closes in the test database queues
+ * a record job, and the seeded demo alone leaves dozens: making them here, each a Chromium print and
+ * a veraPDF run, took most of this hook (157 s of 165 s on a lane, 73 jobs) and passed its 300 s on a
+ * slow CI runner. Another file's job fails here as it does in any file without a record handler, and
+ * waits its backoff. A record job names its item `closed_work_item_id`, a Re-produce `work_item_id`.
+ */
+function forOwnItems(handle: OutboxHandler): OutboxHandler {
+  return async (trx, row) => {
+    if (!ownItems.has(String(row.payload.closed_work_item_id ?? row.payload.work_item_id))) {
+      recordJobs.leftForOthers++;
+      throw new Error(`${row.kind} of another test file's item: not made by documental-record-appendix.test.ts`);
+    }
+    const started = performance.now();
+    try {
+      await handle(trx, row);
+    } finally {
+      recordJobs.ours++;
+      console.log(`RP-1233 ${row.kind} job: ${Math.round(performance.now() - started)} ms`);
+    }
+  };
+}
+
 /** Rabaed's cancel when a Company leaves the Project (workflow-engine.md §9; its command isn't built yet): the close, as the owner. */
 async function rabaedCancels(id: string): Promise<void> {
   await sql`update work_item set outcome = 'cancelled', closed_at = now() where id = ${id}::uuid`.execute(migrator);
 }
 
 beforeAll(async () => {
+  const mark = stepMarks();
   await addSendBackType(migrator, TYPE, { en: "Record appendix", ar: "ملحق السجل" }, schema);
   const c1 = await api.projectCreator();
   const k1 = await onboard(K1_NAME);
@@ -340,16 +380,19 @@ beforeAll(async () => {
   const c2Participant = await api.addParticipant(at.admin!, at.projectId, c2.company, "contractor");
   await ok(at.admin!.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
   c2Engineer = (await memberOnProject(api, c2, c2Participant, ["engineer"])).caller;
-  handler = await recordHandler();
-  await drainOutbox(worker, { documental_record: handler });
+  handler = forOwnItems(await recordHandler());
+  mark("Companies, tower, Stamps, logo, Members and Signatures");
 
-  const draft = async (title: string) =>
-    (
+  const draft = async (title: string) => {
+    const id = (
       await ok(
         c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { model: "CT-300", trade: at.electrical, location: at.buildingA } }),
         201,
       )
     ).json().id as string;
+    ownItems.add(id);
+    return id;
+  };
   const submit = async (id: string) => {
     await take(c1Engineer, id, "send_for_review");
     await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
@@ -373,6 +416,7 @@ beforeAll(async () => {
   await take(k1Engineer, fullId, "send_to_manager");
   await ok(k1Pm.post(`/v1/work-items/${fullId}/pick-up`));
   await take(k1Pm, fullId, "approve_a");
+  mark("the item closed at Code A");
 
   // The item Rabaed closes while C1 holds it after a Send Back, with a file only C1 ever saw.
   heldId = await draft("Appendix trays held");
@@ -382,12 +426,15 @@ beforeAll(async () => {
   await uploadDocument(c1Engineer, heldId, heldFiles.late);
   await uploadDocument(c1Engineer, heldId, heldFiles.lateNotes);
   await rabaedCancels(heldId);
+  mark("the item closed while C1 holds it");
 
   await drainOutbox(worker, { documental_record: handler });
+  mark(`the drain: record jobs ${JSON.stringify(recordJobs)}`);
   made.full = await download(c1Pm, fullId);
   made.fullAsK1 = await bytesOf(k1Pm, fullId);
   made.held = await download(c1Engineer, heldId);
   made.heldAsK1 = await download(k1Engineer, heldId);
+  mark("4 records downloaded and read");
   // Each record is validated by veraPDF before it is published (RP-155).
 }, 300_000);
 
@@ -587,7 +634,7 @@ describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps
   let engineer: Awaited<ReturnType<typeof admin.signedInEngineer>>;
   const reproduce = async (id: string, rendering: PdfRenderer = renderer) => {
     expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(202);
-    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps(rendering)) });
+    await drainOutbox(worker, { documental_record_reproduce: forOwnItems(reproduceHandler(await recordDeps(rendering))) });
   };
   /** The Record Data's facts: without where things land on the pages (the worker's LAYOUT_DERIVED). */
   const facts = (xml: string) =>
