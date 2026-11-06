@@ -112,6 +112,8 @@ export function ActivityFeedPageView({
   now: string;
 }) {
   const t = useTranslations("workItemViews.activityFeed");
+  // A Code reads as the Kanban board says it ("Code C").
+  const tBoard = useTranslations("workItemViews.board");
   const labels: ActivityFeedPageLabels = {
     ...useEventLabels(),
     title: t("title"),
@@ -125,7 +127,7 @@ export function ActivityFeedPageView({
     you: t("you"),
     onItem: t("onItem"),
     internal: t("internal"),
-    code: (code) => t("code", { code }),
+    code: (code) => tBoard("code", { code }),
     noNumber: t("noNumber"),
     scrollForOlder: t("scrollForOlder"),
     loading: t("loading"),
