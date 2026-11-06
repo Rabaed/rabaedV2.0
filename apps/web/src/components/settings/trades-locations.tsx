@@ -1,6 +1,6 @@
 "use client";
 
-import type { BilingualText, DimensionValue, Locale, Scope } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type DimensionValue, type Locale, type Scope } from "@rabaed/domain";
 import {
   Button,
   Checkbox,
@@ -156,6 +156,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
   const activeScope = new Set(scopes.filter((s) => s.active).map((s) => s.id));
   const shownScopes = scopes.filter((s) => activeScope.has(s.id) && (s.parentId === null || activeScope.has(s.parentId)));
   const counts = { trades: trades.length + shownScopes.length, locations: locations.length };
+  const subCount = (id: string) => scopes.filter((s) => s.parentId === id && s.active).length;
 
   // A Scope that is archived (or under one) is shown only with "Show archived".
   const nodes = useMemo(() => {
@@ -197,9 +198,9 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
   function countLabel(n: Node): string | null {
     const count = (children.get(n.id) ?? []).length;
     if (count === 0) return null;
-    if (n.kind === "trade") return t("scopeCount", { count });
-    if (n.kind === "scope") return t("subScopeCount", { count });
-    return t("placeCount", { count });
+    if (n.kind === "trade") return t("scopeCount", { count, n: formatNumber(count, locale) });
+    if (n.kind === "scope") return t("subScopeCount", { count, n: formatNumber(count, locale) });
+    return t("placeCount", { count, n: formatNumber(count, locale) });
   }
 
   async function setActive(node: Node, active: boolean) {
@@ -271,10 +272,10 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
             }}
           >
             <TabsList aria-label={t("title")}>
-              <TabsTrigger value="trades" icon="category" count={counts.trades}>
+              <TabsTrigger value="trades" icon="category" count={formatNumber(counts.trades, locale)}>
                 {t("trades")}
               </TabsTrigger>
-              <TabsTrigger value="locations" icon="map-pin" count={counts.locations}>
+              <TabsTrigger value="locations" icon="map-pin" count={formatNumber(counts.locations, locale)}>
                 {t("locations")}
               </TabsTrigger>
             </TabsList>
@@ -304,7 +305,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
         {(isTrades && archivedCount > 0) || canEdit ? (
           <div className="flex flex-wrap items-center gap-4">
             {isTrades && archivedCount > 0 && (
-              <Field label={t("showArchived", { count: archivedCount })} layout="inline">
+              <Field label={t("showArchived", { n: formatNumber(archivedCount, locale) })} layout="inline">
                 <Checkbox checked={showArchived} onCheckedChange={(c) => setShowArchived(c === true)} />
               </Field>
             )}
@@ -340,7 +341,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
         <Dialog open onOpenChange={(open) => !open && setArchiving(null)}>
           <DialogContent closeLabel={t("close")} title={t("archiveTitle", { name: archiving.name[locale] })} description={t("archiveBody")}>
             {scopes.some((s) => s.parentId === archiving.id && s.active) && (
-              <p className="text-sm text-muted">{t("archiveSubScopes", { count: scopes.filter((s) => s.parentId === archiving.id && s.active).length })}</p>
+              <p className="text-sm text-muted">{t("archiveSubScopes", { count: subCount(archiving.id), n: formatNumber(subCount(archiving.id), locale) })}</p>
             )}
             {rowError?.id === archiving.id && (
               <p role="alert" className="text-sm text-danger-fg">
