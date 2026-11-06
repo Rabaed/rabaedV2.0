@@ -46,7 +46,19 @@ export default async function VisibilitySettingsPage({
   return (
     <>
       <SettingsHeader title={t("title")} description={t("description")} actions={<AddParticipantButton projectId={project.id} />} />
-      {gap && <ProjectGapNotice gap={gap} dimensions={dimensions} />}
+      {gap ? (
+        <ProjectGapNotice gap={gap} dimensions={dimensions} />
+      ) : (
+        // The page is the Project Admins' only, so a missing gap or invitations list is a failed read.
+        <p role="alert" className="text-sm text-danger-fg">
+          {t("unavailableGap")}
+        </p>
+      )}
+      {!invitations && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {t("unavailableInvitations")}
+        </p>
+      )}
       <ParticipantsVisibility
         projectId={project.id}
         dimensions={dimensions}

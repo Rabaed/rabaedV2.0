@@ -107,13 +107,13 @@ function useCommand() {
     parent_deactivated: t("parentArchived"),
   };
 
-  /** The refusal's message, or null when it went through. */
-  async function send(path: string, method: "POST" | "PATCH", body: unknown, done: string): Promise<string | null> {
+  /** The refusal's message, or null when it went through. `done` is the toast; null shows none. */
+  async function send(path: string, method: "POST" | "PATCH", body: unknown, done: string | null): Promise<string | null> {
     setPending(true);
     try {
       const res = await fetch(`/api/v1${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       if (res.ok) {
-        toast({ title: done, tone: "success" });
+        if (done) toast({ title: done, tone: "success" });
         router.refresh();
         return null;
       }
@@ -152,7 +152,10 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
 
   const all = useMemo(() => (tab === "trades" ? tradeNodes(trades, scopes) : locationNodes(locations)), [tab, trades, scopes, locations]);
   const archivedCount = scopes.filter((s) => !s.active).length;
-  const counts = { trades: trades.length + scopes.filter((s) => s.active).length, locations: locations.length };
+  // Row 4: every Trade, Scope and Sub-scope not archived (a Sub-scope under an archived Scope is hidden with it).
+  const activeScope = new Set(scopes.filter((s) => s.active).map((s) => s.id));
+  const shownScopes = scopes.filter((s) => activeScope.has(s.id) && (s.parentId === null || activeScope.has(s.parentId)));
+  const counts = { trades: trades.length + shownScopes.length, locations: locations.length };
 
   // A Scope that is archived (or under one) is shown only with "Show archived".
   const nodes = useMemo(() => {
@@ -200,6 +203,13 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
   }
 
   async function setActive(node: Node, active: boolean) {
+    // A Sub-scope is offered on its own flag, so archiving a Scope archives its active Sub-scopes first.
+    if (!active) {
+      for (const sub of scopes.filter((s) => s.parentId === node.id && s.active)) {
+        const refused = await send(`/scopes/${sub.id}`, "PATCH", { active: false }, null);
+        if (refused) return setRowError({ id: node.id, message: refused });
+      }
+    }
     const message = await send(`/scopes/${node.id}`, "PATCH", { active }, t(active ? "restoredToast" : "archivedToast", { name: node.name[locale] }));
     setRowError(message ? { id: node.id, message } : null);
     if (!message) setArchiving(null);
@@ -329,6 +339,9 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
       {archiving && (
         <Dialog open onOpenChange={(open) => !open && setArchiving(null)}>
           <DialogContent closeLabel={t("close")} title={t("archiveTitle", { name: archiving.name[locale] })} description={t("archiveBody")}>
+            {scopes.some((s) => s.parentId === archiving.id && s.active) && (
+              <p className="text-sm text-muted">{t("archiveSubScopes", { count: scopes.filter((s) => s.parentId === archiving.id && s.active).length })}</p>
+            )}
             {rowError?.id === archiving.id && (
               <p role="alert" className="text-sm text-danger-fg">
                 {rowError.message}

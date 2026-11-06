@@ -144,6 +144,7 @@ export function DimensionCard({
   readOnly,
   locale,
   onChange,
+  plainNames = false,
 }: {
   kind: DimensionKind;
   title: string;
@@ -155,6 +156,8 @@ export function DimensionCard({
   readOnly: boolean;
   locale: Locale;
   onChange: (grant: Grant) => void;
+  /** Each value by its own name and code (the Project's settings panel), not its path. */
+  plainNames?: boolean;
 }) {
   const ordered = useMemo(() => treeOrder(values), [values]);
   const byId = useMemo(() => new Map(values.map((v) => [v.id, v])), [values]);
@@ -205,7 +208,16 @@ export function DimensionCard({
                 style={{ paddingInlineStart: `${v.level * 1.75}rem` }}
               >
                 <Field
-                  label={<span className={top ? "font-semibold text-text" : "text-text"}>{kind === "location" ? <PathLabel value={v} byId={byId} locale={locale} /> : v.name[locale]}</span>}
+                  label={
+                    <span className={top ? "font-semibold text-text" : "text-text"}>
+                      {kind === "location" && !plainNames ? <PathLabel value={v} byId={byId} locale={locale} /> : v.name[locale]}
+                      {plainNames && (
+                        <bdi dir="ltr" className="ms-2 rounded-xs border border-border px-1.5 py-px font-mono text-xs font-semibold text-muted">
+                          {v.code}
+                        </bdi>
+                      )}
+                    </span>
+                  }
                   layout="inline"
                   readOnly={readOnly}
                   disabled={locked}

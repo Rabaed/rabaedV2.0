@@ -1,8 +1,8 @@
 "use client";
 
-import { baseRoles, dimensionKinds, type DimensionKind, type DimensionValue, type DimensionValues, type Locale, type ParticipantVisibility } from "@rabaed/domain";
+import { baseRoles, dimensionKinds, type BaseRole, type DimensionKind, type DimensionValue, type DimensionValues, type Locale, type ParticipantVisibility } from "@rabaed/domain";
 import {
-  Avatar,
+
   Button,
   Dialog,
   DialogClose,
@@ -17,31 +17,52 @@ import {
   SheetFooter,
   cn,
   useToast,
+  type IconName,
 } from "@rabaed/ui";
 import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useHandover, type HandoverOutcome } from "@/components/handover";
 import { DimensionCard, draftOf, stored, type Draft, type Grant } from "@/components/participants/member-visibility-editor";
-import { sheetOnPhone } from "@/components/participants/participants-parts";
+import { sheetOnPhone, valuePath } from "@/components/participants/participants-parts";
 import { useRouter } from "@/i18n/navigation";
 
 // Project Settings → Visibility to the owner's reference (RP-1156, gap rows 20 to 34): the Project's
 // Visibility Gap, each Participant's Visibility as chips with an Edit panel, and the pending
 // invitations by CR number (ADR 0009). The page is the Project Admins' only (V15).
 
-type BaseRole = (typeof baseRoles)[number];
 
-/** The Project Role chip's colours (the reference's role chips). */
-const roleTone: Partial<Record<BaseRole, string>> = {
-  owner: "bg-stage-approved-bg text-stage-approved-fg",
-  consultant: "bg-info-tint text-info-fg",
-  contractor: "bg-brand-tint text-brand-fg",
+
+/** Each Project Role's chip, company tile and icon (the reference's coloured tiles and role chips, row 29). */
+const roleLook: Partial<Record<BaseRole, { chip: string; tile: string; icon: IconName }>> = {
+  owner: { chip: "bg-stage-approved-bg text-stage-approved-fg", tile: "bg-stage-approved-dot", icon: "building" },
+  owner_representative: { chip: "bg-stage-approved-bg text-stage-approved-fg", tile: "bg-stage-approved-dot", icon: "shield-check" },
+  consultant: { chip: "bg-info-tint text-info-fg", tile: "bg-info-fg", icon: "clipboard-check" },
+  contractor: { chip: "bg-brand-tint text-brand-fg", tile: "bg-brand", icon: "crane" },
 };
+const otherRole = { chip: "bg-neutral-tint text-neutral-fg", tile: "bg-neutral-fg", icon: "briefcase" as IconName };
 
 export function RoleChip({ role, name }: { role: BaseRole; name: string }) {
+  const look = roleLook[role] ?? otherRole;
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-px text-xs font-semibold", roleTone[role] ?? "bg-neutral-tint text-neutral-fg")}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-px text-xs font-semibold", look.chip)}>
+      <Icon name={look.icon} size={12} />
       {name}
+    </span>
+  );
+}
+
+/** The Company's initials on its Project Role's colour. */
+function CompanyTile({ name, role }: { name: string; role: BaseRole }) {
+  const initials = name
+    .split(/\s+/)
+    .filter((w) => /\p{L}/u.test(w))
+    .slice(0, 2)
+    .map((w) => [...w][0])
+    .join("")
+    .toUpperCase();
+  return (
+    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xs text-sm font-bold text-on-primary", (roleLook[role] ?? otherRole).tile)} aria-hidden>
+      {initials}
     </span>
   );
 }
@@ -69,15 +90,6 @@ function ValueChip({ label, code, tone = "plain" }: { label: ReactNode; code?: s
 
 const byIdOf = (values: DimensionValue[]) => new Map(values.map((v) => [v.id, v]));
 
-function pathOf(v: DimensionValue, byId: ReadonlyMap<string, DimensionValue>, locale: Locale): string {
-  const names = [v.name[locale]];
-  for (let p = v.parentId; p !== null; p = byId.get(p)?.parentId ?? null) {
-    const parent = byId.get(p);
-    if (!parent) break;
-    names.unshift(parent.name[locale]);
-  }
-  return names.join(" › ");
-}
 
 /** The values to name for a set: each one whose parent is not in the set too (the parent names its subtree). */
 function topsOf(values: DimensionValue[], inSet: (id: string) => boolean): DimensionValue[] {
@@ -108,7 +120,9 @@ function CoveredSummary({ kind, all, grant, covered }: { kind: DimensionKind; al
     if (yes === 0) return;
     if (yes >= inside.length - yes) {
       chips.push(v);
-      excepts.push(...topsOf(inside, (id) => !isCovered.has(id)));
+      // Name only what is wholly out: a Location partly covered is not an exception.
+      const out = (id: string) => !isCovered.has(id) && below(id).every((c) => !isCovered.has(c.id));
+      excepts.push(...topsOf(inside, out));
       return;
     }
     childrenOf(v.id).forEach(visit);
@@ -119,11 +133,11 @@ function CoveredSummary({ kind, all, grant, covered }: { kind: DimensionKind; al
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap gap-1.5">
         {chips.map((v) => (
-          <ValueChip key={v.id} label={v.parentId ? pathOf(v, byId, locale) : v.name[locale]} code={v.code} />
+          <ValueChip key={v.id} label={v.parentId ? valuePath(v, byId, locale) : v.name[locale]} code={v.code} />
         ))}
       </div>
       {excepts.length > 0 && (
-        <p className="text-xs text-muted">{t("except", { places: excepts.map((v) => pathOf(v, byId, locale)).join(locale === "ar" ? "، " : ", ") })}</p>
+        <p className="text-xs text-muted">{t("except", { places: excepts.map((v) => valuePath(v, byId, locale)).join(locale === "ar" ? "، " : ", ") })}</p>
       )}
     </div>
   );
@@ -155,7 +169,7 @@ export function ProjectGapNotice({ gap, dimensions }: { gap: DimensionValues; di
             const byId = byIdOf(dimensions[kind]);
             return topsOf(gap[kind], (id) => ids.has(id)).map((v) => (
               <li key={v.id}>
-                <ValueChip tone="gap" label={<><Icon name={kind === "trade" ? "category" : "map-pin"} size={13} className="text-muted" />{pathOf(v, byId, locale)}</>} code={v.code} />
+                <ValueChip tone="gap" label={<><Icon name={kind === "trade" ? "category" : "map-pin"} size={13} className="text-muted" />{valuePath(v, byId, locale)}</>} code={v.code} />
               </li>
             ));
           })}
@@ -203,7 +217,7 @@ export function ParticipantsVisibility({
         {participants.map((p) => (
           <li key={p.id} className="grid gap-3 border-b border-border px-5 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1.3fr)_1.2fr_1.4fr_auto] md:items-center md:gap-4" data-testid="participant-visibility">
             <div className="flex min-w-0 items-center gap-3">
-              <Avatar name={p.company} kind="company" size="lg" decorative />
+              <CompanyTile name={p.company} role={p.role} />
               <div className="min-w-0 space-y-1">
                 <p className="truncate font-semibold text-text">{p.company}</p>
                 <RoleChip role={p.role} name={p.roleName} />
@@ -280,7 +294,7 @@ function InvitationItem({ projectId, invitation }: { projectId: string; invitati
 
   return (
     <li className="grid gap-3 border-b border-border bg-canvas/60 px-5 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1.3fr)_1.2fr_1.4fr_auto] md:items-center md:gap-4" data-testid="pending-invitation">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3 md:col-span-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xs border border-dashed border-border-strong text-muted" aria-hidden>
           <Icon name="mail" size={18} />
         </span>
@@ -296,8 +310,6 @@ function InvitationItem({ projectId, invitation }: { projectId: string; invitati
           </div>
         </div>
       </div>
-      <span className="hidden md:block" />
-      <span className="hidden md:block" />
       <Button variant="ghost" size="sm" className="justify-self-start border border-border md:justify-self-end" onClick={() => setConfirming(true)} aria-label={t("withdrawLabel", { cr: invitation.crNumber })}>
         {t("withdraw")}
       </Button>
@@ -366,7 +378,7 @@ function EditSheet({ participant, grant, dimensions, onClose }: { participant: P
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex max-w-[620px] flex-col" closeLabel={t("close")} title={t("editTitle", { company: participant.company })} description={t("editHint")}>
+      <SheetContent className="flex max-w-[620px] flex-col" closeLabel={t("close")} title={t("editTitle", { company: participant.company })} description={<RoleChip role={participant.role} name={participant.roleName} />}>
         <div className="flex-1 space-y-4">
           {dimensionKinds.map((kind) => (
             <DimensionCard
@@ -380,8 +392,13 @@ function EditSheet({ participant, grant, dimensions, onClose }: { participant: P
               readOnly={false}
               locale={locale}
               onChange={(g: Grant) => setDraft((prev) => ({ ...prev, [kind]: g }))}
+              plainNames
             />
           ))}
+          <p className="flex items-start gap-2 rounded-md bg-info-tint px-3 py-2.5 text-sm text-info-fg">
+            <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
+            {t("editHint")}
+          </p>
         </div>
         <SheetFooter>
           <Button variant="secondary" onClick={onClose}>
