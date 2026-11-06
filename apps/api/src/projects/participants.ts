@@ -15,6 +15,7 @@ import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { handedOver, type HandoverRefusal } from "../identity/handover.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+import { toValues, toVisibility, type GrantRow, type ValueRow } from "./visibility.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
 // participants migration; reads go through RLS or those functions, never around them.
@@ -223,11 +224,22 @@ type ParticipationRow = {
   host_name: BilingualText;
   base_role: BaseRole;
   role_name: BilingualText;
+  member_count: number;
 };
 
-/** Rows of app.company_participants or app.participation, each with its Host Company's name. */
+/** The Project Members a Participant's page lists: on the Project, and invited or active in their Company. */
+const listedProjectMembers = (participantId: RawBuilder<unknown>) => sql`
+  select pm.id, pm.member_id from project_member pm join member m on m.id = pm.member_id
+  where pm.participant_id = ${participantId} and pm.status = 'active' and m.status in ('invited', 'active')`;
+
+/**
+ * Rows of app.company_participants or app.participation, each with its Host Company's name and
+ * its count of Project Members, read through RLS: the viewer's own Company's only (RP-1155-1).
+ */
 const withHostCompanyName = (from: RawBuilder<unknown>) =>
-  sql<ParticipationRow>`select x.*, app.project_host_company_name(x.project_id) as host_name from ${from} x`;
+  sql<ParticipationRow>`select x.*, app.project_host_company_name(x.project_id) as host_name,
+    (select count(*)::int from (${listedProjectMembers(sql`x.participant_id`)}) listed) as member_count
+    from ${from} x`;
 
 function toParticipation(r: ParticipationRow): CompanyParticipation {
   return {
@@ -235,6 +247,7 @@ function toParticipation(r: ParticipationRow): CompanyParticipation {
     project: { id: r.project_id, projectNumber: r.project_number, code: r.code, name: r.name },
     hostCompany: { legalName: r.host_name },
     projectRole: { baseRole: r.base_role, name: r.role_name },
+    memberCount: r.member_count,
   };
 }
 
@@ -293,7 +306,25 @@ export async function listParticipantMembers(
       .where("base_role", "=", row.base_role)
       .orderBy("sort")
       .execute();
-    return { participant: toParticipation(row), members, positions };
+    // Every Member's grants in one read.
+    const grants = await sql<GrantRow & { member_id: string }>`
+      select m.id as member_id, g.* from unnest(${members.map((m) => m.id)}::uuid[]) as m (id)
+      cross join lateral app.member_grants(${participantId}::uuid, m.id) g
+    `.execute(trx);
+    const withVisibility = members.map((m) => ({
+      ...m,
+      // Never null: they are on the Project through it, and the viewer is of its Company.
+      visibility: toVisibility(grants.rows.filter((g) => g.member_id === m.id))!,
+    }));
+    const covered = await sql<ValueRow>`select * from app.participant_covered_values(${participantId}::uuid)`.execute(trx);
+    // The gap reads empty both for "none" and for "not yours"; only the Authorized Person gets one at all.
+    const { rows: authorized } = await sql<{ is_authorized_person: boolean }>`
+      select exists (select 1 from participant where id = ${participantId}::uuid and company_id = app.current_authorized_company_id()) as is_authorized_person
+    `.execute(trx);
+    const gap = authorized[0]!.is_authorized_person
+      ? toValues((await sql<ValueRow>`select * from app.participant_visibility_gap(${participantId}::uuid)`.execute(trx)).rows)
+      : null;
+    return { participant: toParticipation(row), members: withVisibility, positions, covered: toValues(covered.rows), gap };
   });
 }
 

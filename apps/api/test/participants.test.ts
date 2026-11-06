@@ -199,6 +199,7 @@ describe("the Authorized Person of a Participant", () => {
       project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
       hostCompany: HOST_COMPANY,
       projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
+      memberCount: 0, // none of theirs on it yet
     });
     // Not on the Project yet, so it is not among their own Projects.
     await expectHiddenFrom({ read: projectRead(projectId), target: projectId, seenBy: host.caller, hiddenFrom: consultant.caller, name: who });
@@ -216,7 +217,9 @@ describe("the Authorized Person of a Participant", () => {
     expect(project.json()).toMatchObject({ projectRole: { baseRole: "consultant" }, isProjectAdmin: false });
 
     const list = await consultant.caller.get(`/v1/participants/${participantId}/members`);
-    expect(list.json().members).toEqual([{ id: member.id, email: member.email, fullName: { en: "Test Member", ar: "عضو الاختبار" }, positions: [] }]);
+    // A new Project Member starts with all of their Participant's Visibility (RP-1155, gap row 24).
+    const all = { isAll: true, valueIds: [] };
+    expect(list.json().members).toEqual([{ id: member.id, email: member.email, fullName: { en: "Test Member", ar: "عضو الاختبار" }, positions: [], visibility: { trade: all, location: all } }]);
   });
 
   it("can add themselves", async () => {
@@ -408,6 +411,7 @@ describe("the Participants of a Project", () => {
       project: { id: tower, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
       hostCompany: HOST_COMPANY,
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+      memberCount: expect.any(Number),
     });
   });
 
@@ -426,6 +430,7 @@ describe("the Participants of a Project", () => {
           project: { id: tower, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
           hostCompany: HOST_COMPANY,
           projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+          memberCount: 1, // this Member alone of C1's
         },
       ],
     });
