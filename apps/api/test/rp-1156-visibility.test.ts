@@ -80,7 +80,7 @@ describe("scenario RP-1156-1: the Project's Visibility Gap goes to its Project A
   });
 
   it("is the 404 for a made-up Project id, as for a Project the viewer isn't on", async () => {
-    await expectHidden(c1.caller.get("/v1/projects/00000000-0000-4000-8000-000000000000/visibility-gap"));
-    await expectHidden(c1.caller.get("/v1/projects/not-an-id/visibility-gap"));
+    await expectHidden(c1.caller.get("/v1/projects/00000000-0000-4000-8000-000000000000/visibility-gap")); // not hidden-from: no such Project, the 404's shape
+    await expectHidden(c1.caller.get("/v1/projects/not-an-id/visibility-gap")); // not hidden-from: not an id, the 404's shape
   });
 });
