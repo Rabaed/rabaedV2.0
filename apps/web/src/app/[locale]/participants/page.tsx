@@ -2,7 +2,7 @@ import { formatNumber, relativeAge, type Locale } from "@rabaed/domain";
 import { Badge, Icon, projectTileIndexes } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { InvitationCard } from "@/components/participants/invitation-card";
-import { ParticipantsBreadcrumb, ParticipantsHeading, ReadOnlyNotice, SectionHeading } from "@/components/participants/participants-parts";
+import { outlined, ParticipantsBreadcrumb, ParticipantsHeading, ReadOnlyNotice, SectionHeading } from "@/components/participants/participants-parts";
 import { Link, redirect } from "@/i18n/navigation";
 import { authorizedPersonName } from "@/lib/participants";
 import { getCompanyInvitations, getCompanyParticipations, getMe, getMembers } from "@/lib/session";
@@ -80,7 +80,7 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
               <li key={p.id} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
                 <div className="flex items-center gap-3">
                   <span
-                    className={`flex size-10 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white ${tileClasses[tiles[index]!]}`}
+                    className={`flex size-10 shrink-0 items-center justify-center rounded-md text-[11px] font-extrabold tracking-tight text-on-avatar ${tileClasses[tiles[index]!]}`}
                     aria-hidden
                   >
                     <bdi dir="ltr">{p.project.code}</bdi>
@@ -99,7 +99,7 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
                   <dd className="font-semibold text-text">{p.hostCompany.legalName[locale]}</dd>
                   <dt className="text-muted">{t("ourRole")}</dt>
                   <dd>
-                    <Badge tone="brand">{p.projectRole.name[locale]}</Badge>
+                    <Badge tone="warning">{p.projectRole.name[locale]}</Badge>
                   </dd>
                 </dl>
                 <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
@@ -110,7 +110,7 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
                   </span>
                   <Link
                     href={`/participants/${p.id}`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold text-text hover:bg-hover"
+                    className={outlined}
                   >
                     {t("projectMembersButton")}
                     <Icon name="arrow-right" size={16} />

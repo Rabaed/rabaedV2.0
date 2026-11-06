@@ -1,9 +1,29 @@
 import type { DimensionKind, DimensionValue, DimensionValues, Locale } from "@rabaed/domain";
-import { Icon, type IconName } from "@rabaed/ui";
+import { Icon, buttonVariants, cn, type IconName } from "@rabaed/ui";
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 
 // The parts the three Participants pages share (RP-1155, the owner's reference).
+
+/** A link drawn as the kit's small outlined button (the reference's `.nbtn`). */
+export const outlined = cn(buttonVariants({ variant: "ghost", size: "sm" }), "border border-border font-semibold");
+
+/** A Dialog's classes that make it a bottom sheet at phone width (gap row 35, the reference's `.amod.ph`). */
+export const sheetOnPhone =
+  "max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:mx-0 max-sm:mb-0 max-sm:w-full max-sm:max-h-[85dvh] max-sm:rounded-b-none";
+
+/** "Tower 1 › " before a Location's own name, muted (the reference's `.pth`). */
+export function PathLabel({ value, byId, locale }: { value: DimensionValue; byId: ReadonlyMap<string, DimensionValue>; locale: Locale }) {
+  const path = valuePath(value, byId, locale);
+  const own = value.name[locale];
+  const before = path.slice(0, path.length - own.length);
+  return (
+    <>
+      {before && <span className="text-muted">{before}</span>}
+      {own}
+    </>
+  );
+}
 
 export type Crumb = { label: string; href?: string };
 

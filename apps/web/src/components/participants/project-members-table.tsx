@@ -20,8 +20,10 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useHandover, type HandoverRequest } from "@/components/handover";
 import { Link, useRouter } from "@/i18n/navigation";
+import { outlined, sheetOnPhone } from "./participants-parts";
 
 type Position = { key: string; name: string };
+
 export type MemberRow = {
   id: string;
   name: string;
@@ -119,19 +121,31 @@ export function ProjectMembersTable({
                 </ul>
                 <p className={cn("flex items-start gap-1.5 text-sm", m.visibilityAll ? "text-success-fg" : "text-muted")}>
                   <Icon name="eye" size={16} className="mt-0.5 shrink-0" />
-                  <span>{m.visibility}</span>
+                  {/* The header row is for the eye only; a screen reader hears the column here. */}
+                  <span>
+                    <span className="sr-only">{t("visibility")}: </span>
+                    {m.visibility}
+                  </span>
                 </p>
                 <div className="flex items-center gap-1.5 @[1000px]:justify-end">
                   <Link
                     href={`/participants/${participantId}/members/${m.id}/visibility`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold text-text hover:bg-hover"
+                    aria-label={t("visibilityOf", { name: m.name })}
+                    className={outlined}
                   >
                     <Icon name="eye" size={16} />
                     {t("visibility")}
                   </Link>
                   {canManage && (
                     <>
-                      <Button variant="ghost" size="sm" className="border border-border" disabled={handover.pending} onClick={() => setEditing(m)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="border border-border"
+                        aria-label={t("positionsTitle", { name: m.name })}
+                        disabled={handover.pending}
+                        onClick={() => setEditing(m)}
+                      >
                         {t("editPositions")}
                       </Button>
                       <IconButton label={t("removeMember", { name: m.name })} disabled={handover.pending} onClick={() => setRemoving(m)}>
@@ -162,7 +176,7 @@ export function ProjectMembersTable({
 
       <Dialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         {removing && (
-          <DialogContent closeLabel={t("close")} title={t("removeTitle", { name: removing.name, project })} description={t("removeBody")}>
+          <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("removeTitle", { name: removing.name, project })} description={t("removeBody")}>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="secondary">{t("cancel")}</Button>
@@ -211,7 +225,7 @@ function PositionsDialog({
     });
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent closeLabel={t("close")} title={t("positionsTitle", { name: member.name })} description={t("positionsHint", { project })}>
+      <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("positionsTitle", { name: member.name })} description={t("positionsHint", { project })}>
         <fieldset className="space-y-2">
           <legend className="sr-only">{t("positions")}</legend>
           {positions.map((p) => (
@@ -263,21 +277,25 @@ export function AddMemberDialog({
     try {
       const base = `/api/v1/participants/${participantId}/members`;
       const added = await fetch(base, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ memberId: who.id }) });
+      if (!added.ok) return toast({ title: t("unavailable"), tone: "danger" });
       // A new Project Member holds no Step, so giving the Position never needs a Handover.
       const placed =
-        added.ok &&
-        (!position ||
-          (
-            await fetch(`${base}/${who.id}/positions`, {
-              method: "PUT",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ positions: [position] }),
-            })
-          ).ok);
-      if (!placed) return toast({ title: t("unavailable"), tone: "danger" });
+        !position ||
+        (
+          await fetch(`${base}/${who.id}/positions`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ positions: [position] }),
+          })
+        ).ok;
       setOpen(false);
       setMemberId(null);
-      toast({ title: t("added", { name: who.name, project }), tone: "success" });
+      // Added either way; a Position that didn't save is given from the row's Positions button.
+      toast(
+        placed
+          ? { title: t("added", { name: who.name, project }), tone: "success" }
+          : { title: t("added", { name: who.name, project }), description: t("positionNotSaved"), tone: "danger" },
+      );
       router.refresh();
     } catch {
       toast({ title: t("unavailable"), tone: "danger" });
@@ -292,12 +310,12 @@ export function AddMemberDialog({
         <Icon name="person-add" size={16} />
         {t("addTitle")}
       </Button>
-      <DialogContent closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
+      <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
         {candidates.length === 0 ? (
           <p className="text-sm text-muted">{t("noCandidates")}</p>
         ) : (
           <div className="space-y-4">
-            <fieldset className="space-y-2">
+            <fieldset className="max-h-60 space-y-2 overflow-y-auto">
               <legend className="mb-1.5 text-sm text-muted">{t("member")}</legend>
               {candidates.map((c) => (
                 <label

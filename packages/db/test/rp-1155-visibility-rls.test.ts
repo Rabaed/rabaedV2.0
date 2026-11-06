@@ -69,6 +69,16 @@ describe("scenario RP-1155-2: the Visibility Gap is read by the Participant's ow
     expect(await gap(tower.c1.ap, tower.c1.participantId)).toEqual([]); // not hidden-from: C1's own gap, which is none
   });
 
+  it("stays open with a Project Member who is still invited: they see nothing yet", async () => {
+    const { rows } = await migrator.query(
+      "insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'invited') returning id",
+      [tower.c2.id, `invited-${tower.c2.cr}@rabaed.test`, JSON.stringify(bilingual("Invited"))],
+    );
+    const invited = rows[0].id as string;
+    expect(await tower.outcome(tower.c2.ap, sql`select app.add_project_member(${tower.c2.participantId}::uuid, ${invited}::uuid, now()) as outcome`)).toBe("added");
+    expect(await gap(tower.c2.ap, tower.c2.participantId)).toEqual([{ kind: "location", id: tower.buildingB }]);
+  });
+
   it("gives nothing to C2's engineer, to the Project Admin or to another Company's Authorized Person", async () => {
     for (const as of [tower.c2.members.engineer, tower.c1.ap, tower.c1.members.engineer, tower.k1.ap, tower.ow.ap]) {
       expect(await gap(as, tower.c2.participantId), as).toEqual([]);
@@ -114,5 +124,17 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
 
   it("closes C2's Visibility Gap", async () => {
     expect(await gap(tower.c2.ap, tower.c2.participantId)).toEqual([]);
+  });
+
+  it("starts again with 'all' when added back after a removal, and keeps a narrowed grant while on the Project", async () => {
+    const run = (q: ReturnType<typeof sql<{ outcome: string }>>) => tower.outcome(tower.c2.ap, q);
+    const p = tower.c2.participantId;
+    expect(await run(sql`select app.set_member_visibility(${p}::uuid, ${added}::uuid, 'location', false, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    // Added again while on the Project: nothing changes.
+    expect(await run(sql`select app.add_project_member(${p}::uuid, ${added}::uuid, now()) as outcome`)).toBe("added");
+    expect((await myVisibility(added)).filter((v) => v.kind === "location")).toEqual([]); // not hidden-from: their own narrowed coverage
+    expect(await run(sql`select app.remove_project_member(${p}::uuid, ${added}::uuid, now()) as outcome`)).toBe("removed");
+    expect(await run(sql`select app.add_project_member(${p}::uuid, ${added}::uuid, now()) as outcome`)).toBe("added");
+    expect((await myVisibility(added)).filter((v) => v.kind === "location").map((v) => v.id)).toEqual([tower.buildingB]);
   });
 });

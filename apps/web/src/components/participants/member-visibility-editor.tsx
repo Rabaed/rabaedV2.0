@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { useHandover, type HandoverOutcome } from "@/components/handover";
 import { useRouter } from "@/i18n/navigation";
 import { impliedBySelection, treeOrder } from "@/lib/dimension-tree";
-import { valuePath } from "./participants-parts";
+import { PathLabel } from "./participants-parts";
 
 type Grant = { isAll: boolean; selected: ReadonlySet<string> };
 type Draft = Record<DimensionKind, Grant>;
@@ -205,7 +205,7 @@ function DimensionCard({
                 style={{ paddingInlineStart: `${v.level * 1.75}rem` }}
               >
                 <Field
-                  label={<span className={top ? "font-semibold text-text" : "text-text"}>{kind === "location" ? valuePath(v, byId, locale) : v.name[locale]}</span>}
+                  label={<span className={top ? "font-semibold text-text" : "text-text"}>{kind === "location" ? <PathLabel value={v} byId={byId} locale={locale} /> : v.name[locale]}</span>}
                   layout="inline"
                   readOnly={readOnly}
                   disabled={locked}
@@ -217,7 +217,7 @@ function DimensionCard({
           })}
         </ul>
       )}
-      <p className="mt-3 text-xs text-muted">{caption}</p>
+      <p className="mt-3 rounded-md bg-hover px-3 py-2 text-xs text-muted">{caption}</p>
     </fieldset>
   );
 }

@@ -677,7 +677,6 @@
     "addTitle": "Add a Member of your Company",
     "addHint": "They start with all of your Company's Visibility. You can narrow it after.",
     "position": "Position",
-    "choosePosition": "Choose a Position",
     "addToProject": "Add to Project",
     "noCandidates": "Every Member of your Company is already on this Project.",
     "added": "{name} added to {project}",
@@ -691,7 +690,9 @@
     "removed": "{name} removed from {project}",
     "editPositions": "Positions",
     "removeMember": "Remove {name}",
-    "close": "Close"
+    "close": "Close",
+    "visibilityOf": "{name}'s Visibility",
+    "positionNotSaved": "Their Position didn't save. Give it from Positions in their row."
   },
   "dimensions": {
     "title": "Trades & Locations",

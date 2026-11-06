@@ -4,6 +4,7 @@ import { Badge, Button, Dialog, DialogClose, DialogContent, DialogFooter, Icon, 
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { sheetOnPhone } from "./participants-parts";
 
 export type InvitationCardProps = {
   id: string;
@@ -73,7 +74,7 @@ export function InvitationCard({ id, project, host, company, role, ago }: Invita
         </Button>
       </div>
       <Dialog open={declining} onOpenChange={setDeclining}>
-        <DialogContent closeLabel={t("close")} title={t("declineTitle")} description={t("declineBody", { company, project, host })}>
+        <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("declineTitle")} description={t("declineBody", { company, project, host })}>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="secondary">{t("keepInvitation")}</Button>

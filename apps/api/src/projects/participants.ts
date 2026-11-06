@@ -306,17 +306,22 @@ export async function listParticipantMembers(
       .where("base_role", "=", row.base_role)
       .orderBy("sort")
       .execute();
-    const withVisibility = [];
-    for (const m of members) {
-      const grants = await sql<GrantRow>`select * from app.member_grants(${participantId}::uuid, ${m.id}::uuid)`.execute(trx);
-      // Never null: they are on the Project through it, and the viewer is of its Company.
-      withVisibility.push({ ...m, visibility: toVisibility(grants.rows)! });
-    }
-    const covered = await sql<ValueRow>`select * from app.participant_covered_values(${participantId}::uuid)`.execute(trx);
-    const { rows: authorized } = await sql<{ is: boolean }>`
-      select exists (select 1 from participant where id = ${participantId}::uuid and company_id = app.current_authorized_company_id()) as is
+    // Every Member's grants in one read.
+    const grants = await sql<GrantRow & { member_id: string }>`
+      select m.id as member_id, g.* from unnest(${members.map((m) => m.id)}::uuid[]) as m (id)
+      cross join lateral app.member_grants(${participantId}::uuid, m.id) g
     `.execute(trx);
-    const gap = authorized[0]!.is
+    const withVisibility = members.map((m) => ({
+      ...m,
+      // Never null: they are on the Project through it, and the viewer is of its Company.
+      visibility: toVisibility(grants.rows.filter((g) => g.member_id === m.id))!,
+    }));
+    const covered = await sql<ValueRow>`select * from app.participant_covered_values(${participantId}::uuid)`.execute(trx);
+    // The gap reads empty both for "none" and for "not yours"; only the Authorized Person gets one at all.
+    const { rows: authorized } = await sql<{ is_authorized_person: boolean }>`
+      select exists (select 1 from participant where id = ${participantId}::uuid and company_id = app.current_authorized_company_id()) as is_authorized_person
+    `.execute(trx);
+    const gap = authorized[0]!.is_authorized_person
       ? toValues((await sql<ValueRow>`select * from app.participant_visibility_gap(${participantId}::uuid)`.execute(trx)).rows)
       : null;
     return { participant: toParticipation(row), members: withVisibility, positions, covered: toValues(covered.rows), gap };
