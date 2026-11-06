@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
@@ -14,7 +17,9 @@ const radix = Object.keys(JSON.parse(readFileSync(new URL("package.json", import
 
 // The story test harness: every Storybook story, in English and Arabic, in a
 // real Chromium. See test/stories.test.tsx.
+// Outside node_modules, which Turbopack watches (RP-1182): see the root vitest.config.ts.
 export default defineConfig({
+  cacheDir: join(tmpdir(), "rabaed-vite", fileURLToPath(new URL(".", import.meta.url)).replace(/[:\\/]+/g, "_")),
   plugins: [react(), tailwindcss()],
   // pdf.js too (the Attachments preview, RP-1068): it is imported only when a PDF is first opened.
   optimizeDeps: { include: [...radix, "pdfjs-dist"] },
