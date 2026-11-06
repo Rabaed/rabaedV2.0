@@ -260,7 +260,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
               setRenaming(null);
             }}
           >
-            <TabsList>
+            <TabsList aria-label={t("title")}>
               <TabsTrigger value="trades" icon="category" count={counts.trades}>
                 {t("trades")}
               </TabsTrigger>
@@ -269,7 +269,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <label className="relative min-w-[200px] flex-1 sm:max-w-[280px]">
+          <label className="relative min-w-[200px] flex-1 sm:max-w-[320px]">
             <span className="sr-only">{t(isTrades ? "searchTrades" : "searchLocations")}</span>
             <Icon name="search" size={16} className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <Input
