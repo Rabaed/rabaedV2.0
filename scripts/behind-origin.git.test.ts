@@ -7,8 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkBehindOrigin, stopIfBehindOrigin } from "./behind-origin.ts";
 import type { Holders } from "./claude-sessions.ts";
 
-// Each test clones and fetches real repositories; with other lanes' runs on the machine that passes 5 s (RP-1123).
-// The unit project's default stays as it is.
+// Cloning and fetching real repositories passes the 5 s default when other lanes load the machine (RP-1123).
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A bare origin, a clone of it left at its first commit (the stale checkout), and four commits

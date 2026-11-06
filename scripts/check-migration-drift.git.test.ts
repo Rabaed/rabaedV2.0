@@ -7,8 +7,7 @@ import { kindCheck, takeTransition } from "./check-migration-drift.fixtures.ts";
 import { mergeGroupSides, type MigrationProblems, migrationProblems } from "./check-migration-drift.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
-// Each test builds a repository with a dozen git commands; with other lanes' runs on the machine that
-// passes 5 s, and so does the beforeEach (RP-1123). The unit project's default stays as it is.
+// Building a repository with a dozen git commands passes the 5 s default when other lanes load the machine (RP-1123).
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A throwaway repository replaying the RP-311 history: a branch redefines

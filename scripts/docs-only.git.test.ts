@@ -6,8 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changedSince, decideDocsOnly } from "./docs-only.ts";
 
-// Each test clones and commits in real repositories; with other lanes' runs on the machine that passes 5 s (RP-1123).
-// The unit project's default stays as it is.
+// Cloning and committing in real repositories passes the 5 s default when other lanes load the machine (RP-1123).
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A throwaway origin and a one-commit-deep checkout of it, as CI's checkout leaves one. In the
