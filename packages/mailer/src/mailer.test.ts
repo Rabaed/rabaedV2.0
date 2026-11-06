@@ -1,9 +1,7 @@
-import type { SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { catcherTransport } from "./catcher.ts";
 import { mailerFromEnv } from "./config.ts";
 import { createMailer, invitationMessage, invitationTokenOf, notificationDigestMessage, notificationMessage, type OutgoingEmail } from "./mailer.ts";
-import { sesTransport } from "./ses.ts";
 import { renderEmail } from "./templates.ts";
 
 const signInCode = { to: "engineer@rabaed.test", template: "sign-in-code", locale: "ar", values: { code: "482913", validMinutes: 10 } } as const;
@@ -69,29 +67,6 @@ describe("notificationDigestMessage", () => {
   });
 });
 
-describe("sesTransport", () => {
-  it("sends through SES v2 with the configuration set, UTF-8 bodies and the template as a tag", async () => {
-    const commands: SendEmailCommand[] = [];
-    const transport = sesTransport({ configurationSet: "rabaed-dev", client: { send: async (command) => void commands.push(command) } });
-    const email: OutgoingEmail = { from: "no-reply@rabaed.test", to: "engineer@rabaed.test", template: "sign-in-code", subject: "S", text: "T", html: "<p>H</p>" };
-    await transport(email);
-    expect(commands.map((c) => c.input)).toEqual([
-      {
-        FromEmailAddress: "Rabaed <no-reply@rabaed.test>",
-        Destination: { ToAddresses: ["engineer@rabaed.test"] },
-        Content: {
-          Simple: {
-            Subject: { Data: "S", Charset: "UTF-8" },
-            Body: { Text: { Data: "T", Charset: "UTF-8" }, Html: { Data: "<p>H</p>", Charset: "UTF-8" } },
-          },
-        },
-        ConfigurationSetName: "rabaed-dev",
-        EmailTags: [{ Name: "template", Value: "sign-in-code" }],
-      },
-    ]);
-  });
-});
-
 describe("catcherTransport", () => {
   it.each(["https://mail.example.com", "http://10.0.0.5:8025", "http://mailpit.rabaed.test:8025"])("refuses %s: only a catcher on this machine", (url) => {
     expect(() => catcherTransport({ url })).toThrow(/this machine/);
@@ -103,19 +78,12 @@ describe("catcherTransport", () => {
 });
 
 describe("mailerFromEnv", () => {
-  it("uses SES when a configuration set is given (the cloud)", () => {
-    expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: "rabaed-dev" }).transport).toBe("ses");
-  });
-
   it("uses the catcher when its URL is given (local and CI)", () => {
     expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025" }).transport).toBe("catcher");
   });
 
-  it("refuses both at once, neither, or no From address", () => {
-    expect(() =>
-      mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025" }),
-    ).toThrow();
-    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test" })).toThrow();
+  it("refuses no transport, or no From address", () => {
+    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test" })).toThrow("No mail transport: set SENDGRID_API_KEY (Vercel) or MAIL_CATCHER_URL (local, CI)");
     expect(() => mailerFromEnv({ MAIL_CATCHER_URL: "http://127.0.0.1:8025" })).toThrow();
   });
 
@@ -127,14 +95,18 @@ describe("mailerFromEnv", () => {
     expect(mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: key }).transport).toBe("catcher");
   });
 
-  it.each([
-    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", SENDGRID_API_KEY: "SG.test-key-not-real" },
-    { MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
-    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025" },
-    { MAIL_SES_CONFIGURATION_SET: "rabaed-dev", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" },
-  ])("refuses more than one transport: %o", (transports) => {
-    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", ...transports })).toThrow(/not two/);
+  it("refuses more than one transport", () => {
+    expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_CATCHER_URL: "http://127.0.0.1:8025", SENDGRID_API_KEY: "SG.test-key-not-real" })).toThrow(/not two/);
   });
+
+  it.each([{}, { MAIL_CATCHER_URL: "http://127.0.0.1:8025" }, { SENDGRID_API_KEY: "SG.test-key-not-real" }])(
+    "refuses a leftover MAIL_SES_CONFIGURATION_SET by name, never sending another way (Amazon SES is gone, RP-1230): %o",
+    (transports) => {
+      expect(() => mailerFromEnv({ MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: "rabaed-dev", ...transports })).toThrow(
+        "MAIL_SES_CONFIGURATION_SET is set, but Amazon SES is no longer a mail transport (RP-1230): unset it, and set SENDGRID_API_KEY (Vercel) or MAIL_CATCHER_URL (local, CI)",
+      );
+    },
+  );
 
   describe("through a stubbed SendGrid", () => {
     afterEach(() => void vi.unstubAllGlobals());

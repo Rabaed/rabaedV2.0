@@ -169,7 +169,7 @@ Several worktrees in one lane (a spec's implementer subagents) share its Postgre
 | `apps/api` | Fastify with zod validation. |
 | `apps/worker` | Outbox processor (in-app notifications, from RP-195; immediate notification emails, RP-357, linking to `WEB_URL`). |
 | `packages/domain` | Shared rules and types, no I/O. |
-| `packages/mailer` | Email: `send({ to, template, locale, values })`, with the templates in English and Arabic (RTL, Latin digits). SendGrid on Vercel (`SENDGRID_API_KEY`, tracking off, ADR 0026); locally and in CI, Mailpit (`MAIL_CATCHER_URL`). Its SES transport stays until the production decision (RP-1230). |
+| `packages/mailer` | Email: `send({ to, template, locale, values })`, with the templates in English and Arabic (RTL, Latin digits). SendGrid on Vercel (`SENDGRID_API_KEY`, tracking off, ADR 0026); locally and in CI, Mailpit (`MAIL_CATCHER_URL`). |
 | `packages/db` | Kysely, the migration runner, role bootstrap and `withMember`. Migrations are plain SQL in `packages/db/migrations`, named `YYYYMMDDHHMMSS_what.sql`. |
 
 ## Where it runs
