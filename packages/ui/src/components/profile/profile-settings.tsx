@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  formatNumber,
+  locales,
   watchOutcomeNames,
   watchOutcomes,
   type BilingualText,
@@ -15,6 +17,7 @@ import { useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Switch } from "../form/switch.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
@@ -58,8 +61,8 @@ export type ProfileSettingsLabels = {
   emailChoice: Record<NotificationEmailChoice, string>;
   group: Record<NotificationGroup, string>;
   groupHelp: Record<Exclude<NotificationGroup, "watched">, string>;
-  /** "{ticked} of {total} outcomes ticked". */
-  outcomesTicked: string;
+  /** "{ticked} of {total} outcomes ticked", given both counts already formatted. */
+  outcomesTicked: (counts: { ticked: string; total: string }) => string;
   outcomeGroups: { review_code: string; inspection_result: string; other: string };
   digestLine: string;
   refusals: { not_found: string; unavailable: string };
@@ -116,19 +119,26 @@ function OutcomeLabel({ outcome, locale }: { outcome: WatchOutcome; locale: Loca
   );
 }
 
-// Each group's icon tile: the reference's icon and tint.
-const groupIcon: Record<NotificationGroup, { icon: IconName; tile: string }> = {
+/**
+ * Each group's row in "What to email": the reference's icon and tint, its control (Off /
+ * Immediately / Daily digest, or a switch for the weekly report), and whether its title opens
+ * the outcomes to tick (Items I watch).
+ */
+const groupRow: Record<NotificationGroup, { icon: IconName; tile: string; control: "choice" | "switch"; opensOutcomes?: true }> = {
   // eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy
-  step_reached: { icon: "user-check", tile: "bg-brand-tint text-brand-fg" },
-  watched: { icon: "eye", tile: "bg-info-tint text-info-fg" },
-  sent_back: { icon: "arrow-back-up", tile: "bg-danger-tint text-danger-fg" },
-  weekly_report: { icon: "chart-bar", tile: "bg-segment-type-tint text-segment-type-fg" },
+  step_reached: { icon: "user-check", tile: "bg-brand-tint text-brand-fg", control: "choice" },
+  watched: { icon: "eye", tile: "bg-info-tint text-info-fg", control: "choice", opensOutcomes: true },
+  sent_back: { icon: "arrow-back-up", tile: "bg-danger-tint text-danger-fg", control: "choice" },
+  weekly_report: { icon: "chart-bar", tile: "bg-segment-type-tint text-segment-type-fg", control: "switch" },
 };
 
 type Refusal = keyof ProfileSettingsLabels["refusals"];
 type SaveState = { kind: "idle" } | { kind: "saved" } | { kind: "refused"; message: string };
 
-/** One of the two cards: a 14px-round surface with an icon title. */
+/**
+ * One of the two cards: a 14px-round surface with an icon title and no divider under it, as the
+ * reference draws them. Not the kit's TitledCard, whose header is divided off, bold and has no icon.
+ */
 function Card({ icon, title, titleId, children }: { icon: IconName; title: string; titleId: string; children: ReactNode }) {
   return (
     <section aria-labelledby={titleId} className="min-w-0 overflow-hidden rounded-[14px] bg-surface shadow-[0_0_0_1px_var(--color-border)]">
@@ -138,6 +148,32 @@ function Card({ icon, title, titleId, children }: { icon: IconName; title: strin
       </h2>
       {children}
     </section>
+  );
+}
+
+/** A section's small uppercase heading inside the Notification settings card. */
+function SectionHeading({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <h3 id={id} className="mb-2.5 text-[12px] font-bold tracking-[.04em] text-muted uppercase rtl:tracking-normal">
+      {children}
+    </h3>
+  );
+}
+
+/** A Project's code on its coloured tile; the name beside it says the same, so screen readers skip it. */
+function ProjectCodeTile({ code, colour, size }: { code: string; colour: string; size: "sm" | "md" }) {
+  return (
+    <span
+      aria-hidden
+      dir="ltr"
+      className={cn(
+        "flex shrink-0 items-center justify-center font-bold",
+        size === "sm" ? "size-6 rounded-[6px] text-[10px]" : "size-[30px] rounded-lg text-[11px]",
+        colour,
+      )}
+    >
+      {code}
+    </span>
   );
 }
 
@@ -191,10 +227,15 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
     const index = tiles[projects.findIndex((p) => p.id === projectId)]!;
     return cn(projectTileClasses[index], projectTileSmallTextClasses[index]);
   };
-  const withPositions = projects.filter((p) => p.positions.length > 0);
   const groups = (["step_reached", "watched", "sent_back", "weekly_report"] as const).filter((g) => g !== "weekly_report" || value.receivesWeeklyReport);
   const emailOptions = (["off", "immediate", "digest"] as const).map((choice) => ({ value: choice, label: labels.emailChoice[choice] }));
-  const ticked = saved.settings.watched.outcomes.length;
+  const groupHelp: Record<NotificationGroup, string> = {
+    ...labels.groupHelp,
+    watched: labels.outcomesTicked({
+      ticked: formatNumber(saved.settings.watched.outcomes.length, locale),
+      total: formatNumber(watchOutcomes.length, locale),
+    }),
+  };
   const paused = saved.emailPaused;
 
   const saveLine =
@@ -250,18 +291,17 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
             </div>
             <div>
               <FieldLabel id={`${id}-positions`}>{labels.positions}</FieldLabel>
-              {withPositions.length === 0 ? (
+              {/* Every Project they are on, even one where they hold no Position yet (its row names none). */}
+              {projects.length === 0 ? (
                 <p className="text-[13px] text-muted">{labels.noProjects}</p>
               ) : (
                 <ul aria-labelledby={`${id}-positions`} className="flex flex-col gap-1.5">
-                  {withPositions.map((p) => (
+                  {projects.map((p) => (
                     <li
                       key={p.id}
                       className="flex items-center gap-2 rounded-[9px] bg-surface-subtle px-2.5 py-2 text-[13px] shadow-[inset_0_0_0_1px_var(--color-border-subtle)]"
                     >
-                      <span aria-hidden dir="ltr" className={cn("flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[10px] font-bold", tileOf(p.id))}>
-                        {p.code}
-                      </span>
+                      <ProjectCodeTile code={p.code} colour={tileOf(p.id)} size="sm" />
                       <span className="min-w-0 font-medium">{p.name[locale]}</span>
                       <span className="ms-auto text-end text-[12px] text-muted">{p.positions.map((name) => name[locale]).join(" · ")}</span>
                     </li>
@@ -279,7 +319,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                 aria-labelledby={`${id}-language`}
                 value={saved.preferredLanguage}
                 onValueChange={(language) => void change({ ...saved, preferredLanguage: language as Locale })}
-                options={(["en", "ar"] as const).map((l) => ({ value: l, label: <span lang={l}>{languageNames[l]}</span> }))}
+                options={locales.map((l) => ({ value: l, label: <span lang={l}>{languageNames[l]}</span> }))}
               />
             </div>
             {signature !== undefined && (
@@ -322,18 +362,14 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
           {/* While email is paused, nothing below can send one: dimmed and inert, as the reference. */}
           <div inert={paused} className={cn("transition-opacity", paused && "opacity-45 saturate-[.6]")}>
             <div className="px-[18px] pt-4">
-              <h3 id={`${id}-projects`} className="mb-2.5 text-[12px] font-bold tracking-[.04em] text-muted uppercase rtl:tracking-normal">
-                {labels.projects}
-              </h3>
+              <SectionHeading id={`${id}-projects`}>{labels.projects}</SectionHeading>
               {projects.length === 0 ? (
                 <p className="text-[13px] text-muted">{labels.noProjects}</p>
               ) : (
                 <ul aria-labelledby={`${id}-projects`} className="flex flex-col">
                   {projects.map((p, i) => (
                     <li key={p.id} className={cn("flex items-center gap-2.5 py-2.5", i === 0 ? "pt-0" : "border-t border-border-subtle")}>
-                      <span aria-hidden dir="ltr" className={cn("flex size-[30px] shrink-0 items-center justify-center rounded-lg text-[11px] font-bold", tileOf(p.id))}>
-                        {p.code}
-                      </span>
+                      <ProjectCodeTile code={p.code} colour={tileOf(p.id)} size="md" />
                       <span className="min-w-0 flex-1">
                         <b id={`${id}-project-${p.id}`} className={cn("block text-[13.5px] font-semibold", p.muted && "text-muted")}>
                           {p.name[locale]}
@@ -351,7 +387,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
             </div>
 
             <div className="px-[18px] pt-4">
-              <h3 className="mb-2.5 text-[12px] font-bold tracking-[.04em] text-muted uppercase rtl:tracking-normal">{labels.whatToEmail}</h3>
+              <SectionHeading>{labels.whatToEmail}</SectionHeading>
               <div className="overflow-hidden rounded-xl shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
                 <div aria-hidden className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-[14px] py-[9px] text-[11.5px] font-semibold text-muted sm:grid">
                   <span>{labels.groupColumn}</span>
@@ -359,20 +395,17 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                 </div>
                 {groups.map((group, i) => {
                   const titleId = `${id}-group-${group}`;
+                  const row = groupRow[group];
                   const title = (
                     <>
-                      <span aria-hidden className={cn("flex size-8 shrink-0 items-center justify-center rounded-[9px]", groupIcon[group].tile)}>
-                        <Icon name={groupIcon[group].icon} size={16} />
+                      <span aria-hidden className={cn("flex size-8 shrink-0 items-center justify-center rounded-[9px]", row.tile)}>
+                        <Icon name={row.icon} size={16} />
                       </span>
                       <span className="min-w-0 text-start">
                         <b id={titleId} className="block text-[13.5px] font-semibold">
                           {labels.group[group]}
                         </b>
-                        <span className="block text-[12px] leading-[1.4] text-muted">
-                          {group === "watched"
-                            ? labels.outcomesTicked.replace("{ticked}", String(ticked)).replace("{total}", String(watchOutcomes.length))
-                            : labels.groupHelp[group]}
-                        </span>
+                        <span className="block text-[12px] leading-[1.4] text-muted">{groupHelp[group]}</span>
                       </span>
                     </>
                   );
@@ -383,13 +416,13 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       aria-labelledby={titleId}
                       className={cn("grid gap-3 px-[14px] py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center", i > 0 && "border-t border-border-subtle")}
                     >
-                      {group === "watched" ? (
+                      {row.opensOutcomes ? (
                         <button
                           type="button"
                           aria-expanded={watchedOpen}
                           aria-controls={`${id}-outcomes`}
                           onClick={() => setWatchedOpen((open) => !open)}
-                          className="flex min-w-0 items-center gap-2.5 self-start rounded-md text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:min-h-11"
+                          className={cn("flex min-w-0 items-center gap-2.5 self-start rounded-md text-start pointer-coarse:min-h-11", focusRing)}
                         >
                           {title}
                           <Icon name="chevron-down" size={16} className={cn("shrink-0 text-muted transition-transform", watchedOpen && "rotate-180")} />
@@ -397,10 +430,10 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       ) : (
                         <div className="flex min-w-0 items-center gap-2.5">{title}</div>
                       )}
-                      {group === "weekly_report" ? (
+                      {row.control === "switch" ? (
                         <Switch
                           aria-labelledby={titleId}
-                          checked={saved.settings.weekly_report.email !== "off"}
+                          checked={saved.settings[group].email !== "off"}
                           onCheckedChange={(on) => void setGroup(group, { email: on ? "immediate" : "off" })}
                         />
                       ) : (
@@ -412,7 +445,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                           options={emailOptions}
                         />
                       )}
-                      {group === "watched" && watchedOpen && (
+                      {row.opensOutcomes && watchedOpen && (
                         <div
                           id={`${id}-outcomes`}
                           className="grid gap-3 rounded-[10px] bg-surface-subtle p-3 sm:col-span-2 sm:ms-[42px] sm:grid-cols-3"

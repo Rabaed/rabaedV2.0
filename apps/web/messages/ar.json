@@ -1988,7 +1988,6 @@
     "otherCompany": "{count, plural, one {خطوة واحدة من خطوات {company} تحتاج} other {{n} من خطوات {company} تحتاج}} إلى متولٍّ جديد أولًا. اطلب من {company} تسليمها."
   },
   "notificationSettings": {
-    "title": "الملف الشخصي والإشعارات",
     "subtitle": "أنت فقط من يرى هذه الإعدادات ويغيّرها.",
     "saveIdle": "تُحفظ التغييرات فور إجرائها",
     "saved": "تم الحفظ",

@@ -186,6 +186,17 @@ export const NoProjects: Story = {
   },
 };
 
+/** On a Project with no Position there yet: the Project is still listed (never "not on any Project"), naming no Position. */
+export const NoPositionYet: Story = {
+  args: { value: { ...value, projects: [{ ...value.projects[0]!, positions: [] }] } },
+  play: async (context) => {
+    const { canvas } = context;
+    const positions = within(canvas.getByRole("list", { name: storyText(context, copy.positions) }));
+    await expect(positions.getByRole("listitem")).toHaveTextContent(storyText(context, tower));
+    await expect(canvas.queryByText(storyText(context, copy.noProjects))).toBeNull();
+  },
+};
+
 /** The language of their emails is chosen in the Profile card and saved with the rest. */
 export const EmailLanguage: Story = {
   play: async (context) => {

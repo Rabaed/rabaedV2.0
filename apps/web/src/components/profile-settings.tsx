@@ -28,8 +28,9 @@ export function ProfileSettings({
   signature: ReactNode;
 }) {
   const t = useTranslations("notificationSettings");
+  const page = useTranslations("profile");
   const labels: ProfileSettingsLabels = {
-    title: t("title"),
+    title: page("title"),
     subtitle: t("subtitle"),
     saveIdle: t("saveIdle"),
     saved: t("saved"),
@@ -65,8 +66,8 @@ export function ProfileSettings({
       sent_back: t("groupHelp.sent_back"),
       weekly_report: t("groupHelp.weekly_report"),
     },
-    // The kit fills in the counts as they change.
-    outcomesTicked: t("outcomesTicked", { ticked: "{ticked}", total: "{total}" }),
+    // The kit passes both counts already formatted, as they change.
+    outcomesTicked: (counts) => t("outcomesTicked", counts),
     outcomeGroups: { review_code: t("outcomeGroups.review_code"), inspection_result: t("outcomeGroups.inspection_result"), other: t("outcomeGroups.other") },
     digestLine: t("digestLine"),
     refusals: { not_found: t("refusals.not_found"), unavailable: t("refusals.unavailable") },

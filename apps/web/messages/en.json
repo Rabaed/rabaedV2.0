@@ -1988,7 +1988,6 @@
     "otherCompany": "{count, plural, one {{n} Step of {company} needs} other {{n} Steps of {company} need}} a new holder first. Ask {company} to hand them over."
   },
   "notificationSettings": {
-    "title": "Profile & notifications",
     "subtitle": "Only you can see and change these settings.",
     "saveIdle": "Changes save as you make them",
     "saved": "Saved",
