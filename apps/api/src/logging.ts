@@ -1,8 +1,8 @@
 import type { FastifyRequest, FastifyServerOptions } from "fastify";
 
-// The api's log: JSON lines, kept by CloudWatch in dev and read by the
-// monitoring stack (packages/infra/src/monitoring-stack.ts), which counts
-// Fastify's "request completed" lines by res.statusCode. It holds no customer
+// The api's log: JSON lines (CloudWatch counted
+// them while AWS ran it), with Fastify's "request completed"
+// lines carrying res.statusCode. It holds no customer
 // content: requests are logged by method and path only (paths carry ids, never
 // names), and database errors by code and constraint only, because
 // PostgreSQL's messages and details can quote the values of a row.

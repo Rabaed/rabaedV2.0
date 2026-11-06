@@ -15,8 +15,11 @@ export type ReviewCode = (typeof reviewCodes)[number];
 export const segmentToneKeys = ["project", "participant", "trade", "type", "location", "text", "sequence"] as const;
 export type SegmentTone = (typeof segmentToneKeys)[number];
 
-/** Tones for Badge and Avatar: neutral, the brand, and the semantic feedback hues. Each has a `-tint` and a `-fg` role. */
-export const toneKeys = ["neutral", "brand", "info", "success", "warning", "danger"] as const;
+/**
+ * Tones for Badge and Avatar: neutral, the brand, and the semantic feedback hues, and violet (a
+ * notification's new Revision, RP-1153). Each has a `-tint` and a `-fg` role.
+ */
+export const toneKeys = ["neutral", "brand", "info", "success", "warning", "danger", "violet"] as const;
 export type Tone = (typeof toneKeys)[number];
 
 /**
@@ -126,6 +129,8 @@ export const greyLight = {
   "warning-tint": "amber-50",
   "warning-fg": "amber-700",
   "danger-fg": "red-700",
+  "violet-tint": "violet-50",
+  "violet-fg": "violet-700",
 
   // Trade chips (the Kanban card, RP-410): a Trade in its own hue, by its code; any other Trade in blue.
   "trade-cv-bg": "amber-50",
@@ -258,6 +263,8 @@ const darkTones = {
   "neutral-fg": "dark-gray-fg",
   "info-tint": "dark-blue-tint",
   "info-fg": "dark-blue-fg",
+  "violet-tint": "dark-violet-tint",
+  "violet-fg": "dark-violet-fg",
   "warning-tint": "dark-amber-tint",
   "warning-fg": "dark-amber-fg",
   "trade-cv-bg": "dark-amber-tint",

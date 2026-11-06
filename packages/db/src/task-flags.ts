@@ -1,5 +1,5 @@
-// Flags the infrastructure sets on the migration task
-// (packages/infra/src/migrations-stack.ts), read here and by the api. Defined
+// Flags the migration run is given (on AWS, by its migrations task),
+// read here and by the api. Defined
 // once, so both sides agree on the names and values. No imports: the
 // infrastructure loads this file on its own.
 

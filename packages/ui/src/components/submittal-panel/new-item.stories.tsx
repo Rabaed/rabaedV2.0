@@ -155,6 +155,25 @@ export const TypeCardsNarrow: Story = {
   },
 };
 
+/** The New Snag panel's Types: the triangle for a Snag, the shield for a question (RP-1231). */
+export const SnagTypeCards: Story = {
+  render: (_args, context) => (
+    <TypeCardsDemo
+      context={context}
+      list={[
+        { code: "SNG", name: bi("Snag", "عيب"), description: null },
+        { code: "QSC", name: bi("Question to Contractor", "سؤال إلى المقاول"), description: null },
+        { code: "QSN", name: bi("Question to Consultant", "سؤال إلى الاستشاري"), description: null },
+      ]}
+    />
+  ),
+  play: async (context) => {
+    const cards = within(context.canvasElement).getAllByRole("button");
+    await expect(cards).toHaveLength(3);
+    await expect(cardIcons(cards)).toEqual(["alert-triangle", "shield-check", "shield-check"]);
+  },
+};
+
 /** A single Type: one selected card (decision 2), with its own icon. */
 export const SingleType: Story = {
   render: (_args, context) => <TypeCardsDemo context={context} list={[types[0]!]} />,

@@ -49,6 +49,8 @@ export const CI_OWN_FILES: readonly string[] = [
   ".github/workflows/reviewed-label.yml",
   ".github/workflows/reviewed-required.yml",
   ".github/workflows/secret-scan.yml",
+  // It fails a PR whose body lacks the "UAT cases touched" line (RP-1184). Listed here ahead of the workflow's own PR (rule 3).
+  ".github/workflows/uat-touch.yml",
   // Its second render and flip-flop check decide which screenshot baselines the bot commits.
   ".github/workflows/update-screenshots.yml",
   ".github/workflows/verify-gate.yml",

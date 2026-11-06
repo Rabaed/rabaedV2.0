@@ -9,9 +9,12 @@ const typeIcons: ReadonlyMap<string, IconName> = new Map<string, IconName>([
   ["SAR", "truck"],
   ["DAR", "file-text"],
   ["WIR", "clipboard-check"],
+  ["SNG", "alert-triangle"],
+  ["QSC", "shield-check"],
+  ["QSN", "shield-check"],
 ]);
 
-/** A Type card's icon, from the Type's code (RP-1227): a file for a Type without one of its own. */
+/** A Type card's icon, from the Type's code (RP-1227, RP-1231): a file for a Type without one of its own. */
 export function newItemTypeIcon(code: string): IconName {
   return typeIcons.get(code) ?? "file-text";
 }

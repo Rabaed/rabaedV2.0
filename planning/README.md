@@ -5,7 +5,7 @@ UX comes first. No screen is built until its flow has been prototyped and tested
 | Phase | What | Runs in parallel with |
 |---|---|---|
 | 0: UX & design | Research, IA, design system (RTL-first), clickable prototypes, 2 usability rounds | Phase 1 back-end work |
-| 1: Foundations | Repo, AWS, identity, **tenancy & visibility (RLS + test suite)**, audit trail, i18n | Phase 0 |
+| 1: Foundations | Repo, hosting (Vercel, ADR 0026), identity, **tenancy & visibility (RLS + test suite)**, audit trail, i18n | Phase 0 |
 | 2: Engines | Projects & settings, Form engine + builder, Workflow engine + builder, numbering, signing & PDFs, Rabaed Defaults | UI built only for flows that passed Phase 0 testing |
 | 3: Modules | Views, Submittals & Packages, Inspections, Snag List, Site Reports, Drawings, Files, Floor/Plan, Dashboard, Chat | |
 | 4: Rabaed Admin | Onboarding, support actions, templates, monitoring | Phase 3 |

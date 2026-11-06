@@ -1,45 +1,35 @@
 "use client";
 
-import { Button } from "@rabaed/ui";
+import { Button, Icon, notificationOutlinedButton, useToast } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 
-/** Marks every notification read, then shows the list and the bell as they are now. */
-export function MarkNotificationsRead() {
+/** Marks every notification read, says so, then shows the list and the bell as they are now; disabled with none unread. */
+export function MarkNotificationsRead({ unread }: { unread: number }) {
   const t = useTranslations("notifications");
   const router = useRouter();
+  const toast = useToast();
   const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   async function markAll() {
     setPending(true);
-    setFailed(false);
     try {
-      const res = await fetch("/api/v1/notifications/read", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      if (!res.ok) setFailed(true);
-      router.refresh();
+      const res = await fetch("/api/v1/notifications/read", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      toast(res.ok ? { title: t("markedAllRead"), tone: "success" } : { title: t("unavailable"), tone: "danger" });
     } catch {
-      setFailed(true);
+      toast({ title: t("unavailable"), tone: "danger" });
     } finally {
       setPending(false);
+      router.refresh();
     }
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <Button variant="secondary" size="sm" disabled={pending} onClick={() => void markAll()}>
-        {t("markAllRead")}
-      </Button>
-      {failed && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {t("unavailable")}
-        </p>
-      )}
-    </div>
+    // On a phone, the icon alone (the design's `.nmb`), still named for screen readers.
+    <Button variant="secondary" disabled={pending || unread === 0} onClick={() => void markAll()} title={t("markAllRead")} className={`${notificationOutlinedButton} max-[559px]:w-11 max-[559px]:px-0`}>
+      <Icon name="circle-check" />
+      <span className="max-[559px]:sr-only">{t("markAllRead")}</span>
+    </Button>
   );
 }

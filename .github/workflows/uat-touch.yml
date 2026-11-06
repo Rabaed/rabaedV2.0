@@ -1,0 +1,118 @@
+name: UAT touch
+# A text change in apps/web/messages/*.json can break a UAT case that finds the text on the page
+# (RP-1184: SUB-23, SUB-29, SUB-01 and SNG-01 failed after RP-921 and the List's Enter-to-search change).
+# This runs scripts/check-uat-touch.ts (merged in #664): it names the cases in planning/uat that use a
+# message the PR changes, comments their ids on the PR, and fails unless the PR body has a line
+# "UAT cases touched: <ids>" naming each one. A PR that changes no message used by a case passes and
+# gets no comment.
+# Two jobs, so the PR's code and a write token never meet: `check` runs the PR's own script with a
+# read-only token and hands the comment text over as an artifact; `comment` has the write token, checks
+# out nothing, and only posts that text. A fork's PR gets the check (and its red result) but no comment.
+# The comment is one per PR, found by its marker (`commentTag` in the script) and edited in place.
+# Not a required check: it must not be added to the main ruleset by this PR (the owner decides); it
+# does not run on merge_group.
+on:
+  pull_request:
+    # `edited`: the body gets its "UAT cases touched" line.
+    types: [opened, reopened, synchronize, edited]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: uat-touch-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  check:
+    name: UAT cases touched
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: the script reads each message file at the merge base with origin/main.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Write the PR body to a file
+        run: |
+          mkdir -p "$RUNNER_TEMP/uat-touch"
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/uat-touch/body.md"
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+      - name: Name the UAT cases the changed messages touch
+        id: check
+        run: |
+          status=0
+          node scripts/check-uat-touch.ts --body-file "$RUNNER_TEMP/uat-touch/body.md" > "$RUNNER_TEMP/uat-touch/comment.md" || status=$?
+          cat "$RUNNER_TEMP/uat-touch/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/uat-touch/comment.md"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Hand the comment to the comment job
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: uat-touch-comment
+          path: ${{ runner.temp }}/uat-touch/comment.md
+          if-no-files-found: ignore
+          retention-days: 1
+      - name: Fail unless the PR body names every case touched
+        if: steps.check.outputs.status != '0'
+        run: |
+          # The script always prints something on a real answer; an empty file means it crashed (its error is in the log above).
+          if [ ! -s "$RUNNER_TEMP/uat-touch/comment.md" ]; then
+            echo "::error::scripts/check-uat-touch.ts failed before it could answer; see its error above."
+            exit 1
+          fi
+          echo "::error::Add a line \"UAT cases touched: <case ids>\" to the PR body, naming every case listed above, and say what you did about each (case updated, or still passes)."
+          exit 1
+
+  comment:
+    name: UAT touch comment
+    needs: check
+    # Not for a fork's PR (a read-only token anyway), and not when the check never ran or was superseded.
+    if: ${{ !cancelled() && needs.check.result != 'skipped' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      # No artifact when the check died before writing: the next step then leaves the comment alone.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: uat-touch-comment
+          path: ${{ runner.temp }}/uat-touch
+      - name: Post or update the comment
+        run: |
+          file="$RUNNER_TEMP/uat-touch/comment.md"
+          # Keep in step with `commentTag` in scripts/check-uat-touch.ts.
+          marker='<!-- uat-touch -->'
+          # A missing or empty file means the check crashed: it said nothing about the cases, so leave any earlier comment alone.
+          if [ ! -s "$file" ]; then
+            echo "The check gave no answer; the comment is left as it was."
+            exit 0
+          fi
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=${ids%%$'\n'*}
+          if grep -qF "$marker" "$file"; then
+            body_file="$file"
+          elif [ -n "$id" ]; then
+            # A comment from an earlier push no longer applies: say so rather than leave it standing.
+            body_file="$RUNNER_TEMP/uat-touch/none.md"
+            printf '%s\n**UAT cases touched**: no UAT case uses a message this PR changes any more.\n' "$marker" > "$body_file"
+          else
+            echo "No UAT case uses a message this PR changes, and there is no earlier comment: nothing to post."
+            exit 0
+          fi
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -F "body=@$body_file" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -F "body=@$body_file" > /dev/null
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}

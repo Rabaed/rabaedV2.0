@@ -1,17 +1,18 @@
 import { existsSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-// Five suites, each run on its own in CI:
+// Four suites, each run on its own in CI:
 // - unit:  pure logic, no database.
 // - seam1: the API called as a given signed-in Member, and Rabaed Admin as a
 //   signed-in Rabaed Engineer, against a real Postgres.
 // - seam2: the database as the app role with a Member set (RLS defence in depth).
 // Both run against the seeded setup: the demo Project `pnpm demo` builds is seeded
 // into the test database first (RP-196).
-// - infra: assertions on the synthesised AWS CloudFormation templates.
 // - mail:  the mailer against the local mail catcher (Mailpit).
 // Seam tests drive whole Workflows through the API or the database; 5 s is too tight on CI.
 // With other lanes' runs on the machine (RP-607) a test that makes 50 items took over 20 s, and
@@ -35,7 +36,12 @@ const seamTimeout = seamTimeoutMs === undefined ? 180_000 : Number(seamTimeoutMs
 // The seam suites run one file at a time anyway (fileParallelism: false).
 const maxWorkers = Math.max(2, Math.floor(availableParallelism() / 4));
 
+// Vitest's cache used to sit in node_modules, which Turbopack watches: every run stalled this
+// worktree's `next dev` (RP-1182). It goes to the OS temp folder, one folder per worktree.
+const root = fileURLToPath(new URL(".", import.meta.url));
+
 export default defineConfig({
+  cacheDir: join(tmpdir(), "rabaed-vite", root.replace(/[:\\/]+/g, "_")),
   test: {
     maxWorkers,
     projects: [
@@ -66,13 +72,6 @@ export default defineConfig({
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["scripts/test-services.ts", "packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
-        },
-      },
-      {
-        test: {
-          name: "infra",
-          include: ["packages/infra/test/**/*.test.ts"],
-          testTimeout: 30_000,
         },
       },
       {
