@@ -121,7 +121,17 @@ describe("notification settings", () => {
   it("start from the defaults, with the Member's Projects unmuted", async () => {
     const mine = await settingsOf(at.c1Engineer);
     expect(mine).toMatchObject({ settings: defaultNotificationSettings, emailPaused: false, preferredLanguage: "en", receivesWeeklyReport: false });
-    expect(mine.projects).toEqual([{ id: at.projectId, code: "NTF", name: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" }, muted: false }]);
+    expect(mine.projects).toEqual([
+      { id: at.projectId, code: "NTF", name: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" }, muted: false, positions: [{ en: "Engineer", ar: "مهندس" }] },
+    ]);
+  });
+
+  it("name the Member's own Positions on each Project, several in order, never a colleague's (RP-1154)", async () => {
+    const both = await projectMember(api, c1, at.c1ParticipantId, ["project_manager", "engineer"]);
+    expect((await settingsOf(both)).projects).toEqual([
+      expect.objectContaining({ positions: [{ en: "Engineer", ar: "مهندس" }, { en: "Project Manager", ar: "مدير المشروع" }] }),
+    ]);
+    expect((await settingsOf(at.c1Engineer)).projects[0]!.positions).toEqual([{ en: "Engineer", ar: "مهندس" }]);
   });
 
   it("are saved for the Member who sets them, and nobody else", async () => {
