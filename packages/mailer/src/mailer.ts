@@ -26,7 +26,7 @@ export interface OutgoingEmail extends RenderedEmail {
   template: EmailTemplate;
 }
 
-/** Delivers one rendered email: SES in AWS, SendGrid on Vercel, the local catcher everywhere else. */
+/** Delivers one rendered email: SendGrid on Vercel, the local catcher everywhere else. */
 export type MailTransport = (email: OutgoingEmail) => Promise<void>;
 
 export interface Mailer {
