@@ -78,6 +78,25 @@ describe("casesOf", () => {
   });
 });
 
+describe("harness files (RP-1184, Main 7)", () => {
+  const harness = { file: "planning/uat/round-0/harness/helpers.ts", text: 'export const search = (page) => page.getByRole("button", { name: /search|بحث/i });' };
+
+  it("names a harness file as harness/<file>, not as a helper of a case file", () => {
+    expect(casesOf(harness).map((c) => c.id)).toEqual(["harness/helpers"]);
+  });
+
+  it("reports a changed Arabic or English message a harness helper searches for", () => {
+    const messages = changedMessages("ar", '{"s":"بحث عن مستند"}', '{"s":"استعلام"}');
+    expect(touchedCases(messages, [harness])).toEqual([{ id: "harness/helpers", file: harness.file, messages: ["ar:s"] }]);
+  });
+
+  it("matches the name string of a role query, a button label that drifted", () => {
+    const role = { file: "planning/uat/round-0/cases/R.ts", text: 'defineCase("R-01", async () => { await page.getByRole("button", { name: "Issue code" }).click(); });' };
+    const messages = changedMessages("en", '{"b":"Issue code"}', '{"b":"Revise"}');
+    expect(touchedCases(messages, [role]).map((h) => h.id)).toEqual(["R-01"]);
+  });
+});
+
 describe("touchedCases", () => {
   it("names the cases that use a changed message, once each, with the messages", () => {
     const messages = changedMessages("en", '{"a":{"save":"Save draft","docs":"{count} documents attached","other":"Unused text here"}}', '{"a":{"save":"Save as draft","docs":"{count} documents attached!","other":"Unused text there"}}');

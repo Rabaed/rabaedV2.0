@@ -17,8 +17,11 @@ import { fileVersionsVia } from "./git-files.ts";
 //   characters is too common to match by text (only its key can).
 // - or the case looks for text the new message no longer has: a string literal inside the old text, or a regex literal
 //   that matches the old text and not the new (a case that checks /We can.t find this page/).
-// - a match before the file's first `defineCase` (a helper in the case file) names `<FILE>-helpers`.
-// Not looked at: `planning/uat/*/harness/*` (shared helpers) and a case that finds text by role or test id.
+// - a match before a case file's first `defineCase` (a helper in the case file) names `<FILE>-helpers`.
+// - `planning/uat/*/harness/*.ts` is scanned too (helpers look for UI text themselves) and reports as `harness/<file>`;
+//   a role query's `name` string or regex is searched like any other text (a test id has none).
+// Not looked at: `planning/uat/*/test-cases.json` (the person-run sheet's words; a follow-up), and text assembled
+// from several keys.
 //
 // Checked by `scripts/check-uat-touch.test.ts`, in the unit project.
 
@@ -110,7 +113,7 @@ const defineCase = /defineCase\(\s*["'`]([^"'`]+)["'`]/g;
 export function casesOf(file: CaseFile): { id: string; file: string; source: string }[] {
   const stem = file.file.replace(/^.*[\\/]/, "").replace(/\.ts$/, "");
   const starts = [...file.text.matchAll(defineCase)].map((m) => ({ id: m[1]!, at: m.index }));
-  const head = { id: `${stem}-helpers`, at: 0 };
+  const head = { id: /[\\/]harness[\\/]/.test(file.file) ? `harness/${stem}` : `${stem}-helpers`, at: 0 };
   const all = starts[0]?.at === 0 ? starts : [head, ...starts];
   return all.map((s, i) => ({ id: s.id, file: file.file, source: file.text.slice(s.at, all[i + 1]?.at ?? file.text.length) }));
 }
@@ -164,23 +167,22 @@ export function branchMessages(repo: string, commit = "HEAD", spawn: typeof spaw
     });
 }
 
-/** The case files, `planning/uat/<round>/cases/*.ts`, as the working tree has them. */
+/** The case files and the harness helpers they share, `planning/uat/<round>/{cases,harness}/*.ts`, as the working tree has them. */
 export function caseFiles(repo: string): CaseFile[] {
   const root = join(repo, "planning", "uat");
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
     .filter((round) => round.isDirectory())
-    .flatMap((round) => {
-      const dir = join(root, round.name, "cases");
-      try {
+    .flatMap((round) =>
+      ["cases", "harness"].flatMap((folder) => {
+        const dir = join(root, round.name, folder);
+        if (!existsSync(dir)) return [];
         return readdirSync(dir)
           .filter((f) => f.endsWith(".ts"))
           .sort()
-          .map((f) => ({ file: `planning/uat/${round.name}/cases/${f}`, text: readFileSync(join(dir, f), "utf8") }));
-      } catch {
-        return [];
-      }
-    });
+          .map((f) => ({ file: `planning/uat/${round.name}/${folder}/${f}`, text: readFileSync(join(dir, f), "utf8") }));
+      }),
+    );
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
