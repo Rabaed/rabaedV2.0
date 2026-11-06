@@ -230,7 +230,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
       <div className="grid items-start gap-[18px] lg:grid-cols-[340px_minmax(0,1fr)]">
         {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy */}
         <Card icon="user-circle" title={labels.profile} titleId={`${id}-profile`}>
-          <div className="flex flex-col gap-3.5 px-[18px] pt-3.5 pb-[18px]">
+          <div className="flex flex-col gap-[14px] px-[18px] pt-[14px] pb-[18px]">
             <div className="flex items-center gap-3">
               <Avatar name={member.name[locale]} initialsFrom={member.name.en} solidFrom={member.id} size="lg" decorative className="size-[52px] text-[19px]" />
               <span className="min-w-0">
@@ -283,7 +283,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
               />
             </div>
             {signature !== undefined && (
-              <div className="flex flex-col gap-2 border-t border-border-subtle pt-3.5">
+              <div className="flex flex-col gap-2 border-t border-border-subtle pt-[14px]">
                 <FieldLabel>{labels.signature}</FieldLabel>
                 {signature}
               </div>
@@ -295,7 +295,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
           <p className="mx-[18px] mt-1 text-[12.5px] leading-[1.45] text-muted">{labels.inAppLine}</p>
           <div
             className={cn(
-              "mx-[18px] mt-3.5 flex items-center gap-3 rounded-xl px-3.5 py-3",
+              "mx-[18px] mt-[14px] flex items-center gap-3 rounded-xl px-[14px] py-3",
               paused ? "bg-warning-tint" : "bg-surface-subtle shadow-[inset_0_0_0_1px_var(--color-border-subtle)]",
             )}
           >
@@ -353,7 +353,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
             <div className="px-[18px] pt-4">
               <h3 className="mb-2.5 text-[12px] font-bold tracking-[.04em] text-muted uppercase rtl:tracking-normal">{labels.whatToEmail}</h3>
               <div className="overflow-hidden rounded-xl shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
-                <div aria-hidden className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-3.5 py-[9px] text-[11.5px] font-semibold text-muted sm:grid">
+                <div aria-hidden className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-[14px] py-[9px] text-[11.5px] font-semibold text-muted sm:grid">
                   <span>{labels.groupColumn}</span>
                   <span>{labels.emailColumn}</span>
                 </div>
@@ -381,7 +381,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       key={group}
                       role="group"
                       aria-labelledby={titleId}
-                      className={cn("grid gap-3 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center", i > 0 && "border-t border-border-subtle")}
+                      className={cn("grid gap-3 px-[14px] py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center", i > 0 && "border-t border-border-subtle")}
                     >
                       {group === "watched" ? (
                         <button

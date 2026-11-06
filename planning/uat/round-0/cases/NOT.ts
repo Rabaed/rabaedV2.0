@@ -95,7 +95,9 @@ defineCase("NOT-01", async (t) => {
   await go(page, "/profile");
   await settle(page);
   const profile = (await page.getByRole("main").innerText()).replace(/\s+/g, " ");
-  c.check("there is no in-app switch (settings are email only)", !/in-app|in app/i.test(profile) && /Email/.test(profile));
+  // The page says in-app is always sent (RP-1154 row 13), so look for a switch, not the words.
+  const inAppSwitches = await page.getByRole("main").getByRole("switch", { name: /in-app|in app/i }).count();
+  c.check("there is no in-app switch (settings are email only)", inAppSwitches === 0 && /Email/.test(profile), `in-app switches: ${inAppSwitches}`);
 });
 
 defineCase("NOT-02", async (t) => {
@@ -251,7 +253,8 @@ defineCase("NOT-05", async (t) => {
     const { page } = await pageAs("ali");
     await go(page, "/profile");
     await settle(page);
-    const sw = page.getByRole("switch").last();
+    // Riyadh Gate Tower's own mute: since RP-1154 the weekly report's switch can come after it.
+    const sw = page.getByRole("listitem").filter({ hasText: "Riyadh Gate Tower" }).getByRole("switch", { name: "Mute" });
     await sw.click();
     const muted = await until(async () => ((await readSettings(ali)).projects.find((p) => p.code === "TWR")?.muted ? true : false), 8000, 500);
     c.check("Riyadh Gate Tower is muted in the settings", !!muted);
@@ -275,7 +278,7 @@ defineCase("NOT-05", async (t) => {
       const { page } = await pageAs("ali");
       await go(page, "/profile");
       await settle(page);
-      await page.getByRole("switch").last().click();
+      await page.getByRole("listitem").filter({ hasText: "Riyadh Gate Tower" }).getByRole("switch", { name: "Mute" }).click();
       await until(async () => (!(await readSettings(ali)).projects.find((p) => p.code === "TWR")?.muted ? true : false), 8000, 500);
     }
     c.check("Ali's mute is restored (Project not muted)", !(await readSettings(ali)).projects.find((p) => p.code === "TWR")?.muted);
