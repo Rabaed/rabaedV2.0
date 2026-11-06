@@ -81,6 +81,7 @@ import {
   IconMessage,
   IconMessageCircle,
   IconMinus,
+  IconPackage,
   IconPackages,
   IconPaperclip,
   IconPhoto,
@@ -220,6 +221,7 @@ const icons = {
   "message-circle": IconMessageCircle,
   minus: IconMinus,
   // A Package (RP-659).
+  package: IconPackage,
   packages: IconPackages,
   paperclip: IconPaperclip,
   photo: IconPhoto,

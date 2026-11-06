@@ -200,7 +200,15 @@ describe("watched items", () => {
       const [n, ...more] = (await watched(who, id)).filter((x) => x.event?.type === "issue_code");
       expect(more).toEqual([]);
       expect(n).toMatchObject({ kind: "watched_event", title: "Cable trays", step: null, readAt: null });
-      expect(n!.event).toEqual({ type: "issue_code", outcome: "A", transition: { en: "Approve · A", ar: "اعتماد · A" }, companyName: code.by.companyName });
+      expect(n!.event).toEqual({
+        type: "issue_code",
+        outcome: "A",
+        outcomeName: { en: "Approved", ar: "معتمد" },
+        outcomeKind: "review_code",
+        transition: { en: "Approve · A", ar: "اعتماد · A" },
+        companyName: code.by.companyName,
+        ownCompany: false,
+      });
       // Nothing of K1's people, nor the Remarks.
       expect(JSON.stringify(n)).not.toMatch(/Noted|Test Member/);
     }

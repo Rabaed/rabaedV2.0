@@ -14,6 +14,18 @@ export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_ba
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;
 
+/** The Project a notification is about, as the Member sees it (RP-1153): the bell and page show it and group by it. */
+export const notificationProject = z.object({ id: z.uuid(), code: z.string(), name: bilingualText });
+export type NotificationProject = z.infer<typeof notificationProject>;
+
+/**
+ * Which kind of outcome a watched event closed the item with, when the bell words it
+ * by its kind (RP-1153): a Review Code ("Review Code C · Revise and Resubmit") or an
+ * Inspection Result ("Inspection Result: Failed"). Any other reads as its Transition.
+ */
+export const notificationOutcomeKinds = ["review_code", "inspection_result"] as const;
+export type NotificationOutcomeKind = (typeof notificationOutcomeKinds)[number];
+
 /**
  * One in-app notification about an item. Its number and title, and what happened, are read
  * when it is shown, so they are only ever what the Member may see now
@@ -26,20 +38,33 @@ export const itemNotification = z.object({
   /** Null while the item has none (a Revision still in Draft). */
   documentNumber: z.string().nullable(),
   title: z.string(),
+  project: notificationProject,
+  /** The item's Revision number: 0 for the original, 1 for Rev 1… */
+  revisionNo: z.number().int().nonnegative(),
   /** A Step reached them: the Step, their own Company's. */
   step: z.object({ name: bilingualText }).nullable(),
   /**
+   * The Step reached their Step Pool, not them alone; `waiting` while nobody has picked
+   * it up yet. Null for anything else. A pick-up withdraws the others' unread ones.
+   */
+  pool: z.object({ waiting: z.boolean() }).nullable(),
+  /**
    * Something happened on an item they watch, or it was Sent Back to them
    * (a `transition`, with no outcome): what, the Transition's label,
-   * the outcome it closed the item with, and the Company that did it, by
-   * name only (V14). A new Revision has no label or Company.
+   * the outcome it closed the item with (its name and, for a Review Code or
+   * an Inspection Result, its kind), and the Company that did it, by name only
+   * (V14), and whether that is the Member's own. A new Revision has no label; its
+   * Company is its raiser's.
    */
   event: z
     .object({
       type: z.enum(watchedEventTypes),
       transition: bilingualText.nullable(),
       outcome: workItemOutcome.nullable(),
+      outcomeName: bilingualText.nullable(),
+      outcomeKind: z.enum(notificationOutcomeKinds).nullable(),
       companyName: bilingualText.nullable(),
+      ownCompany: z.boolean(),
     })
     .nullable(),
   createdAt: z.iso.datetime(),
@@ -58,7 +83,9 @@ export const packageNotification = z.object({
   kind: z.literal("package_submitted"),
   /** None: it is about its Package (kept so every notification reads the same fields). */
   workItemId: z.null(),
+  project: notificationProject,
   step: z.null(),
+  pool: z.null(),
   event: z.null(),
   package: z.object({
     id: z.uuid(),

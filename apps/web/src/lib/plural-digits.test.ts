@@ -16,7 +16,7 @@ const counted = [
   ["packages.addItems.add", "count"],
   ["packages.bulk.description", "count"],
   ["packages.submit.count", "count"],
-  ["notifications.packageSubmitted", "count"],
+  ["notifications.what.packageSubmitted", "count"],
 ] as const;
 
 describe.each(["en", "ar"] as const)("counted messages in %s", (locale) => {
