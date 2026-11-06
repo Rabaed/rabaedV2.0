@@ -712,8 +712,8 @@ describe("the README walkthrough", () => {
   });
 });
 
-// The deploy's visibility check (RP-213) asks exactly this of dev, through the
-// load balancer (packages/infra/src/smoke.ts).
+// The deploy's visibility check (RP-213) asks exactly this of UAT, through
+// web and the api (scripts/smoke.ts).
 describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other demo Company is on", () => {
   let nasser: Caller;
   let jcv = "";

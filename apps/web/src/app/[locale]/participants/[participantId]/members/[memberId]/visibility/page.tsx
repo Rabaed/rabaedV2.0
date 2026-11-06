@@ -1,13 +1,16 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { VisibilityEditor } from "@/components/visibility-editor";
-import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getMemberVisibility, getParticipantMembers } from "@/lib/session";
+import { MemberVisibilityEditor } from "@/components/participants/member-visibility-editor";
+import { ParticipantsBreadcrumb, ParticipantsHeading, ReadOnlyNotice, VisibilityGapWarning } from "@/components/participants/participants-parts";
+import { redirect } from "@/i18n/navigation";
+import { authorizedPersonName } from "@/lib/participants";
+import { getMe, getMemberVisibility, getMembers, getParticipantMembers } from "@/lib/session";
 
 /**
- * A Project Member's Visibility. Their Company's Authorized Person narrows it,
- * choosing only among what the Participant covers (a Member never covers more).
+ * A Project Member's Visibility. Their Company's Authorized Person narrows it, choosing only
+ * among what the Participant covers (a Member never covers more, V4); their Company's other
+ * Members read it. Nothing else of the Project's Trades and Locations is shown (V16).
  */
 export default async function MemberVisibilityPage({
   params,
@@ -16,32 +19,49 @@ export default async function MemberVisibilityPage({
 }) {
   const { locale, participantId, memberId } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("visibility");
-  const [me, participation, data] = await Promise.all([
+  const [t, tp] = await Promise.all([getTranslations("visibility"), getTranslations("participants")]);
+  const [me, participation, data, members] = await Promise.all([
     getMe(),
     getParticipantMembers(participantId),
     getMemberVisibility(participantId, memberId),
+    getMembers(),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   // Another Company's Members are not found, exactly like ones that don't exist.
   if (!participation || !data) notFound();
 
+  const manages = me.member.isAuthorizedPerson;
+  const project = participation.participant.project.name[locale];
+  const company = me.company.legalName[locale];
+  const name = data.member.fullName[locale];
+
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <Link href={`/participants/${participantId}`} className="text-sm text-brand-fg underline underline-offset-4">
-          {participation.participant.project.name[locale]} · {participation.participant.projectRole.name[locale]}
-        </Link>
-        <h1 className="text-h4 font-semibold">{t("memberTitle", { name: data.member.fullName[locale] })}</h1>
-        <p className="text-muted">{t("memberHint")}</p>
-      </div>
-      <VisibilityEditor
+      <ParticipantsBreadcrumb
+        label={tp("breadcrumb")}
+        crumbs={[
+          { label: tp("myCompany") },
+          { label: tp("title"), href: "/participants" },
+          { label: project, href: `/participants/${participantId}` },
+          { label: `${name} · ${t("title")}` },
+        ]}
+      />
+      <ParticipantsHeading title={t("memberTitle", { name })} description={t("memberPageHint", { name, project, company })} />
+      {!manages && <ReadOnlyNotice>{tp("readOnly", { name: authorizedPersonName(members, locale) })}</ReadOnlyNotice>}
+      {participation.gap && (
+        <VisibilityGapWarning
+          gap={participation.gap}
+          covered={participation.covered}
+          title={tp("gapTitle")}
+          body={tp("gapBody", { project, company })}
+          locale={locale}
+        />
+      )}
+      <MemberVisibilityEditor
         options={data.participant.covered}
         visibility={data.visibility}
-        endpoint={
-          me.member.isAuthorizedPerson ? `/api/v1/participants/${participantId}/members/${memberId}/visibility` : null
-        }
-        allLabel={{ trade: t("allOfCompanyTrades"), location: t("allOfCompanyLocations") }}
+        endpoint={manages ? `/api/v1/participants/${participantId}/members/${memberId}/visibility` : null}
+        memberName={name}
       />
     </div>
   );

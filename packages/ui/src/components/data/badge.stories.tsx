@@ -11,6 +11,7 @@ const labels = {
   success: { en: "Signed", ar: "موقّع" },
   warning: { en: "Unsaved changes", ar: "تغييرات غير محفوظة" },
   danger: { en: "Removed", ar: "محذوف" },
+  violet: { en: "New Revision", ar: "مراجعة جديدة" },
 };
 
 const meta = {

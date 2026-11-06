@@ -12,10 +12,10 @@ import { objectStoreFromEnv, type ObjectStoreEnvNames, type ObjectStoreSettings 
 // key, so a PR preview Vercel builds itself keeps the fallback. They are written only to the
 // git-ignored folder prepareArabicFont reads (packages/ui/src/fonts/arabic-font.ts).
 // The licence forbids redistributing them (CLAUDE.md): never committed. Without
-// them Arabic falls back to IBM Plex Sans Arabic, as in deploy-dev.yml. It
+// them Arabic falls back to IBM Plex Sans Arabic. It
 // lives in the api because the api has the S3 client.
 
-/** Where the fonts sit in the build assets bucket (as packages/infra FONTS_PREFIX and the worker's THMANYAH_PREFIX). */
+/** Where the fonts sit in the build assets bucket (as the worker's THMANYAH_PREFIX). */
 export const THMANYAH_PREFIX = "fonts/thmanyah/";
 
 /** The git-ignored folder the font switch reads (.gitignore `packages/ui/fonts/`). */

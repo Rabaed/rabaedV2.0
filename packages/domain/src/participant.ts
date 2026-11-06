@@ -3,6 +3,7 @@ import { bilingualText, crNumber, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { withHandovers } from "./handover.ts";
 import { baseRoles } from "./project.ts";
+import { dimensionValues, visibility } from "./visibility.ts";
 
 /** A Participant's Project Role: its base role and its name on the Project. */
 export const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
@@ -111,6 +112,8 @@ export const companyParticipation = z.object({
   project: z.object({ id: z.uuid(), projectNumber: z.number().int(), code: z.string(), name: bilingualText }),
   hostCompany,
   projectRole,
+  /** How many Project Members the viewer's own Company has on it (V15: every Member reads them). */
+  memberCount: z.number().int().nonnegative(),
 });
 export type CompanyParticipation = z.infer<typeof companyParticipation>;
 
@@ -127,10 +130,19 @@ export const participantMembers = z.object({
       fullName: bilingualText,
       /** Keys of the Positions they hold on this Project. */
       positions: z.array(z.string()),
+      /** Their Visibility on the Project; only their own Company reads it (V16). */
+      visibility,
     }),
   ),
   /** The Positions of the Participant's base role, to choose from. */
   positions: z.array(z.object({ key: z.string(), name: bilingualText })),
+  /** The values the Participant covers, which name its Members' Visibility. */
+  covered: dimensionValues,
+  /**
+   * The Visibility Gap: what the Participant covers that none of its Project Members do, for
+   * its Authorized Person only (V16, scenario RP-1155-2); null for anyone else.
+   */
+  gap: dimensionValues.nullable(),
 });
 export type ParticipantMembers = z.infer<typeof participantMembers>;
 

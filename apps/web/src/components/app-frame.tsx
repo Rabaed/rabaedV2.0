@@ -1,6 +1,6 @@
 "use client";
 
-import { appearanceCookie, appearanceCookieValue, type Appearance, type Locale } from "@rabaed/domain";
+import { appearanceCookie, appearanceCookieValue, type Appearance, type Locale, type NotificationList } from "@rabaed/domain";
 import {
   AppShell,
   Button,
@@ -26,8 +26,8 @@ export type AppFrameProps = {
   /** The signed-in Member's name and their Company's, in the page's language. */
   memberName: string;
   companyName: string;
-  /** Unread notifications; null when they couldn't be read. */
-  unread: number | null;
+  /** The Member's latest notifications, for the bell; null when they couldn't be read. */
+  notifications: NotificationList | null;
   defaultCollapsed: boolean;
   /** The Member's Theme and Mode, as the API keeps them; the layout painted <html> in it already. */
   appearance: Appearance;
@@ -66,7 +66,7 @@ function paint(value: Appearance) {
   document.documentElement.dataset.mode = value.mode;
 }
 
-function Frame({ locale, memberName, companyName, unread, defaultCollapsed, appearance: kept, heading, tabs, children }: AppFrameProps) {
+function Frame({ locale, memberName, companyName, notifications, defaultCollapsed, appearance: kept, heading, tabs, children }: AppFrameProps) {
   const t = useTranslations("shell");
   const pathname = usePathname();
   const router = useRouter();
@@ -185,7 +185,7 @@ function Frame({ locale, memberName, companyName, unread, defaultCollapsed, appe
       }}
       topBar={{
         title: heading,
-        notifications: unread !== null ? <NotificationBell unread={unread} /> : undefined,
+        notifications: notifications ? <NotificationBell initial={notifications} /> : undefined,
         member: memberMenu("topBar"),
       }}
       menuLabel={t("menu")}

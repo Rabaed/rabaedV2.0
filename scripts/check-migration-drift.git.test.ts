@@ -2,10 +2,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { kindCheck, takeTransition } from "./check-migration-drift.fixtures.ts";
 import { mergeGroupSides, type MigrationProblems, migrationProblems } from "./check-migration-drift.ts";
 import { migrationsDir as dir } from "./migrations.ts";
+
+// Building a repository with a dozen git commands passes the 5 s default when other lanes load the machine (RP-1123).
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 // A throwaway repository replaying the RP-311 history: a branch redefines
 // app.take_transition, main redefines it later, the branch merges main.
@@ -36,6 +39,12 @@ beforeEach(() => {
 });
 
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+describe("timeouts", () => {
+  it("leave room for building real repositories under load (RP-1123)", ({ task }) => {
+    expect(task.timeout).toBeGreaterThanOrEqual(30_000);
+  });
+});
 
 describe("migrationProblems", () => {
   it("reports the drift main's merge caused, from the head and base commits", () => {
