@@ -4,6 +4,7 @@
 // (RP-1155-1); the Visibility Gap goes to the Participant's own Authorized Person only
 // (RP-1155-2); a Member added to the Project starts with all of their Participant's Visibility,
 // never more (RP-1155-3). Seam 2: packages/db/test/rp-1155-visibility-rls.test.ts.
+import { expectHiddenFrom } from "@rabaed/db/test-support";
 import type { CompanyParticipations, DimensionValues, ParticipantMembers } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -46,7 +47,7 @@ describe("scenario RP-1155-1: Company Projects and Project Members show only the
       const res = await ok(by.get("/v1/participants"), 200);
       const { participants } = res.json() as CompanyParticipations;
       expect(participants.map((p) => [p.id, p.memberCount])).toEqual([[at.k1ParticipantId, 2]]);
-      for (const hidden of c2Names) expect(res.body).not.toContain(hidden);
+      for (const hidden of c2Names) expect(res.body).not.toContain(hidden); // not hidden-from: the same read lists K1's own Project above
     }
   });
 
@@ -58,10 +59,25 @@ describe("scenario RP-1155-1: Company Projects and Project Members show only the
       { trade: all, location: all },
     ]);
     const body = JSON.stringify(read);
-    for (const hidden of c2Names) expect(body).not.toContain(hidden);
-    // Another Company's Project Members, their count and Visibility: as if they didn't exist.
-    for (const other of [at.c1ParticipantId, c2ParticipantId]) await expectHidden(k1Engineer.caller.get(`/v1/participants/${other}/members`));
-    await expectHidden(c1.caller.get(`/v1/participants/${at.k1ParticipantId}/members`));
+    for (const hidden of c2Names) expect(body).not.toContain(hidden); // not hidden-from: the same read lists K1's two Members above
+  });
+
+  it("is the 404 that names nothing for another Company's Project Members, their count and Visibility", async () => {
+    type Viewer = { by: Caller; name: string };
+    /** The Participant's Members read: [it] when read, [] when it is the 404 that names nothing. */
+    const read = (participantId: string) => async (viewer: Viewer) => {
+      const res = await viewer.by.get(`/v1/participants/${participantId}/members`);
+      if (res.statusCode === 200) return [{ id: participantId }];
+      await expectHidden(res, viewer.name); // not hidden-from: the 404's body, inside the read expectHiddenFrom proves
+      return [];
+    };
+    const k1Side = { by: k1Engineer.caller, name: "K1's engineer" };
+    const c1Admin = { by: c1.caller, name: "C1's Authorized Person, the Project Admin" };
+    const c2Side = { by: c2.caller, name: "C2's Authorized Person" };
+    const name = (v: Viewer) => v.name;
+    await expectHiddenFrom({ read: read(at.k1ParticipantId!), target: at.k1ParticipantId!, seenBy: k1Side, hiddenFrom: [c1Admin, c2Side], name, label: "K1's Members" });
+    await expectHiddenFrom({ read: read(at.c1ParticipantId), target: at.c1ParticipantId, seenBy: c1Admin, hiddenFrom: [k1Side, c2Side], name, label: "C1's Members" });
+    await expectHiddenFrom({ read: read(c2ParticipantId), target: c2ParticipantId, seenBy: c2Side, hiddenFrom: [k1Side, c1Admin], name, label: "C2's Members" });
   });
 });
 

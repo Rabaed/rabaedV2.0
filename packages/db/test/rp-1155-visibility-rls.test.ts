@@ -8,7 +8,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { bilingual, buildSeamTwoTower, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { bilingual, buildSeamTwoTower, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 
@@ -80,9 +80,22 @@ describe("scenario RP-1155-2: the Visibility Gap is read by the Participant's ow
   });
 
   it("gives nothing to C2's engineer, to the Project Admin or to another Company's Authorized Person", async () => {
-    for (const as of [tower.c2.members.engineer, tower.c1.ap, tower.c1.members.engineer, tower.k1.ap, tower.ow.ap]) {
-      expect(await gap(as, tower.c2.participantId), as).toEqual([]);
-    }
+    const names = new Map([
+      [tower.c2.ap, "C2's Authorized Person"],
+      [tower.c2.members.engineer, "C2's engineer"],
+      [tower.c1.ap, "C1's Authorized Person, the Project Admin"],
+      [tower.c1.members.engineer, "C1's engineer"],
+      [tower.k1.ap, "K1's Authorized Person"],
+      [tower.ow.ap, "OW's Authorized Person"],
+    ]);
+    await expectHiddenFrom({
+      read: (as: string) => gap(as, tower.c2.participantId),
+      target: tower.buildingB,
+      seenBy: tower.c2.ap,
+      hiddenFrom: [tower.c2.members.engineer, tower.c1.ap, tower.c1.members.engineer, tower.k1.ap, tower.ow.ap],
+      name: (as: string) => names.get(as) ?? as,
+      label: "C2's Visibility Gap",
+    });
   });
 });
 
@@ -110,7 +123,7 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
     );
     const ids = (rows: { id: string }[]) => rows.map((r) => r.id).sort();
     expect(ids(mine.filter((v) => v.kind === "trade"))).toEqual(ids(trades.rows)); // C2 covers all of the Trades
-    expect(mine.map((v) => v.id)).not.toContain(tower.buildingA);
+    expect(mine.map((v) => v.id)).not.toContain(tower.buildingA); // not hidden-from: their own coverage, Building B in it above
   });
 
   it("holds 'all' in every dimension, read by C2 alone", async () => {
@@ -123,7 +136,7 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
   });
 
   it("closes C2's Visibility Gap", async () => {
-    expect(await gap(tower.c2.ap, tower.c2.participantId)).toEqual([]);
+    expect(await gap(tower.c2.ap, tower.c2.participantId)).toEqual([]); // not hidden-from: the Authorized Person's own gap, now closed (state)
   });
 
   it("starts again with 'all' when added back after a removal, and keeps a narrowed grant while on the Project", async () => {
