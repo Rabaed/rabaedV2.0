@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileVersionsVia } from "./git-files.ts";
 
@@ -23,7 +23,9 @@ import { fileVersionsVia } from "./git-files.ts";
 // Checked by `scripts/check-uat-touch.test.ts`, in the unit project.
 
 export const messagesDir = "apps/web/messages";
-export const touchedLine = /^[ \t>*-]*UAT cases touched:[ \t]*(.*)$/im;
+// The line and the lines wrapped under it, up to a blank line.
+export const touchedLine = /^[ \t>*-]*UAT cases touched:[ \t]*([^\n]*(?:\n(?![ \t]*\r?\n)[^\n]*)*)/im;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** First line of the PR comment, so a workflow can find and update its own comment. */
 export const commentTag = "<!-- uat-touch -->";
 
@@ -77,7 +79,8 @@ export function searchedTexts(source: string): { strings: string[]; regexes: Reg
   const long = (t: string) => t.length >= 6 && (t.match(/\p{L}/gu) ?? []).length >= 4;
   const strings = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)].map((m) => normalize(m[1] ?? m[2] ?? m[3] ?? "").trim());
   const regexes = [...source.matchAll(/(?<=[(,:=|&!?]\s*)\/((?:[^/\\\n]|\\.)+)\/([a-z]*)/g)].flatMap((m) => {
-    if (!long(m[1]!)) return [];
+    // A pattern from a PR's case file runs in CI: refuse the nested-quantifier shapes that backtrack without end.
+    if (!long(m[1]!) || m[1]!.length > 300 || /\([^)]*[+*][^)]*\)[+*{]/.test(m[1]!)) return [];
     try {
       return [new RegExp(m[1]!, m[2]!.replace(/[^imsu]/g, ""))];
     } catch {
@@ -98,8 +101,7 @@ export function textBroken(before: string | undefined, after: string | undefined
 
 /** Whether the case source names the key in quotes, as a whole dotted word. */
 export function keyUsed(key: string, source: string): boolean {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`["'\`]${escaped}["'\`]`).test(source);
+  return new RegExp(`["'\`]${escapeRegExp(key)}["'\`]`).test(source);
 }
 
 const defineCase = /defineCase\(\s*["'`]([^"'`]+)["'`]/g;
@@ -131,7 +133,7 @@ export function missingFromBody(body: string, ids: string[]): string[] | undefin
   const line = touchedLine.exec(body);
   if (!line) return undefined;
   const named = line[1]!;
-  return ids.filter((id) => !new RegExp(`(?<![\\w-])${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`, "i").test(named));
+  return ids.filter((id) => !new RegExp(`(?<![\\w-])${escapeRegExp(id)}(?![\\w-])`, "i").test(named));
 }
 
 /** What to say: the PR comment (with its marker) and whether the branch passes. `body` undefined = report only. */
@@ -165,6 +167,7 @@ export function branchMessages(repo: string, commit = "HEAD", spawn: typeof spaw
 /** The case files, `planning/uat/<round>/cases/*.ts`, as the working tree has them. */
 export function caseFiles(repo: string): CaseFile[] {
   const root = join(repo, "planning", "uat");
+  if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
     .filter((round) => round.isDirectory())
     .flatMap((round) => {
@@ -183,11 +186,14 @@ export function caseFiles(repo: string): CaseFile[] {
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   try {
     const args = process.argv.slice(2);
-    const bodyFile = args[args.indexOf("--body-file") + 1];
-    const body = args.includes("--body-file") && bodyFile ? readFileSync(bodyFile, "utf8") : undefined;
+    const at = args.indexOf("--body-file");
+    const bodyFile = args[at + 1];
+    if (at >= 0 && !bodyFile) throw new Error("--body-file needs the path of a file holding the PR body.");
+    const body = at >= 0 ? readFileSync(bodyFile!, "utf8") : undefined;
     const hits = touchedCases(branchMessages(process.cwd()), caseFiles(process.cwd()));
     const { ok, comment } = verdict(hits, body);
-    if (comment) (ok ? console.log : console.error)(comment);
+    // Always stdout: a workflow posts what is printed, most of all when the check fails.
+    if (comment) console.log(comment);
     else console.log("No UAT case uses a message this branch changes.");
     process.exitCode = ok ? 0 : 1;
   } catch (error) {

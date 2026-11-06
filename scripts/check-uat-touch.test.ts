@@ -109,6 +109,10 @@ describe("the PR body line", () => {
     expect(missingFromBody("text\n> UAT cases touched: FIX-01, fix-02\nmore", ids)).toEqual([]);
   });
 
+  it("reads ids wrapped onto the next line, up to a blank line", () => {
+    expect(missingFromBody("UAT cases touched: FIX-01,\nFIX-02 (updated)\n\nOther FIX-03", [...ids, "FIX-03"])).toEqual(["FIX-03"]);
+  });
+
   it("does not take FIX-010 for FIX-01", () => {
     expect(missingFromBody("UAT cases touched: FIX-010", ["FIX-01"])).toEqual(["FIX-01"]);
   });
@@ -152,6 +156,10 @@ describe("a case that looks for a piece of the old text", () => {
     // A pattern that still matches the new text is not broken: the apostrophe is a wildcard.
     expect(textBroken(before, "We can’t find this page. It may not exist.", "x = /We can.t find this page/i;")).toBe(false);
     expect(textBroken(before, "We cannot find this page.", "x = /We can.t find this page/i;")).toBe(true);
+  });
+
+  it("does not build a pattern that backtracks without end", () => {
+    expect(searchedTexts("x = /(a+)+ and more text/;").regexes).toEqual([]);
   });
 
   it("names the case in touchedCases", () => {
