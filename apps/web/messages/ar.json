@@ -1866,7 +1866,7 @@
   },
   "notifications": {
     "title": "الإشعارات",
-    "bellUnread": "{count, plural, one {الإشعارات، إشعار غير مقروء} two {الإشعارات، إشعاران غير مقروءين} few {الإشعارات، {shown} إشعارات غير مقروءة} other {الإشعارات، {shown} إشعارًا غير مقروء}}",
+    "bellUnread": "{count, plural, one {الإشعارات · إشعار غير مقروء} two {الإشعارات · إشعاران غير مقروءين} few {الإشعارات · {shown} إشعارات غير مقروءة} other {الإشعارات · {shown} إشعارًا غير مقروء}}",
     "unread": "غير مقروء",
     "all": "الكل",
     "show": "عرض",
@@ -1892,6 +1892,7 @@
       "reached": "وصلك في {step}",
       "reachedPool": "وصل إلى مجموعة خطوتك في {step}",
       "reviewCode": "رمز المراجعة {code} · {name}، من {company}",
+      "reviewCodeOnly": "رمز المراجعة {code} · {name}",
       "inspectionResult": "نتيجة الفحص: {name}",
       "sentBack": "أرجعته إليكم {company}",
       "transitionBy": "{transition} بواسطة {company}",

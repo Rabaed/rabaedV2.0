@@ -14,18 +14,22 @@
 
 create function app.notification_pools(p_notification_ids uuid[])
   returns table (notification_id uuid, pool boolean, waiting boolean)
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select n.id, a.picked_up_at is distinct from a.created_at, a.status = 'pooled'
-    from notification n
-    join step_assignment a on a.id = n.step_assignment_id
-    where n.id = any (p_notification_ids)
-      and n.kind = 'step_reached'
-      and n.member_id = app.current_member_id()
-      and n.in_app and n.withdrawn_at is null
-      and app.sees_work_item(n.work_item_id)
-      and a.participant_id in (select app.current_participant_ids())
+    #variable_conflict use_column
+    begin
+      return query
+        select n.id, a.picked_up_at is distinct from a.created_at, a.status = 'pooled'
+        from notification n
+        join step_assignment a on a.id = n.step_assignment_id
+        where n.id = any (p_notification_ids)
+          and n.kind = 'step_reached'
+          and n.member_id = app.current_member_id()
+          and n.in_app and n.withdrawn_at is null
+          and app.sees_work_item(n.work_item_id)
+          and a.participant_id in (select app.current_participant_ids());
+    end
   $$;
 
 revoke all on function app.notification_pools(uuid[]) from public;

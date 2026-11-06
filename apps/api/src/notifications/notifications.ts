@@ -33,7 +33,7 @@ function outcomeKindOf(eventType: string | null, typeKind: OutcomeKind | null, o
   if (!outcome) return null;
   if (typeKind === "review_code" && eventType === "issue_code") return "review_code";
   // A WIR on Workflow Version 1 or 2 ends with an Inspection Result though its Type issues Codes (RP-673).
-  if (typeKind === "inspection_result" || inspectionResults.has(outcome)) return "inspection_result";
+  if (typeKind === "inspection_result" || (typeKind === "review_code" && inspectionResults.has(outcome))) return "inspection_result";
   return null;
 }
 
@@ -65,14 +65,6 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
     } & NotificationPackageColumns>`
       with latest as (
         select * from notification order by created_at desc, id desc limit ${LIMIT}
-      ),
-      -- Who the event names: its actor's Participant; a new Revision's (its event is read by nobody), its raiser's.
-      named as (
-        select n.id,
-          case when n.event_type = 'revision_created' then w.raised_by_participant_id else e.actor_participant_id end as participant_id
-        from latest n
-        left join work_item w on w.id = n.work_item_id
-        left join work_item_event e on e.id = n.work_item_event_id
       )
       select n.id, n.kind, n.work_item_id, w.document_number, w.title, w.revision_no,
         p.id as project_id, p.code as project_code, p.name as project_name,
@@ -87,7 +79,6 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
         k.package_id, k.seq as package_seq, k.name as package_name, k.company_name as package_company_name, k.item_count,
         n.created_at, n.read_at
       from latest n
-      join named nm on nm.id = n.id
       join project p on p.id = n.project_id
       left join work_item w on w.id = n.work_item_id
       left join work_item_type wt on wt.id = w.work_item_type_id
@@ -95,6 +86,10 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       -- Whether a "Step reached" came to their Step Pool, and still waits there: booleans only, no time (RP-1153).
       left join app.notification_pools(array(select l.id from latest l where l.kind = 'step_reached')) sp on sp.notification_id = n.id
       left join work_item_event e on e.id = n.work_item_event_id
+      -- Who the event names: its actor's Participant; a new Revision's (its event is read by nobody), its raiser's.
+      cross join lateral (
+        select case when n.event_type = 'revision_created' then w.raised_by_participant_id else e.actor_participant_id end as participant_id
+      ) nm
       left join outcome o on o.project_id = n.project_id and o.work_item_type_id = w.work_item_type_id
         and o.code = e.payload ->> 'outcome'
       -- The Transition's label, which everyone who reads the event is shown; its id is the actor's own (RP-1140).

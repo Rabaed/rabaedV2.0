@@ -72,6 +72,9 @@ describe("whatHappened", () => {
   it("a Review Code: the code, its name and the Company, by name only", () => {
     const n = watched({ type: "issue_code", transition: b("Revise · C"), outcome: "C", outcomeName: b("Revise and Resubmit"), outcomeKind: "review_code", companyName: DC });
     expect(whatHappened(n, "en")).toEqual({ key: "reviewCode", values: { code: "C", name: "Revise and Resubmit", company: "Design Consultants LLC" } });
+    // With no Company to name, no dangling "from".
+    const unnamed = watched({ type: "issue_code", outcome: "A", outcomeName: b("Approved"), outcomeKind: "review_code", companyName: null });
+    expect(whatHappened(unnamed, "en")).toEqual({ key: "reviewCodeOnly", values: { code: "A", name: "Approved" } });
   });
 
   it("an Inspection Result by its name", () => {

@@ -26,9 +26,10 @@ export function MarkNotificationsRead({ unread }: { unread: number }) {
   }
 
   return (
-    <Button variant="secondary" disabled={pending || unread === 0} onClick={() => void markAll()}>
+    // On a phone, the icon alone (the design's `.nmb`), still named for screen readers.
+    <Button variant="secondary" disabled={pending || unread === 0} onClick={() => void markAll()} title={t("markAllRead")} className="max-[559px]:w-11 max-[559px]:px-0">
       <Icon name="circle-check" />
-      {t("markAllRead")}
+      <span className="max-[559px]:sr-only">{t("markAllRead")}</span>
     </Button>
   );
 }

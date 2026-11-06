@@ -23,7 +23,10 @@ export function whatHappened(n: Notification, locale: Locale): WhatHappened {
   if (!e) return { key: "transition", values: { transition: "" } };
   if (e.type === "revision_created") return e.ownCompany || !company ? { key: "revision", values: { n: String(n.revisionNo) } } : { key: "revisionFrom", values: { company, n: String(n.revisionNo) } };
   if (isCancel(e)) return e.ownCompany || !company ? { key: "cancelled", values: {} } : { key: "cancelledBy", values: { company } };
-  if (e.outcomeKind === "review_code" && e.outcome) return { key: "reviewCode", values: { code: e.outcome, name: e.outcomeName?.[locale] ?? "", company } };
+  if (e.outcomeKind === "review_code" && e.outcome) {
+    const code = { code: e.outcome, name: e.outcomeName?.[locale] ?? "" };
+    return company ? { key: "reviewCode", values: { ...code, company } } : { key: "reviewCodeOnly", values: code };
+  }
   if (e.outcomeKind === "inspection_result") return { key: "inspectionResult", values: { name: e.outcomeName?.[locale] ?? e.outcome ?? "" } };
   const transition = e.transition?.[locale] ?? "";
   return company ? { key: "transitionBy", values: { transition, company } } : { key: "transition", values: { transition } };

@@ -31,6 +31,11 @@ export default async function NotificationsPage({
   const shown = filterNotifications(list.notifications, filter);
   const now = new Date();
   const rows = (items: typeof shown) => items.map((n) => <NotificationItem key={n.id} n={n} now={now} layout="page" />);
+  const groups = groupByProject(shown).map((g) => (
+    <NotificationGroup key={g.project.id} code={g.project.code} name={g.project.name[locale]} count={g.notifications.length}>
+      {rows(g.notifications)}
+    </NotificationGroup>
+  ));
   const empty =
     filter.show === "unread" && list.notifications.length > 0 ? (
       <NotificationEmpty title={t("caughtUpTitle")} text={t("caughtUpText")} />
@@ -46,7 +51,7 @@ export default async function NotificationsPage({
           <p className="mt-1 mb-0 text-[13.5px] text-muted">{t("subtitle", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}</p>
         </div>
         <MarkNotificationsRead unread={list.unread} />
-        <Link href="/profile#notification-settings" className={buttonVariants({ variant: "ghost" })}>
+        <Link href="/profile#notification-settings" className={buttonVariants({ variant: "ghost", className: "max-[559px]:hidden" })}>
           <Icon name="settings" />
           {t("settings")}
         </Link>
@@ -56,13 +61,13 @@ export default async function NotificationsPage({
         {shown.length === 0 ? (
           <NotificationCard>{empty}</NotificationCard>
         ) : filter.group ? (
-          groupByProject(shown).map((g) => (
-            <NotificationGroup key={g.project.id} code={g.project.code} name={g.project.name[locale]} count={g.notifications.length}>
-              {rows(g.notifications)}
-            </NotificationGroup>
-          ))
+          groups
         ) : (
-          <NotificationCard>{rows(shown)}</NotificationCard>
+          <>
+            <NotificationCard className="max-[559px]:hidden">{rows(shown)}</NotificationCard>
+            {/* A phone has no grouping switch: its list stays grouped (the design's frame 3). */}
+            <div className="hidden flex-col gap-4 max-[559px]:flex">{groups}</div>
+          </>
         )}
       </div>
     </div>

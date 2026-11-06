@@ -25,7 +25,8 @@ export function NotificationsToolbar({ filter, unread, projects }: { filter: Not
     <div className="flex flex-wrap items-center gap-2.5 max-[559px]:gap-2">
       <SegmentedControl
         aria-label={t("show")}
-        className="max-[559px]:w-full max-[559px]:[&>button]:flex-1"
+        // The design fills the chosen one dark (`.nseg button.on`).
+        className="max-[559px]:w-full max-[559px]:[&>button]:flex-1 [&>button[data-state=checked]]:bg-text [&>button[data-state=checked]]:text-surface"
         value={filter.show}
         onValueChange={(show) => go({ show: show === "all" ? "all" : "unread" })}
         options={[

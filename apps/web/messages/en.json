@@ -1866,7 +1866,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "bellUnread": "{count, plural, other {Notifications, {shown} unread}}",
+    "bellUnread": "{count, plural, other {Notifications · {shown} unread}}",
     "unread": "Unread",
     "all": "All",
     "show": "Show",
@@ -1892,6 +1892,7 @@
       "reached": "Reached you at {step}",
       "reachedPool": "Reached your Step Pool at {step}",
       "reviewCode": "Review Code {code} · {name}, from {company}",
+      "reviewCodeOnly": "Review Code {code} · {name}",
       "inspectionResult": "Inspection Result: {name}",
       "sentBack": "Sent Back to you by {company}",
       "transitionBy": "{transition} by {company}",
