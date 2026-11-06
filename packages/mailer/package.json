@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "^3.1141.0",
     "@rabaed/domain": "workspace:*",
     "zod": "^4.6.7"
   },
