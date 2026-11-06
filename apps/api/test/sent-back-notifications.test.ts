@@ -138,7 +138,15 @@ describe("a Send Back", () => {
       const [n, ...more] = await ofKind(who, id, "sent_back");
       expect(more).toEqual([]);
       expect(n).toMatchObject({ kind: "sent_back", title: "Pumps", step: null, readAt: null });
-      expect(n!.event).toEqual({ type: "transition", transition: { en: "Send Back", ar: "إرجاع إلى المقدّم" }, outcome: null, companyName: k1Name });
+      expect(n!.event).toEqual({
+        type: "transition",
+        transition: { en: "Send Back", ar: "إرجاع إلى المقدّم" },
+        outcome: null,
+        outcomeName: null,
+        outcomeKind: null,
+        companyName: k1Name,
+        ownCompany: false,
+      });
       // Nothing of K1's people.
       expect(JSON.stringify(n)).not.toMatch(/Test Member/);
     }

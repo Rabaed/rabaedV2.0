@@ -1,86 +1,75 @@
-import { formatNumber, type Locale } from "@rabaed/domain";
-import { DocNo } from "@rabaed/ui";
-import { getFormatter, getTranslations, setRequestLocale } from "next-intl/server";
+import type { Locale } from "@rabaed/domain";
+import { Icon, NotificationCard, NotificationEmpty, NotificationGroup, buttonVariants } from "@rabaed/ui";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { MarkNotificationsRead } from "@/components/mark-notifications-read";
-import { NotificationLink } from "@/components/notification-link";
-import { redirect } from "@/i18n/navigation";
+import { NotificationItem } from "@/components/notification-item";
+import { NotificationsToolbar } from "@/components/notifications-toolbar";
+import { Link, redirect } from "@/i18n/navigation";
+import { filterNotifications, groupByProject, notificationFilterOf, projectsOf } from "@/lib/notifications";
 import { getMe, getNotifications } from "@/lib/session";
 
 /**
- * The Member's notifications, newest first. Each shows only the item's number
- * and title as the Member may see them now, and links to the item. A Package
- * Submit's shows the Package's number and name, and how many of its submittals
- * the Member sees (RP-643), and links to the Package.
+ * The Member's notifications (RP-1153, the owner's design "Rabaed Notifications", frame 2): the
+ * latest 50, newest first, Unread or All, of one Project or all, grouped by Project. Each shows
+ * only what the Member may see now (its item's number and Subject, what happened with another
+ * Company by name only) and opens its item, or its Package.
  */
-export default async function NotificationsPage({ params }: { params: Promise<{ locale: Locale }> }) {
+export default async function NotificationsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: Locale }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("notifications");
-  const format = await getFormatter();
   const [me, list] = await Promise.all([getMe(), getNotifications()]);
   if (!me || !list) return redirect({ href: "/sign-in", locale });
 
+  const filter = notificationFilterOf(await searchParams);
+  const shown = filterNotifications(list.notifications, filter);
+  const now = new Date();
+  const rows = (items: typeof shown) => items.map((n) => <NotificationItem key={n.id} n={n} now={now} layout="page" />);
+  const groups = groupByProject(shown).map((g) => (
+    <NotificationGroup key={g.project.id} code={g.project.code} name={g.project.name[locale]} count={g.notifications.length}>
+      {rows(g.notifications)}
+    </NotificationGroup>
+  ));
+  const empty =
+    filter.show === "unread" && list.notifications.length > 0 ? (
+      <NotificationEmpty title={t("caughtUpTitle")} text={t("caughtUpText")} />
+    ) : (
+      <NotificationEmpty title={t("emptyTitle")} text={t("emptyText")} />
+    );
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-h4 font-semibold">{t("title")}</h1>
-        {list.unread > 0 && <MarkNotificationsRead />}
+    <div className="mx-auto flex w-full max-w-[960px] flex-col gap-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 text-[24px] font-bold tracking-[-0.01em] max-[559px]:text-[22px]">{t("title")}</h1>
+          <p className="mt-1 mb-0 text-[13.5px] text-muted">{t("subtitle", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}</p>
+        </div>
+        <MarkNotificationsRead unread={list.unread} />
+        <Link href="/profile#notification-settings" className={buttonVariants({ variant: "ghost", className: "max-[559px]:hidden" })}>
+          <Icon name="settings" />
+          {t("settings")}
+        </Link>
       </div>
-      {list.notifications.length === 0 ? (
-        <p className="text-muted">{t("empty")}</p>
-      ) : (
-        <ul className="divide-y divide-border border-y border-border" data-testid="notification-list">
-          {list.notifications.map((n) => (
-            <li key={n.id} className="flex items-start justify-between gap-4 py-3">
-              {n.kind === "package_submitted" ? (
-                <div className="space-y-1">
-                  <NotificationLink id={n.id} href={`/packages/${n.package.id}`} unread={!n.readAt}>
-                    {n.package.name[locale]}
-                  </NotificationLink>
-                  <p className="text-sm text-muted">
-                    <DocNo value={n.package.number} />
-                    {" · "}
-                    {t("packageSubmitted", { company: n.package.companyName[locale], count: n.package.count, n: formatNumber(n.package.count, locale) })}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <NotificationLink id={n.id} href={`/work-items/${n.workItemId}`} unread={!n.readAt}>
-                    {n.title}
-                  </NotificationLink>
-                  <p className="text-sm text-muted">
-                    {n.documentNumber && (
-                      <>
-                        <DocNo value={n.documentNumber} />
-                        {" · "}
-                      </>
-                    )}
-                    {n.kind === "step_reached" && n.step && t("reached", { step: n.step.name[locale] })}
-                    {n.kind === "record_ready" && t("recordReady")}
-                    {n.kind === "sent_back" && n.event && t("sentBack", { company: n.event.companyName?.[locale] ?? "" })}
-                    {n.kind === "watched_event" &&
-                      n.event &&
-                      (n.event.type === "revision_created"
-                        ? t("revisionCreated")
-                        : [n.event.companyName?.[locale], n.event.transition?.[locale] ?? t("cancelled")].filter(Boolean).join(" · "))}
-                  </p>
-                </div>
-              )}
-              <div className="shrink-0 text-end text-sm text-muted">
-                <time dateTime={n.createdAt}>
-                  {format.dateTime(new Date(n.createdAt), {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                    timeZone: "Asia/Riyadh",
-                    numberingSystem: "latn",
-                  })}
-                </time>
-                {!n.readAt && <p className="font-semibold text-brand-fg">{t("unread")}</p>}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <NotificationsToolbar filter={filter} unread={list.unread} projects={projectsOf(list.notifications)} />
+      <div data-testid="notification-list" className="flex flex-col gap-4">
+        {shown.length === 0 ? (
+          <NotificationCard>{empty}</NotificationCard>
+        ) : filter.group ? (
+          groups
+        ) : (
+          <>
+            <NotificationCard className="max-[559px]:hidden">{rows(shown)}</NotificationCard>
+            {/* A phone has no grouping switch: its list stays grouped (the design's frame 3). */}
+            <div className="hidden flex-col gap-4 max-[559px]:flex">{groups}</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

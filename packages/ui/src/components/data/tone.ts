@@ -8,4 +8,5 @@ export const toneClasses: Record<Tone, string> = {
   success: "bg-success-tint text-success-fg",
   warning: "bg-warning-tint text-warning-fg",
   danger: "bg-danger-tint text-danger-fg",
+  violet: "bg-violet-tint text-violet-fg",
 };

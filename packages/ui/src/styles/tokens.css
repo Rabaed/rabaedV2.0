@@ -264,6 +264,8 @@
   --warning-tint: var(--palette-amber-50);
   --warning-fg: var(--palette-amber-700);
   --danger-fg: var(--palette-red-700);
+  --violet-tint: var(--palette-violet-50);
+  --violet-fg: var(--palette-violet-700);
   --trade-cv-bg: var(--palette-amber-50);
   --trade-cv-fg: var(--palette-amber-700);
   --trade-ar-bg: var(--palette-violet-50);
@@ -429,6 +431,8 @@
   --warning-tint: var(--palette-dark-amber-tint);
   --warning-fg: var(--palette-dark-amber-fg);
   --danger-fg: var(--palette-dark-red-fg);
+  --violet-tint: var(--palette-dark-violet-tint);
+  --violet-fg: var(--palette-dark-violet-fg);
   --trade-cv-bg: var(--palette-dark-amber-tint);
   --trade-cv-fg: var(--palette-dark-amber-fg);
   --trade-ar-bg: var(--palette-dark-violet-tint);
@@ -595,6 +599,8 @@
     --warning-tint: var(--palette-dark-amber-tint);
     --warning-fg: var(--palette-dark-amber-fg);
     --danger-fg: var(--palette-dark-red-fg);
+    --violet-tint: var(--palette-dark-violet-tint);
+    --violet-fg: var(--palette-dark-violet-fg);
     --trade-cv-bg: var(--palette-dark-amber-tint);
     --trade-cv-fg: var(--palette-dark-amber-fg);
     --trade-ar-bg: var(--palette-dark-violet-tint);
@@ -762,6 +768,8 @@
   --warning-tint: var(--palette-amber-50);
   --warning-fg: var(--palette-amber-700);
   --danger-fg: var(--palette-red-700);
+  --violet-tint: var(--palette-violet-50);
+  --violet-fg: var(--palette-violet-700);
   --trade-cv-bg: var(--palette-amber-50);
   --trade-cv-fg: var(--palette-amber-700);
   --trade-ar-bg: var(--palette-violet-50);
@@ -927,6 +935,8 @@
   --warning-tint: var(--palette-dark-amber-tint);
   --warning-fg: var(--palette-dark-amber-fg);
   --danger-fg: var(--palette-dark-red-fg);
+  --violet-tint: var(--palette-dark-violet-tint);
+  --violet-fg: var(--palette-dark-violet-fg);
   --trade-cv-bg: var(--palette-dark-amber-tint);
   --trade-cv-fg: var(--palette-dark-amber-fg);
   --trade-ar-bg: var(--palette-dark-violet-tint);
@@ -1093,6 +1103,8 @@
     --warning-tint: var(--palette-dark-amber-tint);
     --warning-fg: var(--palette-dark-amber-fg);
     --danger-fg: var(--palette-dark-red-fg);
+    --violet-tint: var(--palette-dark-violet-tint);
+    --violet-fg: var(--palette-dark-violet-fg);
     --trade-cv-bg: var(--palette-dark-amber-tint);
     --trade-cv-fg: var(--palette-dark-amber-fg);
     --trade-ar-bg: var(--palette-dark-violet-tint);
@@ -1259,6 +1271,8 @@
   --color-warning-tint: var(--warning-tint);
   --color-warning-fg: var(--warning-fg);
   --color-danger-fg: var(--danger-fg);
+  --color-violet-tint: var(--violet-tint);
+  --color-violet-fg: var(--violet-fg);
   --color-trade-cv-bg: var(--trade-cv-bg);
   --color-trade-cv-fg: var(--trade-cv-fg);
   --color-trade-ar-bg: var(--trade-ar-bg);

@@ -57,7 +57,7 @@ export default async function LocaleLayout({
                 locale={locale}
                 memberName={me.member.fullName[locale]}
                 companyName={me.company.legalName[locale]}
-                unread={notifications?.unread ?? null}
+                notifications={notifications}
                 defaultCollapsed={collapsed}
                 appearance={appearance}
                 heading={heading}
