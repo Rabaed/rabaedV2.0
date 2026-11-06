@@ -18,10 +18,9 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | `packages/domain` | Shared rules and types: the Form schema and validator, the condition and formula evaluators, Step Age, visibility helpers. Pure and portable, so the browser, the server and the future offline app use the same code (ADR 0004) |
 | `packages/db` | PostgreSQL migrations (plain SQL), the Kysely client, and role bootstrap |
 | `packages/auth` | Passwords, sessions and invitation tokens |
-| `packages/mailer` | Email behind one interface: Amazon SES on AWS, SendGrid on Vercel (ADR 0026), Mailpit locally |
+| `packages/mailer` | Email behind one interface: SendGrid on Vercel (ADR 0026), Mailpit locally |
 | `packages/ui` | The design system: tokens, components, Storybook |
 | `packages/eslint-plugin` | Rabaed's own lint rules: no hard-coded colours, no physical left/right CSS, no deadline words |
-| `packages/infra` | AWS infrastructure as code (CDK) |
 
 ## Language and tooling
 
@@ -32,7 +31,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Package manager | pnpm 10 (through corepack) |
 | Validation | Zod 4, for API requests and responses and for config |
 | Lint | ESLint 10 with `typescript-eslint`, plus `@rabaed/eslint-plugin` |
-| Tests | Vitest 5 (unit, both seams, infra, mail); Vitest browser mode with Playwright for UI stories |
+| Tests | Vitest 5 (unit, both seams, mail); Vitest browser mode with Playwright for UI stories |
 
 ## Frontend
 
@@ -42,7 +41,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Styling | Tailwind CSS 4, with design tokens; logical CSS only (RTL-safe) |
 | Components | Radix UI primitives behind our own components (`@rabaed/ui`), `class-variance-authority`, Tabler icons |
 | Languages | next-intl. Arabic and English from day one, RTL, Latin digits, Document Numbers always left-to-right |
-| Fonts | IBM Plex Sans Arabic and IBM Plex Sans (open), Montserrat. The licensed **Thmanyah** fonts come from a private S3 bucket at build time and are never committed. The product owner has Thmanyah's consent to embed them in the Documental Record's PDFs (RP-23 grilling, 2026-10-16); the worker reads them from the same private bucket |
+| Fonts | IBM Plex Sans Arabic and IBM Plex Sans (open), Montserrat. The licensed **Thmanyah** fonts come from a private R2 bucket at build time and are never committed. The product owner has Thmanyah's consent to embed them in the Documental Record's PDFs (RP-23 grilling, 2026-10-16); the worker reads them from the same private bucket |
 | Design system | Storybook 10, with story tests for behaviour, axe accessibility and EN/AR screenshots |
 
 ## Backend and data
@@ -59,40 +58,21 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Audit | Append-only `work_item_event` with a hash chain; `admin_action` for every Rabaed Engineer action | Evidence that can't be quietly changed ([ADR 0001](adr/0001-compliance-ready-from-day-one.md)) |
 | Background work | Outbox table written in the same transaction, delivered by the worker | No lost or premature notifications |
 | Auth | In-house: argon2id passwords, server-side sessions in HttpOnly, SameSite, Secure cookies, one-time expiring invitation tokens. Rabaed Engineers sign in with a password plus an email code | Our own Postgres, under our own rules |
-| Files | S3, keys prefixed by Project, short-lived signed URLs signed by the api only | Storage follows tenancy (ADR 0007) |
-| Documental Records | The worker writes the Record Data (XML), renders the one layout with **headless Chromium** (Playwright), converts to **PDF/A-3** with the XML attached, checks it (veraPDF), and seals it with **PAdES B-LT**: a KMS key (`pdf-sealing`) under Rabaed's own certificate, plus a free RFC 3161 timestamp ([ADR 0023](adr/0023-the-record-is-a-sealed-pdf-a-3-made-from-record-data.md)) | Arabic shaping and mixed RTL/LTR as the browser draws them; tamper-evident with no paid certificate; a record can be made again from the same facts |
+| Files | An S3-compatible store (Cloudflare R2), keys prefixed by Project, short-lived signed URLs signed by the api only | Storage follows tenancy (ADR 0007) |
+| Documental Records | The worker writes the Record Data (XML), renders the one layout with **headless Chromium** (Playwright), converts to **PDF/A-3** with the XML attached, checks it (veraPDF), and seals it with **PAdES B-LT**: Rabaed's own key and certificate (on UAT, a test authority; where the production key lives is RP-1215's decision), plus a free RFC 3161 timestamp ([ADR 0023](adr/0023-the-record-is-a-sealed-pdf-a-3-made-from-record-data.md)) | Arabic shaping and mixed RTL/LTR as the browser draws them; tamper-evident with no paid certificate; a record can be made again from the same facts |
 | Logging | pino; database error codes only, never raw messages (they can quote row values) | No data leaks through logs |
 
 ## Local development
 
 | | Choice |
 |---|---|
-| Services | Docker Compose: PostgreSQL 16, **Mailpit** (mail catcher), **RustFS** (S3-compatible file store). Nothing local touches AWS |
+| Services | Docker Compose: PostgreSQL 16, **Mailpit** (mail catcher), **RustFS** (S3-compatible file store). Nothing local touches a hosted service |
 | Commands | `pnpm dev` (stack and apps), `pnpm demo` (reset, seed the demo Project, run), `pnpm storybook` |
 | Parallel lanes | One git worktree per lane, each with its own ports (`pnpm lane:env`) |
 
-## Cloud: AWS
-
-**Not deployed** ([ADR 0026](adr/0026-dev-and-uat-run-on-vercel.md)): dev, demo and UAT run on Vercel (below); `deploy-dev.yml` and the `cdk diff (dev)` check are retired. The CDK code stays in `packages/infra`, undeployed, so the production decision can still choose AWS.
-
-All defined as code with **AWS CDK 2** in TypeScript. The region is a parameter, so the same code serves the standard Instance and, later, the KSA Instance ([ADR 0005](adr/0005-two-independent-instances-inside-and-outside-ksa.md)). Dev runs in **Frankfurt (eu-central-1)** and holds demo data only.
-
-| | Choice |
-|---|---|
-| Compute | ECS Fargate services for web, api, admin and worker; images in ECR (scanned on push); circuit-breaker rollback |
-| Entry | Application Load Balancers over HTTPS: one for the customer app, a separate one for Rabaed Admin |
-| Database | RDS PostgreSQL 16, private subnets, encrypted with a customer-managed KMS key, backups and deletion protection on |
-| Secrets | Secrets Manager with rotation; each service's role reads only its own secrets |
-| Storage | S3 for Project files, build assets (fonts) and logs; private, KMS- or SSE-encrypted, TLS-only, versioned |
-| Email | Amazon SES |
-| Observability | CloudWatch logs and alarms (api, worker and outbox, database), CloudTrail, load-balancer access logs |
-| Cost | AWS Budgets monthly alert |
-
-Stacks: account, network, data, storage, registry, migrations, app and monitoring. A guided wizard (`packages/infra/scripts/setup-aws-account.sh`) covers the steps only a human can do.
-
 ## Dev and UAT: Vercel
 
-Dev, demo and UAT run on Vercel with demo data only, so builders get a link to every change ([ADR 0026](adr/0026-dev-and-uat-run-on-vercel.md)). Production and the KSA Instance are not decided yet.
+Dev, demo and UAT run on Vercel with demo data only, so builders get a link to every change ([ADR 0026](adr/0026-dev-and-uat-run-on-vercel.md)). Production and the KSA Instance are not decided yet (RP-1215; [ADR 0005](adr/0005-two-independent-instances-inside-and-outside-ksa.md) stands). The AWS account is closed and its CDK code removed ([ADR 0029](adr/0029-the-aws-account-is-closed.md)); the runtime adapters still in the code for it (the SES transport, the KMS seal signer, Secrets Manager passwords) wait on that decision (RP-1230).
 
 | | Choice |
 |---|---|
@@ -113,7 +93,7 @@ Dev, demo and UAT run on Vercel with demo data only, so builders get a link to e
 
 **Pool size.** `DATABASE_POOL_MAX` overrides a process's pool size (`poolMaxFromEnv`, `packages/db`): each Vercel instance holds its own small pool on the transaction pooler.
 
-**Client address in Admin** (the new-device alert): Admin trusts one proxy hop, as behind the AWS load balancer. Vercel overwrites `X-Forwarded-For` with the client's address and forwards none a client wrote (Vercel docs, Request headers), so the one hop it adds is read the same way; no setting is needed.
+**Client address in Admin** (the new-device alert): Admin trusts one proxy hop. Vercel overwrites `X-Forwarded-For` with the client's address and forwards none a client wrote (Vercel docs, Request headers), so the one hop it adds is read the same way; no setting is needed.
 
 **Project settings the deploy workflow applies** (RP-1043; `PATCH https://api.vercel.com/v9/projects/{idOrName}?teamId=$VERCEL_ORG_ID`, Vercel REST API "Update an existing project"). The rest is in each `vercel.json`.
 
@@ -147,7 +127,7 @@ All three: `nodeVersion: "24.x"`, `sourceFilesOutsideRootDirectory: true`, `serv
 | `SENDGRID_API_KEY` | | ✓ | ✓ | _uat_ (Mail Send only); no `MAIL_CATCHER_URL` or `MAIL_SES_CONFIGURATION_SET` beside it |
 | `CRON_SECRET` | | ✓ | | _uat_: random, 16 characters or more (a shorter one counts as none); Vercel Cron sends it as `Authorization: Bearer …` (RP-1039); production only |
 
-**The outbox on Vercel (RP-1039).** There is no always-on worker: Vercel Cron calls `GET /internal/cron/outbox` on the api **every minute** (`crons` in `apps/api/vercel.json`, `* * * * *`). Vercel runs crons on production deployments only, and a schedule more often than once a day needs the **Pro plan** (Hobby allows once a day, within the hour, and refuses the deploy otherwise; Vercel docs, Cron Jobs › Usage & Pricing, 2026-07). Each call runs one pass (`apps/api/src/cron/outbox-cron.ts`): the scheduled jobs that are due (the daily digest, the weekly Step Age report, the import clean-up; each run claimed in the database, so a duplicate or late call runs nothing twice; on AWS the worker's loop runs them, and with no worker on Vercel the pass must, or no digest or Step Age report would ever be queued), then one `processOutbox` run of the kinds the api delivers, `notification`, `email`, `digest`, `step_age_report` and `record_ready`, at most 100 rows and no new row after 40 s, so it ends inside the function's 60 s (a SendGrid send gives up after 10 s and its row is retried). The Documental Record kinds (`documental_record`, `documental_record_reproduce`, `working_copy`, `snag_report`) are never taken there: they stay due, attempts unspent, for the Records container (RP-1042, parked). Two overlapping passes never take one row twice (`app.take_outbox_row` skips locked rows), and Vercel does not retry a failed call: the next minute's pass picks up. The route refuses with 401, running nothing, any call without the right bearer (compared in constant time, never logged), and every call when `CRON_SECRET` is unset; it answers with counts only. The emails are re-checked against what the recipient may see at send time, as on AWS. Locally the worker's loop delivers every kind, as before.
+**The outbox on Vercel (RP-1039).** There is no always-on worker: Vercel Cron calls `GET /internal/cron/outbox` on the api **every minute** (`crons` in `apps/api/vercel.json`, `* * * * *`). Vercel runs crons on production deployments only, and a schedule more often than once a day needs the **Pro plan** (Hobby allows once a day, within the hour, and refuses the deploy otherwise; Vercel docs, Cron Jobs › Usage & Pricing, 2026-07). Each call runs one pass (`apps/api/src/cron/outbox-cron.ts`): the scheduled jobs that are due (the daily digest, the weekly Step Age report, the import clean-up; each run claimed in the database, so a duplicate or late call runs nothing twice; locally the worker's loop runs them, and with no worker on Vercel the pass must, or no digest or Step Age report would ever be queued), then one `processOutbox` run of the kinds the api delivers, `notification`, `email`, `digest`, `step_age_report` and `record_ready`, at most 100 rows and no new row after 40 s, so it ends inside the function's 60 s (a SendGrid send gives up after 10 s and its row is retried). The Documental Record kinds (`documental_record`, `documental_record_reproduce`, `working_copy`, `snag_report`) are never taken there: they stay due, attempts unspent, for the Records container (RP-1042, parked). Two overlapping passes never take one row twice (`app.take_outbox_row` skips locked rows), and Vercel does not retry a failed call: the next minute's pass picks up. The route refuses with 401, running nothing, any call without the right bearer (compared in constant time, never logged), and every call when `CRON_SECRET` is unset; it answers with counts only. The emails are re-checked against what the recipient may see at send time, as locally. Locally the worker's loop delivers every kind, as before.
 
 Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (the deploy's migrate step only), `VERCEL_TOKEN`, Supabase's keys, the fonts key and `BUILD_ASSETS_BUCKET` (the deploy Action's runner only), the R2 admin key (`R2_ADMIN_*`, `r2:cors` only).
 
@@ -155,13 +135,13 @@ Never in any project: `DATABASE_SUPERUSER_URL`, `DATABASE_MIGRATOR_PASSWORD` (th
 
 | Workflow | Does |
 |---|---|
-| `ci.yml` | Lint (including the rule against logging an error's message), typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS, and every `security definer` function sets `search_path` and is written in plpgsql), story tests, infra assertions, mail, web build, web image start, and on pull requests that no existing migration was changed |
+| `ci.yml` | Lint (including the rule against logging an error's message), typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS, and every `security definer` function sets `search_path` and is written in plpgsql), story tests, mail, web build, web image start, and on pull requests that no existing migration was changed |
 | `secret-scan.yml` | gitleaks; refuses font files and the token shapes the pre-commit hook refuses (`scripts/check-secrets.ts`, RP-1100) |
-| `deploy-uat.yml` | On merge to `main`, in environment `uat`: migrate Supabase (session pooler, role passwords set only on create), the app role check, seed the demo if missing → the api's and Admin's Vercel settings and Sensitive variables, build on the runner, deploy not yet live → smoke those deployments (the api's version, database, visibility asked of the api, no Admin on its address; Admin) → make them live → fetch the fonts on the runner, the same for web (smoke: visibility through web, fonts, no Admin on the customer address) → one authorised outbox cron call; stops at the first failure, so code that fails its smoke never goes live; never deploys an older commit over a newer one; one at a time with the Supabase gate and Reset UAT (RP-1043, `scripts/uat-deploy.ts`). Previews: Vercel's own, from Git, of web and the api only, skipped for a branch with a migration main lacks (`scripts/vercel-preview-gate.ts`) |
+| `deploy-uat.yml` | On merge to `main`, in environment `uat`: migrate Supabase (session pooler, role passwords set only on create), the app role check, seed the demo if missing → the api's and Admin's Vercel settings and Sensitive variables, build on the runner, deploy not yet live → smoke those deployments (the api's version, database, visibility asked of the api, no Admin on its address; Admin) → make them live → fetch the fonts on the runner, the same for web (smoke: visibility through web, fonts, no Admin on web's address) → one authorised outbox cron call; stops at the first failure, so code that fails its smoke never goes live; never deploys an older commit over a newer one; one at a time with the Supabase gate and Reset UAT (RP-1043, `scripts/uat-deploy.ts`). Previews: Vercel's own, from Git, of web and the api only, skipped for a branch with a migration main lacks (`scripts/vercel-preview-gate.ts`) |
 | `reset-uat.yml` | By hand on `main`, typing `reset uat`: drops UAT's database, migrates it from empty (main's head as it runs), seeds the demo, runs the app role check (RP-1043) |
 | `update-screenshots.yml` | Re-renders story screenshot baselines on a PR only when it carries the `update-screenshots` label (or by hand), one run per PR and never on a push, and adds new stories' baselines after a failed CI run, with least privilege |
 
-GitHub reaches Vercel and Supabase only from jobs in environment `uat`, whose secrets exist nowhere else. (While AWS was deployed it reached AWS through **OIDC only**, no stored AWS keys, the deploy role trusted only by the deploy job on `main`, under a least-privilege execution policy.) Third-party actions are pinned to commit SHAs (Dependabot updates them).
+GitHub reaches Vercel and Supabase only from jobs in environment `uat`, whose secrets exist nowhere else. Third-party actions are pinned to commit SHAs (Dependabot updates them).
 
 ## Testing approach
 
@@ -171,7 +151,7 @@ Tests check behaviour from outside, never internals, at a few seams:
 2. **Seam 2, the database as the app role.** RLS proves isolation even if the app forgets a filter.
 3. **Pure modules** in `packages/domain`: validator, evaluators.
 4. **UI stories:** behaviour, axe, EN/AR screenshots.
-5. **Infra assertions** on the synthesised templates, plus **smoke tests** after every deploy.
+5. **Smoke tests** after every deploy (`scripts/smoke.ts`).
 
 A failing visibility test blocks merge.
 
