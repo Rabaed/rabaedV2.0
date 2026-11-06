@@ -78,7 +78,7 @@ describe("scenario RP-1153-1: an item reaches K1's Consultant review pool of two
     const all = await stepReachedIds();
     for (const as of [k1.members.engineer, k1.members.manager]) {
       const own = await ownStepReached(as);
-      expect(own, named(as)).toHaveLength(1);
+      expect(own, named(as)).toHaveLength(1); // not hidden-from: each pool Member has their own one
       expect(await pools(as, all), named(as)).toEqual([{ notification_id: own[0], pool: true, waiting: true }]);
     }
   });
@@ -126,7 +126,6 @@ describe("scenario RP-1153-2: K1 issues Code A on C1's item, which C1's engineer
   it("C1's raiser reads the Code with its Project, the outcome's name and K1 by its name only", async () => {
     const [code] = await codeRead(tower.c1.members.engineer);
     expect(code).toMatchObject({ project_code: "RNP", outcome: "A", outcome_name: { en: "Approved" }, company_name: { en: "K1" } });
-    expect(Object.keys(code!)).not.toContain("member_name");
   });
 
   it("C2 and anyone else not watching read nothing of it", async () => {

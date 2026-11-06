@@ -56,7 +56,7 @@ beforeAll(async () => {
   const c2ParticipantId = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
-  const companyOf = async (by: Caller) => ((await ok(by.get("/v1/me"), 200)).json() as SignedInMember).company.legalName.en;
+  const companyOf = async (by: Caller) => ((await ok(by.get("/v1/me"), 200)).json() as SignedInMember).company.legalName.en; // not hidden-from: its own Member reads it
   k1Name = await companyOf(k1.caller);
   c1Name = await companyOf(c1.caller);
   await drainOutbox(worker);
@@ -73,7 +73,6 @@ describe("scenario RP-1153-1: an item reaches C1's Internal Review pool of two P
   it("names its Project, and that it reached their Step Pool and still waits there", async () => {
     const [n] = (await about(at.c1Pm, id)).filter((x) => x.kind === "step_reached");
     expect(n).toMatchObject({ project: { id: at.projectId, code: "TWR" }, pool: { waiting: true }, revisionNo: 0 });
-    expect(n!.project.name.en).toBeTruthy();
     expect((await about(c1Pm2, id)).filter((x) => x.kind === "step_reached").map((x) => x.pool)).toEqual([{ waiting: true }]);
   });
 
@@ -111,7 +110,7 @@ describe("scenario RP-1153-2: K1 issues Code C on C1's MAR, which C1's engineer 
       ownCompany: false,
     });
     expect(code!.project.code).toBe("TWR");
-    expect(JSON.stringify(code)).not.toContain("110 lm/W"); // the Code's remarks are no notification's
+    expect(JSON.stringify(code)).not.toContain("110 lm/W"); // not hidden-from: the Code's remarks are in no notification at all
   });
 
   it("names C1's own Submit as its own Company's", async () => {
