@@ -423,7 +423,10 @@ describe("paging and filters", () => {
 describe("RP-1157: the page's per-entry flags are about the viewer only", () => {
   let id = "";
   let submit = "";
+  /** Another C1 engineer on the Project, who is not on the item. */
+  let c1Other: Caller;
   beforeAll(async () => {
+    c1Other = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"]);
     // C1's engineer raises it, C1's PM Submits it, K1's engineer picks it up at K1's review and sends
     // it to K1's manager, who closes it with Code C. (Last in the file: the manager's "items I'm on" above count three.)
     id = await atContractorReview(tower.c1Engineer, "Feed RP-1157");
@@ -446,7 +449,7 @@ describe("RP-1157: the page's per-entry flags are about the viewer only", () => 
 
   it("RP-1157-1: flags the item for the Members on it, and for nobody else who reads its entries", async () => {
     const on = [eventsIn(tower.c1Engineer, "C1 engineer"), eventsIn(tower.c1Pm, "C1 PM"), eventsIn(k1Engineer, "K1 engineer"), eventsIn(tower.k1Manager, "K1 manager")];
-    const others = { "K1 PM": k1Pm, OR: orEngineer, OW: owner };
+    const others = { "another C1 engineer": c1Other, "K1 PM": k1Pm, OR: orEngineer, OW: owner };
     // Positive control: each of them reads the Submit, so a missing flag is not a missing entry.
     await hiddenFrom(submit, [...on, ...Object.entries(others).map(([name, by]) => eventsIn(by, name))], eventsIn(c2Engineer, "C2"), "RP-1157-1 the Submit");
     await hiddenFrom(
@@ -461,7 +464,7 @@ describe("RP-1157: the page's per-entry flags are about the viewer only", () => 
     await hiddenFrom(
       submit,
       mineIn(tower.c1Pm, "C1 PM"),
-      [mineIn(tower.c1Engineer, "C1 engineer"), mineIn(k1Engineer, "K1 engineer"), mineIn(k1Pm, "K1 PM"), mineIn(orEngineer, "OR"), mineIn(owner, "OW")],
+      [mineIn(tower.c1Engineer, "C1 engineer"), mineIn(c1Other, "another C1 engineer"), mineIn(k1Engineer, "K1 engineer"), mineIn(k1Pm, "K1 PM"), mineIn(orEngineer, "OR"), mineIn(owner, "OW")],
       "RP-1157-2 byMe",
     );
     // K1 reads the Submit by C1's name only, flags and all (V14).

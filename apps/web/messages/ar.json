@@ -421,7 +421,7 @@
       "description": "ما حدث على عناصر عمل {project}، كما يحق لك رؤيته. لا تُدرج تغييرات الإجابات ولا رفع المستندات.",
       "allModules": "كل الوحدات",
       "allTypes": "كل الأنواع",
-      "count": "{count, plural, one {إدخال واحد} two {إدخالان} few {{n} إدخالات} other {{n} إدخال}}",
+      "count": "{count, plural, one {إدخال واحد} two {إدخالان} few {{n} إدخالات} many {{n} إدخالًا} other {{n} إدخال}}",
       "today": "اليوم",
       "yesterday": "أمس",
       "you": "(أنت)",

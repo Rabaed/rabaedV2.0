@@ -3,14 +3,15 @@
 import { formatDate, intlLocaleOf, moduleKeys, riyadhDay, timeZone, type ActivityFeedEntry, type BilingualText, type Locale, type ModuleKey } from "@rabaed/domain";
 import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
-import { moduleName } from "../../lib/module-name.ts";
+import { moduleIcons, moduleName } from "../../lib/module-name.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { toneClasses } from "../data/tone.ts";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
-import { Icon, type IconName } from "../icon/icon.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { codeLookColour } from "../status/code-badge.tsx";
 import { whatHappened, type ActivityEventLabels, type ActivityFeedFilters } from "./activity-feed-panel.tsx";
 
 /** The page's words, from the app's messages. */
@@ -66,18 +67,6 @@ export type ActivityFeedPageProps = {
 
 /** A Select's value for "no filter": Radix Select takes no empty value. */
 const ALL = "all";
-
-/** Each Module's icon on an entry's chip, as its own pages show it. */
-const moduleIcons: Record<ModuleKey, IconName> = {
-  snag_list: "list-check",
-  submittals: "file-text",
-  inspections: "clipboard-check",
-  site_reports: "clipboard-list",
-  drawings: "ruler",
-};
-
-/** The chip of an outcome, by its look (the app's Code colours). */
-const codeColours = { a: "bg-code-a-bg text-code-a-fg", b: "bg-code-b-bg text-code-b-fg", c: "bg-code-c-bg text-code-c-fg", d: "bg-code-d-bg text-code-d-fg" };
 
 const chip = "inline-flex h-[22px] items-center gap-1 rounded-[6px] px-[7px] text-[11.5px] leading-none whitespace-nowrap";
 
@@ -164,7 +153,7 @@ export function ActivityFeedPage({
 
       {entries.length === 0 && !hasMore ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-subtle text-muted">
+          <span className="flex size-11 items-center justify-center rounded-[12px] border border-border bg-surface-subtle text-muted">
             <Icon name="clock" size={22} />
           </span>
           <p className="text-[14px] font-bold text-text">{labels.emptyTitle}</p>
@@ -268,7 +257,7 @@ function Entry({
             </bdi>
           </span>
           {e.outcome !== null && e.outcomeChip && (
-            <span className={cn(chip, "font-bold", codeColours[e.outcomeChip.look])}>{e.outcomeChip.name?.[locale] ?? labels.code(e.outcome)}</span>
+            <span className={cn(chip, "font-bold", codeLookColour[e.outcomeChip.look])}>{e.outcomeChip.name?.[locale] ?? labels.code(e.outcome)}</span>
           )}
           {e.audience === "internal" && (
             <span className={cn(chip, "font-semibold", toneClasses.warning)}>

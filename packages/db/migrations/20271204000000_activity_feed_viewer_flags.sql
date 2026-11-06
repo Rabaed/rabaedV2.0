@@ -30,31 +30,35 @@ create function app.activity_feed(
       return query
         with page as (
           select e.id, e.created_at, e.seq, e.type, e.audience, e.work_item_id, e.actor_participant_id, e.actor_member_id,
-            e.payload ->> 'outcome' as outcome, mine.on_item,
+            e.payload ->> 'outcome' as outcome,
             coalesce(e.actor_member_id = app.current_member_id(), false) as by_me
           from work_item_event e
           join work_item w on w.id = e.work_item_id
           join work_item_type t on t.id = w.work_item_type_id
-          -- "Items I'm on": the caller raised it, holds or held a Step of it, acted on it, or watches it.
-          cross join lateral (
-            select (w.created_by_member_id = app.current_member_id()
-              or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-              or exists (select 1 from work_item_event mine where mine.work_item_id = w.id and mine.actor_member_id = app.current_member_id())
-              -- Watched (RP-354): the caller's own Watch on the item's chain.
-              or app.watching_work_item(w.id)) is true as on_item
-          ) mine
           where e.project_id = p_project_id
             and e.type <> 'answers_changed'
             and (p_module_key is null or t.module_key = p_module_key)
             and (cardinality(coalesce(p_type_codes, '{}')) = 0 or t.code = any(p_type_codes))
-            and (not coalesce(p_mine, false) or mine.on_item)
+            and (not coalesce(p_mine, false)
+              or (w.created_by_member_id = app.current_member_id()
+                or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
+                or exists (select 1 from work_item_event mine where mine.work_item_id = w.id and mine.actor_member_id = app.current_member_id())
+                -- Watched (RP-354): the caller's own Watch on the item's chain.
+                or app.watching_work_item(w.id)))
             and (p_after_event_id is null or (e.created_at, e.work_item_id, e.seq) < (
               select a.created_at, a.work_item_id, a.seq from work_item_event a where a.id = p_after_event_id))
           order by e.created_at desc, e.work_item_id desc, e.seq desc
           limit greatest(1, least(coalesce(p_limit, 30), 101))
         )
         select p.id, p.created_at, p.type, p.audience, actor.legal_name, m.full_name, tr.label, p.outcome,
-          w.id, w.document_number, w.title, t.code, t.name, p.on_item, p.by_me
+          w.id, w.document_number, w.title, t.code, t.name,
+          -- "Items I'm on", the filter's rule above, asked of the page's rows only.
+          (w.created_by_member_id = app.current_member_id()
+            or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
+            or exists (select 1 from work_item_event mine where mine.work_item_id = w.id and mine.actor_member_id = app.current_member_id())
+            -- Watched (RP-354): the caller's own Watch on the item's chain.
+            or app.watching_work_item(w.id)) is true,
+          p.by_me
         from page p
         join work_item w on w.id = p.work_item_id
         join work_item_type t on t.id = w.work_item_type_id
