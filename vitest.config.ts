@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -35,7 +37,12 @@ const seamTimeout = seamTimeoutMs === undefined ? 180_000 : Number(seamTimeoutMs
 // The seam suites run one file at a time anyway (fileParallelism: false).
 const maxWorkers = Math.max(2, Math.floor(availableParallelism() / 4));
 
+// Vitest's cache used to sit in node_modules, which Turbopack watches: every run stalled this
+// worktree's `next dev` (RP-1182). It goes to the OS temp folder, one folder per worktree.
+const root = fileURLToPath(new URL(".", import.meta.url));
+
 export default defineConfig({
+  cacheDir: join(tmpdir(), "rabaed-vite", root.replace(/[:\\/]+/g, "_")),
   test: {
     maxWorkers,
     projects: [

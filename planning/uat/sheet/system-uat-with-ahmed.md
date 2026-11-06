@@ -1,6 +1,6 @@
 # Rabaed UAT test sheet: System UAT with Ahmed
 
-Built 2026-11-01. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
+Built 2026-11-06. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
 
 ## How to use this file
 
@@ -567,16 +567,16 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Also search for a Draft of Hafiz's own and for Beta Build's item.
 - **Expected result:** Only Submitted items Hafiz sees in this Project appear; no Drafts, nothing in internal review, nothing of Beta Build. A saved id that could not be offered is refused like a made-up one.
 
-### FRM-06 Photos keep time and place; Take a photo on a phone
+### FRM-06 Photos keep time and place; Take photo on a phone
 
 - **Key:** `RP-829` · **Part:** FRM · **Round:** 0
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. At 375 px open a Draft MAR; under Sample photo choose Take a photo (or Upload a JPEG with EXIF).
+  1. At 375 px open a Draft MAR; under Sample photo choose Take photo / التقاط صورة (or Upload a JPEG with EXIF).
   2. Save.
   3. Open the photo.
-- **Expected result:** On a phone Take a photo is offered beside Upload. The thumbnail shows, and opening the photo shows the time and place from its EXIF.
+- **Expected result:** On a phone Take photo / التقاط صورة is offered beside Upload. The thumbnail shows, and opening the photo shows the time and place from its EXIF.
 
 ### FRM-07 Documents freeze at the first Submit
 

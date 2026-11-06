@@ -55,8 +55,12 @@ describe("the Type cards' icons (RP-1227)", () => {
     expect(["MAR", "SAR", "DAR", "WIR"].map(newItemTypeIcon)).toEqual(["building-factory", "truck", "file-text", "clipboard-check"]);
   });
 
+  it("gives the Snag Types their own icons (RP-1231)", () => {
+    expect(["SNG", "QSC", "QSN"].map(newItemTypeIcon)).toEqual(["alert-triangle", "shield-check", "shield-check"]);
+  });
+
   it("falls back to a file for a Type it does not know", () => {
-    expect(newItemTypeIcon("SNG")).toBe("file-text");
+    expect(newItemTypeIcon("XYZ")).toBe("file-text");
     expect(newItemTypeIcon("toString")).toBe("file-text");
   });
 });
