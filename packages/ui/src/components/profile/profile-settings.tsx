@@ -406,7 +406,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       ) : (
                         <SegmentedControl
                           aria-labelledby={titleId}
-                          className="w-full sm:w-fit [&>*]:flex-1"
+                          className="w-full sm:w-fit [&>*]:flex-1 [&>*]:whitespace-nowrap"
                           value={saved.settings[group].email}
                           onValueChange={(email) => void setGroup(group, { email: email as NotificationEmailChoice })}
                           options={emailOptions}
