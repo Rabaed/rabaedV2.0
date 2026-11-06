@@ -31,7 +31,7 @@ const setVisibilityRefusals = ["not_found", "project_closed", "member_not_found"
 type SetRefusal = (typeof setVisibilityRefusals)[number];
 export type SetVisibilityResult = { ok: true } | Forbidden | { ok: false; reason: SetRefusal };
 
-type ValueRow = {
+export type ValueRow = {
   kind: DimensionKind;
   id: string;
   parent_id: string | null;
@@ -41,7 +41,7 @@ type ValueRow = {
   level_name: BilingualText | null;
 };
 
-function toValues(rows: ValueRow[]): DimensionValues {
+export function toValues(rows: ValueRow[]): DimensionValues {
   const values: DimensionValues = { trade: [], location: [] };
   for (const r of rows) {
     values[r.kind]?.push({
@@ -56,10 +56,10 @@ function toValues(rows: ValueRow[]): DimensionValues {
   return values;
 }
 
-type GrantRow = { kind: DimensionKind; is_all: boolean; value_ids: string[] };
+export type GrantRow = { kind: DimensionKind; is_all: boolean; value_ids: string[] };
 
 /** Grant rows (one per dimension) as Visibility; null when there are none (not the viewer's to see). */
-function toVisibility(rows: GrantRow[]): Visibility | null {
+export function toVisibility(rows: GrantRow[]): Visibility | null {
   const byKind = new Map(rows.map((r) => [r.kind, { isAll: r.is_all, valueIds: r.value_ids }]));
   const trade = byKind.get("trade");
   const location = byKind.get("location");

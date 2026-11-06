@@ -178,3 +178,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271130 | RP-1152 | 11 | work_item_type_description (20271128 is RP-1219's #647) |
 | 20271128 | RP-1219 | 31 | submittal_stage_order |
 | 20271201 | RP-1221 | 42 | wir_type_description |
+| 20271202 | RP-1155 | 32 | participants_pages |
