@@ -138,8 +138,10 @@ describe("a case that looks for a piece of the old text", () => {
   const before = "We can't find this page. It may not exist.";
   const source = 'await expect(page.getByText(/can\'t find this page/i)).toBeVisible();\nawait page.getByText("It may not exist").click();';
 
-  it("finds the pieces a case searches, from strings and regex literals", () => {
-    expect(searchedTexts(source).sort()).toEqual(["can't find this page", "it may not exist"]);
+  it("finds what a case searches, from strings and regex literals", () => {
+    const found = searchedTexts(`${source}\nconst r = a || /We can.t find this page/i.test(x);`);
+    expect(found.strings).toEqual(["it may not exist"]);
+    expect(found.regexes.map(String)).toEqual(["/can't find this page/i", "/We can.t find this page/i"]);
   });
 
   it("is broken when a searched piece is in the old text and not the new", () => {
@@ -147,6 +149,9 @@ describe("a case that looks for a piece of the old text", () => {
     expect(textBroken(before, "Sorry. It may not exist.", source)).toBe(true);
     expect(textBroken(before, "Oops: We can't find this page. It may not exist.", source)).toBe(false);
     expect(textBroken(undefined, "We can't find this page.", source)).toBe(false);
+    // A pattern that still matches the new text is not broken: the apostrophe is a wildcard.
+    expect(textBroken(before, "We can’t find this page. It may not exist.", "x = /We can.t find this page/i;")).toBe(false);
+    expect(textBroken(before, "We cannot find this page.", "x = /We can.t find this page/i;")).toBe(true);
   });
 
   it("names the case in touchedCases", () => {

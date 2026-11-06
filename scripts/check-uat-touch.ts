@@ -9,14 +9,14 @@ import { fileVersionsVia } from "./git-files.ts";
 // that uses it, prints the case ids as a PR comment, and, given the PR body, requires a line
 // "UAT cases touched: <ids>" naming every one.
 //
-// What counts as "uses it" (agreed with Main 7, who owns the harness; see the PR body):
+// What counts as "uses it" (proposed to Main 7, who owns the harness; see the PR body):
 // - the message key as a whole word in quotes ("home.title"), or
 // - the visible text, before or after the change, found in the case's source: a message with no
 //   placeholders matches whole; one with placeholders needs every literal piece of 3+ letters. Comparison
 //   ignores case, runs of whitespace and the backslashes of string and regex escapes. A message under 4
 //   characters is too common to match by text (only its key can).
-// - or the case looks for a piece of the old text that the new text no longer has: a string literal, or the plain
-//   run inside a regex literal, 6+ characters (a case that checks "We can't find this page" with a regex).
+// - or the case looks for text the new message no longer has: a string literal inside the old text, or a regex literal
+//   that matches the old text and not the new (a case that checks /We can.t find this page/).
 // - a match before the file's first `defineCase` (a helper in the case file) names `<FILE>-helpers`.
 // Not looked at: `planning/uat/*/harness/*` (shared helpers) and a case that finds text by role or test id.
 //
@@ -72,22 +72,28 @@ export function textUsed(value: string, source: string): boolean {
   return pieces.length > 0 && pieces.every((piece) => text.includes(normalize(piece)));
 }
 
-/**
- * The pieces of text a case's source looks for: its string literals, and the plain runs inside its regex literals
- * (`/^Send for review\./` gives "Send for review"), 6+ characters with 4+ letters, normalized.
- */
-export function searchedTexts(source: string): string[] {
-  const strings = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
-  const regexes = [...source.matchAll(/(?<=[(,:=]\s*)\/((?:[^/\\\n]|\\.)+)\/[a-z]*/g)].flatMap((m) => m[1]!.split(/\\[sSdDwWbB]|[\\.*+?()|[\]{}^$]+/));
-  return [...new Set([...strings, ...regexes].map(normalize).map((t) => t.trim()))].filter((t) => t.length >= 6 && (t.match(/\p{L}/gu) ?? []).length >= 4);
+/** What a case's source looks for on the page: its string literals, and its regex literals as RegExps; 6+ characters, 4+ letters. */
+export function searchedTexts(source: string): { strings: string[]; regexes: RegExp[] } {
+  const long = (t: string) => t.length >= 6 && (t.match(/\p{L}/gu) ?? []).length >= 4;
+  const strings = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)].map((m) => normalize(m[1] ?? m[2] ?? m[3] ?? "").trim());
+  const regexes = [...source.matchAll(/(?<=[(,:=|&!?]\s*)\/((?:[^/\\\n]|\\.)+)\/([a-z]*)/g)].flatMap((m) => {
+    if (!long(m[1]!)) return [];
+    try {
+      return [new RegExp(m[1]!, m[2]!.replace(/[^imsu]/g, ""))];
+    } catch {
+      return [];
+    }
+  });
+  return { strings: [...new Set(strings.filter(long))], regexes };
 }
 
-/** Whether a case looks for text the change takes away: a piece it searches is in the old message and not in the new. */
+/** Whether a case looks for text the change takes away: a piece or pattern it searches is in the old message and not in the new. */
 export function textBroken(before: string | undefined, after: string | undefined, source: string): boolean {
   if (before === undefined) return false;
   const was = normalize(before);
   const now = after === undefined ? "" : normalize(after);
-  return searchedTexts(source).some((t) => was.includes(t) && !now.includes(t));
+  const { strings, regexes } = searchedTexts(source);
+  return strings.some((t) => was.includes(t) && !now.includes(t)) || regexes.some((r) => r.test(before) && !r.test(after ?? ""));
 }
 
 /** Whether the case source names the key in quotes, as a whole dotted word. */
