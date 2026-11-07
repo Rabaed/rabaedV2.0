@@ -61,6 +61,20 @@ const raiserOf = (s: Staged): Caller => {
 
 const MODULE = { submittal: "submittals", snag: "snag_list", inspection: "inspections" } as const;
 
+/** Every item `by` reads on the Project's List of the Module a staged item of `kind` is in, page by page. */
+const listOf = (project: string, kind: Staged["kind"]) => async (by: Caller) => {
+  const items: WorkItemList["items"] = [];
+  let cursor: string | null = null;
+  do {
+    const res = await by.get(`/v1/projects/${project}/modules/${MODULE[kind]}/work-items${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+    expect(res.statusCode, res.body).toBe(200);
+    const page = res.json() as WorkItemList;
+    items.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return items;
+};
+
 describe("UAT 01, Hafiz's UAT Project (RP-1248)", () => {
   it("is on Hafiz's Projects, with the four Companies on it", async () => {
     const { projects } = (await as.hafiz.get("/v1/projects")).json() as { projects: { id: string; name: { en: string } }[] };
@@ -102,20 +116,7 @@ describe("UAT 01, Hafiz's UAT Project (RP-1248)", () => {
     for (const s of theirs) {
       const target = await idOf(s.item.title);
       await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: raiserOf(s), hiddenFrom: as.hafiz, name: nameOf, label: `RP-1248 ${s.item.title}` });
-      /** Every item `by` reads on the Module's List, page by page. */
-      const listOf = async (by: Caller) => {
-        const items: WorkItemList["items"] = [];
-        let cursor: string | null = null;
-        do {
-          const res = await by.get(`/v1/projects/${projectId}/modules/${MODULE[s.kind]}/work-items${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
-          expect(res.statusCode, res.body).toBe(200);
-          const page = res.json() as WorkItemList;
-          items.push(...page.items);
-          cursor = page.nextCursor;
-        } while (cursor);
-        return items;
-      };
-      await expectHiddenFrom({ read: listOf, target, seenBy: raiserOf(s), hiddenFrom: as.hafiz, name: nameOf, label: `RP-1248 ${s.item.title} on the List` });
+      await expectHiddenFrom({ read: listOf(projectId, s.kind), target, seenBy: raiserOf(s), hiddenFrom: as.hafiz, name: nameOf, label: `RP-1248 ${s.item.title} on the List` });
     }
   });
 
@@ -178,14 +179,16 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
     }
   });
 
-  it("leaves each item one of its person's cases acts on where the case needs it", async () => {
+  // The Project Admin's cases are settings: UAT 03's one item only puts TMC's Participant Code in use, and Saeed holds no Step on it.
+  const actsOnItems = r.n !== "03";
+  it.runIf(actsOnItems)("leaves each item one of its person's cases acts on where the case needs it", async () => {
     for (const s of items.filter((x) => !x.mustNotSee)) {
       const end = s.item.end;
       const title = s.item.title;
-      if (person === "saeed") continue; // the Project Admin's cases are settings: his one item only puts TMC's code in use
       const d = await detail(as[person], await (s.kind === "submittal" && s.item.revision ? idsOn(project, title).then((ids) => ids[0]!) : only(title)));
       const keys = d.actions.transitions.map((t) => t.key);
       const atStep = Boolean(d.actions.pickUp) || keys.length > 0;
+      if (end === "draft") expect(d.stage.key, title).toBe("draft");
       if (end === "with_pm") expect(keys, `${title}: ${keys.join(", ")}`).toContain("submit");
       if (end === "with_consultant_engineer" && person === "ahmed") expect(atStep, title).toBe(true);
       // Mohammed, the only Consultant Manager, holds it or picks it up first.
@@ -201,7 +204,9 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
   it("holds none of the other Companies' work, nor TMC's before its Submit, where its person can read it (V1, V3)", async () => {
     for (const s of items.filter((x) => x.mustNotSee)) {
       const target = await only(s.item.title);
-      await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: raiserOf(s), hiddenFrom: as[person], name: nameOf, label: `RP-1249 UAT ${r.n} ${s.item.title}` });
+      const label = `RP-1249 UAT ${r.n} ${s.item.title}`;
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${target}`), target, seenBy: raiserOf(s), hiddenFrom: as[person], name: nameOf, label });
+      await expectHiddenFrom({ read: listOf(project, s.kind), target, seenBy: raiserOf(s), hiddenFrom: as[person], name: nameOf, label: `${label} on the List` });
     }
   });
 

@@ -94,16 +94,18 @@ const mar = (title: string, location: string, end: SampleSubmittal["end"], produ
 /** A UAT Project's Document Number series: TMC's (Participant Code 01), Beta Build's (02) and Design Consultants' (03), by Type. */
 const series = (code: string, type: "MAR" | "SAR" | "SNG" | "WIR", participant: "01" | "02" | "03") => (n: number) => `${code}-${type}-${participant}-${String(n).padStart(4, "0")}`;
 
-/** TMC's and Beta Build's MAR series on UAT 01. */
-const tmc = series("UAT01", "MAR", "01");
-const beta = series("UAT01", "MAR", "02");
+/** A staged Submittal for `cases`. */
+const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
+/** Another Company's Submittal, or TMC's before its Submit, that the role must not see: its visibility `cases` look for it. */
+const hidden = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ ...s(cases, item, number), mustNotSee: true });
 
 /**
  * UAT 01, Hafiz (Contractor Engineer, TMC): what his cases act on, waiting at him, and what he must not see.
  * TMC's MARs are numbered in this order; Beta Build's own come between them, so VIS-39 sees TMC's run on with no gaps.
  */
 function uat01(): Staged[] {
-  const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
+  const tmc = series("UAT01", "MAR", "01");
+  const beta = series("UAT01", "MAR", "02");
   /** Beta Build's own item, for VIS-19: Hafiz must not see it. */
   const betaHidden = (item: SampleSubmittal, number?: string): Staged => ({ ...s(["VIS-19"], { ...item, owner: "beta" }, number), mustNotSee: true });
   return [
@@ -149,22 +151,17 @@ function uat01(): Staged[] {
   ];
 }
 
-/** A staged Submittal, and Beta Build's or TMC's own that the role must not see (its visibility cases look for it). */
-const staging = () => {
-  const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
-  const hidden = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ ...s(cases, item, number), mustNotSee: true });
-  return { s, hidden };
-};
-
 /** A Draft of a Package's own: never sent, so no Document Number. */
 const packageDraft = (title: string, location: string, p: Product): SampleDraft => ({ title, trade: "EL", location, product: p });
+
+/** A Package of TMC's, which Ali puts together. */
+const tmcPackage = (en: string, ar: string, status: SamplePackage["status"], existing: string[], drafts: SampleDraft[] = []): SamplePackage => ({ name: { en, ar }, owner: "tmc", status, existing, submitted: [], drafts });
 
 /**
  * UAT 02, Ali (Contractor Project Manager, TMC): items waiting at his Step to Submit or move, Submitted and closed items to
  * read, download and Watch, Drafts and Packages to put together, Snags held by TMC, and Beta Build's work he must not see.
  */
 function uat02(): Staged[] {
-  const { s, hidden } = staging();
   const tmc = series("UAT02", "MAR", "01");
   const beta = series("UAT02", "MAR", "02");
   const snag = series("UAT02", "SNG", "03");
@@ -177,8 +174,8 @@ function uat02(): Staged[] {
     hidden(["VIS-57"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
     // Submitted to Design Consultants, read only: Watch, the workflow map, a Working Copy.
     s(["SUB-18", "SUB-22", "WF-02", "SIG-16", "VIS-25", "VIS-38"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(4)),
-    // In the In Progress Package (PKG-07): one still with Design Consultants, one closed at Code B with two Comments open with TMC.
-    s(["PKG-07", "PKG-08"], mar("PKG-07 Fire alarm control unit – Submitted, in a Package", "A05", "with_consultant_engineer", P.fireAlarm), tmc(5)),
+    // In the In Progress Package PKG-08 reads: one still with Design Consultants, one closed at Code B with two Comments open with TMC.
+    s(["PKG-08"], mar("PKG-08 Fire alarm control unit – Submitted, in a Package", "A05", "with_consultant_engineer", P.fireAlarm), tmc(5)),
     s(["PKG-11", "SNG-06"], mar("PKG-11 Lighting control panel – Code B", "P01", "code_b", P.lightingPanel, {
       recommendedCode: "B",
       comments: [
@@ -192,6 +189,8 @@ function uat02(): Staged[] {
     s(["SIG-12"], mar("LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(9)),
     hidden(["VIS-57"], mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(2)),
     s(["PKG-03"], mar("PKG-03 Smoke detectors – in Internal Review", "A06", "with_pm", P.smoke), tmc(10)),
+    // In the In Progress Package PKG-07 adds to and renames.
+    s(["PKG-07"], mar("PKG-07 Cable trays – Submitted, in a Package", "A04", "with_consultant_engineer", P.trays), tmc(11)),
     // Hafiz's Drafts, which TMC reads: one to download, one whose Subject reads as a formula, and those for the Packages.
     s(["SUB-18"], mar("SUB-18 LED downlights – TMC Draft", "A03", "draft", P.downlights)),
     s(["SUB-24"], mar("=1+1 SUB-24 Subject that looks like a formula", "A04", "draft", P.fixtures)),
@@ -205,26 +204,29 @@ function uat02(): Staged[] {
   ];
 }
 
-/** UAT 02's Packages, TMC's, which Ali puts together: three Open (one empty), one In Progress. */
+/**
+ * UAT 02's Packages, TMC's, one for each Package case that changes one, so they run in any order: four Open (one empty,
+ * one only holding a Draft another Package can't take), two In Progress (one to add to and rename, one to read).
+ */
 function uat02Packages(): UatPackage[] {
-  const pkg = (en: string, ar: string, status: SamplePackage["status"], existing: string[], drafts: SampleDraft[]): SamplePackage => ({ name: { en, ar }, owner: "tmc", status, existing, submitted: [], drafts });
   return [
-    { cases: ["PKG-03"], package: pkg("PKG-03 Package to fill", "PKG-03 حزمة للتعبئة", "open", [], []) },
+    { cases: ["PKG-03"], package: tmcPackage("PKG-03 Package to fill", "PKG-03 حزمة للتعبئة", "open", []) },
+    { cases: ["PKG-03"], package: tmcPackage("PKG-03 Package holding a Draft", "PKG-03 حزمة فيها مسودة", "open", [], [packageDraft("PKG-03 Wiring devices – in another Package", "A05", P.wiring)]) },
     {
-      cases: ["PKG-03", "PKG-04"],
-      package: pkg("PKG-04 Package to change", "PKG-04 حزمة للتعديل", "open", [], [packageDraft("PKG-04 Wiring devices – in the Package", "A05", P.wiring), packageDraft("PKG-04 LED downlights – in the Package", "A05", P.downlights)]),
+      cases: ["PKG-04"],
+      package: tmcPackage("PKG-04 Package to change", "PKG-04 حزمة للتعديل", "open", [], [packageDraft("PKG-04 Wiring devices – in the Package", "A05", P.wiring), packageDraft("PKG-04 LED downlights – in the Package", "A05", P.downlights)]),
     },
-    { cases: ["PKG-05"], package: pkg("PKG-05 Package to submit", "PKG-05 حزمة للتقديم", "open", [], [packageDraft("PKG-05 Exit signs – ready Draft", "A06", P.exitSigns)]) },
+    { cases: ["PKG-05"], package: tmcPackage("PKG-05 Package to submit", "PKG-05 حزمة للتقديم", "open", [], [packageDraft("PKG-05 Exit signs – ready Draft", "A06", P.exitSigns)]) },
+    { cases: ["PKG-07"], package: tmcPackage("PKG-07 Package to add to", "PKG-07 حزمة للإضافة إليها", "in_progress", ["PKG-07 Cable trays – Submitted, in a Package"]) },
     {
-      cases: ["PKG-07", "PKG-08", "PKG-11"],
-      package: pkg("PKG-07 Package in progress", "PKG-07 حزمة قيد التنفيذ", "in_progress", ["PKG-07 Fire alarm control unit – Submitted, in a Package", "PKG-11 Lighting control panel – Code B"], []),
+      cases: ["PKG-01", "PKG-08", "PKG-11", "UX-23"],
+      package: tmcPackage("PKG-08 Package in progress", "PKG-08 حزمة قيد التنفيذ", "in_progress", ["PKG-08 Fire alarm control unit – Submitted, in a Package", "PKG-11 Lighting control panel – Code B"]),
     },
   ];
 }
 
 /** UAT 03, Saeed (Project Admin, TMC's Authorized Person): Project Settings only, so one item, whose number puts TMC's Participant Code in use. */
 function uat03(): Staged[] {
-  const { s } = staging();
   return [s(["PAR-10"], mar("PAR-10 Cable trays – numbered with TMC's code", "A02", "with_consultant_engineer", P.trays), series("UAT03", "MAR", "01")(1))];
 }
 
@@ -234,7 +236,6 @@ function uat03(): Staged[] {
  * Snag TMC resolved back with him to Verify, and TMC's and Beta Build's internal work he must not see.
  */
 function uat04(): Staged[] {
-  const { s, hidden } = staging();
   const tmc = series("UAT04", "MAR", "01");
   const beta = series("UAT04", "MAR", "02");
   const snag = series("UAT04", "SNG", "03");
@@ -243,17 +244,19 @@ function uat04(): Staged[] {
     s(["SUB-09", "NOT-02"], mar("SUB-09 Emergency lighting control panel – with you", "A02", "with_consultant_engineer", P.controlPanel, { samplePhoto: true }), tmc(1)),
     s(["SUB-10"], mar("SUB-10 Smoke detectors – send to the Manager", "A03", "with_consultant_engineer", P.smoke), tmc(2)),
     s(["FRM-08"], mar("FRM-08 Sub-distribution boards – the reply Screens", "A04", "with_consultant_engineer", P.sdb), tmc(3)),
-    s(["SUB-08", "VIS-23"], mar("SUB-08 Fan coil units – in the Engineers' pool", "A05", "with_consultant_engineer", P.fanCoils, { trade: "ME" }), tmc(4)),
-    // TMC's own, before the Submit, and Beta Build's: none of it reaches Design Consultants (V1).
-    hidden(["VIS-01"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(5)),
-    hidden(["VIS-01"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
-    hidden(["VIS-01"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
-    hidden(["VIS-01"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
-    // Closed at Code B: its Comments wait in TMC's pool, which Design Consultants read by TMC's name only.
+    s(["SUB-08"], mar("SUB-08 Fan coil units – in the Engineers' pool", "A05", "with_consultant_engineer", P.fanCoils, { trade: "ME" }), tmc(4)),
+    // Read only, for VIS-23: one in the Engineers' pool (SUB-08 picks up its own), one closed at Code B whose Comment waits in TMC's pool.
+    s(["VIS-23"], mar("VIS-23 Fan coil units – stays in the Engineers' pool", "A06", "with_consultant_engineer", P.fanCoils, { trade: "ME" }), tmc(5)),
     s(["VIS-23"], mar("VIS-23 Wiring devices – Code B, Comments with TMC", "A06", "code_b", P.wiring, {
       recommendedCode: "B",
       comments: [{ comment: "Confirm the socket heights with the Architect: wiring devices.", reference: "Room finishes drawing", end: "open" }],
     }), tmc(6)),
+    // TMC's own, before the Submit, and Beta Build's: none of it reaches Design Consultants (V1). TMC's item in Internal Review
+    // takes TMC's last number, so the numbers Ahmed reads (0001 to 0006) run on with no gap.
+    hidden(["VIS-01"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(7)),
+    hidden(["VIS-01"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
+    hidden(["VIS-01"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
+    hidden(["VIS-01"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
     // Raised by Ahmed on TMC: one resolved by TMC, back with him at Verify; one still Open with TMC.
     { kind: "snag", cases: ["VIS-51", "UX-17"], number: snag(1), item: { title: "VIS-51 Unlabelled circuit breakers – resolved by TMC", type: "SNG", trade: "EL", location: "A05", end: "resolved", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات." } },
     { kind: "snag", cases: ["UX-17"], number: snag(2), item: { title: "UX-17 Cracked light diffuser", type: "SNG", trade: "EL", location: "A06", end: "open", raisedBy: "ahmed", description: "A downlight diffuser is cracked. / غطاء ناشر الضوء مكسور.", photos: 1 } },
@@ -268,7 +271,6 @@ function uat04(): Staged[] {
  * one item for each Code case; two in a TMC Package for the bulk Code; and a Code C whose Revision is still inside TMC.
  */
 function uat05(): Staged[] {
-  const { s, hidden } = staging();
   const tmc = series("UAT05", "MAR", "01");
   const wir = series("UAT05", "WIR", "01");
   const atManager = (title: string, location: string, p: Product, code: "A" | "B" | "C" | "D") => mar(title, location, "with_consultant_manager", p, { recommendedCode: code });
@@ -313,12 +315,7 @@ function uat05(): Staged[] {
 
 /** UAT 05's Package: TMC's, In Progress, its two items waiting at Mohammed for the same Code. */
 function uat05Packages(): UatPackage[] {
-  return [
-    {
-      cases: ["PKG-09"],
-      package: { name: { en: "PKG-09 Package waiting at the Manager", ar: "PKG-09 حزمة لدى المدير" }, owner: "tmc", status: "in_progress", existing: ["PKG-09 Exit signs – bulk Code A", "PKG-09 Wiring devices – bulk Code A"], submitted: [], drafts: [] },
-    },
-  ];
+  return [{ cases: ["PKG-09"], package: tmcPackage("PKG-09 Package waiting at the Manager", "PKG-09 حزمة لدى المدير", "in_progress", ["PKG-09 Exit signs – bulk Code A", "PKG-09 Wiring devices – bulk Code A"]) }];
 }
 
 /* eslint-enable rabaed/no-avoid-terms */
