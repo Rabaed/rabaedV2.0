@@ -1,21 +1,22 @@
 import "server-only";
 import { recordVerification, type RecordVerification } from "@rabaed/domain";
 import { headers } from "next/headers";
-import { apiUrl } from "@/lib/api-url";
+import { apiUrl } from "./api-url.ts";
+import { visitorForwardHeaders, visitorForwardSecretFromEnv } from "./visitor-forward.ts";
 
 // The public verification page's reads (RP-157), from the web server: no session cookie is sent,
-// none is needed. The visitor's address goes on as the load balancer gave it (X-Forwarded-For), so
-// the api limits typed codes per visitor, not per web server. Only this page's calls carry it; the
-// browser's /api/v1 proxy is unchanged.
+// none is needed. The visitor goes on with them, so the api limits typed codes per visitor, not per
+// web server: web's own X-Forwarded-For, and on Vercel, where the api sees web's egress address, the
+// visitor named with VISITOR_FORWARD_SECRET (RP-1230, visitor-forward.ts).
 
 export type VerificationAnswer = { kind: "found"; verification: RecordVerification } | { kind: "not_found" } | { kind: "too_many_attempts" } | { kind: "unavailable" };
 
 async function verify(path: "link" | "code", body: Record<string, string>): Promise<VerificationAnswer> {
-  const forwarded = (await headers()).get("x-forwarded-for");
+  const visitor = visitorForwardHeaders((await headers()).get("x-forwarded-for"), visitorForwardSecretFromEnv());
   try {
     const res = await fetch(`${apiUrl}/v1/verification/${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...(forwarded ? { "x-forwarded-for": forwarded } : {}) },
+      headers: { "content-type": "application/json", ...visitor },
       body: JSON.stringify(body),
       cache: "no-store",
     });
