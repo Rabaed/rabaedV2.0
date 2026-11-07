@@ -1,4 +1,5 @@
 import type { Locale } from "@rabaed/domain";
+import type { SignatureCardPerson } from "../components/signature/signature-card.tsx";
 import type { SignatureEditorLabels } from "../components/signature/signature-editor.tsx";
 import type { SignatureRequiredLabels } from "../components/signature/signature-required-dialog.tsx";
 
@@ -84,7 +85,7 @@ export const signatureRequiredLabels: Record<Locale, SignatureRequiredLabels> = 
 };
 
 /** The Member's own lines on the preview card, in story data (Latin digits in both languages). */
-export const signatureCards: Record<Locale, { name: string; positions: string[]; company: string; date: string }> = {
+export const signatureCards: Record<Locale, SignatureCardPerson> = {
   en: { name: "Hafiz Hamdan", positions: ["Engineer"], company: "Al Rashid Contracting", date: "7 Nov 2026" },
   ar: { name: "حافظ حمدان", positions: ["مهندس"], company: "الراشد للمقاولات", date: "7 نوفمبر 2026" },
 };

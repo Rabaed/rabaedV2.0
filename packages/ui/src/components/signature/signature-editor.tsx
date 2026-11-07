@@ -298,6 +298,11 @@ export function SignatureEditor({ labels, defaultName, card, onSave, secondaryAc
               last.current = null;
               showDrawn();
             }}
+            onPointerCancel={() => {
+              // The browser took the touch (a scroll): the stroke ends as at a pen up.
+              last.current = null;
+              showDrawn();
+            }}
             onPointerLeave={() => {
               last.current = null;
             }}
