@@ -92,7 +92,15 @@ export interface SeedOptions {
    * the Project files bucket (only the api does, ADR 0007).
    */
   files?: boolean;
+  /**
+   * Prints how long each Project took and the total (RP-1254), so a slow seed shows where it is.
+   * Counts and times only: UAT's job log is public.
+   */
+  log?: (line: string) => void;
 }
+
+/** Seconds since `since`, to a tenth. */
+const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
 
 // Each invitation is accepted at once.
 const INVITATION_TTL_MS = 3_600_000;
@@ -108,6 +116,8 @@ export async function seedDemo(
   password: string,
   options: SeedOptions = {},
 ): Promise<DemoSeed> {
+  const start = performance.now();
+  const log = options.log ?? (() => {});
   const people: DemoPerson[] = [];
 
   const engineer: DemoPerson = {
@@ -678,10 +688,13 @@ export async function seedDemo(
     // The sample Project (RP-1217): Al Nakheel District – Block A, the same Companies and people
     // with over a hundred Submittals and a full Snag List. Its Submittals leave Draft with their
     // Datasheets, so it comes only with the file store, as the MARs above do.
+    log(`seeded Riyadh Gate Tower in ${seconds(start)}`);
+    const sample = performance.now();
     await addSampleProject(app, databases.migrator, password);
+    log(`seeded Al Nakheel in ${seconds(sample)}`);
     // The UAT Projects (RP-1248): one per role, with the same Companies and people, each holding what
     // its role's cases in the hand-run sheet act on. Riyadh Gate Tower stays the automated harness's.
-    await addUatProjects(app, databases.migrator, password);
+    await addUatProjects(app, databases.migrator, password, { log });
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
@@ -715,5 +728,6 @@ export async function seedDemo(
     },
   });
 
+  log(`seeded the demo in ${seconds(start)}`);
   return { projectId, otherProjectId, engineer, people };
 }

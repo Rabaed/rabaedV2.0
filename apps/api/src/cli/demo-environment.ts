@@ -54,8 +54,9 @@ if (action === "reset") {
 const files = process.env.PROJECT_FILES_BUCKET ? createFileStore(fileStoreSettingsFromEnv()) : undefined;
 
 const migrator = createDb(urls.migrator, { max: 2 });
-// The sample Project (RP-1217) moves four items at once, each needing a connection at times.
-const db = createDb(urls.app, { max: 4 });
+// The sample Project (RP-1217) moves four items at once, and the UAT Projects (RP-1254) are built four at a
+// time: with four connections they waited on the pool (with 20 ms per query, 476 s against 210 s with eight).
+const db = createDb(urls.app, { max: 8 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
   if (action === "sample-project-status" || action === "add-sample-project") {
@@ -96,7 +97,8 @@ async function demo() {
     { migrator, admin: adminDb },
     (mailer) => buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, mailer, ...(files ? { files } : {}) }),
     password,
-    { files: files !== undefined },
+    // Each Project's time and the total (RP-1254), so the next slow-down shows where it is.
+    { files: files !== undefined, log: (line) => console.log(`demo: ${line}`) },
   );
   // With the file store a new seed includes the sample Project (RP-1217); an existing one gets it from add-sample-project.
   console.log(result === "seeded" ? `demo: seeded Riyadh Gate Tower – Phase 2${files ? ", Al Nakheel District – Block A" : ""} and Jeddah Corniche Villas` : "demo: already seeded");

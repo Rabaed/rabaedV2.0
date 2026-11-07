@@ -370,4 +370,28 @@ describe("adding the UAT Projects again", () => {
     }
     expect(await Promise.all(UAT_ROLES.map((r) => count(ids[r.code]!)))).toEqual(before);
   });
+
+  it("prints how long each Project took, and the total, with no Subject or email (RP-1254: UAT's job log is public)", async () => {
+    const lines: string[] = [];
+    const db = createDb(urls.app, { max: 2 });
+    const app = await buildApp({ db, config: testConfig, logger: false, files: createFileStore(fileStoreSettingsFromEnv()), mailer: demoMailbox().mailer });
+    const signIns: string[] = [];
+    const inject = app.inject.bind(app);
+    app.inject = ((options: { method?: string; url?: string }) => {
+      if (options.method === "POST" && options.url === "/v1/session") signIns.push(options.url);
+      return inject(options as never);
+    }) as typeof app.inject;
+    try {
+      await addUatProjects(app, migrator, DEFAULT_PASSWORD, { roles: UAT_ROLES.slice(0, 3), log: (line) => lines.push(line) });
+    } finally {
+      await app.close();
+      await db.destroy();
+    }
+    const timed = lines.filter((l) => /^seeded /.test(l));
+    expect(timed).toEqual([expect.stringMatching(/^seeded UAT 0[123] in \d+\.\d s$/), expect.stringMatching(/^seeded UAT 0[123] in \d+\.\d s$/), expect.stringMatching(/^seeded UAT 0[123] in \d+\.\d s$/), expect.stringMatching(/^seeded 3 UAT Project\(s\) in \d+\.\d s$/)]);
+    expect(new Set(timed.slice(0, 3).map((l) => l.slice(0, 14)))).toEqual(new Set(["seeded UAT 01 ", "seeded UAT 02 ", "seeded UAT 03 "]));
+    expect(lines.join("\n")).not.toMatch(/@|demo\.rabaed\.test/);
+    // Each demo person signs in once for all of them, not once per Project.
+    expect(signIns.length).toBeLessThanOrEqual(13);
+  });
 });

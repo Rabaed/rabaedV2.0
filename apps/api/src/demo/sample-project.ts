@@ -163,71 +163,87 @@ export async function addSampleProject(
   app: FastifyInstance,
   migrator: Db,
   password: string,
-  { log = () => {}, concurrency = 4, records = sampleRecords(), project: which = SAMPLE_PROJECT, people = {} }: SampleProjectOptions = {},
+  options: SampleProjectOptions = {},
 ): Promise<SampleProjectResult> {
+  return withSampleLock(migrator, async (connection) => buildSampleProject(await signInAll(app, password), connection, options));
+}
+
+/**
+ * Runs `fn` holding the lock that serialises sample Project runs, on one migrator connection, which `fn`
+ * reads with. The UAT Projects (RP-1254) build several Projects at once under one lock and one connection.
+ */
+export async function withSampleLock<T>(migrator: Db, fn: (connection: Db) => Promise<T>): Promise<T> {
   return migrator.connection().execute(async (connection) => {
     await sql`select pg_advisory_lock(${LOCK_KEY})`.execute(connection);
     try {
-      const as = await signInAll(app, password);
-      const projectId = await project(as.saeed, which);
-      const ids = await setUp(as, projectId, which, people);
-      const titled = async (title: string) =>
-        (await sql<{ id: string }>`select id from work_item where project_id = ${projectId}::uuid and title = ${title}`.execute(connection)).rows.map((r) => r.id);
-      const { rows } = await sql<{ title: string }>`select distinct title from work_item where project_id = ${projectId}::uuid`.execute(connection);
-      const existing = new Set(rows.map((r) => r.title));
-      const run = new Runner(as, projectId, ids, titled);
-      const planned = [
-        ...records.submittals.map((item) => ({ title: item.title, move: () => run.submittal(item) })),
-        ...records.snags.map((item) => ({ title: item.title, move: () => run.snag(item) })),
-        ...records.inspections.map((item) => ({ title: item.title, move: () => run.inspection(item) })),
-        ...(records.dars ?? []).map((item) => ({ title: item.title, move: () => run.dar(item) })),
-      ];
-      const todo = planned.filter((p) => !existing.has(p.title));
-      log(`sample project: ${planned.length - todo.length} of ${planned.length} item(s) already there; adding ${todo.length}`);
-      let added = 0;
-      await inParallel(
-        todo.map((p) => async () => {
-          await p.move();
-          added++;
-        }),
-        concurrency,
-      );
-      log(`sample project: ${added} item(s) added`);
-
-      // Each Contractor's Packages by name, its own Participant's only. One already there is finished if a run
-      // stopped half way through it, and left as it is when complete.
-      const found = new Map<string, string>();
-      for (const side of Object.keys(SIDES) as Side[]) {
-        const pm = as[SIDES[side].pm];
-        const { participants } = await pm<{ participants: { id: string; isOwnCompany: boolean }[] }>("GET", `/v1/projects/${projectId}/participants`);
-        const own = participants.find((p) => p.isOwnCompany)?.id;
-        const { packages } = await pm<{ packages: { id: string; name: BilingualText; owner: { participantId: string } }[] }>("GET", `/v1/projects/${projectId}/packages`);
-        for (const p of packages) if (p.owner.participantId === own) found.set(`${side}:${p.name.en}`, p.id);
-      }
-      const already = records.packages.filter((p) => found.has(`${p.owner}:${p.name.en}`)).length;
-      log(`sample project: ${already} of ${records.packages.length} Package(s) already there; adding ${records.packages.length - already}`);
-      let packagesAdded = 0;
-      let packagesFinished = 0;
-      await inParallel(
-        records.packages.map((p) => async () => {
-          const packageId = found.get(`${p.owner}:${p.name.en}`);
-          if (!(await run.package(p, packageId))) return;
-          if (packageId) packagesFinished++;
-          else packagesAdded++;
-        }),
-        concurrency,
-      );
-      log(`sample project: ${packagesAdded} Package(s) added${packagesFinished ? `, ${packagesFinished} finished` : ""}`);
-      return {
-        projectId,
-        added,
-        present: planned.length - todo.length,
-        packages: { added: packagesAdded, present: records.packages.length - packagesAdded - packagesFinished },
-      };
+      return await fn(connection);
     } finally {
       await sql`select pg_advisory_unlock(${LOCK_KEY})`.execute(connection);
     }
   });
+}
+
+/** Builds one Project of the sample's make, as people already signed in (signInAll), the lock held (withSampleLock). */
+export async function buildSampleProject(
+  as: SignedIn,
+  connection: Db,
+  { log = () => {}, concurrency = 4, records = sampleRecords(), project: which = SAMPLE_PROJECT, people = {} }: SampleProjectOptions = {},
+): Promise<SampleProjectResult> {
+  const projectId = await project(as.saeed, connection, which);
+  const ids = await setUp(as, projectId, which, people);
+  const titled = async (title: string) =>
+    (await sql<{ id: string }>`select id from work_item where project_id = ${projectId}::uuid and title = ${title}`.execute(connection)).rows.map((r) => r.id);
+  const { rows } = await sql<{ title: string }>`select distinct title from work_item where project_id = ${projectId}::uuid`.execute(connection);
+  const existing = new Set(rows.map((r) => r.title));
+  const run = new Runner(as, projectId, ids, titled);
+  const planned = [
+    ...records.submittals.map((item) => ({ title: item.title, move: () => run.submittal(item) })),
+    ...records.snags.map((item) => ({ title: item.title, move: () => run.snag(item) })),
+    ...records.inspections.map((item) => ({ title: item.title, move: () => run.inspection(item) })),
+    ...(records.dars ?? []).map((item) => ({ title: item.title, move: () => run.dar(item) })),
+  ];
+  const todo = planned.filter((p) => !existing.has(p.title));
+  log(`sample project: ${planned.length - todo.length} of ${planned.length} item(s) already there; adding ${todo.length}`);
+  let added = 0;
+  await inParallel(
+    todo.map((p) => async () => {
+      await p.move();
+      added++;
+    }),
+    concurrency,
+  );
+  log(`sample project: ${added} item(s) added`);
+
+  // Each Contractor's Packages by name, its own Participant's only. One already there is finished if a run
+  // stopped half way through it, and left as it is when complete.
+  const found = new Map<string, string>();
+  for (const side of Object.keys(SIDES) as Side[]) {
+    const pm = as[SIDES[side].pm];
+    const { participants } = await pm<{ participants: { id: string; isOwnCompany: boolean }[] }>("GET", `/v1/projects/${projectId}/participants`);
+    const own = participants.find((p) => p.isOwnCompany)?.id;
+    const { packages } = await pm<{ packages: { id: string; name: BilingualText; owner: { participantId: string } }[] }>("GET", `/v1/projects/${projectId}/packages`);
+    for (const p of packages) if (p.owner.participantId === own) found.set(`${side}:${p.name.en}`, p.id);
+  }
+  const already = records.packages.filter((p) => found.has(`${p.owner}:${p.name.en}`)).length;
+  log(`sample project: ${already} of ${records.packages.length} Package(s) already there; adding ${records.packages.length - already}`);
+  let packagesAdded = 0;
+  let packagesFinished = 0;
+  await inParallel(
+    records.packages.map((p) => async () => {
+      const packageId = found.get(`${p.owner}:${p.name.en}`);
+      if (!(await run.package(p, packageId))) return;
+      if (packageId) packagesFinished++;
+      else packagesAdded++;
+    }),
+    concurrency,
+  );
+  log(`sample project: ${packagesAdded} Package(s) added${packagesFinished ? `, ${packagesFinished} finished` : ""}`);
+  return {
+    projectId,
+    added,
+    present: planned.length - todo.length,
+    packages: { added: packagesAdded, present: records.packages.length - packagesAdded - packagesFinished },
+  };
 }
 
 /** How far the sample Project is on this database, read as the migrator and changing nothing: a dry run's answer. */
@@ -253,7 +269,7 @@ export async function sampleProjectStatus(
 }
 
 /** Runs `moves`, `n` at a time; after a failure it starts no more, waits for the rest, and throws the first. */
-async function inParallel(moves: (() => Promise<void>)[], n: number): Promise<void> {
+export async function inParallel(moves: (() => Promise<void>)[], n: number): Promise<void> {
   let next = 0;
   let failure: { error: unknown } | undefined;
   const worker = async () => {
@@ -271,9 +287,11 @@ async function inParallel(moves: (() => Promise<void>)[], n: number): Promise<vo
 }
 
 type People = Record<Who, Call>;
+/** The demo people, each signed in as one browser (signInAll); several Projects built at once share them (RP-1254). */
+export type SignedIn = People;
 
 /** Everyone signs in first, so a password that no longer works stops the run before it writes anything. */
-async function signInAll(app: FastifyInstance, password: string): Promise<People> {
+export async function signInAll(app: FastifyInstance, password: string): Promise<People> {
   const people = {} as People;
   for (const [who, [local, domain]] of Object.entries(PEOPLE) as [Who, readonly [string, string]][]) {
     const caller = browser(app);
@@ -287,11 +305,15 @@ async function signInAll(app: FastifyInstance, password: string): Promise<People
   return people;
 }
 
-/** The Project, created by TMC's Authorized Person (its Project Admin) unless it is there. */
-async function project(saeed: Call, which: SampleProjectName): Promise<string> {
-  const { projects } = await saeed<{ projects: { id: string; code: string; name: BilingualText }[] }>("GET", "/v1/projects");
+/**
+ * The Project, created by TMC's Authorized Person (its Project Admin) unless it is there. Found as the migrator
+ * reads which items exist: Saeed's own list of Projects costs over a hundred queries once the UAT Projects are on it (RP-1254).
+ */
+async function project(saeed: Call, connection: Db, which: SampleProjectName): Promise<string> {
   // By its code and English name, as sampleProjectStatus finds it.
-  const found = projects.find((p) => p.code === which.code && p.name.en === which.name.en);
+  const { rows: [found] } = await sql<{ id: string }>`
+    select id from project where code = ${which.code} and name ->> 'en' = ${which.name.en} order by created_at limit 1
+  `.execute(connection);
   if (found) return found.id;
   const { projectId } = await saeed<{ projectId: string }>("POST", "/v1/projects", { name: which.name, code: which.code, role: "contractor" });
   return projectId;
@@ -316,10 +338,13 @@ async function setUp(as: People, projectId: string, which: SampleProjectName, pe
   for (const t of SAMPLE_TRADES) {
     if (!have.trade.some((v) => v.code === t.code)) await admin("POST", `/v1/projects/${projectId}/trades`, { code: t.code, name: t.name });
   }
+  // Each Location's id by its code as it is added, so a child finds its parent without reading them all again (RP-1254).
+  const locationIds = new Map(have.location.map((v) => [v.code, v.id]));
   for (const l of SAMPLE_LOCATIONS) {
-    if (have.location.some((v) => v.code === l.code)) continue;
-    const parentId = l.parent ? (await dimensions()).location.find((v) => v.code === l.parent)!.id : null;
-    await admin("POST", `/v1/projects/${projectId}/locations`, { code: l.code, name: l.name, parentId });
+    if (locationIds.has(l.code)) continue;
+    const parentId = l.parent ? locationIds.get(l.parent)! : null;
+    const { id } = await admin<{ id: string }>("POST", `/v1/projects/${projectId}/locations`, { code: l.code, name: l.name, parentId });
+    locationIds.set(l.code, id);
   }
   have = await dimensions();
   const byCode = (values: DimensionValues["trade"]) => Object.fromEntries(values.map((v) => [v.code, v.id]));
@@ -353,11 +378,12 @@ async function setUp(as: People, projectId: string, which: SampleProjectName, pe
       ...company.members.filter(([who]) => !people.leaveOff?.includes(who)).map(([who, positions]): OnProject => [who, positions, people.grants?.[who]]),
       ...(people.add ?? []).filter((a) => a.company === company.ap).map((a): OnProject => [a.who, a.positions, a.grant]),
     ];
+    // Read once: adding one Member changes no other's entry (RP-1254).
+    const onProject = await ap<ParticipantMembers>("GET", `/v1/participants/${participantId}/members`);
     for (const [who, positions, grant] of members) {
       const email = demoEmail(PEOPLE[who][0], PEOPLE[who][1]);
       const memberId = colleagues.find((m) => m.email === email)?.id;
       if (!memberId) throw new Error(`Sample project: the demo person "${who}" is not a Member of their Company`);
-      const onProject = await ap<ParticipantMembers>("GET", `/v1/participants/${participantId}/members`);
       const member = onProject.members.find((m) => m.id === memberId);
       if (!member) await ap("POST", `/v1/participants/${participantId}/members`, { memberId });
       // Sara works Mechanical only, as on Riyadh Gate Tower (RP-1207); everyone else all of their Participant's, unless `people` narrows them.
