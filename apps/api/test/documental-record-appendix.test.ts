@@ -408,7 +408,7 @@ beforeAll(async () => {
   mark("the item closed while C1 holds it");
 
   await drainOutbox(worker, { documental_record: handler }, own());
-  mark("the drain: this file's 2 records");
+  mark("the drain: this file's records");
   made.full = await download(c1Pm, fullId);
   made.fullAsK1 = await bytesOf(k1Pm, fullId);
   made.held = await download(c1Engineer, heldId);

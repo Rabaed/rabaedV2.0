@@ -39,8 +39,8 @@
  *   rolledBack(db, fn)              runs fn in a transaction that is always rolled back.
  *   testDatabaseUrls()              the environment's URLs, pointed at `<database>_test`.
  *   drainOutbox(db, handlers?, own?)   runs the outbox until nothing is due; emails, digests and reports go nowhere.
- *                                   With `own` ({ projects, migrator }), the kinds `handlers` names come only from
- *                                   those Projects (RP-1236): a record test makes its own records, not the seed's.
+ *                                   With `own` (OwnProjects: { projects, migrator }), the kinds `handlers` names come
+ *                                   only from those Projects (RP-1236): a record test makes its own records, not the seed's.
  *   whileOtherProjectsWait(own, kinds, run)   other Projects' rows of `kinds` wait while `run` runs (a test's processOutbox).
  * Not re-exported (import by path): reset-test-database.ts and global-setup.ts (the test database's lifecycle),
  *   the catalogue checks grants.ts, function-grants.ts, definer-*.ts, id-defaults.ts, item-visibility-tables.ts,
@@ -132,6 +132,8 @@ export interface OwnProjects {
  */
 export async function whileOtherProjectsWait<T>(own: OwnProjects, kinds: readonly string[], run: () => Promise<T>): Promise<T> {
   if (kinds.length === 0) throw new Error("whileOtherProjectsWait: name the kinds whose rows wait (a drain's own handlers)");
+  // With no Project, every row of `kinds` would wait and the run would quietly take none.
+  if (own.projects.length === 0) throw new Error("whileOtherProjectsWait: own.projects names no Project");
   const { rows: held } = await sql<{ id: string; available_at: string }>`
     with other as (
       select id, available_at from outbox
