@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { VISITOR_HEADER, VISITOR_KEY_HEADER } from "@rabaed/domain";
+import { lastForwardedEntry, VISITOR_HEADER, VISITOR_KEY_HEADER } from "@rabaed/domain";
 import type { FastifyRequest } from "fastify";
 
 const sha256 = (text: string): Buffer => createHash("sha256").update(text, "utf8").digest();
@@ -8,16 +8,6 @@ const sha256 = (text: string): Buffer => createHash("sha256").update(text, "utf8
 function isSecret(key: string | string[] | undefined, secret: string): boolean {
   return typeof key === "string" && key !== "" && timingSafeEqual(sha256(key), sha256(secret));
 }
-
-/** The last entry of a comma-separated address list. */
-const lastEntry = (header: string | string[] | undefined): string | undefined =>
-  [header]
-    .flat()
-    .join(",")
-    .split(",")
-    .map((a) => a.trim())
-    .filter((a) => a !== "")
-    .at(-1);
 
 /**
  * Who is asking, for a limit on a public route.
@@ -31,10 +21,10 @@ const lastEntry = (header: string | string[] | undefined): string | undefined =>
  */
 export function visitorOf(request: FastifyRequest, secret: string | undefined): string {
   if (secret && isSecret(request.headers[VISITOR_KEY_HEADER], secret)) {
-    const named = lastEntry(request.headers[VISITOR_HEADER]);
+    const named = lastForwardedEntry(request.headers[VISITOR_HEADER]);
     if (named) return named;
   }
-  return lastEntry(request.headers["x-forwarded-for"]) ?? request.ip;
+  return lastForwardedEntry(request.headers["x-forwarded-for"]) ?? request.ip;
 }
 
 /** The visitor's address as the database keeps it for a limit: its SHA-256, never the address. */

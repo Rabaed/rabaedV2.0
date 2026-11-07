@@ -216,7 +216,8 @@ describe("the three Vercel projects' environment variables", () => {
   // RP-1230: web names the visitor a public route's limit counts, and the api believes it only
   // with this key. Web's previews call the api's production address, so both targets get it.
   describe("VISITOR_FORWARD_SECRET", () => {
-    const secret = "visitor-forward-secret-of-40-characters!";
+    // Built at run time, so no secret-like literal is in the source.
+    const secret = "v".repeat(40);
     const withSecret = { ...env, VISITOR_FORWARD_SECRET: secret };
     const sent = (project: ProjectName) => projectEnv(project, withSecret, version).filter((v) => v.key === "VISITOR_FORWARD_SECRET");
 

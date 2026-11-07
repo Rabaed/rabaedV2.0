@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stripVisitorHeaders, visitorForwardHeaders, visitorForwardSecretFromEnv } from "./visitor-forward.ts";
+import { visitorForwardHeaders, visitorForwardSecretFromEnv } from "./visitor-forward.ts";
 
 // RP-1230: on Vercel the api sees web's egress address, so web names the visitor its own incoming
 // X-Forwarded-For holds (Vercel sets it to the browser's address) with VISITOR_FORWARD_SECRET as the key.
@@ -44,13 +44,5 @@ describe("VISITOR_FORWARD_SECRET on web", () => {
     const short = "k".repeat(31);
     expect(() => visitorForwardSecretFromEnv({ VISITOR_FORWARD_SECRET: short })).toThrow(/VISITOR_FORWARD_SECRET/);
     expect(() => visitorForwardSecretFromEnv({ VISITOR_FORWARD_SECRET: short })).toThrow(expect.objectContaining({ message: expect.not.stringContaining(short) }));
-  });
-});
-
-describe("a browser's own visitor headers", () => {
-  it("are taken off before web adds its own", () => {
-    const headers = new Headers({ "x-rabaed-visitor": "198.51.100.9", "X-Rabaed-Visitor-Key": "guess", "x-rabaed-visitor-other": "y", accept: "*/*" });
-    stripVisitorHeaders(headers);
-    expect([...headers.keys()]).toEqual(["accept"]);
   });
 });

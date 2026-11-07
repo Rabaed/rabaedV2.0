@@ -34,7 +34,7 @@ describe("api config", () => {
     });
 
     it("never prints the short secret in the error", () => {
-      const short = "short-secret-of-31-characters!!";
+      const short = "q".repeat(31);
       expect(() => apiConfigFromEnv({ VISITOR_FORWARD_SECRET: short })).toThrow(expect.objectContaining({ message: expect.not.stringContaining(short) }));
     });
   });

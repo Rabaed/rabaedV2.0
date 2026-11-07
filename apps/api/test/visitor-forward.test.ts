@@ -3,12 +3,13 @@
 // each hop, so the api's last entry is web's egress address, one for every visitor. Web names the
 // visitor in `x-rabaed-visitor`, with VISITOR_FORWARD_SECRET in `x-rabaed-visitor-key`, and the api
 // believes it only with that key. The typed-code route counts a wrong code as an attempt, so no
-// record is needed here; verification.test.ts has the records.
+// record is needed here (verification.test.ts has the records), and the password-reset route counts
+// a request for any email alike.
 import { randomBytes } from "node:crypto";
 import { Writable } from "node:stream";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { VERIFICATION_ATTEMPTS } from "@rabaed/domain";
+import { PASSWORD_RESET, VERIFICATION_ATTEMPTS } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
@@ -75,6 +76,21 @@ describe("RP-1230: two visitors behind one egress address", () => {
     const egress = address();
     expect(await pastTheLimit(withoutSecret, egress, address(), SECRET)).toBe(429);
     expect((await attempt(withoutSecret, egress, address(), SECRET)).statusCode).toBe(429);
+  });
+
+  it("get a password-reset limit each too (RP-1058), each request for an email no one has", async () => {
+    const egress = address();
+    const [first, second] = [address(), address()];
+    const ask = (visitor: string) =>
+      withSecret.inject({
+        method: "POST",
+        url: "/v1/password-resets",
+        headers: { "x-forwarded-for": egress, "x-rabaed-visitor": visitor, "x-rabaed-visitor-key": SECRET },
+        payload: { email: `nobody-${randomBytes(6).toString("hex")}@rabaed.test` },
+      });
+    for (let i = 0; i < PASSWORD_RESET.perVisitor; i++) expect((await ask(first)).statusCode).toBe(202);
+    expect((await ask(first)).statusCode).toBe(429);
+    expect((await ask(second)).statusCode).toBe(202);
   });
 
   it("never puts the key in the api's log", () => {
