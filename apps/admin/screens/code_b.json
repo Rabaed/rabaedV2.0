@@ -59,6 +59,27 @@
             ]
           }
         ]
+      },
+      {
+        "key": "code_files",
+        "title": { "en": "Photos and files", "ar": "الصور والملفات" },
+        "fields": [
+          {
+            "key": "code_photos",
+            "type": "photos",
+            "required": false,
+            "maxFiles": 10,
+            "label": { "en": "Photos", "ar": "الصور" },
+            "help": { "en": "Shared with the Code.", "ar": "تُشارك مع الرمز." }
+          },
+          {
+            "key": "code_attachments",
+            "type": "attachments",
+            "required": false,
+            "label": { "en": "Files", "ar": "الملفات" },
+            "help": { "en": "PDFs and documents. Shared with the Code.", "ar": "ملفات PDF والمستندات. تُشارك مع الرمز." }
+          }
+        ]
       }
     ]
   },

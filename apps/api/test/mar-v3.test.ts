@@ -334,7 +334,8 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
     for (const who of [hafiz, faisal, ahmed]) {
       const events = await history(who, id);
       expect(sections(events.find((e) => e.answers?.cover_note !== undefined))).toEqual(["cover"]);
-      expect(sections(events.find((e) => e.type === "issue_code"))).toEqual(["final_verification", "code_remarks"]);
+      // The Code's Screen with its Photos and files section (RP-1237 row 34).
+      expect(sections(events.find((e) => e.type === "issue_code"))).toEqual(["final_verification", "code_remarks", "code_files"]);
       for (const e of events) if (!e.answers) expect(e.answersForm).toBeUndefined();
     }
     for (const who of [hafiz, faisal]) expect((await history(who, id)).some((e) => sections(e)?.includes("verification"))).toBe(false);
