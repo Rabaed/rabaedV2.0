@@ -200,7 +200,7 @@ describe("scenario RP-1139-3: another Company reads a Document's Company, never 
     const kOne = [k1.members.engineer, k1.members.manager];
     // The Documents themselves are read across Companies, so a hidden id is the column, not the row.
     const seen = await tower.call<{ id: string }>(k1.members.engineer, sql`select id from document where id = ${c1Document}::uuid`);
-    expect(seen).toHaveLength(1);
+    expect(seen.map((r) => r.id)).toEqual([c1Document]);
     await expectHiddenFrom({
       read: uploadersRead,
       target: c1.members.engineer,

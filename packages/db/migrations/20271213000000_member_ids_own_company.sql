@@ -11,8 +11,8 @@
 -- * app.event_actor_members(event ids) and app.document_uploaders(document ids) give, for each row the
 --   events or Documents policy lets the reader read, the Member's id only where the Member is of the
 --   reader's own Company; null otherwise.
--- * app.acted_on_work_item(item) says whether the reader has acted on the item: the Activity Feed's
---   "Items I'm on" asks it of the reader's own Member only.
+-- * app.my_acted_work_items(project) gives the items of the Project the reader's own Member has acted
+--   on: the Activity Feed's "Items I'm on" reads it once per call.
 -- * app.work_item_history and app.activity_feed (security invoker, run by the app role) read the actor
 --   through them, from their newest bodies (20271127000000 and 20271207000000). The other readers of
 --   both columns run inside definer functions only (the app role may not run them).
@@ -79,19 +79,26 @@ create function app.document_uploaders(p_document_ids uuid[])
 revoke all on function app.document_uploaders(uuid[]) from public;
 grant execute on function app.document_uploaders(uuid[]) to rabaed_app;
 
-create function app.acted_on_work_item(p_work_item_id uuid)
-  returns boolean
+create function app.my_acted_work_items(p_project_id uuid)
+  returns setof uuid
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
     begin
-      -- The reader's own moves only, on an item they see: it names no one else.
-      return app.sees_work_item(p_work_item_id)
-        and exists (select 1 from work_item_event e where e.work_item_id = p_work_item_id and e.actor_member_id = app.current_member_id());
+      -- The reader's own moves only, on a Project of theirs and items they still see: it names no one else.
+      -- One set per call, so the Activity Feed asks it once, not per event.
+      if p_project_id not in (select app.current_project_ids()) then
+        return;
+      end if;
+      return query
+        select i.work_item_id
+        from (select distinct e.work_item_id from work_item_event e
+              where e.project_id = p_project_id and e.actor_member_id = app.current_member_id()) i
+        where app.sees_work_item(i.work_item_id);
     end
   $$;
-revoke all on function app.acted_on_work_item(uuid) from public;
-grant execute on function app.acted_on_work_item(uuid) to rabaed_app;
+revoke all on function app.my_acted_work_items(uuid) from public;
+grant execute on function app.my_acted_work_items(uuid) to rabaed_app;
 
 create or replace function app.work_item_history(p_work_item_id uuid)
   returns table (
@@ -160,6 +167,9 @@ create or replace function app.activity_feed(
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
+    declare
+      -- The items the caller's own Member acted on (RP-1139: the actor column isn't the app role's), asked once.
+      v_acted uuid[] := array(select app.my_acted_work_items(p_project_id));
     begin
       return query
         with page as (
@@ -175,7 +185,7 @@ create or replace function app.activity_feed(
             and (not coalesce(p_mine, false)
               or (w.created_by_member_id = app.current_member_id()
                 or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-                or app.acted_on_work_item(w.id)
+                or w.id = any (v_acted)
                 -- Watched (RP-354): the caller's own Watch on the item's chain.
                 or app.watching_work_item(w.id)))
             and (p_after_event_id is null or (e.created_at, e.work_item_id, e.seq) < (
@@ -190,7 +200,7 @@ create or replace function app.activity_feed(
           -- "Items I'm on", the filter's rule above, asked of the page's rows only.
           (w.created_by_member_id = app.current_member_id()
             or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-            or app.acted_on_work_item(w.id)
+            or w.id = any (v_acted)
             -- Watched (RP-354): the caller's own Watch on the item's chain.
             or app.watching_work_item(w.id)) is true,
           coalesce(ac.actor_member_id = app.current_member_id(), false)

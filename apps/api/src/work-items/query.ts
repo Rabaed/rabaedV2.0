@@ -783,8 +783,12 @@ const holderJoins = sql`left join lateral (
     order by e.seq desc
     limit 1
   ) ce on true
-  -- Its actor's id, which app.event_actor_members gives for one's own Company's Member only (RP-1139).
-  left join lateral (select a.actor_member_id from app.event_actor_members(array[ce.id]) a where ce.id is not null) ca on true
+  -- Its actor's id, which app.event_actor_members gives for one's own Company's Member only (RP-1139),
+  -- asked only of one's own Participant's closes: another's is named by its Company only.
+  left join lateral (
+    select a.actor_member_id from app.event_actor_members(array[ce.id]) a
+    where ce.id is not null and ce.actor_participant_id in (select app.current_participant_ids())
+  ) ca on true
   left join member cm on cm.id = ca.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
   left join member m on m.id = r.assignee_member_id
   left join lateral (

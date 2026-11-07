@@ -111,6 +111,16 @@ beforeAll(async () => {
   await take(k1Manager.caller, id, "recommend_a");
 });
 
+describe("scenario RP-1139-1: the reads that used the revoked columns still answer", () => {
+  it("history, Documents and the Activity Feed answer the app role's reads, naming one's own people", async () => {
+    for (const url of [`/v1/work-items/${id}/history`, `/v1/work-items/${id}/documents`, `/v1/projects/${at.projectId}/activity`])
+      expect((await c1Pm.caller.get(url)).statusCode, url).toBe(200);
+    // The actor and the uploader come through app.event_actor_members and app.document_uploaders now.
+    await expectHiddenFrom({ read: actorsRead, target: c1Pm.name, seenBy: c1Pm.caller, hiddenFrom: k1Manager.caller, name: named, label: "C1's PM in the history" });
+    await expectHiddenFrom({ read: uploadersRead, target: c1Engineer.name, seenBy: c1Pm.caller, hiddenFrom: k1Manager.caller, name: named, label: "C1's uploader" });
+  });
+});
+
 describe("scenario RP-1139-2: C1 at the Owner's review, and after it closes, reads no other Company's actor", () => {
   it("the history names K1's manager to K1 only, and C1's PM to C1 only", async () => {
     const cOne = [c1Engineer.caller, c1Pm.caller];
@@ -124,9 +134,10 @@ describe("scenario RP-1139-2: C1 at the Owner's review, and after it closes, rea
     const closer = async (by: Caller) => {
       const res = await by.get(`/v1/projects/${at.projectId}/work-items/kanban`);
       const card = (res.json() as WorkItemBoard).columns.flatMap((c) => c.lanes.flatMap((l) => l.cards)).find((c) => c.id === id);
-      return card?.closedBy?.kind === "own" ? [{ id: card.closedBy.name.en }] : [];
+      // The card, when it names a person as its closer: only an own-Company closer carries one.
+      return card?.closedBy && "name" in card.closedBy ? [{ id: card.id }] : [];
     };
-    await expectHiddenFrom({ read: closer, target: owPm.name, seenBy: owPm.caller, hiddenFrom: [c1Engineer.caller, c1Pm.caller, k1Manager.caller, c2Engineer.caller], name: named, label: "the Owner's closer" });
+    await expectHiddenFrom({ read: closer, target: id, seenBy: owPm.caller, hiddenFrom: [c1Engineer.caller, c1Pm.caller, k1Manager.caller, c2Engineer.caller], name: named, label: "the Owner's closer" });
   });
 });
 
