@@ -6,8 +6,8 @@ describe("sidebarItemOf", () => {
     expect(sidebarItemOf("/")).toBe("home");
   });
 
-  it("marks Projects on the Projects page, every Project page and a Work Item", () => {
-    for (const path of ["/projects", "/projects/p1", "/projects/p1/work-items", "/projects/p1/settings/numbering", "/work-items/w1"]) {
+  it("marks Projects on the Projects page, every Project page, a Work Item and a Package (RP-1164)", () => {
+    for (const path of ["/projects", "/projects/p1", "/projects/p1/work-items", "/projects/p1/settings/numbering", "/work-items/w1", "/packages/k1"]) {
       expect(sidebarItemOf(path)).toBe("projects");
     }
   });

@@ -1,20 +1,7 @@
-import { projectTabModules } from "@rabaed/domain";
-import { TabsBar } from "@rabaed/ui";
-import { ProjectTabsNav } from "@/components/project-tabs-nav";
-import { getProject } from "@/lib/session";
+import { ProjectTabsBand } from "@/components/project-shell";
 
-/**
- * A Project's module tabs, in the band under the top bar on every Project page
- * (RP-346, RP-406), but not Inspections' while the Project shows it in Submittals (RP-652). A Project the Member is not on gets no tabs; its page
- * answers not found.
- */
+/** A Project's module tabs on every Project page (RP-346, RP-406): see `ProjectTabsBand`. */
 export default async function ProjectTabs({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const project = await getProject(projectId);
-  if (!project) return null;
-  return (
-    <TabsBar>
-      <ProjectTabsNav projectId={project.id} modules={projectTabModules(project)} />
-    </TabsBar>
-  );
+  return <ProjectTabsBand projectId={projectId} />;
 }

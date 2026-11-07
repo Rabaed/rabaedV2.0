@@ -105,7 +105,7 @@ export type WorkItemTableProps = {
   /**
    * Under 1600 wide, fit 1366 (RP-1177, a List's table; the owner's answers of 2026-11-02): cells 8px in, no drag dots
    * before the names, the Subject 112px and "With" 140px at most, each in full in its tooltip. The Package page's
-   * table, whose columns fit, leaves it off.
+   * table takes it too (RP-1164): with its checkboxes and remove column it did not fit 1366 (UX-23).
    */
   fit?: boolean;
   className?: string;
