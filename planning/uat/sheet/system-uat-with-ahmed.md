@@ -1627,7 +1627,7 @@ Every case here is run in **UAT 06 · Consultant Authorized Person (Layla)**, as
 - **Sign in as:** Layla (DCL Authorized Person)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open Company Projects (sidebar).
+  1. Open Participants (sidebar, under My Company): its Company Projects.
 - **Expected result:** Each Project Design Consultants takes part in shows its name, code, Host Company, Design Consultants' own Project Role and its own Project Members, the ten UAT Projects (UAT 01 to UAT 10) among them: an Authorized Person sees every Project of her Company (V15). On UAT 06 the only Member is Ahmed; on the others Ahmed, Sara and Mohammed. Never another Participant or its people.
 
 ### VIS-03 Access follows the current grant, not the grant date
@@ -1678,8 +1678,8 @@ Every case here is run in **UAT 07 · Owner Representative (Noura)**, as the one
 - **Sign in as:** Noura (Al Waha PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-DAR-01-0001 "SUB-21 Cable schedule – recommended Code A", which Hafiz raised, Ali Submitted and Mohammed recommended at Code A; it waits at your Owner's review.
-  2. Pick it up if it is in the pool, read Mohammed's Recommendation and choose Confirm.
+  1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-DAR-01-0001 "SUB-21 Cable schedule – recommended Code A", which Hafiz raised, Ali Submitted and Mohammed recommended at Code A; it waits at your Owner's review, With you.
+  2. Read Mohammed's Recommendation, then Issue Review Code > Confirm.
 - **Expected result:** Noura reads the Recommended Code A, which only Design Consultants and the Participant holding the review read (V5). Confirm issues Code A and closes UAT07-DAR-01-0001 as Approved, and its Documental Record can be downloaded.
 
 ### I18N-03 Document Numbers stay left to right
@@ -1722,8 +1722,8 @@ Every case here is run in **UAT 07 · Owner Representative (Noura)**, as the one
 - **Sign in as:** Noura (Al Waha PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-MAR-01-0002 and look for its Chat.
-- **Expected result:** Not built yet: the item has no Chat. When built (V6): Noura reads what TMC and Design Consultants post on it, messages can't be edited or deleted, and Chat is not on the closed record.
+  1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-MAR-01-0002 and its Chat tab.
+- **Expected result:** Noura reads every Chat message TMC and Design Consultants post on the item, as everyone with access to it does (V6); messages can't be edited or deleted, and Chat is not on the closed record.
 
 ### VIS-07 Only people who see a closed item can download its record
 
