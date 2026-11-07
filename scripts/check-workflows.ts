@@ -61,7 +61,8 @@ import { parseDocument } from "yaml";
 //
 // Out of scope for rules 6 to 9: string inputs in a step name:, container or services env, and a
 // reusable workflow's with:; tee or a redirect through a variable (`out=$GITHUB_STEP_SUMMARY`); echo of a variable that holds
-// a tool's output (`echo "$OUT" >> ...`); a composite action's steps (no job, so no environment or secrets to read).
+// a tool's output (`echo "$OUT" >> ...`); a composite action's steps (no job, so no environment or secrets to read); PowerShell's
+// `$env:GITHUB_STEP_SUMMARY`; a script the step runs that appends to the summary itself (scripts/*.ts do), which only that script can mask.
 //
 // Usage: node scripts/check-workflows.ts   (from the repository root)
 
@@ -166,7 +167,7 @@ function commandWord(segment: string): string {
 }
 
 /** A write to $GITHUB_STEP_SUMMARY, and what feeds it: the `masked` stage, text the script writes itself, or a bare command. */
-export interface SummaryWrite {
+interface SummaryWrite {
   kind: "tee" | "redirect";
   target: string;
   fed: "masked" | "own text" | "bare";
@@ -178,7 +179,7 @@ export interface SummaryWrite {
  * `printf` with no command substitution is text the script writes itself, not a tool's output. A backslash-newline or a
  * trailing `|` joins lines, so a pipeline written over several lines reads as one.
  */
-export function summaryWrites(script: string): SummaryWrite[] {
+function summaryWrites(script: string): SummaryWrite[] {
   const joined = script.replace(/\\\r?\n/g, " ").replace(/\|[ \t]*\r?\n/g, "| ");
   const out: SummaryWrite[] = [];
   for (const tee of joined.matchAll(/\btee\b([^\n|;&]*)/g)) {
@@ -322,7 +323,7 @@ function defaultShell(holder: unknown): string | undefined {
 }
 
 /** An expression such as `${{ secrets.X }}`, `${{ secrets['X'] }}` or `${{ toJSON(secrets) }}` anywhere in a workflow or job value. */
-const secretsExpression = /\$\{\{(?:(?!\}\}).)*?(?<![\w.-])secrets(?![\w-])/s;
+const secretsExpression = /\$\{\{(?:(?!\}\}).)*?(?<![\w.-])secrets(?![\w-])/is; // i: context names are case-insensitive (`SECRETS.X` reads a secret)
 const readsSecrets = (value: unknown) => value !== undefined && secretsExpression.test(JSON.stringify(value));
 
 const definesMasked =(script: string) => /(?:^|[\s;{(&|])(?:function\s+masked\b|masked\s*\(\s*\))/m.test(script);

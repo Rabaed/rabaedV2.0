@@ -521,6 +521,8 @@ describe("rule 8: in a job with an environment or secrets, a write to the step s
         expect(found[0], JSON.stringify(options)).toContain(missingStage);
       }
       expect(messages(uat('echo "$X"; ${{ secrets.TOKEN }}\n' + bare, { environment: "" }))).toHaveLength(1);
+      // Context names are case-insensitive.
+      expect(messages(uat(bare, { environment: "", stepExtra: "        env: { TOKEN: '${{ SECRETS.TOKEN }}' }\n" }))).toHaveLength(1);
     });
 
     it("leaves a job with no environment and no secrets alone", () => {
