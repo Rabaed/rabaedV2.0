@@ -23,6 +23,7 @@ import { useLocale, useTranslations } from "next-intl";
 import NextLink from "next/link";
 import { useCallback, useRef } from "react";
 import { usePackageBulkCalls } from "@/components/package-bulk";
+import { useRememberedHref } from "@/components/remembered-module-queries";
 import { getPathname, useRouter } from "@/i18n/navigation";
 import { messageKeys } from "@/lib/message-keys";
 
@@ -110,6 +111,7 @@ export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "loc
   // Submit Package's key, kept until it is taken, so a double click or a retry Submits once.
   const submitKey = useRef<string | null>(null);
   const back = `/projects/${pkg.projectId}/work-items`;
+  const remembered = useRememberedHref();
   const refreshed = async (result: Promise<Result>) => {
     const r = await result;
     if (r.ok) router.refresh();
@@ -153,7 +155,8 @@ export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "loc
       pkg={pkg}
       locale={locale}
       labels={labels}
-      backHref={getPathname({ href: back, locale })}
+      // Back to the Submittals with the Member's last filters there (RP-1240).
+      backHref={remembered(getPathname({ href: back, locale }))}
       itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
       // The hrefs already carry their locale (getPathname): next/link keeps navigation client-side without adding it again.
       linkAs={NextLink}
