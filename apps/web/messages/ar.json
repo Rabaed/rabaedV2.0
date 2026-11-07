@@ -3429,6 +3429,18 @@
       "revision": "المراجعة {n}",
       "revisionNoNumber": "المراجعة {n}: بلا رقم بعد"
     },
+    "sheet": {
+      "title": "ما يحدث عند التأكيد",
+      "stage": "تصبح المرحلة {stage}",
+      "told": "يُبلَّغ {company}",
+      "comments": "{count, plural, one {تُفتح ملاحظة واحدة} two {تُفتح ملاحظتان} few {تُفتح {n} ملاحظات} many {تُفتح {n} ملاحظة} other {تُفتح {n} ملاحظة}} في قائمة الملاحظات لـ {company}",
+      "commentsOwn": "{count, plural, one {تُفتح ملاحظة واحدة} two {تُفتح ملاحظتان} few {تُفتح {n} ملاحظات} many {تُفتح {n} ملاحظة} other {تُفتح {n} ملاحظة}} في قائمة الملاحظات",
+      "revision": "يعود إلى {company} لمراجعة جديدة",
+      "revisionOwn": "يعود لمراجعة جديدة",
+      "record": "يُطبع الرمز {code} على السجل المستندي",
+      "signsAs": "يوقّع باسم",
+      "issue": "إصدار الرمز {code}"
+    },
     "with": "لدى",
     "stepAge": "عمر الخطوة",
     "location": "الموقع",

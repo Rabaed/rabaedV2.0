@@ -16,9 +16,27 @@ import {
   type ReplyChecklistRead,
   type WorkItemActions,
 } from "@rabaed/domain";
-import { ActionForm, Badge, Button, CodeBadge, CodeTile, cn, DocNo, Field, Icon, IconButton, reviewCodes, Select, type FormFiles } from "@rabaed/ui";
+import {
+  ActionForm,
+  ActionSheetEffects,
+  ActionSheetSigner,
+  Badge,
+  Button,
+  CodeBadge,
+  CodeTile,
+  cn,
+  DocNo,
+  Field,
+  Icon,
+  IconButton,
+  reviewCodes,
+  Select,
+  type ActionSheetEffect,
+  type ActionSheetEffectsLabels,
+  type FormFiles,
+} from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { InspectionTiles, liveTally, tallyOf, useInspection, type Inspection } from "@/components/inspection-context";
 import { ReplyChecklistsRead } from "@/components/reply-checklists";
 import { useDocuments, useImageUrls } from "@/components/use-documents";
@@ -64,7 +82,30 @@ export type TransitionHeading = {
   remarksReader: string | null;
   /** The taker's own Company, which alone reads the Internal Note (V5). */
   ownCompany: string;
+  /**
+   * The Submittal Panel's sheet (RP-1237, gap table v3 rows 29, 30 and 39): the pop-up rises from the panel's
+   * bottom, the panel's width, with what the Transition does after the number, "What happens when you confirm"
+   * (worked out from the answers as they are typed, so Code B counts its Comments), and who it is signed as.
+   */
+  sheet?: {
+    /** One line after the number: who is told, whether a Revision follows. */
+    line: string | undefined;
+    effects: (answers: Readonly<Record<string, unknown>>) => ActionSheetEffect[];
+    effectsLabels: ActionSheetEffectsLabels;
+    signer: { name: BilingualText; role: string | null; signsAs: string } | null;
+    /** The primary button's words, e.g. "Issue Code A"; the Transition's label without one. */
+    confirm: string | undefined;
+  };
 };
+
+/** The Submittal Panel the sheet rises from (RP-1237 row 29). */
+const submittalPanelSelector = "[data-submittal-panel]";
+
+/** Where the sheet sits: the panel's own box, so the sheet is the panel's width and dims the panel alone. */
+function submittalPanelBox(): { left: number; width: number; right: number } | null {
+  const rect = document.querySelector(submittalPanelSelector)?.getBoundingClientRect();
+  return rect && rect.width > 0 ? { left: rect.left, width: rect.width, right: document.documentElement.clientWidth - rect.right } : null;
+}
 
 /** The "Assign to" choice that leaves the next Step to its Step Pool. */
 const TO_POOL = "pool";
@@ -293,11 +334,24 @@ export function TransitionDialog({
   const { pending, error, setError } = calls;
   const reply = useReplyFiles(calls.workItemId, transition.actionForm);
 
+  const sheet = heading?.sheet && !inspection ? heading.sheet : null;
+  const [box] = useState(() => (sheet ? submittalPanelBox() : null));
+  // Narrower than the Normal band (Compact): the buttons take the whole width (row 29).
+  const narrow = box !== null && box.width < 560;
+
   useEffect(() => {
     setError(null);
     dialog.current?.showModal();
     // Opened once, when mounted.
   }, []);
+
+  /** The first field to fix comes into view, and takes the focus (row 37). */
+  const showFirstError = () =>
+    requestAnimationFrame(() => {
+      const first = dialog.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      first?.scrollIntoView({ block: "center" });
+      first?.focus({ preventScroll: true });
+    });
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -309,6 +363,7 @@ export function TransitionDialog({
     setParticipantMissing(unpicked);
     if (!checked.ok) {
       setFieldErrors(checked.errors);
+      showFirstError();
       return setError(t("actionFormInvalid"));
     }
     setFieldErrors([]);
@@ -325,7 +380,10 @@ export function TransitionDialog({
     );
     if (result === true) return dialog.current?.close();
     // The Action Form's own answers: the pop-up marks each field to fix.
-    if (result.code === "invalid_action_form" && result.fields) setFieldErrors(result.fields);
+    if (result.code === "invalid_action_form" && result.fields) {
+      setFieldErrors(result.fields);
+      showFirstError();
+    }
     // Leaving Draft with an incomplete Form: the item's Form marks each field to fix.
     if (result.code === "form_incomplete" && result.fields && itemForm) {
       itemForm.showErrors(result.fields, t("formIncomplete"));
@@ -344,26 +402,35 @@ export function TransitionDialog({
       ref={dialog}
       onClose={onClose}
       aria-label={title}
+      data-action-sheet={sheet ? "" : undefined}
+      style={
+        box
+          ? ({ left: box.left, right: "auto", top: "auto", bottom: 0, width: box.width, "--sheet-clip": `inset(0 ${box.right}px 0 ${box.left}px)` } as CSSProperties)
+          : undefined
+      }
       className={cn(
         "m-auto w-full max-w-md rounded-md border border-border bg-surface p-6 text-text backdrop:bg-text/40",
         // On a phone a WIR's pop-up is a sheet from the bottom of the screen, as the design draws it.
         (inspection || heading) && "max-h-[90dvh] overflow-y-auto",
         inspection && "max-md:mb-0 max-md:max-w-none max-md:rounded-b-none",
         inspection && "md:max-w-xl",
-        heading && !inspection && "rounded-[18px] p-0 sm:max-w-[560px] max-[559px]:mb-0 max-[559px]:max-w-none max-[559px]:rounded-b-none",
+        heading && !inspection && !box && "rounded-[18px] p-0 sm:max-w-[560px] max-[559px]:mb-0 max-[559px]:max-w-none max-[559px]:rounded-b-none",
+        // From the panel's bottom, its width; only the panel is dimmed (V3 frames 11–17).
+        box && "mx-0 mt-auto mb-0 max-h-[85dvh] max-w-none rounded-t-[18px] rounded-b-none border-x-0 border-b-0 p-0 shadow-lg backdrop:[clip-path:var(--sheet-clip)]",
       )}
     >
       <form onSubmit={onSubmit} className={cn("space-y-4", heading && !inspection && "[&>*:not(:first-child)]:mx-5 [&>:last-child]:mb-5")} noValidate>
         {heading && !inspection ? (
-          <div className="flex items-center gap-3 border-b border-border-subtle px-5 py-4">
+          <div className="relative flex items-center gap-3 border-b border-border-subtle px-5 py-4">
+            {box && <span aria-hidden="true" className="absolute inset-x-0 top-1.5 mx-auto h-1 w-10 rounded-full bg-border" />}
             {heading.code && <CodeTile code={heading.code} look={heading.look} size="lg" />}
             <div className="min-w-0 flex-1">
               <h2 className="text-[16px] font-bold">{title}</h2>
-              {(heading.documentNumber || heading.goesTo) && (
+              {(heading.documentNumber || (sheet?.line ?? heading.goesTo)) && (
                 <p className="text-[12.5px] text-muted">
                   {heading.documentNumber && <DocNo value={heading.documentNumber} />}
-                  {heading.documentNumber && heading.goesTo && " · "}
-                  {heading.goesTo}
+                  {heading.documentNumber && (sheet?.line ?? heading.goesTo) && " · "}
+                  {sheet?.line ?? heading.goesTo}
                 </p>
               )}
             </div>
@@ -390,6 +457,7 @@ export function TransitionDialog({
           <h2 className="text-h6 font-semibold">{title}</h2>
         )}
         {description && <p className="text-caption text-muted">{description}</p>}
+        {sheet && <ActionSheetEffects effects={sheet.effects(answers)} labels={sheet.effectsLabels} locale={locale} />}
         {sending && inspection && (
           <SendToManager
             transition={transition}
@@ -509,13 +577,17 @@ export function TransitionDialog({
             inspection && "sticky -bottom-6 -mb-6 bg-surface pt-2 pb-6",
             // The page's pop-up keeps its footer in view while the form scrolls (RP-1188, gap table row 34: `.wpop .tf`).
             heading && !inspection && "sticky bottom-0 mx-0! mb-0! border-t border-border-subtle bg-surface px-5 py-3",
+            sheet && "flex-wrap items-center",
           )}
         >
-          <Button type="button" variant={inspection ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1")} onClick={() => dialog.current?.close()}>
+          {sheet?.signer && <ActionSheetSigner name={sheet.signer.name} role={sheet.signer.role} signsAs={sheet.signer.signsAs} locale={locale} />}
+          {narrow && <span className="basis-full" />}
+          <Button type="button" variant={inspection || sheet ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1", narrow && "flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
-          <Button type="submit" disabled={pending} className={cn(inspection && "min-h-11 max-md:flex-[2]")}>
-            {coding ? tInspection("issueCodeAs", { code: transition.label[locale] }) : transition.label[locale]}
+          <Button type="submit" disabled={pending} className={cn(inspection && "min-h-11 max-md:flex-[2]", sheet && "gap-2", narrow && "flex-[2]")}>
+            {sheet && heading?.code && <Icon name="gavel" size={17} />}
+            {coding ? tInspection("issueCodeAs", { code: transition.label[locale] }) : (sheet?.confirm ?? transition.label[locale])}
           </Button>
         </div>
       </form>
