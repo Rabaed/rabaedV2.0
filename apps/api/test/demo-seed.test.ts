@@ -700,7 +700,16 @@ describe("the README walkthrough", () => {
   it("15. Its Rev 1, Submitted by TMC, reaches the Consultant, whose Revision drop-down lists the original and Rev 1", async () => {
     const [original, rev1] = await codeCChain();
     const base = (await (await mohammed.get(`/v1/work-items/${original!.id}`)).json()).documentNumber as string;
-    expect(rev1).toEqual({ id: expect.any(String), documentNumber: `${base} Rev 1`, revisionNo: 1, stage: expect.objectContaining({ category: "in_progress" }) });
+    expect(rev1).toEqual({
+      id: expect.any(String),
+      documentNumber: `${base} Rev 1`,
+      revisionNo: 1,
+      stage: expect.objectContaining({ category: "in_progress" }),
+      // Submitted and still open (RP-1253): its Submission Date, no close and no code yet.
+      submissionDate: expect.any(String),
+      closedAt: null,
+      outcome: null,
+    });
     for (const who of [hafiz, ali, ahmed, mohammed, faisal]) {
       const chain = (await who.get(`/v1/work-items/${rev1!.id}/revisions`)).json() as RevisionChain;
       expect(chain.revisions).toEqual([original, rev1]);
