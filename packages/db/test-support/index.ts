@@ -38,7 +38,10 @@
  * Defined below:
  *   rolledBack(db, fn)              runs fn in a transaction that is always rolled back.
  *   testDatabaseUrls()              the environment's URLs, pointed at `<database>_test`.
- *   drainOutbox(db, handlers?)      runs the outbox until nothing is due; emails, digests and reports go nowhere.
+ *   drainOutbox(db, handlers?, own?)   runs the outbox until nothing is due; emails, digests and reports go nowhere.
+ *                                   With `own` ({ projects, migrator }), the kinds `handlers` names come only from
+ *                                   those Projects (RP-1236): a record test makes its own records, not the seed's.
+ *   whileOtherProjectsWait(own, kinds, run)   other Projects' rows of `kinds` wait while `run` runs (a test's processOutbox).
  * Not re-exported (import by path): reset-test-database.ts and global-setup.ts (the test database's lifecycle),
  *   the catalogue checks grants.ts, function-grants.ts, definer-*.ts, id-defaults.ts, item-visibility-tables.ts,
  *   and statement-roles.ts (statementRoles(url): a db recording the role each statement runs as, RP-960),
@@ -46,6 +49,7 @@
  *
  * The API tests' helpers are listed in apps/api/test/support/README.md.
  */
+import { sql } from "kysely";
 import type { Db } from "../src/client.ts";
 import { notificationDigestHandler, notificationEmailHandler, processOutbox, type OutboxHandler } from "../src/outbox.ts";
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
@@ -111,14 +115,64 @@ const discardDigests = notificationDigestHandler(async () => {});
 /** Takes each weekly Step Age report as the worker would, and sends it nowhere. */
 const discardStepAgeReports = stepAgeReportHandler(async () => {});
 
+/** A test file's own Projects, for a drain or a run of the outbox that takes only their rows (RP-1236). */
+export interface OwnProjects {
+  /** The Projects whose rows are taken. */
+  readonly projects: readonly string[];
+  /** The migrator: it holds the other Projects' rows back while the drain runs, and gives them back. */
+  readonly migrator: Db;
+}
+
+/**
+ * Runs `run` while every row of `kinds` of another Project waits (RP-1236): each one not yet
+ * processed or dead is made due at no time, then given back its own time to the microsecond, attempts
+ * untouched. A row of no Project (a daily digest) is no other file's, and is taken as before. For a
+ * test's own `processOutbox` call; `drainOutbox` takes the same `own`. The seam suites run one file at
+ * a time, so nothing else waits on those rows meanwhile.
+ */
+export async function whileOtherProjectsWait<T>(own: OwnProjects, kinds: readonly string[], run: () => Promise<T>): Promise<T> {
+  if (kinds.length === 0) throw new Error("whileOtherProjectsWait: name the kinds whose rows wait (a drain's own handlers)");
+  const { rows: held } = await sql<{ id: string; available_at: string }>`
+    with other as (
+      select id, available_at from outbox
+      where processed_at is null and dead_at is null and kind = any(${kinds}::text[])
+        and project_id <> all(${own.projects}::uuid[])
+      for update
+    )
+    update outbox o set available_at = 'infinity' from other where o.id = other.id
+    returning o.id, other.available_at::text as available_at
+  `.execute(own.migrator);
+  try {
+    return await run();
+  } finally {
+    if (held.length > 0) {
+      await sql`
+        update outbox o set available_at = back.available_at
+        from unnest(${held.map((r) => r.id)}::uuid[], ${held.map((r) => r.available_at)}::timestamptz[]) as back (id, available_at)
+        where o.id = back.id and o.available_at = 'infinity'
+      `.execute(own.migrator);
+    }
+  }
+}
+
 /**
  * Runs `processOutbox` until nothing is due. One run takes at most 100 rows,
  * oldest first, so after busy test files a single call can leave the row a test
  * waits for undelivered. `db` connects as the app role, with no Member set.
  * Notification emails, digests and weekly reports go nowhere unless `handlers` has an `email`,
  * `digest` or `step_age_report` handler.
+ *
+ * With `own`, the kinds `handlers` names are taken only from `own.projects` (RP-1236): every item that
+ * closes in the test database queues a record job, the seeded demo's alone 73, and a drain with a
+ * record handler made them all, a Chromium print and a veraPDF run each, so a record test's time hung
+ * on what ran before it. Other Projects' rows wait, untouched (whileOtherProjectsWait); the default
+ * email, digest and report handlers still take every Project's.
  */
-export async function drainOutbox(db: Db, handlers: Record<string, OutboxHandler> = {}): Promise<void> {
+export async function drainOutbox(db: Db, handlers: Record<string, OutboxHandler> = {}, own?: OwnProjects): Promise<void> {
+  if (own) {
+    if (Object.keys(handlers).length === 0) throw new Error("drainOutbox: `own` limits the kinds `handlers` names, and it names none");
+    return whileOtherProjectsWait(own, Object.keys(handlers), () => drainOutbox(db, handlers));
+  }
   for (;;) {
     const run = await processOutbox(db, { handlers: { email: discardEmails, digest: discardDigests, step_age_report: discardStepAgeReports, ...handlers } });
     if (run.processed + run.failed + run.dead === 0) return;
