@@ -267,6 +267,8 @@ export function PackagePage({
               linkAs={Link}
               selection={bulkTable.selection}
               stageShowsCode
+              // Fits 1366 as the List's table does (RP-1177), so "Review Code or Stage" and "Step Age" show (RP-1164, UX-23).
+              fit
               rowEnd={
                 pkg.actions.removeItems && onRemove
                   ? (row) => (

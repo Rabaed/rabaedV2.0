@@ -281,10 +281,12 @@ export const ItemTable: Story = {
     await expect(number.closest("[dir=ltr]")).not.toBeNull();
     const fansRow = within(table).getByRole("link", { name: fans.title }).closest("tr")!;
     await expect(fansRow).toHaveTextContent(l.table.code("A"));
-    // Its columns fit, so the List's tighter fit under 1600 (RP-1177) stays off here (the owner's answer of 2026-11-02).
-    await expect(getComputedStyle(lightsRow.querySelector("td")!).paddingInlineStart).not.toBe("8px");
-    await expect(table.querySelector("thead svg.tabler-icon-grid-dots") === null || getComputedStyle(table.querySelector("thead svg.tabler-icon-grid-dots")!).display !== "none").toBe(true);
-    await expect(getComputedStyle(within(table).getByRole("link", { name: lights.title })).maxWidth).toBe("420px");
+    // Under 1600 it fits as the List's table does (RP-1177), so "Review Code or Stage" and "Step Age" show at 1366
+    // (RP-1164, UX-23): cells 8px in, no drag dots, the Subject 112px at most. The runner is 1024 wide.
+    await expect(innerWidth).toBeLessThan(1600);
+    await expect(getComputedStyle(lightsRow.querySelector("td")!).paddingInlineStart).toBe("8px");
+    for (const grip of table.querySelectorAll("thead svg.tabler-icon-grid-dots")) await expect(getComputedStyle(grip).display).toBe("none");
+    await expect(within(table).getByRole("link", { name: lights.title }).getBoundingClientRect().width).toBeLessThanOrEqual(112);
   },
 };
 
