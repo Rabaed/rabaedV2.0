@@ -33,7 +33,7 @@ jobs:
     if: inputs.confirm == 'reset uat' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: uat
-    timeout-minutes: 30
+    timeout-minutes: 90 # RP-1254: the seed with UAT 01–10 outran 30 minutes
     # Shared with Deploy UAT and the Supabase gate: never two at once on UAT's database.
     concurrency:
       group: uat-database

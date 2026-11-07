@@ -27,9 +27,10 @@ export function treeOrder<T extends Node>(values: T[]): (T & { level: number })[
 
 /**
  * What a grant editor offers (RP-1239): the active values, and an archived one only while `kept`
- * (what the grant already covers) holds it, so it can be unticked but never picked anew.
+ * (what the grant already covers) holds it, so it can be unticked but never picked anew. The
+ * settings pickers and lists use it too (RP-1251), with a record's own Trade as `kept`.
  */
-export function pickable<T extends Node & { active: boolean }>(values: T[], kept: ReadonlySet<string>): T[] {
+export function pickable<T extends { id: string; active: boolean }>(values: T[], kept: ReadonlySet<string>): T[] {
   return values.filter((v) => v.active || kept.has(v.id));
 }
 
