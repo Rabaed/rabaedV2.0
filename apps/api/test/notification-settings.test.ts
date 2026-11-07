@@ -337,7 +337,7 @@ describe("a move inside another Company (V5)", () => {
 });
 
 describe("mute and email off", () => {
-  it("a mute silences the bell, and the item still waits on them (Need My Action is unaffected); email off keeps the bell", async () => {
+  it("a mute stops the email and keeps the bell (RP-1238), and the item still waits on them (Need My Action is unaffected); email off keeps the bell", async () => {
     const pmMuted = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
     const pmOff = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
     await ok(mute(pmMuted, at.projectId));
@@ -348,13 +348,14 @@ describe("mute and email off", () => {
     expect(await kinds(at.c1Pm, id)).toEqual(["step_reached"]);
     // In-app is always sent: a Member who turned email off still gets it in the bell.
     expect(await kinds(pmOff, id)).toEqual(["step_reached"]);
-    expect(await about(pmMuted, id)).toEqual([]);
+    // A mute stops only the email (owner's decision 2026-11-06, RP-1238).
+    expect(await kinds(pmMuted, id)).toEqual(["step_reached"]);
     for (const who of [pmMuted, pmOff]) expect((await detail(who, id)).actions.pickUp).toBe(true);
-    // Email off routes no email; a mute sends nothing at all.
+    // Email off and a mute both route no email.
     const byMember = new Map((await routed(id)).map((r) => [r.member_id, { in_app: r.in_app, email: r.email }]));
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
     expect(byMember.get(await meOf(pmOff))).toEqual({ in_app: true, email: "none" });
-    expect(byMember.has(await meOf(pmMuted))).toBe(false);
+    expect(byMember.get(await meOf(pmMuted))).toEqual({ in_app: true, email: "none" });
   });
 
   it("pausing email keeps the bell and routes no email", async () => {

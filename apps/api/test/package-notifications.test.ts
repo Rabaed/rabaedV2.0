@@ -268,13 +268,21 @@ describe("a Package Submit's notification", () => {
     expect((await ofPackage(k1All, pkg.id))[0]!.readAt).not.toBeNull();
   });
 
-  it("reaches nobody who muted the Project", async () => {
+  it("reaches the bell, and emails nobody, of a Member who muted the Project (RP-1238)", async () => {
+    const emails: NotificationEmail[] = [];
+    const handlers = { email: notificationEmailHandler(async (e) => void emails.push(e)) };
     await ok(k1Electrical.caller.request("PUT", `/v1/projects/${at.projectId}/mute`));
-    const pkg = await packageOf("Muted", 1, 0);
-    await submitPackage(pkg.id);
-    await drainOutbox(worker);
-    expect(await ofPackage(k1Electrical, pkg.id)).toEqual([]);
-    expect(await ofPackage(k1All, pkg.id)).toHaveLength(1);
-    await ok(k1Electrical.caller.request("DELETE", `/v1/projects/${at.projectId}/mute`));
+    try {
+      const pkg = await packageOf("Muted", 1, 0);
+      await submitPackage(pkg.id);
+      await drainOutbox(worker, handlers);
+      // Both take "Step reached" by email at once; only the mute holds the Electrical engineer's back.
+      expect(await ofPackage(k1Electrical, pkg.id)).toHaveLength(1); // not hidden-from: their own bell, of a Package they see
+      expect(await ofPackage(k1All, pkg.id)).toHaveLength(1); // not hidden-from: their own bell, of a Package they see
+      expect(emails.filter((e) => e.to === k1Electrical.email)).toEqual([]); // not hidden-from: their own mute holds the email; the colleague's below is sent
+      expect(emails.filter((e) => e.to === k1All.email && e.kind === "package_submitted")).toHaveLength(1); // not hidden-from: the positive control of the email
+    } finally {
+      await ok(k1Electrical.caller.request("DELETE", `/v1/projects/${at.projectId}/mute`));
+    }
   });
 });

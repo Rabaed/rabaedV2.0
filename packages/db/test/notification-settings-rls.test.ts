@@ -225,8 +225,13 @@ describe("the routing rule in the database", () => {
       );
     }
     // A turned Sent Back's email off, paused email, and muted their Project.
-    expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: false, email: "none" });
+    expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "none" });
+    // The mute alone stops the email and leaves the bell (RP-1238).
+    await rowsAs(a.member, sql`update member_notification_preference set email_paused = false`);
+    expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "none" });
     await rowsAs(a.member, sql`select app.set_project_mute(${a.projectId}::uuid, false)`);
+    expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "immediate" });
+    await rowsAs(a.member, sql`update member_notification_preference set email_paused = true`);
     expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "none" });
     // In-app is always sent, even for a group whose email they turned off.
     expect(await route(a.member, a.projectId, "sent_back", null)).toEqual({ inApp: true, email: "none" });
