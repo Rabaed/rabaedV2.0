@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     # The environment's deployment-branch rule admits main only.
     environment: uat
-    timeout-minutes: 60
+    timeout-minutes: 120 # RP-1254: on an empty database `demo ensure` seeds UAT 01–10, then come the deploys
     # One job at a time on UAT's database, with the Supabase gate and Reset UAT
     # (roles are cluster-wide), never cancelled half way. Job-level, so a run whose
     # job is skipped never joins it. GitHub keeps one pending run per group: a newer
