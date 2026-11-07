@@ -1,6 +1,7 @@
 import {
   answerFields,
   formatNumber,
+  inspectionsInSubmittals,
   isOpenStageCategory,
   moduleNames,
   moduleTabPaths,
@@ -48,6 +49,7 @@ import {
   getOptionLists,
   getSupplierChoices,
   getChecklistTemplateChoices,
+  getProject,
   getProjectScopes,
   getRevisionChain,
   getTypeOutcomes,
@@ -107,7 +109,11 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   // Subject, the Consultant Engineer's checklist with its summary bar, the Manager's decision, and
   // after the code its Snags and Comments, reply and checklist. Its actions are exactly the API's.
   const wir = item.module === "inspections";
-  const listModule = snag ? "snag_list" : wir ? "inspections" : "submittals";
+  // A Project that shows its Inspections in the Submittals tab (RP-652) lists a WIR there: its way back
+  // goes to that tab, where the Member's filters are kept (RP-1240), not through the Inspections
+  // tab's redirect, which drops them.
+  const wirProject = wir ? await getProject(item.projectId) : null;
+  const listModule = snag ? "snag_list" : wir && !(wirProject && inspectionsInSubmittals(wirProject)) ? "inspections" : "submittals";
   const listHref = `/projects/${item.projectId}/${moduleTabPaths[listModule]}`;
   const quote = snag && typeof item.answers.comment === "string" ? item.answers.comment : null;
 

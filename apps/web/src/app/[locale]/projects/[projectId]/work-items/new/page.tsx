@@ -3,7 +3,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { CreateWorkItemForm } from "@/components/create-work-item-form";
 import { NewItemTypePicker } from "@/components/new-item-type-picker";
-import { Link, redirect } from "@/i18n/navigation";
+import { RememberedModuleLink } from "@/components/remembered-module-queries";
+import { redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { newPageWords } from "@/lib/new-item-route";
 import { newInspectionLanding, newItemLanding } from "@/lib/submittal-panel-url";
@@ -74,9 +75,10 @@ export default async function NewWorkItemPage({
   return (
     <div className="max-w-2xl space-y-6">
       <div className="space-y-1">
-        <Link href={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} className="text-sm text-brand-fg underline underline-offset-4">
+        {/* Back to the tab with the Member's last filters there (RP-1240). */}
+        <RememberedModuleLink href={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} className="text-sm text-brand-fg underline underline-offset-4">
           {tabs(moduleKey)}
-        </Link>
+        </RememberedModuleLink>
         <h1 className="text-h4 font-semibold">{t(words.heading)}</h1>
       </div>
       {!chosen || !form ? (

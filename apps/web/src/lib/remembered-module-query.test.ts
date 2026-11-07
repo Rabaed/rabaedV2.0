@@ -48,7 +48,7 @@ describe("a Module tab's address (RP-1240)", () => {
   });
 
   it("is no other page's: the Dashboard, Settings, Activity, the New page or an item", () => {
-    for (const path of [`/en/projects/${project}`, `/en/projects/${project}/settings`, `/en/projects/${project}/activity`, `/en/projects/${project}/work-items/new`, `/en/work-items/${project}`, "/en"]) {
+    for (const path of [`/fr/projects/${project}/work-items`, `/en/projects/${project}`,`/en/projects/${project}/settings`, `/en/projects/${project}/activity`, `/en/projects/${project}/work-items/new`, `/en/work-items/${project}`, "/en"]) {
       expect(moduleTabOf(path)).toBeNull();
     }
   });

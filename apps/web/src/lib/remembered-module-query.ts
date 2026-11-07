@@ -1,4 +1,5 @@
 import {
+  locales,
   moduleOfTabPath,
   moduleViewFromSearchParams,
   workItemQueryFromSearchParams,
@@ -38,9 +39,12 @@ export function rememberStorage(): RememberStorage | null {
   }
 }
 
+/** A Module tab's address, as `projectTabHref` builds it, after an optional locale and before any query. */
+const moduleTabPath = new RegExp(String.raw`^(?:/(?:${locales.join("|")}))?/projects/([^/?#]+)/([^/?#]+)/?(?:[?#].*)?$`);
+
 /** The Module tab at `path` (`/<locale>/projects/<id>/<tab path>`, the locale optional, any query ignored), or null. */
 export function moduleTabOf(path: string): ModuleTab | null {
-  const match = /^(?:\/[a-z]{2})?\/projects\/([^/?#]+)\/([^/?#]+)\/?(?:[?#].*)?$/.exec(path);
+  const match = moduleTabPath.exec(path);
   const tabModule = match ? moduleOfTabPath(match[2]!) : null;
   return match && tabModule ? { projectId: match[1]!, module: tabModule } : null;
 }
@@ -50,7 +54,7 @@ export function moduleTabOf(path: string): ModuleTab | null {
  * isn't valid left out), without its page, cursor or any parameter that isn't the query's.
  * "" when the tab is as it opens; null on the Submittals' Packages view, which takes no filter.
  */
-export function rememberedPart(search: string | URLSearchParams, module: ModuleKey): string | null {
+export function rememberedPart(search: string, module: ModuleKey): string | null {
   const params = new URLSearchParams(search);
   const view = moduleViewFromSearchParams(params, module);
   if (view === "packages") return null;
@@ -68,7 +72,7 @@ export function rememberedPart(search: string | URLSearchParams, module: ModuleK
 }
 
 /** The page at `pathname` with the query `search`, as `queryToRemember` compares them. */
-export function seenAt(pathname: string, search: string | URLSearchParams): Seen {
+export function seenAt(pathname: string, search: string): Seen {
   const tab = moduleTabOf(pathname);
   return tab && { ...tab, query: rememberedPart(search, tab.module) };
 }
@@ -112,7 +116,7 @@ export function readRemembered(storage: RememberStorage | null, memberId: string
 
 /** `href` with the Member's remembered query, when it leads to a Module tab and has no query of its own; else `href` as it is. */
 export function rememberedHref(storage: RememberStorage | null, memberId: string | null, href: string): string {
-  const tab = memberId ? moduleTabOf(href) : null;
+  const tab = moduleTabOf(href);
   if (!memberId || !tab || /[?#]/.test(href)) return href;
   const query = readRemembered(storage, memberId, tab);
   return query ? `${href}?${query}` : href;

@@ -15,16 +15,18 @@ const MemberContext = createContext<string | null>(null);
 let writes = 0;
 const listeners = new Set<() => void>();
 
+function written() {
+  writes += 1;
+  for (const listener of listeners) listener();
+}
+
+/** `useSyncExternalStore`'s hook-up: one `storage` listener (another tab's writes) while any link reads. */
 function onWrites(listener: () => void) {
+  if (listeners.size === 0) window.addEventListener("storage", written);
   listeners.add(listener);
-  const fromOtherTab = () => {
-    writes += 1;
-    listener();
-  };
-  window.addEventListener("storage", fromOtherTab);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", fromOtherTab);
+    if (listeners.size === 0) window.removeEventListener("storage", written);
   };
 }
 
@@ -39,8 +41,7 @@ function RememberWatch({ memberId }: { memberId: string }) {
     prev.current = now;
     if (query === null || !now) return;
     writeRemembered(rememberStorage(), memberId, now, query);
-    writes += 1;
-    for (const listener of listeners) listener();
+    written();
   }, [pathname, search, memberId]);
   return null;
 }
@@ -50,7 +51,8 @@ export function RememberedModuleQueries({ memberId, children }: { memberId: stri
   return (
     <MemberContext.Provider value={memberId}>
       <Suspense fallback={null}>
-        <RememberWatch memberId={memberId} />
+        {/* Keyed by the Member: another Member's first page starts afresh, never compared with the last one's. */}
+        <RememberWatch key={memberId} memberId={memberId} />
       </Suspense>
       {children}
     </MemberContext.Provider>
@@ -63,11 +65,12 @@ export function RememberedModuleQueries({ memberId, children }: { memberId: stri
  */
 export function useRememberedHref(): (href: string) => string {
   const memberId = useContext(MemberContext);
-  const mounted = useSyncExternalStore(onWrites, () => writes, () => -1);
-  return (href) => (mounted < 0 ? href : rememberedHref(rememberStorage(), memberId, href));
+  // The server's snapshot is -1: it draws the bare link, and so does the browser until hydrated.
+  const writesSeen = useSyncExternalStore(onWrites, () => writes, () => -1);
+  return (href) => (writesSeen < 0 ? href : rememberedHref(rememberStorage(), memberId, href));
 }
 
-/** A link back to a Module tab, with the Member's remembered query (the item page's way back). */
+/** A link back to a Module tab, with the Member's remembered query (the item, New, Imports and Package pages' way back). */
 export function RememberedModuleLink({ href, ...props }: Omit<ComponentProps<typeof Link>, "href"> & { href: string }) {
   const remembered = useRememberedHref();
   return <Link href={remembered(href)} {...props} />;
