@@ -190,15 +190,18 @@ describe("in-app is always sent", () => {
     expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([{ member_id: c1Engineer2Id, kind: "watched_event", in_app: true, email: "none" }]);
   });
 
-  it("is still silenced by a Member's mute of the Project, which is their own setting a Workflow never overrides", async () => {
+  it("still follows a Member's mute of the Project, which is their own setting a Workflow never overrides: the bell, no email (RP-1238)", async () => {
+    await saveSettings(c1Engineer2, { watched: { email: "immediate", outcomes: ["A", "B", "C", "D", "cancelled"] } });
     await ok(c1Engineer2.request("PUT", `/v1/projects/${at.projectId}/mute`));
     try {
       const id = await inReview("Boilers");
       await take(at.c1Pm, id, "submit");
       await drainOutbox(worker);
-      expect(await movesOf(c1Engineer2, id)).toEqual([]); // not hidden-from: their own mute silences it
+      expect((await movesOf(c1Engineer2, id)).map((n) => n.workItemId)).toEqual([id]);
+      expect((await routed(id)).filter((r) => r.member_id === c1Engineer2Id)).toEqual([{ member_id: c1Engineer2Id, kind: "watched_event", in_app: true, email: "none" }]);
     } finally {
       await ok(c1Engineer2.delete(`/v1/projects/${at.projectId}/mute`));
+      await saveSettings(c1Engineer2, { watched: { email: "off", outcomes: ["A", "B", "C", "D", "cancelled"] } });
     }
   });
 });

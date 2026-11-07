@@ -120,8 +120,16 @@ describe("outcome ticks on watched items", () => {
 });
 
 describe("mute and pause", () => {
-  it("a muted Project silences the bell and the email", () => {
-    for (const kind of notificationKinds) expect(routeNotification(input({ kind, muted: true })), kind).toEqual({ inApp: false, email: "none" });
+  // Owner's decision 2026-11-06 (RP-1238): a mute stops email only, as Pause all email does.
+  it("a muted Project stops every email and leaves the bell", () => {
+    for (const kind of notificationKinds)
+      expect(routeNotification(input({ kind, muted: true })), kind).toEqual({ inApp: kind !== "weekly_report", email: "none" });
+  });
+
+  it("a muted Project still holds back an outcome the watcher didn't tick, in the bell too", () => {
+    const settings = withGroup("watched_event", { outcomes: ["A"] });
+    expect(routeNotification(input({ kind: "watched_event", outcome: "C", settings, muted: true }))).toEqual({ inApp: false, email: "none" });
+    expect(routeNotification(input({ kind: "watched_event", outcome: "A", settings, muted: true }))).toEqual({ inApp: true, email: "none" });
   });
 
   it("pausing all email stops every email and leaves the bell", () => {
@@ -160,9 +168,10 @@ describe("every combination", () => {
   it.each(cases)("$kind $outcome email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {
     const route = routeNotification(c);
     const heldBack = c.kind === "watched_event" && c.outcome !== null && c.outcome !== "closed" && !c.ticks.includes(c.outcome);
-    // Nothing when muted or when the watcher didn't tick the outcome.
-    if (c.muted || heldBack) return expect(route).toEqual({ inApp: false, email: "none" });
-    const emailed = !c.emailPaused && c.email !== "off";
+    // Nothing when the watcher didn't tick the outcome.
+    if (heldBack) return expect(route).toEqual({ inApp: false, email: "none" });
+    // A mute, like a pause, stops only the email.
+    const emailed = !c.muted && !c.emailPaused && c.email !== "off";
     // The weekly report: never the bell; emailed on its schedule while on.
     if (c.kind === "weekly_report") return expect(route).toEqual({ inApp: false, email: emailed ? "immediate" : "none" });
     // Otherwise the bell is always on, and email follows the choice unless paused.

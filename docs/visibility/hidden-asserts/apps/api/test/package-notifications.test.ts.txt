@@ -14,5 +14,3 @@ text a Package Submit's notification > RP-588-2: a Member narrowed off every one
 empty a Package Submit's notification > RP-588-2: one Member never reads another Member's, nor marks it read :: expect((await notifications(k1Electrical)).map((n) => n.id)).not.toContain(theirs!.id);
 empty a Package Submit's notification > RP-588-2: one Member never reads another Member's, nor marks it read :: expect(JSON.stringify((await at.c1Pm.get("/v1/notifications")).json())).not.toContain(pkg.id);
 empty a Package Submit's notification > RP-588-2: one Member never reads another Member's, nor marks it read :: expect(JSON.stringify((await at.k1Manager.get("/v1/notifications")).json())).not.toContain(theirs!.id);
-empty a Package Submit's notification > reaches nobody who muted the Project :: expect(await ofPackage(k1Electrical, pkg.id)).toEqual([]);
-text a Package Submit's notification > reaches nobody who muted the Project :: expect(await ofPackage(k1All, pkg.id)).toHaveLength(1);
