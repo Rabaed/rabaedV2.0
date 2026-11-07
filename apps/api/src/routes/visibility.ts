@@ -17,6 +17,7 @@ import {
   getParticipantVisibility,
   listDimensions,
   myVisibility,
+  projectVisibilityGap,
   setMemberVisibility,
   setParticipantVisibility,
 } from "../projects/visibility.ts";
@@ -67,6 +68,16 @@ export const visibilityRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(myVisibility(ctx.db, memberId, idOrNotFound(request.params.projectId)));
+      },
+    );
+
+    // The Project's Visibility Gap, for its Project Admins; a 404 for anyone else (V16).
+    app.get(
+      "/v1/projects/:projectId/visibility-gap",
+      { schema: { params: projectParams, response: { 200: dimensionValues } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(projectVisibilityGap(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 
