@@ -23,6 +23,29 @@ describe("the /api/v1 proxy", () => {
     expect(sent.get("content-type")).toBe("application/json");
   });
 
+  describe("RP-1230: the visitor a password-reset limit counts, on Vercel", () => {
+    // Built at run time, so no secret-like literal is in the source.
+    const secret = "v".repeat(40);
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("names the visitor web's X-Forwarded-For holds, with VISITOR_FORWARD_SECRET as the key", async () => {
+      vi.stubEnv("VISITOR_FORWARD_SECRET", secret);
+      const sent = await forwardedHeaders(["password-resets"], { headers: { "x-forwarded-for": "203.0.113.7" } });
+      expect(sent.get("x-forwarded-for")).toBe("203.0.113.7");
+      expect(sent.get("x-rabaed-visitor")).toBe("203.0.113.7");
+      expect(sent.get("x-rabaed-visitor-key")).toBe(secret);
+    });
+
+    it("never passes a visitor or key the browser sent, with a secret or without", async () => {
+      const browser = { "x-forwarded-for": "203.0.113.7", "x-rabaed-visitor": "198.51.100.9", "x-rabaed-visitor-key": "a-guess" };
+      const without = await forwardedHeaders(["password-resets"], { headers: browser });
+      expect([without.get("x-rabaed-visitor"), without.get("x-rabaed-visitor-key")]).toEqual([null, null]);
+      vi.stubEnv("VISITOR_FORWARD_SECRET", secret);
+      const withSecret = await forwardedHeaders(["password-resets"], { headers: browser });
+      expect([withSecret.get("x-rabaed-visitor"), withSecret.get("x-rabaed-visitor-key")]).toEqual(["203.0.113.7", secret]);
+    });
+  });
+
   it("passes no other browser header on", async () => {
     const sent = await forwardedHeaders(["session"], { headers: { authorization: "Bearer x", "x-other": "y" } });
     expect(sent.get("authorization")).toBeNull();
