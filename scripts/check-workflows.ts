@@ -42,8 +42,11 @@ import { parseDocument } from "yaml";
 //     with: or a run: script; read it with jq on $GITHUB_EVENT_PATH.
 //  7. A job that reads a string input starts with a run: step that tests each one for \r
 //     or \n (jq test("[\r\n]") on $GITHUB_EVENT_PATH, as age-uat.yml does) and exits 1.
-//  8. Under environment: uat, a tee to $GITHUB_STEP_SUMMARY is fed by a `masked` pipe
-//     segment, and the step defines masked().
+//  8. In any job with an environment: or that reads secrets.* (its own, or the workflow's env:),
+//     a write to $GITHUB_STEP_SUMMARY is fed by a `masked` pipe segment, and the step defines
+//     masked(). A write is a tee or a redirect (`cat x >> "$GITHUB_STEP_SUMMARY"`,
+//     `tool > "$GITHUB_STEP_SUMMARY"`, `2>&1 >>`, `&>>`). A redirect of echo or printf with no
+//     command substitution is the script's own text and passes (RP-1202).
 //  9. ::add-mask:: never gets a value shorter than 8 characters: a literal needs 8, a
 //     variable a ${#v} test on the same line or the if/[ line right before it.
 //
@@ -57,7 +60,8 @@ import { parseDocument } from "yaml";
 //     pipefail itself (`bash -eo pipefail {0}`) is accepted too.
 //
 // Out of scope for rules 6 to 9: string inputs in a step name:, container or services env, and a
-// reusable workflow's with:; a `>> "$GITHUB_STEP_SUMMARY"` redirect of tool output; tee through a variable.
+// reusable workflow's with:; tee or a redirect through a variable (`out=$GITHUB_STEP_SUMMARY`); echo of a variable that holds
+// a tool's output (`echo "$OUT" >> ...`); a composite action's steps (no job, so no environment or secrets to read).
 //
 // Usage: node scripts/check-workflows.ts   (from the repository root)
 
@@ -144,20 +148,53 @@ function refusesLineBreaks(script: string): boolean {
   return tests && /\bexit\s+[1-9]/.test(text);
 }
 
+/** $GITHUB_STEP_SUMMARY or ${GITHUB_STEP_SUMMARY}, not a longer name that starts with it. */
+const SUMMARY_REF = String.raw`\$(?:GITHUB_STEP_SUMMARY(?!\w)|\{GITHUB_STEP_SUMMARY\})`;
+/** A redirect to the summary: `> f`, `>> f`, `1>> f`, `2> f` or `&>> f`. */
+const summaryRedirect = new RegExp(String.raw`(?:&|\d*)>>?[ \t]*["']?(${SUMMARY_REF})`, "g");
+
+/** The text of a command without its single-quoted strings and escaped characters, so only what the shell expands is left. */
+const expandable = (text: string) => text.replace(/\\./g, "").replace(/'[^']*'/g, "''");
+/** The command a pipe segment runs: the word after any `then`, `do`, `{`, `!` or NAME=value prefixes. */
+function commandWord(segment: string): string {
+  let rest = (segment.split(/;|&&|\|\|/).pop() ?? "").trim();
+  for (;;) {
+    const next = rest.replace(/^(?:then|do|else|elif|if|while|until|\{|!|\w+=\S*)\s+/, "");
+    if (next === rest) return /^\S*/.exec(rest)?.[0] ?? "";
+    rest = next;
+  }
+}
+
+/** A write to $GITHUB_STEP_SUMMARY, and what feeds it: the `masked` stage, text the script writes itself, or a bare command. */
+export interface SummaryWrite {
+  kind: "tee" | "redirect";
+  target: string;
+  fed: "masked" | "own text" | "bare";
+}
+
 /**
- * Each `tee` in a script whose arguments name $GITHUB_STEP_SUMMARY, with the last command of the pipe segment right
- * before it. A backslash-newline or a trailing `|` joins lines, so a pipeline written over several lines reads as one.
+ * Each write to $GITHUB_STEP_SUMMARY in a script: a `tee` whose arguments name it (fed by the command of the pipe
+ * segment right before it), or a redirect to it (fed by the command that owns the redirect). A redirect of `echo` or
+ * `printf` with no command substitution is text the script writes itself, not a tool's output. A backslash-newline or a
+ * trailing `|` joins lines, so a pipeline written over several lines reads as one.
  */
-function teesToSummary(script: string): { target: string; previous: string }[] {
+export function summaryWrites(script: string): SummaryWrite[] {
   const joined = script.replace(/\\\r?\n/g, " ").replace(/\|[ \t]*\r?\n/g, "| ");
-  const out: { target: string; previous: string }[] = [];
+  const out: SummaryWrite[] = [];
   for (const tee of joined.matchAll(/\btee\b([^\n|;&]*)/g)) {
-    const target = /\$\{?GITHUB_STEP_SUMMARY\}?/.exec(tee[1] ?? "")?.[0];
+    const target = new RegExp(SUMMARY_REF).exec(tee[1] ?? "")?.[0];
     if (!target) continue;
     const line = joined.slice(joined.lastIndexOf("\n", tee.index) + 1, tee.index);
     const segments = line.split(/(?<!\|)\|(?!\|)/);
     const segment = segments.length > 1 ? (segments[segments.length - 2] ?? "") : "";
-    out.push({ target, previous: (segment.split(/;|&&|\|\|/).pop() ?? "").trim() });
+    out.push({ kind: "tee", target, fed: (segment.split(/;|&&|\|\|/).pop() ?? "").trim() === "masked" ? "masked" : "bare" });
+  }
+  for (const redirect of joined.matchAll(summaryRedirect)) {
+    const line = joined.slice(joined.lastIndexOf("\n", redirect.index) + 1, redirect.index);
+    const segment = line.split(/(?<!\|)\|(?!\|)/).pop() ?? "";
+    const command = commandWord(segment);
+    const writesItself = (command === "echo" || command === "printf") && !/\$\(|`/.test(expandable(segment));
+    out.push({ kind: "redirect", target: redirect[1] ?? "", fed: command === "masked" ? "masked" : writesItself ? "own text" : "bare" });
   }
   return out;
 }
@@ -284,7 +321,11 @@ function defaultShell(holder: unknown): string | undefined {
   return isObj(run) && typeof run.shell === "string" ? run.shell : undefined;
 }
 
-const definesMasked = (script: string) => /(?:^|[\s;{(&|])(?:function\s+masked\b|masked\s*\(\s*\))/m.test(script);
+/** An expression such as `${{ secrets.X }}`, `${{ secrets['X'] }}` or `${{ toJSON(secrets) }}` anywhere in a workflow or job value. */
+const secretsExpression = /\$\{\{(?:(?!\}\}).)*?(?<![\w.-])secrets(?![\w-])/s;
+const readsSecrets = (value: unknown) => value !== undefined && secretsExpression.test(JSON.stringify(value));
+
+const definesMasked =(script: string) => /(?:^|[\s;{(&|])(?:function\s+masked\b|masked\s*\(\s*\))/m.test(script);
 
 /** Shells whose `|` is not bash's: they have no pipefail to ask for. */
 const nonBashShell = /^(?:pwsh|powershell|python|cmd)\b/;
@@ -534,19 +575,24 @@ export function lintWorkflow(file: string, source: string): Finding[] {
     }
   }
 
-  // 8. A tee to the step summary under environment uat goes through masked
+  // 8. In a job with an environment or secrets, a write to the step summary goes through masked
+  const workflowReadsSecrets = readsSecrets(root.env);
   for (const { where, steps, job } of stepGroups) {
-    const environment = isObj(job?.environment) ? job.environment.name : job?.environment;
-    if (environment !== "uat") continue;
+    if (!job || (job.environment === undefined && job.secrets === undefined && !workflowReadsSecrets && !readsSecrets(job))) continue;
     steps.forEach((step, index) => {
       if (!isObj(step) || typeof step.run !== "string") return;
       const script = stripComments(step.run);
-      const tees = teesToSummary(script);
+      const writes = summaryWrites(script);
       const label = stepLabel(where, step, index);
-      for (const tee of tees.filter((candidate) => candidate.previous !== "masked")) {
-        add(label, `pipes to tee ${tee.target} without a masked stage right before it, so the public step summary would print the tool's output unmasked; define masked() as age-uat.yml does and write '... | masked | tee -a "$GITHUB_STEP_SUMMARY"'`);
+      for (const write of writes.filter((candidate) => candidate.fed === "bare")) {
+        add(
+          label,
+          write.kind === "tee"
+            ? `pipes to tee ${write.target} without a masked stage right before it, so the public step summary would print the tool's output unmasked; define masked() as age-uat.yml does and write '... | masked | tee -a "$GITHUB_STEP_SUMMARY"'`
+            : `redirects to $GITHUB_STEP_SUMMARY without a masked stage right before it, so the public step summary would print the command's output unmasked; define masked() as age-uat.yml does and write '... | masked >> "$GITHUB_STEP_SUMMARY"'`,
+        );
       }
-      if (tees.some((tee) => tee.previous === "masked") && !definesMasked(script)) add(label, "pipes to tee through masked but never defines it, so the step would fail with command not found; define masked() in the same step, as age-uat.yml does");
+      if (writes.some((write) => write.fed === "masked") && !definesMasked(script)) add(label, "writes to the step summary through masked but never defines it, so the step would fail with command not found; define masked() in the same step, as age-uat.yml does");
     });
   }
 

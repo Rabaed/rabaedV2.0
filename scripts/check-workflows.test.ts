@@ -426,10 +426,10 @@ describe("rule 7: a job that reads string inputs refuses a carriage return or ne
   });
 });
 
-describe("rule 8: a tee to the step summary under environment uat goes through masked", () => {
+describe("rule 8: in a job with an environment or secrets, a write to the step summary goes through masked", () => {
   const maskedFunction = "masked() { sed -E 's/[^[:space:]]+@[^[:space:]]+/<email>/g'; }\n";
-  const uat = (run: string, { define = true, environment = "environment: uat\n    " } = {}) =>
-    `on: push\npermissions: { contents: read }\njobs:\n  a:\n    ${environment}runs-on: ubuntu-latest\n    steps:\n      - shell: bash\n        run: |\n${indent((define ? maskedFunction : "") + run)}\n`;
+  const uat = (run: string, { define = true, environment = "environment: uat\n    ", stepExtra = "", rootExtra = "" } = {}) =>
+    `on: push\npermissions: { contents: read }\n${rootExtra}jobs:\n  a:\n    ${environment}runs-on: ubuntu-latest\n    steps:\n      - shell: bash\n${stepExtra}        run: |\n${indent((define ? maskedFunction : "") + run)}\n`;
   const missingStage = `without a masked stage right before it`;
   const piped = `write '... | masked | tee -a "$GITHUB_STEP_SUMMARY"'`;
 
@@ -479,15 +479,149 @@ describe("rule 8: a tee to the step summary under environment uat goes through m
     expect(messages(uat('# node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"'))).toEqual([]);
   });
 
-  it("does not flag plain echo of fixed text, a tee to another file, or a job outside environment uat", () => {
+  it("does not flag plain echo or printf of text the script writes, or a tee to another file", () => {
     expect(messages(uat('echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"'))).toEqual([]);
+    expect(messages(uat('printf "%s\\n" "### Deployed" >> "$GITHUB_STEP_SUMMARY"'))).toEqual([]);
+    expect(messages(uat('echo "### Deployed \\`${VERSION:0:7}\\`" >> "$GITHUB_STEP_SUMMARY"'))).toEqual([]);
+    expect(messages(uat("echo 'a $(not run) b' >> \"$GITHUB_STEP_SUMMARY\""))).toEqual([]);
+    expect(messages(uat('if [ -n "$X" ]; then echo "- ok" >> "$GITHUB_STEP_SUMMARY"; fi'))).toEqual([]);
     expect(messages(uat("node tool.ts | tee out.log"))).toEqual([]);
-    expect(messages(uat('node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"', { environment: "" }))).toEqual([]);
-    expect(messages(uat('node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"', { environment: "environment: { name: other }\n    " }))).toEqual([]);
+    expect(messages(uat("node tool.ts > out.log"))).toEqual([]);
   });
 
-  it("recognises environment uat given as a mapping", () => {
+  it("recognises an environment given as a mapping", () => {
     expect(messages(uat('node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"', { environment: "environment: { name: uat }\n    " }))).toHaveLength(1);
+  });
+
+  describe("scope: any job with an environment: or that reads secrets.*", () => {
+    const bare = 'node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"';
+
+    it("flags a job under any environment, a string one included", () => {
+      for (const environment of ["environment: production\n    ", "environment: { name: other }\n    ", "environment: { name: staging, url: 'https://x.test' }\n    "]) {
+        const found = messages(uat(bare, { environment }));
+        expect(found, environment).toHaveLength(1);
+        expect(found[0], environment).toContain(missingStage);
+      }
+    });
+
+    it("flags a job that reads a secret in a step's env, a step's with, its run, the job's env or the workflow's env", () => {
+      const reads = [
+        { environment: "", stepExtra: "        env: { TOKEN: '${{ secrets.TOKEN }}' }\n" },
+        { environment: "", stepExtra: "        with: { token: '${{ secrets.TOKEN }}' }\n" },
+        { environment: "env: { TOKEN: '${{ secrets.TOKEN }}' }\n    " },
+        { environment: "", rootExtra: "env: { TOKEN: '${{ secrets.TOKEN }}' }\n" },
+        { environment: "", stepExtra: "        env: { TOKEN: \"${{ secrets['TOKEN'] }}\" }\n" },
+        { environment: "", stepExtra: "        env: { ALL: '${{ toJSON(secrets) }}' }\n" },
+        { environment: "", stepExtra: "        env: { TOKEN: '${{ secrets.GITHUB_TOKEN }}' }\n" },
+        { environment: "", stepExtra: "        env: { TOKEN: '${{ github.ref == `x` && secrets.TOKEN || `y` }}' }\n" },
+      ];
+      for (const options of reads) {
+        const found = messages(uat(bare, options));
+        expect(found, JSON.stringify(options)).toHaveLength(1);
+        expect(found[0], JSON.stringify(options)).toContain(missingStage);
+      }
+      expect(messages(uat('echo "$X"; ${{ secrets.TOKEN }}\n' + bare, { environment: "" }))).toHaveLength(1);
+    });
+
+    it("leaves a job with no environment and no secrets alone", () => {
+      expect(messages(uat(bare, { environment: "" }))).toEqual([]);
+      expect(messages(uat('node tool.ts > "$GITHUB_STEP_SUMMARY"', { environment: "" }))).toEqual([]);
+      expect(messages(uat('cat out.md >> "$GITHUB_STEP_SUMMARY"', { environment: "", stepExtra: "        env: { REPO: '${{ github.repository }}' }\n" }))).toEqual([]);
+      // A word "secrets" outside an expression, or part of another name, is not a read.
+      expect(messages(uat(bare, { environment: "", stepExtra: "        env: { NOTE: 'secrets.TOKEN', OTHER: '${{ vars.secrets_dir }}' }\n" }))).toEqual([]);
+    });
+
+    it("judges each job on its own", () => {
+      const two = (run: string) =>
+        `on: push\npermissions: { contents: read }\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - shell: bash\n        run: |\n${indent(run)}\n  b:\n    environment: uat\n    runs-on: ubuntu-latest\n    steps:\n      - shell: bash\n        run: |\n${indent(run)}\n`;
+      const found = messages(two('cat out.md >> "$GITHUB_STEP_SUMMARY"'));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("job b");
+    });
+  });
+
+  describe("redirects: cat x >> and tool > as well as tee", () => {
+    const redirectMissing = "redirects to $GITHUB_STEP_SUMMARY without a masked stage right before it";
+    const redirected = `write '... | masked >> "$GITHUB_STEP_SUMMARY"'`;
+
+    it("flags a redirect of a command's output to the summary", () => {
+      const bad = [
+        'cat out.md >> "$GITHUB_STEP_SUMMARY"',
+        'cat out.md > "$GITHUB_STEP_SUMMARY"',
+        "cat out.md >> $GITHUB_STEP_SUMMARY",
+        'cat out.md >> "${GITHUB_STEP_SUMMARY}"',
+        'node tool.ts > "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts >"$GITHUB_STEP_SUMMARY"',
+        'node tool.ts 2>&1 >> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts &>> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts 1>> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts | sed s/a/b/ >> "$GITHUB_STEP_SUMMARY"',
+        'masked | node tool.ts >> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts | masked_not >> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts 2>&1 \\\n  >> "$GITHUB_STEP_SUMMARY"',
+        'status=0; node tool.ts >> "$GITHUB_STEP_SUMMARY" || status=$?',
+        'cat <<EOF >> "$GITHUB_STEP_SUMMARY"\n$(node tool.ts)\nEOF',
+        '{ echo "### Out"; node tool.ts; } >> "$GITHUB_STEP_SUMMARY"',
+        'if [ -s out.md ]; then cat out.md >> "$GITHUB_STEP_SUMMARY"; fi',
+        'cat out.md >> "$GITHUB_STEP_SUMMARY" # then masked',
+        'echo "$(node tool.ts)" >> "$GITHUB_STEP_SUMMARY"',
+        'echo `node tool.ts` >> "$GITHUB_STEP_SUMMARY"',
+        'printf "%s\\n" "$(node tool.ts)" >> "$GITHUB_STEP_SUMMARY"',
+      ];
+      for (const run of bad) {
+        const found = messages(uat(run));
+        expect(found, run).toHaveLength(1);
+        expect(found[0], run).toContain(redirectMissing);
+        expect(found[0], run).toContain(redirected);
+      }
+    });
+
+    it("flags it in a job that only reads a secret, too", () => {
+      const found = messages(uat('cat out.md >> "$GITHUB_STEP_SUMMARY"', { environment: "", stepExtra: "        env: { TOKEN: '${{ secrets.TOKEN }}' }\n" }));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain(redirectMissing);
+    });
+
+    it("passes a redirect fed by masked", () => {
+      const good = [
+        'cat out.md | masked >> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts 2>&1 | masked > "$GITHUB_STEP_SUMMARY"',
+        "node tool.ts | masked >> $GITHUB_STEP_SUMMARY",
+        'node tool.ts | masked >> "${GITHUB_STEP_SUMMARY}"',
+        'node tool.ts 2>&1 \\\n  | masked \\\n  >> "$GITHUB_STEP_SUMMARY"',
+        'node tool.ts |\n  masked >> "$GITHUB_STEP_SUMMARY"',
+        'masked < out.md >> "$GITHUB_STEP_SUMMARY"',
+        '{ echo "### Out"; node tool.ts; } | masked >> "$GITHUB_STEP_SUMMARY"',
+        'if [ -s out.md ]; then cat out.md | masked >> "$GITHUB_STEP_SUMMARY"; fi',
+        'masked <<EOF >> "$GITHUB_STEP_SUMMARY"\n$(node tool.ts)\nEOF',
+      ];
+      for (const run of good) expect(messages(uat(run)), run).toEqual([]);
+    });
+
+    it("says masked is never defined when a redirect uses it", () => {
+      const found = messages(uat('cat out.md | masked >> "$GITHUB_STEP_SUMMARY"', { define: false }));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("never defines it");
+    });
+
+    it("does not take a redirect to another file, a read of the summary, or a comment for a write to it", () => {
+      for (const run of [
+        'cat out.md >> "$RUNNER_TEMP/summary.md"',
+        'cat out.md >> "$GITHUB_STEP_SUMMARY_COPY"',
+        'cat "$GITHUB_STEP_SUMMARY" > copy.md',
+        'node tool.ts 2>&1 > out.log',
+        'node tool.ts 2> "$GITHUB_STEP_SUMMARY_ERR"',
+        '# cat out.md >> "$GITHUB_STEP_SUMMARY"',
+        'echo "status=1" >> "$GITHUB_OUTPUT"',
+      ]) {
+        expect(messages(uat(run)), run).toEqual([]);
+      }
+    });
+
+    it("reports a tee and a redirect in the same step each once", () => {
+      const found = messages(uat('node tool.ts | tee -a "$GITHUB_STEP_SUMMARY"\ncat out.md >> "$GITHUB_STEP_SUMMARY"'));
+      expect(found).toHaveLength(2);
+    });
   });
 });
 
