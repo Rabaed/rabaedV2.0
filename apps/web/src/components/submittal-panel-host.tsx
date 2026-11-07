@@ -22,6 +22,7 @@ import {
   readSubmittalPanelPreferences,
   stageColour,
   useSubmittalPanelIds,
+  useMediaQuery,
   useSubmittalPanelSize,
   writeSubmittalPanelPreferences,
   type SubmittalPanelSizeLabels,
@@ -35,6 +36,7 @@ import { SubmittalPanelForm, useSubmittalPanelReads } from "@/components/submitt
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
+import { phoneQuery } from "@/lib/new-submittal-panel";
 import { submittalPanelPlace } from "@/lib/submittal-panel-place";
 import { openIdFrom, sizeFrom, submittalPanelHref, withoutLinkSize } from "@/lib/submittal-panel-url";
 
@@ -173,6 +175,9 @@ export function SubmittalPanelHost({
   const typeOutcomes = item ? filters.outcomes.filter((o) => o.type === item.type.code) : [];
   const chain = item && reads?.id === item.id ? reads.chain : null;
   const tRevisions = useTranslations("submittalPanel.revisions");
+  const tNew = useTranslations("newSubmittal");
+  // On a phone the item is a page with a back arrow, as the create panel is (RP-1152 row 7; RP-1237 row 43).
+  const phone = useMediaQuery(phoneQuery, false);
   const n = (value: number) => formatNumber(value, locale);
 
   return (
@@ -188,7 +193,9 @@ export function SubmittalPanelHost({
           hint: t("hint"),
           // Opened from outside the List, ↑ ↓ move nowhere (row 41).
           hintClose: t("hintClose"),
+          back: tNew("back"),
         }}
+        layout={phone ? "page" : "slide-over"}
         crumb={
           !item ? null : number === null ? (
             t("noNumber")
@@ -204,7 +211,7 @@ export function SubmittalPanelHost({
         onClose={close}
         width={size.width}
         resizing={size.resizing}
-        covers={size.pressed === "full"}
+        covers={phone || size.pressed === "full"}
         edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels} />}
         topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels} />}
         labelledBy={item ? ids.labelledBy : undefined}
