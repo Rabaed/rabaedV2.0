@@ -107,7 +107,10 @@ export function SubmittalPanelActionBar({
     return `${named ? t("closes", { company: to[locale] }) : t("closesOwn")}${comments}`;
   };
 
-  /** The Position the viewer's Step names, as the Workflow map words it ("Consultant Manager"); null without one. */
+  /**
+   * The Position the viewer's Step is narrowed to, as the Workflow map words it; null without one. The signer
+   * line then names the Step itself ("Consultant Manager"), else the Company (row 39).
+   */
   const roleOf = (): string | null => {
     const step = map?.definition.steps.find((x) => x.key === item.step?.key);
     const actor = step?.actor;
@@ -151,7 +154,7 @@ export function SubmittalPanelActionBar({
           revision: (company) => (company ? tSheet("revision", { company }) : tSheet("revisionOwn")),
           record: (recorded) => tSheet("record", { code: recorded }),
         },
-        signer: me ? { name: me.member.fullName, role: roleOf() ?? me.company.legalName[locale], signsAs: tSheet("signsAs") } : null,
+        signer: me ? { name: me.member.fullName, role: roleOf() ?? item.step?.name[locale] ?? me.company.legalName[locale], signsAs: tSheet("signsAs") } : null,
         confirm: code ? tSheet("issue", { code }) : undefined,
       },
     };
