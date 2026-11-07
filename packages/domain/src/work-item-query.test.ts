@@ -112,6 +112,19 @@ describe("workItemQuery", () => {
     expect(workItemQuery.safeParse({ cursor, sort: "documentNumber" }).success).toBe(false);
     expect(workItemQuery.safeParse({ cursor: "garbage" }).success).toBe(false);
   });
+
+  it("takes a Revision's Document Number as a Raised from value, at every Revision (RP-1119)", () => {
+    const numbers = ["TWR-C1-EL-MAR-0041", "TWR-C1-EL-MAR-0041 Rev 1", "TWR-C1-EL-MAR-0041 Rev 2", "TWR-C1-EL-MAR-0041 Rev 12"];
+    expect(workItemQuery.parse({ raisedFrom: numbers }).raisedFrom).toEqual(numbers);
+    // Read back from the Snag List's URL, as "Open in Snag List" writes it.
+    const href = workItemListHref("p1", { module: "snag_list", raisedFrom: ["TWR-C1-EL-MAR-0041 Rev 2"] });
+    expect(workItemQueryFromSearchParams(new URLSearchParams(href.split("?")[1])).raisedFrom).toEqual(["TWR-C1-EL-MAR-0041 Rev 2"]);
+  });
+
+  it("refuses a Raised from value that is no Document Number, nor a Revision of one", () => {
+    for (const bad of ["Rev 2", " TWR-0041 Rev 2", "TWR-0041 Rev", "TWR-0041 Rev 0", "TWR-0041 Rev 02", "TWR-0041 rev 2", "TWR-0041  Rev 2", "TWR-0041 Rev 2 Rev 3", "TWR 0041"])
+      expect(workItemQuery.safeParse({ raisedFrom: bad }).success, bad).toBe(false);
+  });
 });
 
 describe("the query in the URL", () => {

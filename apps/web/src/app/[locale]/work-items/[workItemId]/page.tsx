@@ -7,7 +7,6 @@ import {
   moduleTabPaths,
   stepAgeLabel,
   watchOutcomeNames,
-  workItemListHref,
   type Locale,
 } from "@rabaed/domain";
 import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
@@ -41,6 +40,7 @@ import { WirDraftBar, WirDraftSide, WirNextSteps, WirRequestColumns } from "@/co
 import { codeRemarks, coverNote, inspectionActions, recommendedCodeSent, requestActions, sharedChecklists } from "@/lib/inspection";
 import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
 import { notPickedUpYetValues } from "@/lib/pool-line";
+import { raisedFromHref } from "@/lib/raised-from-href";
 import { itemLanding } from "@/lib/submittal-panel-url";
 import { beforePhotos, snagResponse } from "@/lib/snag-response";
 import {
@@ -202,13 +202,14 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           each opens the Snag List filtered to them (RP-628), where the viewer again sees only its own. */}
       {!wir && item.raisedItems.map((f) => {
         const counts = t("fields.raisedItemCounts", { open: formatNumber(f.open, locale), closed: formatNumber(f.closed, locale) });
+        const href = raisedFromHref(item.projectId, f.type.code, item.documentNumber);
         return (
           <Fragment key={f.type.code}>
             <dt className="text-muted">{t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale]}</dt>
             <dd data-testid={`raised-item-counts-${f.type.code}`}>
-              {item.documentNumber ? (
+              {href ? (
                 <Link
-                  href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })}
+                  href={href}
                   className="text-brand-fg underline underline-offset-4"
                 >
                   {counts}
@@ -225,13 +226,14 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       {!wir && previous?.items.map((f) => {
         const counts = t("fields.previousRaisedItemCounts", { closed: formatNumber(f.closed, locale), open: formatNumber(f.open, locale) });
         const typeName = t.has(`fields.raisedItemTypes.${f.type.code}`) ? t(`fields.raisedItemTypes.${f.type.code}`) : f.type.name[locale];
+        const href = raisedFromHref(item.projectId, f.type.code, previous.documentNumber);
         return (
           <Fragment key={`previous-${f.type.code}`}>
             <dt className="text-muted">{t("fields.previousRaisedItems", { type: typeName, revision: formatNumber(previous.revisionNo, locale) })}</dt>
             <dd data-testid={`previous-raised-item-counts-${f.type.code}`}>
-              {previous.documentNumber ? (
+              {href ? (
                 <Link
-                  href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [previous.documentNumber] })}
+                  href={href}
                   className="text-brand-fg underline underline-offset-4"
                 >
                   {counts}
