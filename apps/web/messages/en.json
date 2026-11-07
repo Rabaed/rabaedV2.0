@@ -2153,6 +2153,9 @@
       "blue": "Blue"
     },
     "clear": "Clear",
+    "undo": "Undo",
+    "cardTitle": "How it looks on a record",
+    "cardSignature": "Signature",
     "name": "Your full name",
     "hand": "Handwriting",
     "hands": {

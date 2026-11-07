@@ -17,6 +17,9 @@ export const signatureEditorLabels: Record<Locale, SignatureEditorLabels> = {
     ink: "Ink",
     inks: { black: "Black", blue: "Blue" },
     clear: "Clear",
+    undo: "Undo",
+    cardTitle: "How it looks on a record",
+    cardSignature: "Signature",
     name: "Your full name",
     hand: "Handwriting",
     hands: { flowing: "Flowing", upright: "Upright" },
@@ -44,6 +47,9 @@ export const signatureEditorLabels: Record<Locale, SignatureEditorLabels> = {
     ink: "الحبر",
     inks: { black: "أسود", blue: "أزرق" },
     clear: "مسح",
+    undo: "تراجع",
+    cardTitle: "شكله في السجل",
+    cardSignature: "التوقيع",
     name: "اسمك",
     hand: "الخط",
     hands: { flowing: "منساب", upright: "قائم" },
@@ -75,6 +81,12 @@ export const signatureRequiredLabels: Record<Locale, SignatureRequiredLabels> = 
     notNow: "ليس الآن",
     close: "إغلاق",
   },
+};
+
+/** The Member's own lines on the preview card, in story data (Latin digits in both languages). */
+export const signatureCards: Record<Locale, { name: string; positions: string[]; company: string; date: string }> = {
+  en: { name: "Hafiz Hamdan", positions: ["Engineer"], company: "Al Rashid Contracting", date: "7 Nov 2026" },
+  ar: { name: "حافظ حمدان", positions: ["مهندس"], company: "الراشد للمقاولات", date: "7 نوفمبر 2026" },
 };
 
 /** The pop-up's link to Profile → Add Signature, as the app words it. */
