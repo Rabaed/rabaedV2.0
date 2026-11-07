@@ -141,7 +141,8 @@ export type SubmittalPanelBarChipLabels = {
 export function SubmittalPanelWaiting({ chip, labels, locale }: { chip: SubmittalPanelBarChip; labels: SubmittalPanelBarChipLabels; locale: Locale }): ReactNode {
   const [icon, text]: [IconName, string] =
     chip.kind === "pool"
-      ? ["users", labels.pool(chip.count)]
+      ? // eslint-disable-next-line rabaed/no-avoid-terms -- the icon's name
+        ["users", labels.pool(chip.count)]
       : chip.kind === "pickedUp"
         ? ["lock", labels.pickedUp(chip.name[locale], chip.weeks)]
         : ["eye", labels.viewOnly];

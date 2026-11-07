@@ -455,9 +455,6 @@ export {
   type VerificationCodeFormLabels,
 } from "./components/verification/record-verification.tsx";
 // The Work Item page (RP-1151): the Submittal Panel at page size, and its own parts.
-export { WorkItemPageFrame, WorkItemTopBarButton, type WorkItemPageFrameProps } from "./components/work-item-page/page-frame.tsx";
 export { AttachmentChips, type AttachmentChip, type AttachmentChipsLabels, type AttachmentChipsProps } from "./components/work-item-page/attachment-chips.tsx";
-export { CodeTile, StepAgePill, WorkItemTransitionsCard, WorkItemIssuedCodeCard, type WorkItemTransitionsCardProps, type WorkItemIssuedCodeCardProps } from "./components/work-item-page/page-parts.tsx";
-export { WorkItemPageHistory, type WorkItemPageHistoryLabels } from "./components/work-item-page/work-item-history.tsx";
-export { workItemHistoryEntries, type WorkItemHistoryEntry } from "./components/work-item-page/history-model.ts";
-export { transitionCodes, workItemIssuedCode, type WorkItemIssuedCode } from "./components/work-item-page/page-model.ts";
+export { CodeTile } from "./components/work-item-page/page-parts.tsx";
+export { transitionCodes } from "./components/work-item-page/page-model.ts";

@@ -346,6 +346,7 @@ export function WorkItemAnswers({
   look,
   saveRow = true,
   folding,
+  hide,
 }: {
   locale: Locale;
   workItemId: string;
@@ -368,7 +369,15 @@ export function WorkItemAnswers({
     nothing: string;
     /** The cards folded when the page opens (the Details card). */
     folded?: readonly string[];
+    /** The folded cards, kept by the page (the Submittal Panel keeps them in this browser, RP-1066); left out, its own. */
+    collapsed?: Readonly<Record<string, boolean>>;
+    onCollapsedChange?: (collapsed: Record<string, boolean>) => void;
   };
+  /**
+   * Field types the Form leaves out here, because the page shows them itself (the Submittal Panel's Scope and
+   * Location sections, RP-1237 row 12); a section left empty goes too. Only to read: never while editing.
+   */
+  hide?: readonly string[];
 }) {
   const t = useTranslations("workItems.form");
   const formLabels = useFormRendererLabels();
@@ -381,7 +390,9 @@ export function WorkItemAnswers({
     documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
   );
   const saveDraft = useSaveDraft(locale);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => Object.fromEntries((folding?.folded ?? []).map((key) => [key, true])));
+  const [ownCollapsed, setOwnCollapsed] = useState<Record<string, boolean>>(() => Object.fromEntries((folding?.folded ?? []).map((key) => [key, true])));
+  const collapsed = folding?.collapsed ?? ownCollapsed;
+  const setCollapsed = folding?.onCollapsedChange ?? setOwnCollapsed;
   if (!form) return null;
   const button = saveDraft!.button;
   // The fields the last check marked, by their labels in the viewer's language, in Form order.
@@ -393,7 +404,7 @@ export function WorkItemAnswers({
   return (
     <section className="space-y-4" aria-label={t("title")}>
       <FormRenderer
-        schema={formBesideReplyChecklists(form.schema, replyChecklists)}
+        schema={formBesideReplyChecklists(hide && !form.editable ? withoutFieldTypes(form.schema, hide) : form.schema, replyChecklists)}
         choices={form.choices}
         answers={form.answers}
         named={form.named}
@@ -507,4 +518,15 @@ export function WorkItemAnswers({
       )}
     </section>
   );
+}
+
+/** The Form without fields of these types, and without a section they leave empty. */
+function withoutFieldTypes(schema: FormSchema, types: readonly string[]): FormSchema {
+  return {
+    ...schema,
+    sections: schema.sections.flatMap((section) => {
+      const fields = section.fields.filter((f) => !types.includes(f.type));
+      return fields.length === 0 ? [] : [{ ...section, fields }];
+    }),
+  };
 }

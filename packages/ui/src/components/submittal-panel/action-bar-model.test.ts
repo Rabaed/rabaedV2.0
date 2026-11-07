@@ -25,11 +25,14 @@ const none: Actions = {
   recommendedCode: null,
 } as unknown as Actions;
 
-const transition = (key: string, kind: Transition["kind"]): Transition =>
-  ({ key, kind, label: { en: key, ar: key }, actionForm: null }) as Transition;
+/** A name in both languages, as the item read gives it (story data, not the UI's own words). */
+const bi = (en: string, ar: string) => Object.fromEntries([["en", en], ["ar", ar]]) as { en: string; ar: string };
 
-const consultant = { en: "Consultant Co", ar: "الاستشاري" };
-const ahmed = { en: "Ahmed bin Said", ar: "أحمد بن سعيد" };
+const transition = (key: string, kind: Transition["kind"]): Transition =>
+  ({ key, kind, label: bi(key, key), actionForm: null }) as Transition;
+
+const consultant = bi("Consultant Co", "الاستشاري");
+const ahmed = bi("Ahmed bin Said", "أحمد بن سعيد");
 const heldBy = (held: Partial<NonNullable<HeldBy>>): HeldBy => ({ companyName: consultant, memberName: null, pool: null, ...held }) as HeldBy;
 
 describe("the Submittal Panel's action bar", () => {
@@ -48,7 +51,7 @@ describe("the Submittal Panel's action bar", () => {
   });
 
   it("shows Transitions that issue no code as buttons, with no menu", () => {
-    const [back, submit] = [transition("return", "return"), transition("sign_submit", "forward")];
+    const [back, submit] = [transition("return", "return"), transition("sign_submit", "send")];
     const bar = submittalPanelBar({ actions: { ...none, transitions: [back, submit] }, codes: {}, heldBy: heldBy({ memberName: ahmed }), stepAgeWeeks: 1 });
     expect(bar.menu).toBeNull();
     expect(bar.buttons).toEqual([back, submit]);
@@ -58,7 +61,7 @@ describe("the Submittal Panel's action bar", () => {
     const bar = submittalPanelBar({
       actions: { ...none, pickUp: true },
       codes: {},
-      heldBy: heldBy({ pool: { names: [ahmed, { en: "Sara", ar: "سارة" }, { en: "Omar", ar: "عمر" }] } }),
+      heldBy: heldBy({ pool: { names: [ahmed, bi("Sara", "سارة"), bi("Omar", "عمر")] } }),
       stepAgeWeeks: 2,
     });
     expect(bar.pickUp).toBe(true);
