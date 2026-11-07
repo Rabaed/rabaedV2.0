@@ -24,17 +24,20 @@ import { resolve } from "node:path";
 // Exit 0: both private; 1: a bucket is public, or Cloudflare's answer could not be read; 2: a missing input.
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
-const TOKEN = "CLOUDFLARE_R2_READ_TOKEN";
+/** The name of the variable holding the token (never the token itself). */
+const TOKEN_VAR = "CLOUDFLARE_R2_READ_TOKEN";
 /** The values `cf-r2-jurisdiction` takes besides `default` (Cloudflare's API reference for these endpoints). */
 const JURISDICTIONS = ["eu", "us", "fedramp", "fedramp-high"] as const;
+type Jurisdiction = (typeof JURISDICTIONS)[number];
+const isJurisdiction = (value: string): value is Jurisdiction => (JURISDICTIONS as readonly string[]).includes(value);
 /** R2's S3 address: `<ACCOUNT_ID>.r2.cloudflarestorage.com`, or `<ACCOUNT_ID>.<JURISDICTION>.r2.cloudflarestorage.com` (R2 docs, "Data location"). */
 const R2_S3_HOST = /^([0-9a-f]{32})(?:\.([a-z-]+))?\.r2\.cloudflarestorage\.com$/;
 /** How much of Cloudflare's error text a failure line keeps. */
 const MAX_ERROR_TEXT = 300;
 
 export interface R2Bucket {
-  /** What the bucket holds, for the failure line: "files" or "fonts". */
-  readonly label: string;
+  /** What the bucket holds, for the failure line. */
+  readonly label: "files" | "fonts";
   readonly name: string;
 }
 
@@ -43,28 +46,34 @@ export interface R2PrivateOptions {
   readonly token: string;
   readonly buckets: readonly R2Bucket[];
   /** The buckets' jurisdiction, when not the default one. */
-  readonly jurisdiction?: (typeof JURISDICTIONS)[number];
+  readonly jurisdiction?: Jurisdiction;
   readonly fetch?: typeof fetch;
+}
+
+/** One public address of a bucket as Cloudflare reports it: its r2.dev URL or a custom domain, and whether it serves the bucket. */
+interface R2Domain {
+  domain: string;
+  enabled: boolean;
 }
 
 /** The check's inputs from the deploy step's environment, or the first one missing. Blank counts as unset. */
 export function r2PrivateFromEnv(env: NodeJS.ProcessEnv): { options: Omit<R2PrivateOptions, "fetch"> } | { error: string } {
-  const token = env[TOKEN];
-  if (!token) return { error: `${TOKEN} is not set: add the read-only R2 token (Workers R2 Storage Read) to GitHub environment uat (docs/tech-stack.md). The check never skips.` };
-  for (const name of ["FILE_STORE_ENDPOINT", "PROJECT_FILES_BUCKET", "BUILD_ASSETS_BUCKET"]) {
-    if (!env[name]) return { error: `${name} is not set: the uat environment's variable, as the deploy's other steps read it` };
-  }
-  const endpoint = env.FILE_STORE_ENDPOINT!;
-  const host = URL.canParse(endpoint) && new URL(endpoint).protocol === "https:" ? R2_S3_HOST.exec(new URL(endpoint).hostname) : null;
-  const jurisdiction = host?.[2];
-  if (!host || (jurisdiction !== undefined && !(JURISDICTIONS as readonly string[]).includes(jurisdiction))) {
+  const { [TOKEN_VAR]: token, FILE_STORE_ENDPOINT: endpoint, PROJECT_FILES_BUCKET: files, BUILD_ASSETS_BUCKET: fonts } = env;
+  if (!token) return { error: `${TOKEN_VAR} is not set: add the read-only R2 token (Workers R2 Storage Read) to GitHub environment uat (docs/tech-stack.md). The check never skips.` };
+  const unset = (name: string) => ({ error: `${name} is not set: the uat environment's variable, as the deploy's other steps read it` });
+  if (!endpoint) return unset("FILE_STORE_ENDPOINT");
+  if (!files) return unset("PROJECT_FILES_BUCKET");
+  if (!fonts) return unset("BUILD_ASSETS_BUCKET");
+  const url = URL.canParse(endpoint) ? new URL(endpoint) : null;
+  const [, accountId, jurisdiction] = (url?.protocol === "https:" && R2_S3_HOST.exec(url.hostname)) || [];
+  if (!accountId || (jurisdiction !== undefined && !isJurisdiction(jurisdiction))) {
     return { error: "FILE_STORE_ENDPOINT is not R2's S3 address (https://<account id>[.<jurisdiction>].r2.cloudflarestorage.com), so the account is unknown" };
   }
-  const buckets = [
-    { label: "files", name: env.PROJECT_FILES_BUCKET! },
-    { label: "fonts", name: env.BUILD_ASSETS_BUCKET! },
+  const buckets: R2Bucket[] = [
+    { label: "files", name: files },
+    { label: "fonts", name: fonts },
   ];
-  return { options: { accountId: host[1]!, token, buckets, ...(jurisdiction ? { jurisdiction: jurisdiction as R2PrivateOptions["jurisdiction"] } : {}) } };
+  return { options: { accountId, token, buckets, ...(jurisdiction ? { jurisdiction } : {}) } };
 }
 
 /** Cloudflare's v4 envelope. */
@@ -80,52 +89,53 @@ export async function r2PrivateCheck({ accountId, token, buckets, jurisdiction, 
   const failures: string[] = [];
   for (const { label, name } of buckets) {
     const who = `the ${label} bucket ${name}`;
-    const base = `${CLOUDFLARE_API}/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(name)}`;
-    const read = async (path: string): Promise<unknown> => {
-      const answer = await ask(get, `${base}/${path}`, headers, path);
+    const bucketUrl = `${CLOUDFLARE_API}/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(name)}`;
+    // Every path ends in a failure or a judged result: a result missing or of another shape is unclear, never a pass.
+    const read = async (path: string): Promise<{ result: unknown } | null> => {
+      const answer = await ask(get, bucketUrl, path, headers);
       if ("failure" in answer) failures.push(`${who}: ${answer.failure}`);
-      return "result" in answer ? answer.result : undefined;
+      return "failure" in answer ? null : answer;
     };
     const unclear = (path: string) => failures.push(`${who}: Cloudflare's answer to GET ${path} does not say whether it is public`);
 
-    const dev = await read("domains/managed");
-    if (dev !== undefined) {
-      if (!isManaged(dev)) unclear("domains/managed");
-      else if (dev.enabled) failures.push(`${who} is public at its r2.dev URL ${dev.domain}: turn it off (R2 > ${name} > Settings > Public Development URL > Disable)`);
+    const r2Dev = await read("domains/managed");
+    if (r2Dev) {
+      if (!isR2Domain(r2Dev.result)) unclear("domains/managed");
+      else if (r2Dev.result.enabled) failures.push(`${who} is public at its r2.dev URL ${r2Dev.result.domain}: turn it off (R2 > ${name} > Settings > Public Development URL > Disable)`);
     }
     const custom = await read("domains/custom");
-    if (custom !== undefined) {
-      if (!isCustomList(custom)) unclear("domains/custom");
-      else for (const d of custom.domains.filter((d) => d.enabled)) failures.push(`${who} is public at its custom domain ${d.domain}: disable or remove it (R2 > ${name} > Settings > Custom Domains)`);
+    if (custom) {
+      if (!isR2DomainList(custom.result)) unclear("domains/custom");
+      else for (const d of custom.result.domains.filter((d) => d.enabled)) failures.push(`${who} is public at its custom domain ${d.domain}: disable or remove it (R2 > ${name} > Settings > Custom Domains)`);
     }
   }
   return token ? failures.map((f) => f.replaceAll(token, "***")) : failures;
 }
 
-/** One GET of Cloudflare's API: its `result`, or why there is none. Never throws. */
-async function ask(get: typeof fetch, url: string, headers: Record<string, string>, what: string): Promise<{ result: unknown } | { failure: string }> {
+/** One GET of `path` under a bucket in Cloudflare's API: its `result`, or why there is none. Never throws. */
+async function ask(get: typeof fetch, bucketUrl: string, path: string, headers: Record<string, string>): Promise<{ result: unknown } | { failure: string }> {
   let res: Response;
   try {
-    res = await get(url, { headers, signal: AbortSignal.timeout(10_000) });
+    res = await get(`${bucketUrl}/${path}`, { headers, signal: AbortSignal.timeout(10_000) });
   } catch (error) {
-    return { failure: `Cloudflare's API could not be reached for GET ${what} (${(error as Error).message})` };
+    return { failure: `Cloudflare's API could not be reached for GET ${path} (${(error as Error).message})` };
   }
   const body = (await res.json().catch(() => undefined)) as Envelope | undefined;
   if (res.ok && body?.success === true) return { result: body.result };
   const errors = (body?.errors ?? []).map((e) => `${e.code ?? "?"} ${e.message ?? ""}`.trim()).join("; ").slice(0, MAX_ERROR_TEXT);
   // A token Cloudflare does not know answers 400 (9106), one without the permission 401 or 403.
-  const hint = [400, 401, 403].includes(res.status) ? `; is ${TOKEN} a Workers R2 Storage Read token for this account?` : "";
-  return { failure: `Cloudflare answered ${res.status} to GET ${what}${errors ? ` (${errors})` : ""}${hint}` };
+  const hint = [400, 401, 403].includes(res.status) ? `; is ${TOKEN_VAR} a Workers R2 Storage Read token for this account?` : "";
+  return { failure: `Cloudflare answered ${res.status} to GET ${path}${errors ? ` (${errors})` : ""}${hint}` };
 }
 
-function isManaged(value: unknown): value is { domain: string; enabled: boolean } {
+function isR2Domain(value: unknown): value is R2Domain {
   const v = value as { domain?: unknown; enabled?: unknown } | null;
   return typeof v?.enabled === "boolean" && typeof v.domain === "string";
 }
 
-function isCustomList(value: unknown): value is { domains: { domain: string; enabled: boolean }[] } {
+function isR2DomainList(value: unknown): value is { domains: R2Domain[] } {
   const domains = (value as { domains?: unknown } | null)?.domains;
-  return Array.isArray(domains) && domains.every((d) => typeof d?.enabled === "boolean" && typeof d.domain === "string");
+  return Array.isArray(domains) && domains.every(isR2Domain);
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
@@ -135,10 +145,10 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     process.exit(2);
   }
   const failures = await r2PrivateCheck(run.options);
-  const names = run.options.buckets.map((b) => `${b.label} (${b.name})`).join(" and ");
   if (failures.length > 0) {
     console.error(`R2 buckets stay private: failed\n${failures.map((f) => `  - ${f}`).join("\n")}`);
     process.exit(1);
   }
+  const names = run.options.buckets.map((b) => `${b.label} (${b.name})`).join(" and ");
   console.log(`R2 buckets stay private: ${names} have no r2.dev URL and no custom domain on`);
 }

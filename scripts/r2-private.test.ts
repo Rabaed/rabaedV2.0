@@ -70,6 +70,17 @@ describe("R2 buckets stay private", () => {
     expect(await r2PrivateCheck({ accountId, token, buckets, fetch })).toEqual([]);
   });
 
+  it("names only the custom domain that is on, of several", async () => {
+    const { fetch } = cloudflare({
+      [`${api}/rabaed-uat-files/domains/custom`]: custom([
+        { domain: "off.example.com", enabled: false },
+        { domain: "on.example.com", enabled: true },
+      ]),
+    });
+    const failures = await r2PrivateCheck({ accountId, token, buckets, fetch });
+    expect(failures).toEqual([expect.stringContaining("the files bucket rabaed-uat-files is public at its custom domain on.example.com:")]);
+  });
+
   it("names every public address of both buckets in one run", async () => {
     const { fetch } = cloudflare({
       [`${api}/rabaed-uat-files/domains/managed`]: managed("rabaed-uat-files", true),
@@ -128,6 +139,18 @@ describe("R2 buckets stay private: an answer it cannot read fails, never passes"
     ]);
   });
 
+  it("fails on a 200 with no result at all", async () => {
+    const { fetch } = cloudflare({
+      [`${api}/rabaed-uat-build-assets/domains/managed`]: { body: { success: true, errors: [], messages: [] } },
+      [`${api}/rabaed-uat-build-assets/domains/custom`]: { body: { success: true, errors: [], messages: [] } },
+    });
+    const failures = await r2PrivateCheck({ accountId, token, buckets, fetch });
+    expect(failures).toEqual([
+      "the fonts bucket rabaed-uat-build-assets: Cloudflare's answer to GET domains/managed does not say whether it is public",
+      "the fonts bucket rabaed-uat-build-assets: Cloudflare's answer to GET domains/custom does not say whether it is public",
+    ]);
+  });
+
   it("fails when Cloudflare cannot be reached", async () => {
     const down = (async () => {
       throw new TypeError("fetch failed");
@@ -175,10 +198,26 @@ describe("R2 buckets stay private: what the deploy step passes", () => {
     expect(r2PrivateFromEnv({ ...env, [name]: undefined })).toEqual({ error: expect.stringContaining(`${name} is not set`) });
   });
 
-  it("refuses an endpoint that is not R2's S3 address", () => {
-    expect(r2PrivateFromEnv({ ...env, FILE_STORE_ENDPOINT: "https://s3.eu-central-1.amazonaws.com" })).toEqual({
+  it("treats a blank bucket name as unset", () => {
+    expect(r2PrivateFromEnv({ ...env, BUILD_ASSETS_BUCKET: "" })).toEqual({ error: expect.stringContaining("BUILD_ASSETS_BUCKET is not set") });
+  });
+
+  it.each([
+    ["another store", "https://s3.eu-central-1.amazonaws.com"],
+    ["plain http", `http://${accountId}.r2.cloudflarestorage.com`],
+    ["an unknown jurisdiction", `https://${accountId}.xx.r2.cloudflarestorage.com`],
+    ["a short account id", `https://${accountId.slice(1)}.r2.cloudflarestorage.com`],
+    ["an account id that is not hex", `https://${"g".repeat(32)}.r2.cloudflarestorage.com`],
+    ["not a URL", "r2.cloudflarestorage.com"],
+  ])("refuses an endpoint that is not R2's S3 address: %s", (_, endpoint) => {
+    expect(r2PrivateFromEnv({ ...env, FILE_STORE_ENDPOINT: endpoint })).toEqual({
       error: "FILE_STORE_ENDPOINT is not R2's S3 address (https://<account id>[.<jurisdiction>].r2.cloudflarestorage.com), so the account is unknown",
     });
+  });
+
+  // URL lower-cases a host, so an account id typed in capitals is still R2's.
+  it("reads an account id typed in capitals", () => {
+    expect(r2PrivateFromEnv({ ...env, FILE_STORE_ENDPOINT: `https://${accountId.toUpperCase()}.R2.cloudflarestorage.com` })).toEqual({ options: { accountId, token, buckets } });
   });
 
   // R2's docs, "Data location": a jurisdiction's S3 address is `<ACCOUNT_ID>.<JURISDICTION>.r2.cloudflarestorage.com`,
