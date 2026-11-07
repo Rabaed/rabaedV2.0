@@ -155,9 +155,9 @@ describe("scenario RP-1139-2: C1 at the Owner's review, and after it closes, rea
         .filter((r) => r.member_name !== null)
         .map((r) => ({ id: r.member_name!.en }));
     const k1Name = (await migrator.query<{ en: string }>("select full_name ->> 'en' as en from member where id = $1", [k1.members.manager])).rows[0]!.en;
-    await expectHiddenFrom({ read: historyNames, target: k1Name, seenBy: kOne(), hiddenFrom: cOne(), name: named, label: "K1's manager in the history" });
+    await expectHiddenFrom({ read: historyNames, target: k1Name, seenBy: kOne(), hiddenFrom: [...cOne(), tower.ow.members.representative], name: named, label: "K1's manager in the history" });
     const c1Name = (await migrator.query<{ en: string }>("select full_name ->> 'en' as en from member where id = $1", [c1.members.project_manager])).rows[0]!.en;
-    await expectHiddenFrom({ read: historyNames, target: c1Name, seenBy: cOne(), hiddenFrom: kOne(), name: named, label: "C1's PM in the history" });
+    await expectHiddenFrom({ read: historyNames, target: c1Name, seenBy: cOne(), hiddenFrom: [...kOne(), tower.ow.members.representative], name: named, label: "C1's PM in the history" });
   });
 
   it("after the Owner's closing Confirm: its actor is the Owner's own; C1 and K1 read no id of it", async () => {

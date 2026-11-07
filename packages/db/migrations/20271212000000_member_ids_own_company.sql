@@ -81,12 +81,15 @@ grant execute on function app.document_uploaders(uuid[]) to rabaed_app;
 
 create function app.acted_on_work_item(p_work_item_id uuid)
   returns boolean
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
-as $$
-  -- The reader's own moves only: it names no one else.
-  select exists (select 1 from work_item_event e where e.work_item_id = p_work_item_id and e.actor_member_id = app.current_member_id())
-$$;
+  as $$
+    begin
+      -- The reader's own moves only, on an item they see: it names no one else.
+      return app.sees_work_item(p_work_item_id)
+        and exists (select 1 from work_item_event e where e.work_item_id = p_work_item_id and e.actor_member_id = app.current_member_id());
+    end
+  $$;
 revoke all on function app.acted_on_work_item(uuid) from public;
 grant execute on function app.acted_on_work_item(uuid) to rabaed_app;
 

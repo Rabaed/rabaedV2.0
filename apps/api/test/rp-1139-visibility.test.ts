@@ -37,6 +37,7 @@ const schema = {
 
 let at: Tower;
 let id = "";
+let c1Document = "";
 type Person = { id: string; caller: Caller; name: string };
 let c1Engineer: Person;
 let c1Pm: Person;
@@ -102,7 +103,7 @@ beforeAll(async () => {
 
   const answers = { model: "Switchgear", trade: at.electrical, location: at.buildingA };
   id = (await ok(c1Engineer.caller.post(`/v1/projects/${at.projectId}/work-items`, { type: OWNER_TYPE, title: "Switchgear", answers }), 201)).json().id as string;
-  await uploadDocument(c1Engineer.caller, id, pdf("c1-datasheet.pdf"));
+  c1Document = await uploadDocument(c1Engineer.caller, id, pdf("c1-datasheet.pdf"));
   await take(c1Engineer.caller, id, "send_for_review");
   await ok(c1Pm.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm.caller, id, "submit");
@@ -113,7 +114,7 @@ beforeAll(async () => {
 describe("scenario RP-1139-2: C1 at the Owner's review, and after it closes, reads no other Company's actor", () => {
   it("the history names K1's manager to K1 only, and C1's PM to C1 only", async () => {
     const cOne = [c1Engineer.caller, c1Pm.caller];
-    await expectHiddenFrom({ read: actorsRead, target: k1Manager.name, seenBy: k1Manager.caller, hiddenFrom: [...cOne, c2Engineer.caller], name: named, label: "K1's manager in the history" });
+    await expectHiddenFrom({ read: actorsRead, target: k1Manager.name, seenBy: k1Manager.caller, hiddenFrom: [...cOne, owPm.caller, c2Engineer.caller], name: named, label: "K1's manager in the history" });
     await expectHiddenFrom({ read: actorsRead, target: c1Pm.name, seenBy: cOne, hiddenFrom: [k1Manager.caller, owPm.caller, c2Engineer.caller], name: named, label: "C1's PM in the history" });
   });
 
@@ -145,8 +146,22 @@ describe("scenario RP-1139-3: another Company reads a Document's Company, never 
   });
 });
 
-describe("scenario RP-1139-4: no response carries another Company's Member id", () => {
+describe("scenario RP-1139-4: C2 on C1's item, and no response carries another Company's Member id", () => {
+  it("C2, which doesn't see C1's item, reads none of its Documents or history; C1 reads them", async () => {
+    const documentIds = async (by: Caller) => {
+      const res = await by.get(`/v1/work-items/${id}/documents`);
+      return res.statusCode === 200 ? (res.json() as DocumentsRead).documents.map((d) => ({ id: d.id })) : [];
+    };
+    await expectHiddenFrom({ read: documentIds, target: c1Document, seenBy: c1Engineer.caller, hiddenFrom: c2Engineer.caller, name: named, label: "C1's Document" });
+    const historyRead = async (by: Caller) => ((await by.get(`/v1/work-items/${id}/history`)).statusCode === 200 ? [{ id }] : []);
+    await expectHiddenFrom({ read: historyRead, target: id, seenBy: c1Engineer.caller, hiddenFrom: c2Engineer.caller, name: named, label: "the item's history" });
+  });
+
   it("each Member's id shows to its own Company only, across documents, history, the item and the Kanban", async () => {
+    // Every reader asked below reads the item: an error body would make the id search pass for nothing.
+    for (const by of [c1Engineer, c1Pm, k1Manager, owPm])
+      for (const url of [`/v1/work-items/${id}/documents`, `/v1/work-items/${id}/history`, `/v1/work-items/${id}`])
+        expect((await by.caller.get(url)).statusCode, `${by.name} reads ${url}`).toBe(200);
     const idsIn = (memberId: string) => async (by: Caller) => ((await responses(by)).includes(memberId) ? [{ id: memberId }] : []);
     // A Member's own id may reach its own Company's reads (an own uploader); only other Companies' reads are asked.
     for (const [target, hiddenFrom] of [
