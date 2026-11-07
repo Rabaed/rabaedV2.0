@@ -24,6 +24,11 @@ export const dimensionValue = z.object({
   levelName: bilingualText.nullable(),
   code: z.string(),
   name: bilingualText,
+  /**
+   * A deactivated one ("Archived" on screen) keeps the Work Items and grants that use it; it isn't
+   * offered for new ones (RP-1239).
+   */
+  active: z.boolean(),
 });
 export type DimensionValue = z.infer<typeof dimensionValue>;
 
@@ -38,6 +43,15 @@ export type AddTradeRequest = z.infer<typeof addTradeRequest>;
 /** A Project Admin adds a Location: a Zone, or a Building or Floor inside `parentId`. */
 export const addLocationRequest = addTradeRequest.extend({ parentId: z.uuid().nullable().default(null) });
 export type AddLocationRequest = z.infer<typeof addLocationRequest>;
+
+/**
+ * A Project Admin renames a Trade or Location (its name only: the code is fixed), deactivates or
+ * reactivates it, or both (RP-1239).
+ */
+export const updateDimensionValueRequest = z
+  .object({ name: bilingualText.optional(), active: z.boolean().optional() })
+  .refine((r) => r.name !== undefined || r.active !== undefined, { message: "Nothing to change" });
+export type UpdateDimensionValueRequest = z.infer<typeof updateDimensionValueRequest>;
 
 /**
  * Visibility in one dimension: all of it, or the listed values (a Location with

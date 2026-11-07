@@ -6,6 +6,7 @@ import {
   participantVisibility,
   setMemberVisibilityRequest,
   setParticipantVisibilityRequest,
+  updateDimensionValueRequest,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -20,12 +21,14 @@ import {
   projectVisibilityGap,
   setMemberVisibility,
   setParticipantVisibility,
+  updateDimensionValue,
 } from "../projects/visibility.ts";
 import { refusal } from "../refusals.ts";
 
 const projectParams = z.object({ projectId: z.string() });
 const participantParams = z.object({ participantId: z.string() });
 const memberParams = participantParams.extend({ memberId: z.string() });
+const valueParams = z.object({ valueId: z.string() });
 const created = z.object({ id: z.uuid() });
 
 // A Project's Trades and Locations, and who covers which of them. Every Project
@@ -58,6 +61,20 @@ export const visibilityRoutes =
           const result = await addDimensionValue(ctx.db, memberId, projectId, kind, request.body);
           if (!result.ok) throw refusal(result);
           return reply.code(201).send({ id: result.id });
+        },
+      );
+
+      // Rename (the name only; the code is fixed), deactivate or reactivate one (RP-1239). Anyone
+      // but the Project's Project Admins gets a 404, as for a made-up id or the other dimension's value.
+      app.patch(
+        `/v1/${kind}s/:valueId`,
+        { schema: { params: valueParams, body: updateDimensionValueRequest } },
+        async (request, reply) => {
+          const memberId = ctx.requireMember(request);
+          const valueId = idOrNotFound(request.params.valueId);
+          const result = await updateDimensionValue(ctx.db, memberId, kind, valueId, request.body, ctx.now());
+          if (!result.ok) throw refusal(result);
+          return reply.code(204).send();
         },
       );
     }

@@ -450,3 +450,33 @@ describe("scenario RP-23-5: C1 has no Stamp until its Authorized Person adds one
     expect([own.stamp?.storageKey, own.logo]).toEqual([stampKey, null]);
   });
 });
+
+// RP-1239, decision 4: page 1 lists the Project's Trades without the deactivated ones, except the
+// item's own, which stays ticked. Not a scenario: who reads the Record is unchanged.
+describe("page 1's Trade list leaves deactivated Trades out, except the item's own (RP-1239)", () => {
+  const deactivate = (trade: string, active: boolean) =>
+    tower.outcome(tower.c1.ap, sql`select app.update_dimension_value(${trade}::uuid, 'trade', null, ${active}, now()) as outcome`);
+
+  it("keeps the item's own deactivated Trade, ticked, and drops another deactivated Trade", async () => {
+    const { c1, k1 } = tower;
+    const code = `X${letters(2)}`;
+    const [added] = await tower.call<{ value_id: string }>(
+      c1.ap,
+      sql`select value_id from app.add_dimension_value(${tower.projectId}::uuid, 'trade', null, ${code}, ${JSON.stringify(bilingual(code))}::jsonb)`,
+    );
+    const id = await wirAtConsultant(tower, { type: TYPE, title: "Slab pour, Level 2" });
+    expect(await deactivate(added!.value_id, false)).toBe("updated");
+    expect(await deactivate(tower.tradeId, false)).toBe("updated");
+    try {
+      expect(await takeWith(k1.members.engineer, id, "send_to_manager", { recommended: "A" })).toBe("applied");
+      expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
+      expect(await takeWith(k1.members.manager, id, "approve_a")).toBe("applied");
+      const trades = (await factsOf(id)).trades.map((t) => [t.name.en, t.selected]);
+      expect(trades).toContainEqual(["EL", true]);
+      expect(trades).toContainEqual(["General", false]);
+      expect(trades.map(([name]) => name)).not.toContain(code);
+    } finally {
+      expect(await deactivate(tower.tradeId, true)).toBe("updated");
+    }
+  });
+});
