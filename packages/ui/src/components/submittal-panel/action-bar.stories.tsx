@@ -3,6 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { revisionPickerLabels } from "../../storybook/revision.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -85,14 +86,16 @@ const chipLabels = (locale: Locale): SubmittalPanelBarChipLabels => ({
   pool: (count) => (locale === "ar" ? `في مجموعة المراجعة · ${count}` : `In the review pool · ${count}`),
   pickedUp: (name) => (locale === "ar" ? `استلمه ${name}` : `Picked up by ${name}`),
   viewOnly: copy.viewOnly[locale],
+  pastRevision: (revision) => `${revision} · ${locale === "ar" ? "للقراءة فقط" : "read only"}`,
+  revision: revisionPickerLabels[locale].revision,
 });
 
-function BarDemo({ context, state, width }: { context: StoryContext; state: keyof typeof cases; width: number }) {
+function BarDemo({ context, state, width, pastRevision = null }: { context: StoryContext; state: keyof typeof cases; width: number; pastRevision?: number | null }) {
   const locale = storyLocale(context);
   const ids = useSubmittalPanelIds();
   const [opened, setOpened] = useState<string | null>(null);
   const { actions, heldBy } = cases[state]!;
-  const bar = submittalPanelBar({ actions, codes, heldBy, stepAgeWeeks: 1 });
+  const bar = submittalPanelBar({ actions, codes, heldBy, stepAgeWeeks: 1, pastRevision });
   const item = (tr: Transition) => ({ key: tr.key, code: codes[tr.key], look: codes[tr.key] ? looks[codes[tr.key] as keyof typeof looks] : undefined, title: tr.label[locale], line: lines[tr.key]?.[locale] });
   return (
     <div className="p-4">
@@ -242,6 +245,16 @@ export const ViewOnly: Story = {
     const bar = barOf(context);
     await expect(bar.querySelector('[data-bar-chip="viewOnly"]')).toHaveTextContent(storyText(context, copy.viewOnly));
     await expect(bar).not.toHaveTextContent(storyText(context, ahmed));
+    await expect(bar.querySelectorAll("button")).toHaveLength(1);
+  },
+};
+
+/** An earlier Revision open (RP-1253, gap row 24): "Rev 1 · read only" and Download PDF, nothing else, whatever the engine offers. */
+export const EarlierRevisionReadOnly: Story = {
+  render: (_args, context) => <BarDemo context={context} state="review" width={640} pastRevision={1} />,
+  play: async (context) => {
+    const bar = barOf(context);
+    await expect(bar.querySelector('[data-bar-chip="pastRevision"]')).toHaveTextContent(storyLocale(context) === "ar" ? "Rev 1 · للقراءة فقط" : "Rev 1 · read only");
     await expect(bar.querySelectorAll("button")).toHaveLength(1);
   },
 };

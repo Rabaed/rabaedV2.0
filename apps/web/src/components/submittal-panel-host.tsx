@@ -1,11 +1,10 @@
 "use client";
 
-import { directionOf, formatNumber, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
+import { directionOf, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
 import {
   Button,
   DocNo,
   ErrorState,
-  RevisionMenu,
   Outcome,
   StagePill,
   SubmittalPanel,
@@ -20,6 +19,7 @@ import {
   submittalPanelStorage,
   submittalPanelWith,
   readSubmittalPanelPreferences,
+  revisionPicker,
   stageColour,
   useSubmittalPanelIds,
   useMediaQuery,
@@ -37,6 +37,7 @@ import { SubmittalPanelForm, useSubmittalPanelReads } from "@/components/submitt
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
+import { WorkItemRevisionBanner, WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { phoneQuery } from "@/lib/new-submittal-panel";
 import { useRouter } from "@/i18n/navigation";
 import { submittalPanelPlace } from "@/lib/submittal-panel-place";
@@ -184,11 +185,20 @@ export function SubmittalPanelHost({
   const startEditing = useCallback(() => setEditing(itemId), [itemId]);
   const typeOutcomes = item ? filters.outcomes.filter((o) => o.type === item.type.code) : [];
   const chain = item && reads?.id === item.id ? reads.chain : null;
-  const tRevisions = useTranslations("submittalPanel.revisions");
+  // An earlier Revision open (RP-1253): read only, with the banner naming the latest the viewer sees.
+  const picked = item && chain ? revisionPicker(chain.revisions, item.id) : null;
+  const pastRevision = picked?.kind === "button" && picked.past ? picked.revisionNo : null;
+  // Choosing a Revision is a new history entry (the browser's Back returns to the one before), and the
+  // panel scrolls to the top once it is read; its file viewer, sheet and menus reset with the item.
+  const pathname = usePathname();
+  const [revisionOpened, setRevisionOpened] = useState<string | null>(null);
+  const openRevision = (id: string) => {
+    setRevisionOpened(id);
+    window.history.pushState(null, "", submittalPanelHref(pathname, window.location.search, id));
+  };
   const tNew = useTranslations("newSubmittal");
   // On a phone the item is a page with a back arrow, as the create panel is (RP-1152 row 7; RP-1237 row 43).
   const phone = useMediaQuery(phoneQuery, false);
-  const n = (value: number) => formatNumber(value, locale);
 
   return (
     <SubmittalPanelForm item={item} reads={reads} editing={editing !== null && editing === item?.id} locale={locale}>
@@ -227,6 +237,7 @@ export function SubmittalPanelHost({
         labelledBy={item ? ids.labelledBy : undefined}
         label={item ? undefined : loading ? t("loading") : t("unavailable")}
         busy={loading}
+        scrollTopKey={item && item.id === revisionOpened ? item.id : null}
         identity={
           item && (
             <SubmittalPanelIdentity
@@ -236,26 +247,14 @@ export function SubmittalPanelHost({
               subject={item.title}
               numberId={ids.numberId}
               subjectId={ids.subjectId}
-              numberInfo={
-                <span className="flex flex-wrap items-center gap-2.5">
-                  <SubmittalPanelNumber item={item} locale={locale} place={numberPlace} />
-                  {/* Switching Revisions (row 5): only the chain's Revisions the viewer may see (V1 each); one opens here, in the panel. */}
-                  {chain && chain.revisions.length > 1 && (
-                    <RevisionMenu
-                      locale={locale}
-                      labels={{
-                        title: tRevisions("title"),
-                        open: tRevisions("open"),
-                        name: (revisionNo, hasNumber) => (revisionNo > 0 ? tRevisions("revision", { n: n(revisionNo) }) : hasNumber ? tRevisions("original") : tRevisions("draft")),
-                        noNumber: (revisionNo) => (revisionNo > 0 ? tRevisions("revisionNoNumber", { n: n(revisionNo) }) : t("noNumber")),
-                      }}
-                      revisions={chain.revisions}
-                      currentId={item.id}
-                      onOpen={onOpen}
-                    />
-                  )}
-                </span>
+              numberInfo={<SubmittalPanelNumber item={item} locale={locale} place={numberPlace} />}
+              // The Revision picker right after the number (RP-1253): only the chain's Revisions the viewer may see (V1 each).
+              revision={
+                chain ? (
+                  <WorkItemRevisionPicker chain={chain} openId={item.id} locale={locale} typeCode={item.type.code} outcomes={filters.outcomes} onOpen={openRevision} />
+                ) : undefined
               }
+              banner={chain && pastRevision !== null && <WorkItemRevisionBanner chain={chain} openId={item.id} locale={locale} onOpen={openRevision} />}
               chips={
                 <>
                   <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
@@ -297,6 +296,7 @@ export function SubmittalPanelHost({
               events={log.events}
               editing={editing === item.id}
               onEdit={startEditing}
+              pastRevision={pastRevision}
             />
           )
         }

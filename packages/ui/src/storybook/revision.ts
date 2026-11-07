@@ -1,7 +1,7 @@
 import type { Locale } from "@rabaed/domain";
 import type { ReplacementActionsLabels } from "../components/revision/replacement-actions.tsx";
 import type { RevisionActionsLabels } from "../components/revision/revision-actions.tsx";
-import type { RevisionPickerLabels } from "../components/revision/revision-picker.tsx";
+import type { RevisionBannerLabels, RevisionPickerLabels } from "../components/revision/revision-picker.tsx";
 
 // Story copy for the Revision components: the labels the app passes from its
 // messages (apps/web/messages), in English and Arabic.
@@ -72,7 +72,38 @@ export const replacementActionsLabels: Record<Locale, ReplacementActionsLabels> 
   },
 };
 
+const revisionNames = (original: string) => ({ rev: (n: string) => `Rev ${n}`, original });
+
 export const revisionPickerLabels: Record<Locale, RevisionPickerLabels> = {
-  en: { label: "Revision" },
-  ar: { label: "المراجعة" },
+  en: {
+    revision: revisionNames("Original"),
+    tooltip: "Open an earlier revision",
+    title: "Revisions · each one came from a Code C",
+    current: "Current",
+    submitted: (date) => `Submitted ${date}`,
+    closed: (date) => `Returned ${date}`,
+  },
+  ar: {
+    revision: revisionNames("الأصلي"),
+    tooltip: "فتح مراجعة سابقة",
+    title: "المراجعات · كل منها نتج عن الرمز C",
+    current: "الحالية",
+    submitted: (date) => `قُدّمت ${date}`,
+    closed: (date) => `أُعيدت ${date}`,
+  },
+};
+
+export const revisionBannerLabels: Record<Locale, RevisionBannerLabels> = {
+  en: {
+    revision: revisionNames("Original"),
+    viewing: (revision, code) => (code ? `You are viewing ${revision} · Code ${code}` : `You are viewing ${revision}`),
+    replaced: (latest) => `Replaced by ${latest}. Read only — the form, attachments, chat and log exactly as they were.`,
+    goTo: (latest) => `Go to ${latest}`,
+  },
+  ar: {
+    revision: revisionNames("الأصلي"),
+    viewing: (revision, code) => (code ? `أنت تعرض ${revision} · الرمز ${code}` : `أنت تعرض ${revision}`),
+    replaced: (latest) => `استُبدلت بـ ${latest}. للقراءة فقط — النموذج والمرفقات والمحادثة والسجل كما كانت.`,
+    goTo: (latest) => `الانتقال إلى ${latest}`,
+  },
 };

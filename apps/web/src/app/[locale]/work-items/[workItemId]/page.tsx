@@ -9,7 +9,7 @@ import {
   watchOutcomeNames,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour, submittalPanelNumber } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -23,7 +23,7 @@ import { WorkItemLinks } from "@/components/work-item-links";
 import { WorkItemPaperRef } from "@/components/work-item-paper-ref";
 import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
-import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
+import { WorkItemRevisionBanner, WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
 import { DownloadRecordButton } from "@/components/download-record-button";
 import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
@@ -98,7 +98,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   ]);
   // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
   // The closed item's Issued Code: the same badge as the List and the Kanban, from its Type's outcome set (RP-429, RP-522).
-  const typeOutcomes = item.outcome ? await getTypeOutcomes(item.projectId, item.type.code) : null;
+  // The Revision picker's earlier Revisions show their Outcome the same way (RP-1253).
+  const typeOutcomes = item.outcome || (chain?.revisions.length ?? 0) > 1 ? await getTypeOutcomes(item.projectId, item.type.code) : null;
   const editable = item.actions.saveAnswers;
   const [mine, scopes] = editable
     ? await Promise.all([getMyVisibility(item.projectId), getProjectScopes(item.projectId)])
@@ -278,6 +279,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         <div className="space-y-2">
           {/* Back (RP-1241), else to its Module tab with the Member's last filters there (RP-1240). */}
           <PageBackLink parent={listHref} />
+          {/* An earlier Revision open: the amber banner naming the latest the viewer sees (RP-1253, gap row 28). */}
+          {chain && <WorkItemRevisionBanner chain={chain} openId={item.id} locale={locale} />}
           {wir && (
             // Inspections › its Document Number, as the design's breadcrumb reads.
             <nav aria-label={t("inspection.breadcrumb")} className="flex flex-wrap items-center gap-2 text-sm">
@@ -435,9 +438,21 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           </dd>
           <dt className="text-muted">{t("fields.documentNumber")}</dt>
           <dd className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
-            {/* A Revision's number carries its " Rev n", and reads left to right whole. */}
-            <span>
-              {item.documentNumber ? (
+            {/* A Revision's number carries its " Rev n", and reads left to right whole; with the chain read, the
+                Revision picker shows the "Rev n" right after the base number (RP-1253): only the Revisions the viewer may see (V1 each). */}
+            <span className="inline-flex flex-wrap items-center">
+              {item.documentNumber && chain ? (
+                <>
+                  <DocNo value={submittalPanelNumber(item.documentNumber, item.revisionNo)?.number ?? item.documentNumber} />
+                  <WorkItemRevisionPicker
+                    chain={chain}
+                    openId={item.id}
+                    locale={locale}
+                    typeCode={item.type.code}
+                    outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
+                  />
+                </>
+              ) : item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
               ) : item.revisionNo > 0 ? (
                 tViews("list.revisionNoNumber", { revision: formatNumber(item.revisionNo, locale) })
@@ -445,8 +460,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                 t("noNumber")
               )}
             </span>
-            {/* The Revision drop-down: only the Revisions of the chain the viewer may see (V1 each). */}
-            {chain && <WorkItemRevisionPicker chain={chain} workItemId={item.id} locale={locale} />}
           </dd>
           {draftRows}
         </dl>

@@ -1515,7 +1515,20 @@
   },
   "revision": {
     "section": "المراجعة",
-    "pickerLabel": "المراجعة",
+    "picker": {
+      "rev": "Rev {n}",
+      "original": "الأصلي",
+      "tooltip": "فتح مراجعة سابقة",
+      "title": "المراجعات · كل منها نتج عن الرمز C",
+      "current": "الحالية",
+      "submitted": "قُدّمت {date}",
+      "returned": "أُعيدت {date}",
+      "viewing": "أنت تعرض {revision} · الرمز {code}",
+      "viewingNoCode": "أنت تعرض {revision}",
+      "replaced": "استُبدلت بـ {latest}. للقراءة فقط — النموذج والمرفقات والمحادثة والسجل كما كانت.",
+      "goTo": "الانتقال إلى {latest}",
+      "readOnly": "{revision} · للقراءة فقط"
+    },
     "createIntro": "أنشئ مراجعة لهذا البند بالرقم نفسه: تبدأ مسودةً فيها إجاباتك ومستنداتك.",
     "create": "إنشاء مراجعة",
     "discard": "حذف مسودة المراجعة",
@@ -3446,14 +3459,6 @@
       "backOwn": "يعود لمراجعة جديدة.",
       "sendBack": "يعود إلى {company} بلا رمز.",
       "comments": "تستمر ملاحظاتك في قائمة الملاحظات."
-    },
-    "revisions": {
-      "title": "المراجعات المتاحة لك",
-      "open": "مفتوح",
-      "original": "الأصل",
-      "draft": "مسودة",
-      "revision": "المراجعة {n}",
-      "revisionNoNumber": "المراجعة {n}: بلا رقم بعد"
     },
     "sheet": {
       "title": "ما يحدث عند التأكيد",
