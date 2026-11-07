@@ -256,14 +256,20 @@ function OwnStepCard({
       {people.length > 0 && (
         <ul aria-label={labels.people} className="flex flex-col gap-1.5 pt-1">
           {people.map((name) => (
-            <li key={name.en} className="flex items-center gap-2 text-[12.5px] font-semibold">
+            <li
+              key={name.en}
+              // The one holding it, marked as the holder's chip is (RP-1188).
+              data-holder={holder === name[locale] ? "" : undefined}
+              className={cn("flex items-center gap-2 text-[12.5px] font-semibold", holder === name[locale] && "-mx-1.5 self-start rounded-full bg-surface-subtle px-1.5 py-0.5")}
+            >
               <Avatar name={name[locale]} initialsFrom={name.en} size="sm" decorative />
               <bdi>{name[locale]}</bdi>
             </li>
           ))}
         </ul>
       )}
-      {holder && (
+      {/* Who holds it, unless the list above already names them. */}
+      {holder && !people.some((name) => name[locale] === holder) && (
         <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-surface-subtle px-2 py-0.5 text-[12px] font-semibold">
           {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name: a person holds the Step. */}
           <Icon name="user" size={14} />
