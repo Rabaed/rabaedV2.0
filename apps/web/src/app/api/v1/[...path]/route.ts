@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { memberApiTarget } from "../../../../lib/api-url.ts";
+import { stripVisitorHeaders, visitorForwardHeaders, visitorForwardSecretFromEnv } from "../../../../lib/visitor-forward.ts";
 
 // Forwards the browser's /api/v1/* calls to the API, so the session cookie is
 // first-party (HttpOnly, SameSite=Lax) and no CORS is needed. Resolved per
@@ -11,12 +12,15 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
   if (!target) return Response.json({ error: "not_found" }, { status: 404 });
 
   const headers = new Headers();
-  // X-Forwarded-For: the API limits some public routes per visitor (password reset requests, RP-1058),
-  // reading the last entry, the one the load balancer appended (apps/api/src/visitor.ts).
-  for (const name of ["cookie", "content-type", "accept", "x-forwarded-for"]) {
+  for (const name of ["cookie", "content-type", "accept"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // The visitor: the API limits some public routes per visitor (password reset requests, RP-1058). On
+  // Vercel the API sees web's egress address, so web names the visitor with VISITOR_FORWARD_SECRET
+  // (RP-1230, lib/visitor-forward.ts). Only web names one: a browser's own x-rabaed-visitor* never passes.
+  stripVisitorHeaders(headers);
+  for (const [name, value] of Object.entries(visitorForwardHeaders(request.headers.get("x-forwarded-for"), visitorForwardSecretFromEnv()))) headers.set(name, value);
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const upstream = await fetch(target, {
     method: request.method,

@@ -213,6 +213,35 @@ describe("the three Vercel projects' environment variables", () => {
     expect(projectEnv("admin", without("DATABASE_APP_PASSWORD", "DATABASE_MIGRATOR_PASSWORD"), version)).toEqual(projectEnv("admin", env, version));
   });
 
+  // RP-1230: web names the visitor a public route's limit counts, and the api believes it only
+  // with this key. Web's previews call the api's production address, so both targets get it.
+  describe("VISITOR_FORWARD_SECRET", () => {
+    const secret = "visitor-forward-secret-of-40-characters!";
+    const withSecret = { ...env, VISITOR_FORWARD_SECRET: secret };
+    const sent = (project: ProjectName) => projectEnv(project, withSecret, version).filter((v) => v.key === "VISITOR_FORWARD_SECRET");
+
+    it("goes to web and the api alike, Sensitive, production and previews, never to Admin", () => {
+      for (const project of ["web", "api"] as const) expect(sent(project)).toEqual([{ key: "VISITOR_FORWARD_SECRET", value: secret, type: "sensitive", target: ["production", "preview"] }]);
+      expect(sent("admin")).toEqual([]);
+    });
+
+    it("is left as it is on Vercel when the step passes none (empty too): the deploy neither sets nor removes it", () => {
+      for (const project of PROJECTS) {
+        expect(projectEnv(project, { ...env, VISITOR_FORWARD_SECRET: "" }, version).map((v) => v.key)).not.toContain("VISITOR_FORWARD_SECRET");
+      }
+    });
+
+    it("is refused when shorter than 32 characters, naming it but not the value", () => {
+      const short = "k".repeat(31);
+      expect(() => projectEnv("web", { ...env, VISITOR_FORWARD_SECRET: short }, version)).toThrow(/VISITOR_FORWARD_SECRET/);
+      expect(() => projectEnv("api", { ...env, VISITOR_FORWARD_SECRET: short }, version)).toThrow(expect.objectContaining({ message: expect.not.stringContaining(short) }));
+    });
+
+    it("never reaches a migration or demo command", () => {
+      expect(commandEnv(withSecret).VISITOR_FORWARD_SECRET).toBeUndefined();
+    });
+  });
+
   it("refuse a missing value, naming it", () => {
     expect(() => projectEnv("api", { ...env, CRON_SECRET: undefined }, version)).toThrow("CRON_SECRET is required");
     expect(() => projectEnv("web", { ...env, UAT_API_URL: "not a url" }, version)).toThrow("UAT_API_URL must be an https URL");

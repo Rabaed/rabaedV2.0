@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, loginSuffixOf, loginUrl, withDatabaseName, type DatabaseUrls } from "../packages/db/src/config.ts";
 import { TRANSACTION_POOLER_PORT } from "../packages/db/src/supabase-gate.ts";
 import { ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE, DEMO_FLAG, DEMO_ON } from "../packages/db/src/task-flags.ts";
+import { readVisitorForwardSecret } from "../packages/domain/src/env.ts";
 
 // The UAT deploy's helper (ADR 0026, RP-1043), run by .github/workflows/deploy-uat.yml and
 // reset-uat.yml with environment `uat`'s secrets and variables. It prints no secret, but for
@@ -103,7 +104,16 @@ function uatServer(env: NodeJS.ProcessEnv): { superuser: string; database: strin
 }
 
 /** The deploy's secrets a migration or demo command never needs. */
-const NOT_FOR_COMMANDS = ["VERCEL_TOKEN", "ADMIN_VERCEL_PASSWORD", "SENDGRID_API_KEY", "CRON_SECRET", "SUPABASE_PUBLISHABLE_KEY", "FONTS_ACCESS_KEY_ID", "FONTS_SECRET_ACCESS_KEY"];
+const NOT_FOR_COMMANDS = [
+  "VERCEL_TOKEN",
+  "ADMIN_VERCEL_PASSWORD",
+  "SENDGRID_API_KEY",
+  "CRON_SECRET",
+  "VISITOR_FORWARD_SECRET",
+  "SUPABASE_PUBLISHABLE_KEY",
+  "FONTS_ACCESS_KEY_ID",
+  "FONTS_SECRET_ACCESS_KEY",
+];
 /** UAT's file store (R2), as the api reaches it: for the demo command only. */
 const FILE_STORE = ["PROJECT_FILES_BUCKET", "FILE_STORE_ENDPOINT", "FILE_STORE_ACCESS_KEY_ID", "FILE_STORE_SECRET_ACCESS_KEY", "FILE_STORE_REGION"];
 
@@ -194,9 +204,17 @@ export function projectEnv(project: ProjectName, env: NodeJS.ProcessEnv, version
   const functions = { NODE_OPTIONS: "--experimental-transform-types", NODEJS_HELPERS: "0" };
   // Read only for the project that gets them: each workflow step passes its project's secrets alone.
   const mail = () => ({ WEB_URL: httpsUrl(env, "UAT_WEB_URL"), MAIL_FROM: required(env, "MAIL_FROM"), SENDGRID_API_KEY: required(env, "SENDGRID_API_KEY") });
+  // The key with which web names the visitor a public route's limit counts (RP-1230), the same on
+  // web and the api. Optional: when the step passes none, Vercel keeps what it has (none, or one the
+  // owner set by hand); shorter than 32 characters it is refused, as both apps refuse it.
+  const visitorKey = (): Record<string, string> => {
+    const secret = readVisitorForwardSecret({ VISITOR_FORWARD_SECRET: env.VISITOR_FORWARD_SECRET });
+    return secret ? { VISITOR_FORWARD_SECRET: secret } : {};
+  };
   const values: Record<ProjectName, () => Record<string, string>> = {
-    web: () => ({ API_URL: httpsUrl(env, "UAT_API_URL") }),
+    web: () => ({ API_URL: httpsUrl(env, "UAT_API_URL"), ...visitorKey() }),
     api: () => ({
+      ...visitorKey(),
       ...functions,
       DATABASE_APP_URL: uatRoleUrl(env, "APP", "transaction"),
       DATABASE_POOL_MAX: "2",
