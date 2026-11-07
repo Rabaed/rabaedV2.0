@@ -8,7 +8,7 @@
 // record through a short-lived signed link; anyone else gets the plain 404.
 import { createHash } from "node:crypto";
 import { createDb, processOutbox, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls, whileOtherProjectsWait, type OwnProjects } from "@rabaed/db/test-support";
 import type { SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -38,8 +38,6 @@ import { bilingual, buildTower, detail, draft, memberOnProject, ok, take, type C
 
 /** veraPDF, in one container for the file. */
 const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
-/** Stands in for veraPDF on the records other suites left behind. */
-const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -79,6 +77,8 @@ const cancellableSchema = {
 };
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let k1: Company;
 let k1ParticipantId = "";
 let c1Name = "";
@@ -204,8 +204,6 @@ beforeAll(async () => {
   orEngineer = orMember.caller;
   c2Engineer = c2Member.caller;
   handler = await recordHandler();
-  // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
-  await drainOutbox(worker, { documental_record: await recordHandler(renderer, unvalidated) });
 
   // Every item the read-only tests share is closed here at once, then the worker runs once
   // (one Chromium start, one sealer), so a loaded machine pays for the setup one time.
@@ -225,7 +223,7 @@ beforeAll(async () => {
   };
   // Before the record is made, K1 makes her an Engineer instead.
   await ok(k1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/members/${signer.id}/positions`, { positions: ["engineer"] }));
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   shared = { approved, codeC, cancelled, signed, returnedToEngineer, beforeWorker };
 }, 240_000);
 
@@ -484,14 +482,15 @@ describe("the record job", () => {
   it("retries a failure without touching the closure, then makes the record", async () => {
     const id = await closedAt("approve_a", "Cable glands");
     const failing: PdfRenderer = { render: () => Promise.reject(new Error("Chromium is not there")), close: async () => {} };
-    const run = await processOutbox(worker, { handlers: { documental_record: await recordHandler(failing) } });
+    const failingHandlers = { documental_record: await recordHandler(failing) };
+    const run = await whileOtherProjectsWait(own(), ["documental_record"], () => processOutbox(worker, { handlers: failingHandlers }));
     expect(run.failed).toBeGreaterThanOrEqual(1);
     expect(await recordJobs(id)).toEqual([{ attempts: 1, processed_at: null, last_error: "Chromium is not there" }]);
     expect((await detail(c1Pm, id)).outcome).toBe("A");
     await expectHidden(downloadLink(c1Pm, id));
 
     await sql`update outbox set available_at = now() where kind = 'documental_record' and payload ->> 'closed_work_item_id' = ${id}`.execute(migrator);
-    await drainOutbox(worker, { documental_record: handler });
+    await drainOutbox(worker, { documental_record: handler }, own());
     expect((await verifySeal((await download(c1Pm, id)).bytes)).valid).toBe(true);
   }, 120_000);
 });

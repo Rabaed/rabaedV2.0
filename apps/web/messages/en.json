@@ -1577,7 +1577,8 @@
     "stepsTab": "Steps",
     "mapTab": "Map",
     "hereNow": "Here now",
-    "privateSteps": "Who works on these Steps, and which one has it, stays with them."
+    "privateSteps": "Who works on these Steps, and which one has it, stays with them.",
+    "people": "Members on this Step"
   },
   "workflowMap": {
     "line": "Workflow: {name} · Version {version}",
@@ -3559,5 +3560,8 @@
     "notifications": "Notifications",
     "subjectMissing": "Give the Draft a Subject.",
     "tradeMissing": "Pick the Trade first: a Draft can't be saved without one."
+  },
+  "backLink": {
+    "label": "Back"
   }
 }

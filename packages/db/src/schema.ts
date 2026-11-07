@@ -676,6 +676,8 @@ export interface DocumentTable {
   taken_longitude: number | null;
   /** The SHA-256 of the file's bytes, taken by the api at confirming; copies carry their source's. Never the app role's (RP-618). */
   file_sha256: Buffer | null;
+  /** A PDF's pages, counted by the api at confirming; null for any other file or one it couldn't read; copies carry their source's (RP-1189). */
+  page_count: number | null;
   /** The item's `arrivals` when it was added (a trigger sets it): until the item leaves, only its holder sees it (RP-309). */
   arrival: Generated<number>;
 }

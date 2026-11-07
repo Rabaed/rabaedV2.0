@@ -4,6 +4,7 @@ import {
   attachmentKind,
   attachmentLayerToClose,
   attachmentPageAt,
+  attachmentPages,
   attachmentZoom,
   submittalPanelAttachmentDocuments,
 } from "./attachments-model.ts";
@@ -85,5 +86,19 @@ describe("the Documents the Attachments section lists", () => {
   it("leave out a photo's annotated copy, which is shown beside its original, never as a Document of its own", () => {
     const documents = [document("photo", { contentType: "image/jpeg" }), document("copy", { contentType: "image/jpeg", annotatedFromId: "photo" })];
     expect(submittalPanelAttachmentDocuments(documents).map((d) => d.id)).toEqual(["photo"]);
+  });
+});
+
+describe("a file card's page count (RP-1189, gap table v3 row 14)", () => {
+  it("is the count the API stored when the file was processed, before and without pdf.js reading it", () => {
+    expect(attachmentPages(12, undefined)).toBe(12);
+    expect(attachmentPages(12, 12)).toBe(12);
+  });
+
+  it("falls back to what pdf.js read for a PDF with none stored (confirmed before RP-1189), and is none otherwise", () => {
+    expect(attachmentPages(null, 3)).toBe(3);
+    expect(attachmentPages(undefined, 3)).toBe(3);
+    expect(attachmentPages(null, undefined)).toBeUndefined();
+    expect(attachmentPages(undefined, undefined)).toBeUndefined();
   });
 });

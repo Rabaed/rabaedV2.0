@@ -10,7 +10,7 @@
 // the test reads it as the migrator, and says so.
 import { createHash } from "node:crypto";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import { recordVerification, VERIFICATION_ATTEMPTS, type RecordVerification, type SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -87,6 +87,8 @@ async function handlers(validator: PdfAValidator): Promise<Record<string, Outbox
 }
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let k1: Company;
 let k1ParticipantId = "";
 let c1Name = "";
@@ -193,20 +195,18 @@ beforeAll(async () => {
   k1PmId = huda.id;
   engineer = await admin.signedInEngineer();
   quick = await handlers(compliant);
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await drainOutbox(worker, quick);
 
   const [genuineId, replacedId, sentBackId] = await Promise.all([
     closedAfterAReturn("Cable trays for Building A"),
     closedAfterAReturn("Cable glands"),
     closedAfterASendBack("Cable tray supports"),
   ]);
-  await drainOutbox(worker, quick);
+  await drainOutbox(worker, quick, own());
   sentBack = (await printedOn(await download(c1Pm, sentBackId))).token;
   // A record printed in English only: the Project's record language when the job ran (RP-151).
   await ok(at.admin!.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "en", hijriDates: false }));
   const englishId = await closedAfterAReturn("Cable trays in English");
-  await drainOutbox(worker, quick);
+  await drainOutbox(worker, quick, own());
   await ok(at.admin!.request("PUT", `/v1/projects/${at.projectId}/settings/record`, { language: "bilingual", hijriDates: false }));
   english = (await printedOn(await download(c1Pm, englishId))).token;
   const pdf = await download(c1Pm, genuineId);
@@ -214,13 +214,13 @@ beforeAll(async () => {
 
   const before = await download(c1Pm, replacedId);
   await reproduce(replacedId);
-  await drainOutbox(worker, quick);
+  await drainOutbox(worker, quick, own());
   replaced = { id: replacedId, before, after: await download(c1Pm, replacedId), token: (await printedOn(before)).token };
 
   // A record whose checks failed: nobody can download it, so its link and code are read from what the
   // job stored, as the migrator.
   const failedId = await closedAfterAReturn("Cable ladders");
-  await drainOutbox(worker, await handlers(failing));
+  await drainOutbox(worker, await handlers(failing), own());
   const { rows } = await sql<{ storage_key: string; code: string }>`
     select f.storage_key, r.verification_code as code
     from documental_record r join stored_file f on f.id = r.record_data_file_id

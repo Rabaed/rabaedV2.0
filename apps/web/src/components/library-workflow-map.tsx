@@ -1,10 +1,10 @@
 "use client";
 
 import { formatNumber, type Locale, type WorkflowMapRead } from "@rabaed/domain";
-import { Icon, SegmentedControl, WorkflowCanvas, WorkflowStepList, buttonVariants, type WorkflowLabels } from "@rabaed/ui";
+import { Icon, SegmentedControl, WorkflowCanvas, WorkflowStepList, type WorkflowLabels } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "@/i18n/navigation";
+import { PageBackLink } from "@/components/page-back-link";
 
 type Props = { read: WorkflowMapRead; locale: Locale };
 
@@ -51,6 +51,8 @@ export function LibraryWorkflowMap({ read, locale }: Props) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
         <div className="flex min-w-0 flex-col gap-1">
+          {/* Back to the Library (RP-1241). */}
+          <PageBackLink parent="/library" />
           <h1 className="font-display text-h4 leading-[1.2] font-extrabold tracking-[-0.01em] text-text rtl:font-bold rtl:tracking-normal">
             {read.workflow.name[locale]}
           </h1>
@@ -63,10 +65,6 @@ export function LibraryWorkflowMap({ read, locale }: Props) {
             <Icon name="lock" size={14} />
             {t("map.readOnly")}
           </span>
-          <Link href="/library" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-            <Icon name="arrow-left" />
-            {t("map.back")}
-          </Link>
         </div>
       </div>
       {shared && (

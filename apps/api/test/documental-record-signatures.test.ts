@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb, type Db, type OutboxHandler } from "@rabaed/db";
-import { addTestWorkflow, drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestWorkflow, drainOutbox, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import type { SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -205,6 +205,8 @@ async function download(by: Caller, id: string): Promise<Made> {
 const inkOf = (rgb: readonly number[]) => rgb.join(",");
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Engineer: Caller;
@@ -284,7 +286,6 @@ beforeAll(async () => {
   await brand(k1, "logo", INK.logoK1);
   await brand(owner, "stamp", INK.stampOwner);
   handler = await recordHandler();
-  await drainOutbox(worker, { documental_record: handler });
 
   // Code A: K1's engineer Recommended C (scenario RP-23-2); C1's PM changes her Signature after acting.
   const a = await atManager("Signature trays A", "C");
@@ -326,7 +327,7 @@ beforeAll(async () => {
   await brand(c1, "stamp", INK.stampC1Later);
   await brand(k1, "logo", INK.logoK1Later);
 
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   made.a = await download(c1Pm, a);
   made.b = await download(c1Pm, b);
   made.c = await download(c1Pm, c);

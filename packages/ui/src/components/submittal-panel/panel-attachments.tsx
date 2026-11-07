@@ -8,7 +8,7 @@ import { Icon } from "../icon/icon.tsx";
 import { onBar } from "../photo/photo-screen.tsx";
 import { printAttachment, saveAttachment, useAttachmentFiles, type AttachmentLoad } from "./attachment-files.ts";
 import { AttachmentTile, AttachmentView, AttachmentZoom, attachmentIcon, attachmentNameClass, type AttachmentPageJump, type AttachmentViewLabels } from "./attachment-view.tsx";
-import { attachmentLayerToClose, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
+import { attachmentLayerToClose, attachmentPages, attachmentZoomStep, type SubmittalPanelAttachmentKind } from "./attachments-model.ts";
 import { SubmittalPanelAttachmentViewer } from "./panel-attachment-viewer.tsx";
 import { isTyping, layerSelector } from "./submittal-panel.tsx";
 
@@ -20,12 +20,14 @@ export type SubmittalPanelAttachmentFile = {
   kind: SubmittalPanelAttachmentKind;
   /** Its size, formatted ("2.4 MB"). */
   size: string;
+  /** A PDF's pages as the API stored them when the file was processed (RP-1189); absent or null when it has none. */
+  pages?: number | null;
 };
 
 export type SubmittalPanelAttachmentsLabels = AttachmentViewLabels & {
   /** "PDF", "Image", "File". */
   kind: Record<SubmittalPanelAttachmentKind, string>;
-  /** "12 pages", once pdf.js has read the Document: formatted (`n`) and as a number for the plural (`count`). */
+  /** "12 pages", as the API stored it or once pdf.js has read the Document: formatted (`n`) and as a number for the plural (`count`). */
   pageCount: (n: string, count: number) => string;
   /** "1 / 12": the page shown, left to right in Arabic too. */
   pageOf: (page: string, pages: string) => string;
@@ -159,7 +161,7 @@ export function SubmittalPanelAttachments({ locale, labels, files, fileUrl }: Su
   if (files.length === 0) return <p className="text-[13px] text-muted">{labels.none}</p>;
 
   const meta = (file: SubmittalPanelAttachmentFile, fileLoad: AttachmentLoad | undefined) => {
-    const pages = fileLoad?.status === "ready" ? fileLoad.file.pdf?.pages : undefined;
+    const pages = attachmentPages(file.pages, fileLoad?.status === "ready" ? fileLoad.file.pdf?.pages : undefined);
     return [labels.kind[file.kind], ...(pages === undefined ? [] : [labels.pageCount(n(pages), pages)]), file.size].join(" · ");
   };
 

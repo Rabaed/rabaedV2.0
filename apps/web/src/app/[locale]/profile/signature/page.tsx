@@ -1,6 +1,7 @@
 import { signatureReturnPath, type Locale } from "@rabaed/domain";
 import { TitledCard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { PageBackLink } from "@/components/page-back-link";
 import { AddSignature } from "@/components/signature";
 import { redirect } from "@/i18n/navigation";
 import { getMe } from "@/lib/session";
@@ -29,6 +30,8 @@ export default async function AddSignaturePage({
   return (
     <div className="max-w-3xl space-y-8">
       <div className="space-y-1">
+        {/* Back to the Profile (RP-1241). */}
+        <PageBackLink parent="/profile" />
         <h1 className="text-h4 font-semibold">{t("addTitle")}</h1>
         <p className="text-muted">{t("addSubtitle")}</p>
       </div>

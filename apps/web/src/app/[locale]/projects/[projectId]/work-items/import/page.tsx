@@ -1,6 +1,7 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { PageBackLink } from "@/components/page-back-link";
 import { RegisterImportWizard } from "@/components/register-import-wizard";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getMyVisibility, getProject, getRaisableTypes, getRegisterImport, getRegisterImportFields } from "@/lib/session";
@@ -40,6 +41,8 @@ export default async function ImportRegisterPage({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Back (RP-1241), else to the Submittals with the Member's last filters there (RP-1240). */}
+      <PageBackLink parent={`/projects/${project.id}/work-items`} />
       <nav aria-label={t("breadcrumb")} className="flex items-center gap-2 text-[13px] text-muted">
         <Link href={`/projects/${project.id}/work-items/imports`} className="hover:text-text hover:underline">
           {t("imports")}

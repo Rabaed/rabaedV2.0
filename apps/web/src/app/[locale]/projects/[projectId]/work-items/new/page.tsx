@@ -3,7 +3,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { CreateWorkItemForm } from "@/components/create-work-item-form";
 import { NewItemTypePicker } from "@/components/new-item-type-picker";
-import { RememberedModuleLink } from "@/components/remembered-module-queries";
+import { PageBackLink } from "@/components/page-back-link";
 import { redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
 import { newPageWords } from "@/lib/new-item-route";
@@ -53,7 +53,6 @@ export default async function NewWorkItemPage({
   if (moduleKey === "snag_list") return redirect({ href: snagListLanding(projectId, requested, location), locale });
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const tabs = await getTranslations("projectTabs");
   const [me, project, mine, scopes, raisable, people, optionLists, suppliers, checklistTemplates] = await Promise.all([
     getMe(),
     getProject(projectId),
@@ -75,10 +74,8 @@ export default async function NewWorkItemPage({
   return (
     <div className="max-w-2xl space-y-6">
       <div className="space-y-1">
-        {/* Back to the tab with the Member's last filters there (RP-1240). */}
-        <RememberedModuleLink href={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} className="text-sm text-brand-fg underline underline-offset-4">
-          {tabs(moduleKey)}
-        </RememberedModuleLink>
+        {/* Back (RP-1241), else to the tab with the Member's last filters there (RP-1240). */}
+        <PageBackLink parent={`/projects/${project.id}/${moduleTabPaths[moduleKey]}`} />
         <h1 className="text-h4 font-semibold">{t(words.heading)}</h1>
       </div>
       {!chosen || !form ? (

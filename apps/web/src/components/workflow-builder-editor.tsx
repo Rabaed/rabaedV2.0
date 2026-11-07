@@ -30,6 +30,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const tMap = useTranslations("workflowMap");
   const tRules = useTranslations("workflowRules");
   const tRoles = useTranslations("projects.roles");
+  const tBack = useTranslations("backLink");
   const { workflow } = read;
   const api = `/api/v1/workflows/${encodeURIComponent(workflow.id)}`;
   const start = workflow.draft?.definition ?? workflow.published?.definition ?? { steps: [], transitions: [], layout: {} };
@@ -143,8 +144,9 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const versionsHref = useMemo(() => (project ? (n: number) => `${project}/workflows/${workflow.id}/versions/${n}` : undefined), [project, workflow.id]);
 
   const labels = useMemo<WorkflowBuilderLabels>(
-    () => workflowBuilderLabels({ t, tMap, tRules, tRoles, positions: read.positions, locale, names }),
-    [t, tMap, tRoles, tRules, read.positions, locale, names],
+    // Its bar's way back is named as every inner page's is, "Back" (RP-1241).
+    () => ({ ...workflowBuilderLabels({ t, tMap, tRules, tRoles, positions: read.positions, locale, names }), back: tBack("label") }),
+    [t, tMap, tRoles, tRules, tBack, read.positions, locale, names],
   );
 
   const name: BilingualText = workflow.draft?.name ?? workflow.name;

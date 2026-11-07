@@ -85,7 +85,8 @@ const who = (by: Caller) => named.get(by) ?? "someone";
 let handlers: Record<string, OutboxHandler> = {};
 /** The record checks' veraPDF run is the record tests' to judge; here only what the record holds is. */
 const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
-const runWorker = () => drainOutbox(worker, handlers);
+/** This file's Project's jobs only: never another file's or the seed's records (RP-1236). */
+const runWorker = () => drainOutbox(worker, handlers, { projects: [at.projectId], migrator });
 
 /** `by` adds a site photo to the "Recommend C" Screen of item `id` (start, PUT to the signed URL, confirm); its Document's id. */
 async function addSitePhoto(by: Caller, id: string, fileName: string): Promise<string> {
@@ -249,8 +250,6 @@ beforeAll(async () => {
       validator: unvalidated,
     }),
   };
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await runWorker();
 });
 
 const c1 = () => [at.c1Pm, at.c1Engineer];

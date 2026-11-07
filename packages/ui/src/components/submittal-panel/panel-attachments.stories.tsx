@@ -86,7 +86,8 @@ const kb = (size: string, locale: Locale) => (locale === "ar" ? `${size} ك.ب` 
 
 const filesIn = (locale: Locale): SubmittalPanelAttachmentFile[] => [
   { id: "datasheet", name: "LED-1200_Datasheet.pdf", kind: attachmentKind("application/pdf"), size: mb("2.4", locale) },
-  { id: "compliance", name: "Compliance_Statement.pdf", kind: attachmentKind("application/pdf"), size: kb("640", locale) },
+  // Its pages as the API stored them when it was processed (RP-1189); the datasheet has none stored, as one confirmed before.
+  { id: "compliance", name: "Compliance_Statement.pdf", kind: attachmentKind("application/pdf"), size: kb("640", locale), pages: 12 },
   // The fixture is an SVG; the app previews JPEG, PNG and WebP the same way.
   { id: "photo", name: "Sample_board_photo.jpg", kind: attachmentKind("image/jpeg"), size: mb("1.1", locale) },
   { id: "drawing", name: "Ceiling_layout_L3.dwg", kind: attachmentKind("image/vnd.dwg"), size: mb("3.8", locale) },
@@ -232,6 +233,9 @@ export const Documents: Story = {
   play: async (context) => {
     const card = cardOf(context, "datasheet");
     await expect(card).toHaveTextContent(`LED-1200_Datasheet.pdfPDF · ${mb("2.4", storyLocale(context))}`);
+    // A page count the API stored shows at once, with nothing loaded (RP-1189, gap table v3 row 14).
+    const stored = storyLocale(context) === "ar" ? `PDF · 12 صفحات · ${kb("640", "ar")}` : `PDF · 12 pages · ${kb("640", "en")}`;
+    await expect(cardOf(context, "compliance")).toHaveTextContent(stored);
     await nameLeftToRight(within(card).getByText("LED-1200_Datasheet.pdf"), context);
     await expect(within(card).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
       storyText(context, copy.preview),

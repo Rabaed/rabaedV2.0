@@ -1,9 +1,9 @@
 import type { Locale } from "@rabaed/domain";
-import { Badge, Icon, SettingsHeader } from "@rabaed/ui";
+import { Badge, SettingsHeader } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ChecklistTemplateEditor } from "@/components/checklist-templates";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import { getChecklistTemplates, getMe, getProject, getProjectDimensions } from "@/lib/session";
 
 type Params = { locale: Locale; projectId: string; templateId: string };
@@ -43,10 +43,6 @@ export default async function ChecklistTemplatePage({ params }: { params: Promis
                 <Badge tone={template.status === "active" ? "success" : "neutral"}>{t(`statuses.${template.status}`)}</Badge>
               </>
             )}
-            <Link href={`/projects/${projectId}/settings/checklist-templates`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-fg hover:underline">
-              <Icon name="arrow-left" size={15} />
-              {t("backToList")}
-            </Link>
           </div>
         }
       />

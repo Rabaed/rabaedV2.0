@@ -1,9 +1,10 @@
 import { formatNumber, type Locale } from "@rabaed/domain";
-import { Icon, KeyValues, PackageCell, TableCard } from "@rabaed/ui";
+import { KeyValues, PackageCell, TableCard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { PageBackLink } from "@/components/page-back-link";
 import { RegisterImportDownloads, RegisterImportRows } from "@/components/register-import-wizard";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRegisterImport } from "@/lib/session";
 
 /**
@@ -26,10 +27,8 @@ export default async function RegisterImportPage({ params }: { params: Promise<{
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <Link href={`/projects/${project.id}/work-items/imports`} className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-text hover:underline">
-          <Icon name="arrow-left" size={14} />
-          {t("imports")}
-        </Link>
+        {/* Back (RP-1241), else to the Project's Imports. */}
+        <PageBackLink parent={`/projects/${project.id}/work-items/imports`} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-h3 font-bold">
             <bdi>{record.fileName}</bdi>

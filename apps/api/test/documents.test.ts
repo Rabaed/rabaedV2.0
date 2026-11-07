@@ -143,6 +143,8 @@ describe("a Draft's Documents, for the raiser", () => {
         // Not a photo: no time or place (RP-284).
         takenAt: null,
         takenWhere: null,
+        // Its 29 bytes aren't a PDF the api can read: no page count (RP-1189).
+        pageCount: null,
       },
     ]);
   });

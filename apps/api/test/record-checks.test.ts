@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import { createDb, dailyDigestJob, notificationDigestHandler, notificationEmailHandler, processOutbox, runScheduledJobs, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls, whileOtherProjectsWait, type OwnProjects } from "@rabaed/db/test-support";
 import type { NotificationDigest, NotificationList, NotificationSettingsView, SignedUrl } from "@rabaed/domain";
 import { notificationDigestMessage, notificationMessage, renderEmail, type MailMessage } from "@rabaed/mailer";
 import {
@@ -110,6 +110,8 @@ function png(r: number, g: number, b: number): Buffer {
 }
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let k1: Company;
 let k1ParticipantId = "";
 let engineer: { id: string; browser: Awaited<ReturnType<typeof admin.signedInEngineer>>["browser"] };
@@ -176,8 +178,6 @@ beforeAll(async () => {
   engineer = await admin.signedInEngineer();
   real = await handlers(veraPdf);
   quick = await handlers(compliant);
-  // Anything earlier tests left in the outbox is not ours to judge, nor worth a veraPDF run each.
-  await drainOutbox(worker, quick);
 }, SETUP_MS);
 
 /** A MAR the C1 engineer raises and sends, the C1 PM Submits, K1's PM Approves (Code A). */
@@ -276,7 +276,7 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
   });
 
   it("is published, and its download works (RP-155-2)", async () => {
-    await drainOutbox(worker, real);
+    await drainOutbox(worker, real, own());
     for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord, "after").toBe("published");
     expect((await download(c1Pm, id)).bytes.length).toBeGreaterThan(1000);
     await expectHiddenFrom({ read: recordRead(id), target: id, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer], hiddenFrom: c2Engineer, name: who });
@@ -301,7 +301,7 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
     expect(routes.rows.filter((r) => r.member_id === k1EngineerId).map((r) => ({ in_app: r.in_app, email: r.email }))).toEqual([{ in_app: true, email: "none" }]);
     expect(routes.rows.filter((r) => r.member_id !== k1EngineerId && !(r.in_app && r.email === "digest"))).toEqual([]); // not hidden-from: every route is the digest; the rows are counted above
     // Delivered once: another pass delivers nothing more.
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect(await bell(c1Pm, id)).toHaveLength(1);
   });
 
@@ -348,7 +348,7 @@ describe("scenario RP-950-1: record ready by email and in the digest", { timeout
     await saveWatched(c2Engineer, "immediate");
     id = await closed("Chillers for Building A");
     documentNumber = (await detail(c1Pm, id)).documentNumber!;
-    await drainOutbox(worker, { ...quick, email: emailHandler });
+    await drainOutbox(worker, { ...quick, email: emailHandler }, own());
   }, SETUP_MS);
 
   it("emails a Member who sees the item and chose immediately, once, with a link to the item and never to the file", async () => {
@@ -405,7 +405,7 @@ describe("scenario RP-950-1: record ready by email and in the digest", { timeout
     await sql`delete from scheduled_job_run where job = ${dailyDigestJob.name}`.execute(migrator);
     // Monday 12 October 2026, 07:00 Riyadh.
     await runScheduledJobs(worker, [dailyDigestJob], new Date("2026-10-12T07:00:00+03:00"));
-    await drainOutbox(worker, { ...quick, digest: notificationDigestHandler(async (digest) => void digests.push(digest)) });
+    await drainOutbox(worker, { ...quick, digest: notificationDigestHandler(async (digest) => void digests.push(digest)) }, own());
     const entriesFor = (to: string) =>
       digests
         .filter((d) => d.to === to)
@@ -433,7 +433,7 @@ describe("scenario RP-155-2: a record that fails its checks", { timeout: SETUP_M
   let id = "";
   it("publishes nothing: the item shows no record, nobody downloads one and nobody is told", async () => {
     id = await closed("Cable ladders");
-    await drainOutbox(worker, await handlers(failing));
+    await drainOutbox(worker, await handlers(failing), own());
     for (const by of [c1Pm, k1Pm, orEngineer]) expect((await detail(by, id)).documentalRecord).toBeNull();
     await expectHidden(c1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record");
     await expectHidden(k1Pm.get(`/v1/work-items/${id}/documental-record`), "failed record, K1");
@@ -462,7 +462,7 @@ describe("scenario RP-155-2: a record that fails its checks", { timeout: SETUP_M
 
   it("is made good by a Re-produce that passes: published, the alert gone, everyone told", async () => {
     expect((await reproduce(id)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect((await detail(c1Pm, id)).documentalRecord).toBe("published");
     expect((await download(k1Pm, id)).bytes.length).toBeGreaterThan(1000);
     // Published at last, and still never C2's: the record the checks failed on was hidden from them for who they are, too.
@@ -495,7 +495,7 @@ describe("scenario RP-155-3: Re-produce in Rabaed Admin", { timeout: SETUP_MS },
 
   it("remakes the PDF from the same Record Data at the same URL, with a new seal date, and keeps the replaced one", async () => {
     id = await closed("Cable glands");
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     before = await download(c1Pm, id);
     const first = await recordOf(id);
     const sealedBefore = (await verifySeal(before.bytes)).timestampedAt!;
@@ -504,7 +504,7 @@ describe("scenario RP-155-3: Re-produce in Rabaed Admin", { timeout: SETUP_MS },
     expect((await reproduce(id)).statusCode).toBe(202);
     const again = await reproduce(id);
     expect([again.statusCode, again.json()], "while one waits").toEqual([409, { error: "already_queued" }]);
-    await drainOutbox(worker, real);
+    await drainOutbox(worker, real, own());
 
     const after = await download(c1Pm, id);
     expect(location(after.link), "the same location, name and URL").toBe(location(before.link));
@@ -568,9 +568,9 @@ describe("scenario RP-155-3: Re-produce in Rabaed Admin", { timeout: SETUP_MS },
     expect((await reproduce(id, "   ")).statusCode).toBe(400);
     expect((await admin.browser().post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(401);
     expect((await reproduce(id)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect((await reproduce(id)).statusCode, "after it was done").toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     const { rows } = await sql<{ n: number }>`
       select count(*)::int as n from documental_record_reproduction x join documental_record r on r.id = x.documental_record_id where r.work_item_id = ${id}
     `.execute(migrator);
@@ -579,23 +579,24 @@ describe("scenario RP-155-3: Re-produce in Rabaed Admin", { timeout: SETUP_MS },
 
   it("replaces nothing when the new PDF fails its checks: the published record stays, and Rabaed Admin is alerted", async () => {
     const id2 = await closed("Cable lugs");
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     const published = await download(c1Pm, id2);
     expect((await reproduce(id2)).statusCode).toBe(202);
-    await drainOutbox(worker, await handlers(failing));
+    await drainOutbox(worker, await handlers(failing), own());
     expect((await detail(c1Pm, id2)).documentalRecord).toBe("published");
     expect(sha((await download(c1Pm, id2)).bytes)).toBe(sha(published.bytes));
     expect(await alertsFor(id2)).toEqual([expect.objectContaining({ status: "published", problems: ["PDF/A-3 6.1.2: a test finding"] })]);
     // The next good Re-produce clears the alert.
     expect((await reproduce(id2)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect(await alertsFor(id2)).toEqual([]);
   });
 
   it("raises an alert for a record job that gave up", async () => {
     const id3 = await closed("Cable clips");
     const broken: PdfAValidator = { validate: () => Promise.reject(new Error("docker is not running")) };
-    const run = await processOutbox(worker, { handlers: await handlers(broken), maxAttempts: 1, limit: 50 });
+    const brokenHandlers = await handlers(broken);
+    const run = await whileOtherProjectsWait(own(), Object.keys(brokenHandlers), () => processOutbox(worker, { handlers: brokenHandlers, maxAttempts: 1, limit: 50 }));
     expect(run.dead).toBeGreaterThanOrEqual(1);
     expect(await alertsFor(id3)).toEqual([expect.objectContaining({ status: "job_failed", problems: ["docker is not running"] })]);
     // The item still shows no record, not "being prepared" forever.
@@ -609,7 +610,7 @@ describe("scenario RP-155-3: Re-produce finds the Form photos again by their fin
 
   it("tells two photos of one name and no time apart, and prints both again", async () => {
     const id = await closedWithPhotos("Two same-named photos", "IMG_0001.png", [red, blue]);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     const before = await download(c1Pm, id);
     const dataBefore = new TextDecoder().decode((await attachedFiles(before.bytes))[0]!.bytes);
     // The Record Data holds each printed image's fingerprint, in the order the Documents were added.
@@ -617,7 +618,7 @@ describe("scenario RP-155-3: Re-produce finds the Form photos again by their fin
     expect(await imageCountOf(before.bytes)).toBe(2);
 
     expect((await reproduce(id)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     const after = await download(c1Pm, id);
     expect(sha(after.bytes)).not.toBe(sha(before.bytes));
     expect(await imageCountOf(after.bytes), "both photos are printed again").toBe(2);
@@ -626,7 +627,7 @@ describe("scenario RP-155-3: Re-produce finds the Form photos again by their fin
 
   it("fails when a photo's file is not what the record printed: nothing is replaced, and Rabaed Admin is alerted", async () => {
     const id = await closedWithPhotos("A photo that changed", "IMG_0002.png", [red]);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     const published = await download(c1Pm, id);
     // Where the Document's file is stored is read as the migrator: no seam shows a storage key.
     const { rows } = await sql<{ storage_key: string }>`select storage_key from document where work_item_id = ${id}::uuid and file_name = 'IMG_0002.png'`.execute(migrator);
@@ -634,7 +635,7 @@ describe("scenario RP-155-3: Re-produce finds the Form photos again by their fin
     await files.put(key, blue, "image/png");
 
     expect((await reproduce(id)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect(sha((await download(c1Pm, id)).bytes), "the published record stays as it was").toBe(sha(published.bytes));
     const [alert] = await alertsFor(id);
     expect(alert).toMatchObject({ status: "published" });
@@ -647,7 +648,7 @@ describe("scenario RP-155-3: Re-produce finds the Form photos again by their fin
     // Put the file back, and the next Re-produce is made and replaces it, the alert gone.
     await files.put(key, red, "image/png");
     expect((await reproduce(id)).statusCode).toBe(202);
-    await drainOutbox(worker, quick);
+    await drainOutbox(worker, quick, own());
     expect(sha((await download(c1Pm, id)).bytes)).not.toBe(sha(published.bytes));
     expect(await alertsFor(id)).toEqual([]);
   });
