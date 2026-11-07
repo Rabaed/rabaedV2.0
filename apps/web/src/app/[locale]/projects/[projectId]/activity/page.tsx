@@ -1,14 +1,14 @@
 import type { Locale } from "@rabaed/domain";
 import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { ActivityFeedView } from "@/components/activity-feed-view";
-import { Link, redirect } from "@/i18n/navigation";
+import { ActivityFeedPageView } from "@/components/activity-feed-view";
+import { redirect } from "@/i18n/navigation";
 import { getActivityFeed, getMe, getProject } from "@/lib/session";
 
 /**
- * The Activity Feed at full height ("View all" on the Dashboard, RP-353): the
- * Project's Work Item events as the Member may see them, older ones loading on
- * scrolling down. A Project the Member is not on is not found.
+ * The Activity Feed page (RP-1157, the owner's `Rabaed Activity.html`; "View all" on the Dashboard,
+ * RP-353): the Project's Work Item events as the Member may see them, by day, older ones loading on
+ * scrolling down. The Project's tabs lead back. A Project the Member is not on is not found.
  */
 export default async function ActivityPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
@@ -17,12 +17,5 @@ export default async function ActivityPage({ params }: { params: Promise<{ local
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !activity) notFound();
 
-  return (
-    <div className="space-y-4">
-      <Link href={`/projects/${project.id}`} className="text-sm text-brand-fg underline underline-offset-4">
-        {project.name[locale]}
-      </Link>
-      <ActivityFeedView projectId={project.id} initial={activity} locale={locale} fullHeight />
-    </div>
-  );
+  return <ActivityFeedPageView projectId={project.id} projectName={project.name[locale]} initial={activity} locale={locale} now={new Date().toISOString()} />;
 }

@@ -1,49 +1,16 @@
 "use client";
 
-import { activityFeedSearchParams, type ActivityFeed, type Locale } from "@rabaed/domain";
-import { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels } from "@rabaed/ui";
+import { activityFeedSearchParams, formatNumber, type ActivityFeed, type Locale } from "@rabaed/domain";
+import { ActivityFeedPage, ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPageLabels, type ActivityFeedPanelLabels } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 
 /**
- * The Activity Feed panel (RP-353), live: its first page comes from the server;
- * filters and older pages are read in the browser, through the /api/v1 proxy,
- * as the signed-in Member may see them.
+ * The feed's entries, live: the first page comes from the server; filters and older pages are read in
+ * the browser, through the /api/v1 proxy, as the signed-in Member may see them.
  */
-export function ActivityFeedView({
-  projectId,
-  initial,
-  locale,
-  fullHeight = false,
-}: {
-  projectId: string;
-  /** The first page; its `types` name the Project's Modules and Types, for the filters. */
-  initial: ActivityFeed;
-  locale: Locale;
-  fullHeight?: boolean;
-}) {
-  const t = useTranslations("workItemViews.activityFeed");
-  const labels: ActivityFeedPanelLabels = {
-    title: t("title"),
-    module: t("module"),
-    type: t("type"),
-    all: t("all"),
-    mine: t("mine"),
-    viewAll: t("viewAll"),
-    loadMore: t("loadMore"),
-    loading: t("loading"),
-    empty: t("empty"),
-    internal: t("internal"),
-    noNumber: t("noNumber"),
-    pickedUp: t("pickedUp"),
-    returnedToPool: t("returnedToPool"),
-    assigned: t("assigned"),
-    internalNote: t("internalNote"),
-    recommended: t("recommended"),
-    cancelled: t("cancelled"),
-    updated: t("updated"),
-  };
+function useActivityFeed(projectId: string, initial: ActivityFeed) {
   const [query, setQuery] = useState<ActivityFeedFilters>({ type: [], mine: false });
   const [entries, setEntries] = useState(initial.entries);
   const [nextCursor, setNextCursor] = useState(initial.nextCursor);
@@ -68,26 +35,113 @@ export function ActivityFeedView({
     }
   }
 
+  return {
+    entries,
+    hasMore: nextCursor !== null,
+    loading,
+    onLoadMore: () => {
+      if (!loading && nextCursor) void load(query, nextCursor);
+    },
+    query,
+    onQueryChange: (next: ActivityFeedFilters) => {
+      setQuery(next);
+      void load(next, null);
+    },
+    types: initial.types,
+  };
+}
+
+/** The words `whatHappened` reads, for the panel and the page alike. */
+function useEventLabels() {
+  const t = useTranslations("workItemViews.activityFeed");
+  return {
+    pickedUp: t("pickedUp"),
+    returnedToPool: t("returnedToPool"),
+    assigned: t("assigned"),
+    internalNote: t("internalNote"),
+    recommended: t("recommended"),
+    cancelled: t("cancelled"),
+    updated: t("updated"),
+  };
+}
+
+/** The Activity Feed panel on the Project's Dashboard (RP-353), with "View all" to its page. */
+export function ActivityFeedView({ projectId, initial, locale }: { projectId: string; initial: ActivityFeed; locale: Locale }) {
+  const t = useTranslations("workItemViews.activityFeed");
+  const labels: ActivityFeedPanelLabels = {
+    ...useEventLabels(),
+    title: t("title"),
+    module: t("module"),
+    type: t("type"),
+    all: t("all"),
+    mine: t("mine"),
+    viewAll: t("viewAll"),
+    loadMore: t("loadMore"),
+    loading: t("loading"),
+    empty: t("empty"),
+    internal: t("internal"),
+    noNumber: t("noNumber"),
+  };
   return (
     <ActivityFeedPanel
-      entries={entries}
-      hasMore={nextCursor !== null}
-      loading={loading}
-      onLoadMore={() => {
-        if (!loading && nextCursor) void load(query, nextCursor);
-      }}
-      query={query}
-      onQueryChange={(next) => {
-        setQuery(next);
-        void load(next, null);
-      }}
-      types={initial.types}
+      {...useActivityFeed(projectId, initial)}
       locale={locale}
       labels={labels}
       // Link adds the locale.
       itemHref={(id) => `/work-items/${id}`}
-      viewAllHref={fullHeight ? undefined : `/projects/${projectId}/activity`}
-      fullHeight={fullHeight}
+      viewAllHref={`/projects/${projectId}/activity`}
+      linkAs={Link}
+    />
+  );
+}
+
+/** The Activity Feed page (RP-1157, the owner's reference): the whole feed, grouped by day. */
+export function ActivityFeedPageView({
+  projectId,
+  projectName,
+  initial,
+  locale,
+  now,
+}: {
+  projectId: string;
+  projectName: string;
+  /** The first page; its `types` name the Project's Modules and Types, for the filters. */
+  initial: ActivityFeed;
+  locale: Locale;
+  /** When the server made the page (ISO), for "Today" and "Yesterday". */
+  now: string;
+}) {
+  const t = useTranslations("workItemViews.activityFeed");
+  // A Code reads as the Kanban board says it ("Code C").
+  const tBoard = useTranslations("workItemViews.board");
+  const labels: ActivityFeedPageLabels = {
+    ...useEventLabels(),
+    title: t("title"),
+    description: t("description", { project: projectName }),
+    allModules: t("allModules"),
+    allTypes: t("allTypes"),
+    mine: t("mine"),
+    count: (n) => t("count", { count: n, n: formatNumber(n, locale) }),
+    today: t("today"),
+    yesterday: t("yesterday"),
+    you: t("you"),
+    onItem: t("onItem"),
+    internal: t("internal"),
+    code: (code) => tBoard("code", { code }),
+    noNumber: t("noNumber"),
+    scrollForOlder: t("scrollForOlder"),
+    loading: t("loading"),
+    emptyTitle: t("emptyTitle"),
+    emptyFiltered: t("emptyFiltered"),
+    emptyNone: t("empty"),
+  };
+  return (
+    <ActivityFeedPage
+      {...useActivityFeed(projectId, initial)}
+      locale={locale}
+      labels={labels}
+      itemHref={(id) => `/work-items/${id}`}
+      now={now}
       linkAs={Link}
     />
   );

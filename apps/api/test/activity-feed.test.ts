@@ -403,6 +403,8 @@ describe("paging and filters", () => {
     await ok(owner.request("PUT", `/v1/work-items/${marId}/watch`));
     const watched = (await feed(owner, { mine: true })).entries;
     expect(new Set(watched.map((e) => e.workItem.id))).toEqual(new Set([marId]));
+    // The page's "You're on this item" (RP-1157-1) follows the filter's rule: a Watch counts.
+    expect(watched.every((e) => e.onItem)).toBe(true);
     expect(watched).toEqual((await feed(owner, { type: [LEGACY_MAR] })).entries);
     await ok(owner.delete(`/v1/work-items/${marId}/watch`));
     expect((await feed(owner, { mine: true })).entries).toEqual([]); // not hidden-from: the "items I'm on" filter once the Owner stops watching
@@ -415,5 +417,67 @@ describe("paging and filters", () => {
       const res = await tower.c1Pm.get(`/v1/projects/${tower.projectId}/activity?${query}`);
       expect(res.statusCode, query).toBe(400);
     }
+  });
+});
+
+describe("RP-1157: the page's per-entry flags are about the viewer only", () => {
+  let id = "";
+  let submit = "";
+  /** Another C1 engineer on the Project, who is not on the item. */
+  let c1Other: Caller;
+  beforeAll(async () => {
+    c1Other = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"]);
+    // C1's engineer raises it, C1's PM Submits it, K1's engineer picks it up at K1's review and sends
+    // it to K1's manager, who closes it with Code C. (Last in the file: the manager's "items I'm on" above count three.)
+    id = await atContractorReview(tower.c1Engineer, "Feed RP-1157");
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.c1Pm, id, "submit");
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+    await take(k1Engineer, id, "send_to_manager");
+    await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.k1Manager, id, "revise_c");
+    submit = ofItem((await feed(tower.c1Pm)).entries, id).find((e) => e.type === "transition" && e.transition?.en === "Submit")!.id;
+  });
+
+  /** The items `by`'s feed flags "You're on this item", by id. */
+  const flaggedIn = (by: Caller, name: string): Reader => ({
+    name: `${name}'s "on this item"`,
+    rows: async () => (await feed(by)).entries.filter((e) => e.onItem).map((e) => ({ id: e.workItem.id })),
+  });
+  /** The events `by`'s feed flags "(you)", by id. */
+  const mineIn = (by: Caller, name: string): Reader => ({ name: `${name}'s "(you)"`, rows: async () => (await feed(by)).entries.filter((e) => e.byMe) });
+
+  it("RP-1157-1: flags the item for the Members on it, and for nobody else who reads its entries", async () => {
+    const on = [eventsIn(tower.c1Engineer, "C1 engineer"), eventsIn(tower.c1Pm, "C1 PM"), eventsIn(k1Engineer, "K1 engineer"), eventsIn(tower.k1Manager, "K1 manager")];
+    const others = { "another C1 engineer": c1Other, "K1 PM": k1Pm, OR: orEngineer, OW: owner };
+    // Positive control: each of them reads the Submit, so a missing flag is not a missing entry.
+    await hiddenFrom(submit, [...on, ...Object.entries(others).map(([name, by]) => eventsIn(by, name))], eventsIn(c2Engineer, "C2"), "RP-1157-1 the Submit");
+    await hiddenFrom(
+      id,
+      [flaggedIn(tower.c1Engineer, "C1 engineer"), flaggedIn(tower.c1Pm, "C1 PM"), flaggedIn(k1Engineer, "K1 engineer"), flaggedIn(tower.k1Manager, "K1 manager")],
+      Object.entries(others).map(([name, by]) => flaggedIn(by, name)),
+      "RP-1157-1 onItem",
+    );
+  });
+
+  it("RP-1157-2: marks the Submit \"(you)\" for the PM who took it only", async () => {
+    await hiddenFrom(
+      submit,
+      mineIn(tower.c1Pm, "C1 PM"),
+      [mineIn(tower.c1Engineer, "C1 engineer"), mineIn(c1Other, "another C1 engineer"), mineIn(k1Engineer, "K1 engineer"), mineIn(k1Pm, "K1 PM"), mineIn(orEngineer, "OR"), mineIn(owner, "OW")],
+      "RP-1157-2 byMe",
+    );
+    // K1 reads the Submit by C1's name only, flags and all (V14).
+    const asK1 = ofItem((await feed(k1Engineer)).entries, id).find((e) => e.id === submit)!;
+    expect(asK1).toMatchObject({ by: { companyName: bilingual(C1_NAME), memberName: null }, byMe: false });
+  });
+
+  it("shows the close's Code as a chip, coloured by its place in the Type's set, to both sides", async () => {
+    for (const by of [tower.c1Pm, tower.k1Manager, owner]) {
+      const close = ofItem((await feed(by)).entries, id).find((e) => e.outcome !== null)!;
+      expect(close).toMatchObject({ type: "issue_code", outcome: "C", outcomeChip: { name: null, look: "c" } });
+    }
+    // Every entry without an outcome has no chip.
+    for (const e of (await feed(tower.c1Pm)).entries) if (e.outcome === null) expect(e.outcomeChip).toBeNull();
   });
 });

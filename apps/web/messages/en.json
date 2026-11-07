@@ -417,7 +417,18 @@
       "internalNote": "wrote an Internal Note with",
       "recommended": "recommended a Code on",
       "cancelled": "cancelled",
-      "updated": "updated"
+      "updated": "updated",
+      "description": "What happened on {project}'s Work Items, as you may see it. Answer changes and Document uploads aren't listed.",
+      "allModules": "All modules",
+      "allTypes": "All types",
+      "count": "{count, plural, one {1 entry} other {{n} entries}}",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "you": "(you)",
+      "onItem": "You're on this item",
+      "scrollForOlder": "Scroll for older entries",
+      "emptyTitle": "Nothing here",
+      "emptyFiltered": "No entries match these filters."
     },
     "layout": {
       "title": "Card view layout",
