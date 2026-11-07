@@ -215,9 +215,9 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
     const { packages } = (await as.ali.get(`/v1/projects/${project}/packages`)).json() as { packages: { id: string; name: { en: string } }[] };
     expect(packages.map((p) => p.name.en).sort()).toEqual(planned.map((p) => p.package.name.en).sort()); // not hidden-from: TMC's own Packages, read by its PM
     for (const p of planned) {
-      const found = packages.find((x) => x.name.en === p.package.name.en)!;
+      const found = packages.find((x) => x.name.en === p.package.name.en)!; // not hidden-from: finds TMC's own Package by its name, to read its items
       const { items: inIt } = (await as.ali.get(`/v1/packages/${found.id}`)).json() as { items: { title: string }[] };
-      expect(inIt.map((i) => i.title).sort(), p.package.name.en).toEqual([...p.package.existing, ...p.package.drafts.map((d) => d.title)].sort());
+      expect(inIt.map((i) => i.title).sort(), p.package.name.en).toEqual([...p.package.existing, ...p.package.drafts.map((d) => d.title)].sort()); // not hidden-from: the items TMC's PM put in, read by him
     }
   });
 });
