@@ -122,7 +122,7 @@ function sheetCases(file: CaseFile): { id: string; file: string; source: string 
   try {
     list = JSON.parse(file.text);
   } catch (error) {
-    throw new Error(`${file.file} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`${file.file} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
   if (!Array.isArray(list)) return [];
   return list.flatMap((entry: unknown) => {
