@@ -16,7 +16,9 @@ export type SubmittalPanelBarChip =
   /** Someone of the viewer's own Company picked it up, and the viewer may do nothing on it (row 51). */
   | { kind: "pickedUp"; name: BilingualText; weeks: number | null }
   /** Nothing offered: another Company holds it, or it is closed (row 26). */
-  | { kind: "viewOnly" };
+  | { kind: "viewOnly" }
+  /** An earlier Revision open (RP-1253): "Rev 1 · read only", or the Original at 0; nothing else but Download PDF. */
+  | { kind: "pastRevision"; revisionNo: number };
 
 export type SubmittalPanelBar = {
   /** Edit the Form: the Form's holder (row 28). */
@@ -40,6 +42,7 @@ export function submittalPanelBar({
   codes,
   heldBy,
   stepAgeWeeks,
+  pastRevision = null,
 }: {
   actions: Actions;
   /** The Review Code each offered Transition issues, by its key (`transitionCodes`). */
@@ -47,7 +50,22 @@ export function submittalPanelBar({
   heldBy: WorkItemDetail["heldBy"];
   /** Step Age in weeks while it waits at a Step; null when it doesn't age. */
   stepAgeWeeks: number | null;
+  /** The open Revision's number when it is an earlier one than the latest the viewer sees (RP-1253): read only. */
+  pastRevision?: number | null;
 }): SubmittalPanelBar {
+  if (pastRevision !== null) {
+    return {
+      edit: false,
+      discardRevision: false,
+      createRevision: false,
+      createReplacement: false,
+      buttons: [],
+      menu: null,
+      pickUp: false,
+      returnToPool: false,
+      chip: { kind: "pastRevision", revisionNo: pastRevision },
+    };
+  }
   const coded = actions.transitions.filter((t) => codes[t.key] !== undefined);
   const uncoded = actions.transitions.filter((t) => codes[t.key] === undefined);
   // With a menu, a backward Transition (a Send Back) sits below its divider; without one, every Transition is a button.

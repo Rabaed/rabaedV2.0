@@ -98,4 +98,30 @@ describe("the Submittal Panel's action bar", () => {
     expect(replacement.createReplacement).toBe(true);
     expect(replacement.chip).toBeNull();
   });
+
+  it("offers nothing on an earlier Revision, whatever the engine offers: 'Rev 1 · read only' and Download PDF (RP-1253)", () => {
+    const everything: Actions = {
+      ...none,
+      pickUp: true,
+      returnToPool: true,
+      saveAnswers: true,
+      createRevision: true,
+      createReplacement: true,
+      discardRevision: true,
+      transitions: [transition("approve", "close"), transition("submit", "submit")],
+    };
+    const bar = submittalPanelBar({ actions: everything, codes: { approve: "A" }, heldBy: heldBy({ pool: { names: [ahmed] } }), stepAgeWeeks: 1, pastRevision: 1 });
+    expect(bar).toEqual({
+      edit: false,
+      discardRevision: false,
+      createRevision: false,
+      createReplacement: false,
+      buttons: [],
+      menu: null,
+      pickUp: false,
+      returnToPool: false,
+      chip: { kind: "pastRevision", revisionNo: 1 },
+    });
+    expect(submittalPanelBar({ actions: none, codes: {}, heldBy: null, stepAgeWeeks: null, pastRevision: 0 }).chip).toEqual({ kind: "pastRevision", revisionNo: 0 });
+  });
 });
