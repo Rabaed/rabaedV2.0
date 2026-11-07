@@ -60,12 +60,12 @@ const raiserOf = (s: Staged): Caller => {
 
 const MODULE = { submittal: "submittals", snag: "snag_list", inspection: "inspections" } as const;
 
-describe(`${role.name.en} (RP-1248)`, () => {
+describe("UAT 01, Hafiz's UAT Project (RP-1248)", () => {
   it("is on Hafiz's Projects, with the four Companies on it", async () => {
     const { projects } = (await as.hafiz.get("/v1/projects")).json() as { projects: { id: string; name: { en: string } }[] };
     expect(projects.find((p) => p.id === projectId)?.name.en).toBe(role.name.en); // not hidden-from: Hafiz's own Project, by id
     const { rows } = await sql<{ n: number }>`select count(*)::int as n from participant where project_id = ${projectId}::uuid`.execute(migrator);
-    expect(rows[0]!.n).toBe(4);
+    expect(rows[0]!.n).toBe(4); // not hidden-from: the seed's four Companies, read as the migrator
   });
 
   it("gives every staged item the Document Number the sheet names, and leaves each Draft without one", async () => {
@@ -86,7 +86,7 @@ describe(`${role.name.en} (RP-1248)`, () => {
       // A Draft's is send_for_review; a returned item's, send_for_review_again.
       if (s.kind === "submittal" && (end === "draft" || end === "returned")) expect(at.keys.some((k) => k.startsWith("send_for_review")), `${s.item.title}: ${at.keys.join(", ")}`).toBe(true);
       if ((end === "returned" || end === "draft") && s.cases.includes("WF-16")) expect(at.kinds, s.item.title).toContain("cancel");
-      if (end === "with_consultant_engineer") expect(at.kinds, s.item.title).not.toContain("cancel");
+      if (end === "with_consultant_engineer") expect(at.kinds, s.item.title).not.toContain("cancel"); // not hidden-from: Hafiz reads the item; Cancel is not offered after the Submit
       if (end === "cancelled") expect(at.stage, s.item.title).toBe("cancelled");
       if (end === "code_c") expect(at.stage, s.item.title).toBe("revise_resubmit");
       if (end === "code_d") expect(at.stage, s.item.title).toBe("rejected");
