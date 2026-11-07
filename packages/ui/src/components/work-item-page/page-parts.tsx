@@ -6,19 +6,13 @@ import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
+import { codeLookColour } from "../status/code-badge.tsx";
 
 /**
  * The Work Item page's own parts (RP-1151, the owner's "Rabaed Work Item Page"), beside the Submittal
  * Panel's it reuses. Presentational: the app fills them from the item, history and Workflow map
  * reads, and wires their buttons.
  */
-
-const lookColour: Record<OutcomeLook, string> = {
-  a: "bg-code-a-bg text-code-a-fg",
-  b: "bg-code-b-bg text-code-b-fg",
-  c: "bg-code-c-bg text-code-c-fg",
-  d: "bg-code-d-bg text-code-d-fg",
-};
 
 /**
  * A Review Code's letter on a small square tile (gap table row 27), coloured by `look`, its place in its
@@ -33,7 +27,7 @@ export function CodeTile({ code, look, size = "sm", className }: { code: string;
       className={cn(
         "inline-flex shrink-0 items-center justify-center font-extrabold",
         size === "sm" ? "size-[18px] rounded-[5px] text-[11px]" : "size-[30px] rounded-[8px] text-[15px]",
-        look ? lookColour[look] : "bg-surface-subtle text-text-secondary",
+        look ? codeLookColour[look] : "bg-surface-subtle text-text-secondary",
         className,
       )}
     >

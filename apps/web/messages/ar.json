@@ -417,7 +417,18 @@
       "internalNote": "كتب ملاحظة داخلية مع",
       "recommended": "أوصى برمز على",
       "cancelled": "ألغى",
-      "updated": "حدّث"
+      "updated": "حدّث",
+      "description": "ما حدث على عناصر عمل {project}، كما يحق لك رؤيته. لا تُدرج تغييرات الإجابات ولا رفع المستندات.",
+      "allModules": "كل الوحدات",
+      "allTypes": "كل الأنواع",
+      "count": "{count, plural, one {إدخال واحد} two {إدخالان} few {{n} إدخالات} many {{n} إدخالًا} other {{n} إدخال}}",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "you": "(أنت)",
+      "onItem": "أنت على هذا العنصر",
+      "scrollForOlder": "مرّر لعرض الإدخالات الأقدم",
+      "emptyTitle": "لا شيء هنا",
+      "emptyFiltered": "لا توجد إدخالات تطابق هذه المرشحات."
     },
     "layout": {
       "title": "تخطيط عرض البطاقة",

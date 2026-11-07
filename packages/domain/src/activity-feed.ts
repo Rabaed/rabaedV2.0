@@ -95,12 +95,21 @@ export const activityFeed = z.object({
       transition: bilingualText.nullable(),
       /** Set on the event that closed the item: the Issued Code. */
       outcome: workItemOutcome.nullable(),
+      /**
+       * How the page's chip shows `outcome`, from its Type's outcome set (`outcomeLook`): its colour, and its
+       * own name when it is not a Review Code ("Passed"); a name of null reads "Code <outcome>". Null with no outcome.
+       */
+      outcomeChip: z.object({ name: bilingualText.nullable(), look: z.enum(["a", "b", "c", "d"]) }).nullable(),
       workItem: z.object({
         id: z.uuid(),
         documentNumber: z.string().nullable(),
         title: z.string(),
         type: z.object({ code: z.string(), name: bilingualText }),
       }),
+      /** The viewer is on the item, by the "items I'm on" rule ("You're on this item"). About the viewer only (RP-1157-1). */
+      onItem: z.boolean(),
+      /** The viewer took it ("(you)"). About the viewer only (RP-1157-2). */
+      byMe: z.boolean(),
     }),
   ),
   nextCursor: z.string().nullable(),

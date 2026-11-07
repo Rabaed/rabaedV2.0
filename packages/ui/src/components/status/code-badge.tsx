@@ -1,5 +1,6 @@
 import type { Locale } from "@rabaed/domain";
 import { cn } from "../../lib/cn.ts";
+import type { OutcomeLook } from "@rabaed/domain";
 import type { ReviewCode } from "../../tokens/themes.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
@@ -21,6 +22,14 @@ const codes: Record<ReviewCode, { icon: IconName; colour: string; meaning: Recor
   d: { icon: "circle-x", colour: "bg-code-d-bg text-code-d-fg", meaning: { en: "Rejected", ar: "مرفوض" } },
 };
 /* eslint-enable rabaed/no-ui-translations */
+
+/** A Code's tint and text by its look (`outcomeLook`): the chips and tiles that show an outcome's colour without CodeBadge's icon and meaning. */
+export const codeLookColour: Record<OutcomeLook, string> = {
+  a: codes.a.colour,
+  b: codes.b.colour,
+  c: codes.c.colour,
+  d: codes.d.colour,
+};
 
 const sizes = {
   sm: { box: "h-5 gap-1 px-1.5 text-notes", icon: 14 },
