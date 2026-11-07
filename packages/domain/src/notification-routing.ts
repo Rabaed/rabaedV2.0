@@ -117,7 +117,7 @@ export interface RouteNotificationInput {
   outcome: string | null;
   /** The recipient's settings. */
   settings: NotificationSettings;
-  /** The recipient muted the item's Project. */
+  /** The recipient muted the item's Project: no email from it; the bell still rings. */
   muted: boolean;
   /** The recipient paused all email. */
   emailPaused: boolean;
@@ -133,19 +133,18 @@ const silent: NotificationRoute = { inApp: false, email: "none" };
 
 /**
  * For one recipient of one event: whether it reaches their bell, and how it is
- * emailed. A muted Project, or an outcome a watcher didn't tick, silences both;
- * pausing email, or a group's email off, stops only the email: in-app is always
- * sent. The weekly report is an email only, sent
- * on its own schedule whenever its email is on. Need My Action never passes
- * through here.
+ * emailed. An outcome a watcher didn't tick silences both; a muted Project,
+ * pausing email, or a group's email off stops only the email (owner's decision
+ * 2026-11-06, RP-1238: a mute no longer silences the bell): in-app is always
+ * sent. The weekly report is an email only, sent on its own schedule whenever
+ * its email is on. Need My Action never passes through here.
  */
 export function routeNotification({ kind, outcome, settings, muted, emailPaused }: RouteNotificationInput): NotificationRoute {
   const setting: NotificationGroupSetting = settings[notificationGroupOf(kind)];
-  if (muted) return silent;
   if (kind === "watched_event" && isWatchOutcome(outcome) && !(setting.outcomes ?? watchOutcomes).includes(outcome)) return silent;
   // In-app is always sent (decision 2026-10-08); only the weekly report, an email, never reaches the bell.
   const inApp = kind !== "weekly_report";
-  if (emailPaused || setting.email === "off") return { inApp, email: "none" };
+  if (muted || emailPaused || setting.email === "off") return { inApp, email: "none" };
   return { inApp, email: kind === "weekly_report" ? "immediate" : setting.email };
 }
 
