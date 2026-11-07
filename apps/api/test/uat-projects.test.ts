@@ -371,14 +371,21 @@ describe("adding the UAT Projects again", () => {
     expect(await Promise.all(UAT_ROLES.map((r) => count(ids[r.code]!)))).toEqual(before);
   });
 
+  it("numbers TMC's UAT Projects in the plan's order, though they are built side by side (RP-1254)", async () => {
+    const { rows } = await sql<{ code: string; n: number }>`
+      select code, project_number as n from project where code = any(${UAT_ROLES.map((r) => r.code)}::text[]) order by project_number, id
+    `.execute(migrator);
+    expect(rows.map((r) => r.code)).toEqual(UAT_ROLES.map((r) => r.code)); // not hidden-from: the seed's Projects, read as the migrator
+  });
+
   it("prints how long each Project took, and the total, with no Subject or email (RP-1254: UAT's job log is public)", async () => {
     const lines: string[] = [];
     const db = createDb(urls.app, { max: 2 });
     const app = await buildApp({ db, config: testConfig, logger: false, files: createFileStore(fileStoreSettingsFromEnv()), mailer: demoMailbox().mailer });
     const signIns: string[] = [];
     const inject = app.inject.bind(app);
-    app.inject = ((options: { method?: string; url?: string }) => {
-      if (options.method === "POST" && options.url === "/v1/session") signIns.push(options.url);
+    app.inject = ((options: { method?: string; url?: string; payload?: { email?: string } }) => {
+      if (options.method === "POST" && options.url === "/v1/session") signIns.push(options.payload?.email ?? "");
       return inject(options as never);
     }) as typeof app.inject;
     try {
@@ -392,6 +399,7 @@ describe("adding the UAT Projects again", () => {
     expect(new Set(timed.slice(0, 3).map((l) => l.slice(0, 14)))).toEqual(new Set(["seeded UAT 01 ", "seeded UAT 02 ", "seeded UAT 03 "]));
     expect(lines.join("\n")).not.toMatch(/@|demo\.rabaed\.test/);
     // Each demo person signs in once for all of them, not once per Project.
-    expect(signIns.length).toBeLessThanOrEqual(13);
+    expect(signIns.length).toBeGreaterThan(0);
+    expect(signIns.length).toBe(new Set(signIns).size);
   });
 });

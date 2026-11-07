@@ -189,7 +189,7 @@ export async function buildSampleProject(
   connection: Db,
   { log = () => {}, concurrency = 4, records = sampleRecords(), project: which = SAMPLE_PROJECT, people = {} }: SampleProjectOptions = {},
 ): Promise<SampleProjectResult> {
-  const projectId = await project(as.saeed, connection, which);
+  const projectId = await sampleProjectId(as, connection, which);
   const ids = await setUp(as, projectId, which, people);
   const titled = async (title: string) =>
     (await sql<{ id: string }>`select id from work_item where project_id = ${projectId}::uuid and title = ${title}`.execute(connection)).rows.map((r) => r.id);
@@ -286,13 +286,12 @@ export async function inParallel(moves: (() => Promise<void>)[], n: number): Pro
   if (failure) throw failure.error;
 }
 
-type People = Record<Who, Call>;
 /** The demo people, each signed in as one browser (signInAll); several Projects built at once share them (RP-1254). */
-export type SignedIn = People;
+export type SignedIn = Record<Who, Call>;
 
 /** Everyone signs in first, so a password that no longer works stops the run before it writes anything. */
-export async function signInAll(app: FastifyInstance, password: string): Promise<People> {
-  const people = {} as People;
+export async function signInAll(app: FastifyInstance, password: string): Promise<SignedIn> {
+  const people = {} as SignedIn;
   for (const [who, [local, domain]] of Object.entries(PEOPLE) as [Who, readonly [string, string]][]) {
     const caller = browser(app);
     try {
@@ -309,10 +308,10 @@ export async function signInAll(app: FastifyInstance, password: string): Promise
  * The Project, created by TMC's Authorized Person (its Project Admin) unless it is there. Found as the migrator
  * reads which items exist: Saeed's own list of Projects costs over a hundred queries once the UAT Projects are on it (RP-1254).
  */
-async function project(saeed: Call, connection: Db, which: SampleProjectName): Promise<string> {
+export async function sampleProjectId({ saeed }: SignedIn, connection: Db, which: SampleProjectName): Promise<string> {
   // By its code and English name, as sampleProjectStatus finds it.
   const { rows: [found] } = await sql<{ id: string }>`
-    select id from project where code = ${which.code} and name ->> 'en' = ${which.name.en} order by created_at limit 1
+    select id from project where code = ${which.code} and name ->> 'en' = ${which.name.en} order by created_at, id limit 1
   `.execute(connection);
   if (found) return found.id;
   const { projectId } = await saeed<{ projectId: string }>("POST", "/v1/projects", { name: which.name, code: which.code, role: "contractor" });
@@ -331,7 +330,7 @@ const sameGrant = (a: VisibilityGrant, b: VisibilityGrant) => a.isAll === b.isAl
 const sameVisibility = (a: Visibility, b: Visibility) => sameGrant(a.trade, b.trade) && sameGrant(a.location, b.location);
 
 /** Trades, Locations, suppliers, Participants and Members: each added only where it is missing, `people`'s changes with them. */
-async function setUp(as: People, projectId: string, which: SampleProjectName, people: SamplePeople): Promise<Ids> {
+async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, people: SamplePeople): Promise<Ids> {
   const admin = as.saeed;
   const dimensions = () => admin<DimensionValues>("GET", `/v1/projects/${projectId}/dimensions`);
   let have = await dimensions();
@@ -414,7 +413,7 @@ async function setUp(as: People, projectId: string, which: SampleProjectName, pe
 }
 
 /** The Company's Participant on the Project: the Project Admin's own, or invited by CR number and accepted by its Authorized Person. */
-async function participantOf(as: People, ap: Call, projectId: string, which: SampleProjectName, crNumber: string, role: BaseRole): Promise<string> {
+async function participantOf(as: SignedIn, ap: Call, projectId: string, which: SampleProjectName, crNumber: string, role: BaseRole): Promise<string> {
   const mine = async () => (await ap<{ participants: { id: string; project: { id: string } }[] }>("GET", "/v1/participants")).participants.find((p) => p.project.id === projectId)?.id;
   const found = await mine();
   if (found) return found;
@@ -450,7 +449,7 @@ const requestedFor = () => {
 /** Moves each item, as whoever holds it. */
 class Runner {
   constructor(
-    private readonly as: People,
+    private readonly as: SignedIn,
     private readonly projectId: string,
     private readonly ids: Ids,
     /** The ids of the Project's items with this Subject, read as the migrator (a Code B's Comments, by the row's comment). */

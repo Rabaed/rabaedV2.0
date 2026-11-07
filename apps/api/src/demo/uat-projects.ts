@@ -1,6 +1,7 @@
 import type { Db } from "@rabaed/db";
 import type { FastifyInstance } from "fastify";
-import { buildSampleProject, inParallel, signInAll, withSampleLock, type SampleLog, type SampleProjectResult } from "./sample-project.ts";
+import { buildSampleProject, inParallel, sampleProjectId, signInAll, withSampleLock, type SampleLog, type SampleProjectResult } from "./sample-project.ts";
+import { secondsSince } from "./demo-api.ts";
 import { UAT_ROLES, uatPeople, uatRecords, type UatRole } from "./uat-projects-plan.ts";
 
 // The UAT Projects (RP-1246, RP-1248): one Project per role, each built as the sample Project is
@@ -12,9 +13,6 @@ import { UAT_ROLES, uatPeople, uatRecords, type UatRole } from "./uat-projects-p
 // Over the network to UAT's database each api call costs round trips, so (RP-1254) the demo people sign
 // in once for every Project, and `concurrency` Projects are built at once: each Project numbers its own
 // Documents (numbering_counter is per Project), so building them side by side changes no number.
-
-/** Seconds, to a tenth: what the timing lines print. */
-const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
 
 /**
  * Adds every UAT Project in `roles` (all of them when left out) that is not there yet, and what is missing
@@ -31,13 +29,20 @@ export async function addUatProjects(
   const results: Record<string, SampleProjectResult> = {};
   await withSampleLock(migrator, async (connection) => {
     const as = await signInAll(app, password);
+    // Each Project first, one at a time in the plan's order: TMC numbers its Projects as it creates them
+    // (company_project_counter), so UAT 01 keeps the number it had when they were built one after another.
+    for (const role of roles) await sampleProjectId(as, connection, { code: role.code, name: role.name });
+    // The builds share `connection` for their reads only (which items exist): pg runs them one after another,
+    // and none opens a transaction or sets anything on it.
     // The biggest first, so the last to start are short and the run does not trail on one long Project.
-    const size = (role: UatRole) => {
-      const r = uatRecords(role);
-      return r.submittals.length + r.snags.length + r.inspections.length + (r.dars?.length ?? 0) + r.packages.length;
-    };
+    const size = new Map(
+      roles.map((role) => {
+        const r = uatRecords(role);
+        return [role, r.submittals.length + r.snags.length + r.inspections.length + (r.dars?.length ?? 0) + r.packages.length];
+      }),
+    );
     await inParallel(
-      [...roles].sort((a, b) => size(b) - size(a)).map((role) => async () => {
+      [...roles].sort((a, b) => size.get(b)! - size.get(a)!).map((role) => async () => {
         const began = performance.now();
         results[role.code] = await buildSampleProject(as, connection, {
           project: { code: role.code, name: role.name },
@@ -46,12 +51,12 @@ export async function addUatProjects(
           concurrency: 1,
           log: (line) => log(line.replace(/^sample project:/, `${role.code}:`)),
         });
-        log(`seeded UAT ${role.n} in ${seconds(began)}`);
+        log(`seeded UAT ${role.n} in ${secondsSince(began)}`);
       }),
       concurrency,
     );
   });
-  log(`seeded ${roles.length} UAT Project(s) in ${seconds(start)}`);
+  log(`seeded ${roles.length} UAT Project(s) in ${secondsSince(start)}`);
   // In the plan's order, as before, whichever finished first.
   return Object.fromEntries(roles.map((r) => [r.code, results[r.code]!]));
 }

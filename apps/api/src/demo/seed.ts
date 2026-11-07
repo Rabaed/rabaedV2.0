@@ -4,7 +4,7 @@ import type { Db } from "@rabaed/db";
 import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, type StartedDocumentUpload, type VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { browser, demoEmail, SAMPLE_PHOTO_JPEG, type Call } from "./demo-api.ts";
+import { browser, demoEmail, SAMPLE_PHOTO_JPEG, secondsSince, type Call } from "./demo-api.ts";
 import type { DemoMailbox } from "./mailbox.ts";
 import { demoPdf } from "./demo-pdf.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
@@ -98,9 +98,6 @@ export interface SeedOptions {
    */
   log?: (line: string) => void;
 }
-
-/** Seconds since `since`, to a tenth. */
-const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
 
 // Each invitation is accepted at once.
 const INVITATION_TTL_MS = 3_600_000;
@@ -688,10 +685,10 @@ export async function seedDemo(
     // The sample Project (RP-1217): Al Nakheel District – Block A, the same Companies and people
     // with over a hundred Submittals and a full Snag List. Its Submittals leave Draft with their
     // Datasheets, so it comes only with the file store, as the MARs above do.
-    log(`seeded Riyadh Gate Tower in ${seconds(start)}`);
+    log(`seeded the Companies, people and Riyadh Gate Tower in ${secondsSince(start)}`);
     const sample = performance.now();
     await addSampleProject(app, databases.migrator, password);
-    log(`seeded Al Nakheel in ${seconds(sample)}`);
+    log(`seeded Al Nakheel in ${secondsSince(sample)}`);
     // The UAT Projects (RP-1248): one per role, with the same Companies and people, each holding what
     // its role's cases in the hand-run sheet act on. Riyadh Gate Tower stays the automated harness's.
     await addUatProjects(app, databases.migrator, password, { log });
@@ -701,6 +698,7 @@ export async function seedDemo(
   // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
   // nothing else, so each sees only their own Project (the deploy's
   // visibility check on UAT, scripts/smoke.ts).
+  const villas = performance.now();
   await beta.caller("PATCH", `/v1/members/${beta.authorizedPersonId}`, { canCreateProjects: true });
   const { projectId: otherProjectId } = await beta.caller<{ projectId: string }>("POST", "/v1/projects", {
     name: bi("Jeddah Corniche Villas", "فلل كورنيش جدة"),
@@ -728,6 +726,7 @@ export async function seedDemo(
     },
   });
 
-  log(`seeded the demo in ${seconds(start)}`);
+  log(`seeded Jeddah Corniche Villas in ${secondsSince(villas)}`);
+  log(`seeded the demo in ${secondsSince(start)}`);
   return { projectId, otherProjectId, engineer, people };
 }

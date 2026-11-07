@@ -25,6 +25,9 @@ export function browser(app: FastifyInstance): Call {
   };
 }
 
+/** Seconds since `since` (a performance.now()), to a tenth, as the seed's timing lines print them (RP-1254). */
+export const secondsSince = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
+
 /** What every demo person's email ends with (the reserved .test domain): only the demo's people have it. */
 export const DEMO_EMAIL_SUFFIX = ".demo.rabaed.test";
 /** A demo person's email: `hafiz.hamdan` at `tmc` → hafiz.hamdan@tmc.demo.rabaed.test. */
