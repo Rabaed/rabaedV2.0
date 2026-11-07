@@ -311,8 +311,8 @@ defineCase("SIG-07", async (t) => {
   await page.getByRole("tab", { name: "Type" }).or(page.getByRole("radio", { name: "Type" })).or(page.getByRole("button", { name: "Type" })).first().click();
   await page.getByRole("textbox", { name: /full name/i }).fill("Hafiz Hamdan");
   await page.waitForTimeout(600);
-  const preview = (await page.locator("main img, main canvas, main svg[role=img]").count()) > 0;
-  c.check("Type shows a preview as on a record", preview);
+  const preview = (await page.getByRole("group", { name: "How it looks on a record" }).getByRole("img", { name: "Signature" }).count()) > 0;
+  c.check("Type shows a preview as on a record (the Signature card)", preview);
   await t.shot(page, "type-375");
   await page.getByRole("button", { name: "Save Signature" }).click();
   await page.waitForURL(/\/profile$/, { timeout: 15_000 }).catch(() => undefined);
