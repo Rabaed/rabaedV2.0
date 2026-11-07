@@ -54,12 +54,11 @@ describe("the Revision picker (RP-1253)", () => {
       kind: "button",
       revisionNo: 2,
       past: false,
-      latest: { id: rev2.id, revisionNo: 2 },
       banner: null,
       rows: [
         { id: rev2.id, revisionNo: 2, open: true, current: true, date: { kind: "submitted", at: rev2.submissionDate }, chip: { kind: "stage", stage: rev2.stage } },
-        { id: rev1.id, revisionNo: 1, open: false, current: false, date: { kind: "returned", at: rev1.closedAt }, chip: { kind: "outcome", outcome: "C" } },
-        { id: original.id, revisionNo: 0, open: false, current: false, date: { kind: "returned", at: original.closedAt }, chip: { kind: "outcome", outcome: "C" } },
+        { id: rev1.id, revisionNo: 1, open: false, current: false, date: { kind: "closed", at: rev1.closedAt }, chip: { kind: "outcome", outcome: "C" } },
+        { id: original.id, revisionNo: 0, open: false, current: false, date: { kind: "closed", at: original.closedAt }, chip: { kind: "outcome", outcome: "C" } },
       ],
     });
   });
@@ -70,7 +69,7 @@ describe("the Revision picker (RP-1253)", () => {
       kind: "button",
       revisionNo: 0,
       past: true,
-      banner: { revisionNo: 0, outcome: "C", latest: { id: rev2.id, revisionNo: 2 } },
+      banner: { outcome: "C", latest: { id: rev2.id, revisionNo: 2 } },
     });
     expect(view.kind === "button" && view.rows.map((r) => [r.revisionNo, r.open])).toEqual([[2, false], [1, false], [0, true]]);
   });
@@ -78,14 +77,14 @@ describe("the Revision picker (RP-1253)", () => {
   it("names no later Revision the viewer can't see: Rev 1 is their latest, with no banner (RP-1253-1)", () => {
     // The chain read leaves Rev 2 out for this viewer; nothing here may bring it back.
     const view = revisionPicker([original, rev1], rev1.id);
-    expect(view).toMatchObject({ kind: "button", revisionNo: 1, past: false, banner: null, latest: { id: rev1.id, revisionNo: 1 } });
+    expect(view).toMatchObject({ kind: "button", revisionNo: 1, past: false, banner: null });
     expect(view.kind === "button" && view.rows.map((r) => r.revisionNo)).toEqual([1, 0]);
     expect(JSON.stringify(view)).not.toContain(rev2.id);
   });
 
   it("gives the whole chain's banner to a viewer who sees Rev 2 (RP-1253-2)", () => {
     const view = revisionPicker([original, rev1, rev2], rev1.id);
-    expect(view).toMatchObject({ kind: "button", past: true, banner: { revisionNo: 1, latest: { id: rev2.id, revisionNo: 2 } } });
+    expect(view).toMatchObject({ kind: "button", past: true, banner: { latest: { id: rev2.id, revisionNo: 2 } } });
   });
 
   it("dates a Draft latest with no line: it has no Submission Date", () => {

@@ -14,8 +14,8 @@ export type RevisionPickerRow = {
   open: boolean;
   /** The latest the viewer sees: tagged "Current". */
   current: boolean;
-  /** "Submitted <date>" on the latest, "Returned <date>" (its close) on an earlier one; none without one. Event dates only. */
-  date: { kind: "submitted" | "returned"; at: string } | null;
+  /** The latest's Submission Date, an earlier one's close (shown as "Returned <date>"); none without one. Event dates only. */
+  date: { kind: "submitted" | "closed"; at: string } | null;
   /** The latest's Stage as the viewer reads it; an earlier one's Outcome (Code C), never "Rejected". */
   chip: { kind: "stage"; stage: Revision["stage"] } | { kind: "outcome"; outcome: WorkItemOutcome };
 };
@@ -31,11 +31,10 @@ export type RevisionPickerView =
       revisionNo: number;
       /** An earlier Revision is open: the button turns amber, the panel is read only. */
       past: boolean;
-      latest: { id: string; revisionNo: number };
       /** Newest first, the Original last. */
       rows: RevisionPickerRow[];
-      /** "You are viewing Rev 1 · Code C. Replaced by Rev 2." and "Go to Rev 2"; null on the latest. */
-      banner: { revisionNo: number; outcome: WorkItemOutcome | null; latest: { id: string; revisionNo: number } } | null;
+      /** "You are viewing Rev 1 · Code C. Replaced by Rev 2." and "Go to Rev 2": the open one's code and the latest the viewer sees; null on the latest. */
+      banner: { outcome: WorkItemOutcome | null; latest: { id: string; revisionNo: number } } | null;
     };
 
 /** The picker for the Revision `openId`, from the chain read (in order, the Original first). */
@@ -45,7 +44,6 @@ export function revisionPicker(revisions: readonly Revision[], openId: string): 
   if (revisions.length < 2 || open.stage.category === "draft") return open.revisionNo > 0 ? { kind: "label", revisionNo: open.revisionNo } : { kind: "none" };
   const newest = [...revisions].sort((a, b) => b.revisionNo - a.revisionNo);
   const top = newest[0]!;
-  const latest = { id: top.id, revisionNo: top.revisionNo };
   const past = open.id !== top.id;
   const rows = newest.map((r): RevisionPickerRow => {
     const current = r.id === top.id;
@@ -55,7 +53,7 @@ export function revisionPicker(revisions: readonly Revision[], openId: string): 
       revisionNo: r.revisionNo,
       open: r.id === open.id,
       current,
-      date: at === null ? null : { kind: current ? "submitted" : "returned", at },
+      date: at === null ? null : { kind: current ? "submitted" : "closed", at },
       chip: !current && r.outcome !== null ? { kind: "outcome", outcome: r.outcome } : { kind: "stage", stage: r.stage },
     };
   });
@@ -63,8 +61,7 @@ export function revisionPicker(revisions: readonly Revision[], openId: string): 
     kind: "button",
     revisionNo: open.revisionNo,
     past,
-    latest,
     rows,
-    banner: past ? { revisionNo: open.revisionNo, outcome: open.outcome, latest } : null,
+    banner: past ? { outcome: open.outcome, latest: { id: top.id, revisionNo: top.revisionNo } } : null,
   };
 }

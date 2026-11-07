@@ -96,12 +96,14 @@ export {
 export {
   RevisionBanner,
   RevisionPicker,
+  revisionName,
   type RevisionBannerLabels,
   type RevisionBannerProps,
+  type RevisionNameLabels,
   type RevisionPickerLabels,
   type RevisionPickerProps,
 } from "./components/revision/revision-picker.tsx";
-export { revisionPicker, type RevisionPickerRow, type RevisionPickerView } from "./components/revision/revision-picker-model.ts";
+export { revisionPicker } from "./components/revision/revision-picker-model.ts";
 export { ProfileSettings, type ProfileSettingsLabels, type ProfileSettingsProps, type SettingsCall } from "./components/profile/profile-settings.tsx";
 export { NotificationRow, type NotificationRowProps, type NotificationTone } from "./components/notifications/notification-row.tsx";
 export { NotificationCard, NotificationEmpty, NotificationGroup, type NotificationGroupProps } from "./components/notifications/notification-list.tsx";

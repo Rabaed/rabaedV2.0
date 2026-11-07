@@ -39,6 +39,7 @@ import { useRef, useState } from "react";
 /** An outcome whose rows open Comments in the Snag List (Code B: `create_items`, workflow-engine.md). */
 const opensComments = (outcome: Outcome | undefined) => outcome?.actions.some((a) => a.kind === "create_items") ?? false;
 import { useRouter } from "@/i18n/navigation";
+import { useRevisionPickerLabels } from "@/components/work-item-revision-picker";
 
 /**
  * The Submittal Panel's action bar (RP-1237, gap table v3 rows 22–28 and 48–51; the owner's Anatomy V3
@@ -81,6 +82,7 @@ export function SubmittalPanelActionBar({
   const tForm = useTranslations("workItems.form");
   const tSheet = useTranslations("submittalPanel.sheet");
   const tPicker = useTranslations("revision.picker");
+  const revisionLabels = useRevisionPickerLabels();
   const form = useWorkItemForm();
   const saveDraft = useSaveDraft(locale);
 
@@ -174,7 +176,8 @@ export function SubmittalPanelActionBar({
   });
 
   const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly"),
-    pastRevision: (revisionNo: number) => tPicker("readOnly", { revision: revisionNo > 0 ? tPicker("rev", { n: formatNumber(revisionNo, locale) }) : tPicker("original") }),
+    pastRevision: (revision: string) => tPicker("readOnly", { revision }),
+    revision: revisionLabels.revision,
   };
   const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks, pastRevision });
   const busy = opener.calls.pending || opener.waiting;

@@ -7,6 +7,7 @@ import { Badge } from "../data/badge.tsx";
 import { Button } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
+import { revisionName, type RevisionNameLabels } from "../revision/revision-picker.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { CodeTile } from "../work-item-page/page-parts.tsx";
@@ -132,8 +133,10 @@ export type SubmittalPanelBarChipLabels = {
   /** "Picked up by Ahmed": its Step Age follows as the shared dots and words (1–4+ weeks). */
   pickedUp: (name: string) => string;
   viewOnly: string;
-  /** "Rev 1 · read only" or "Original · read only": an earlier Revision open (RP-1253, gap row 24). */
-  pastRevision: (revisionNo: number) => string;
+  /** "Rev 1 · read only" or "Original · read only": an earlier Revision open (RP-1253, gap row 24), given its name. */
+  pastRevision: (revision: string) => string;
+  /** The Revision's name, as the picker words it. */
+  revision: RevisionNameLabels;
 };
 
 /**
@@ -149,7 +152,7 @@ export function SubmittalPanelWaiting({ chip, labels, locale }: { chip: Submitta
       : chip.kind === "pickedUp"
         ? ["lock", labels.pickedUp(chip.name[locale])]
         : chip.kind === "pastRevision"
-          ? ["history", labels.pastRevision(chip.revisionNo)]
+          ? ["history", labels.pastRevision(revisionName(labels.revision, chip.revisionNo, locale))]
           : ["eye", labels.viewOnly];
   return (
     <span

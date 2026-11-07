@@ -29,7 +29,7 @@ import {
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRememberedHref } from "@/components/remembered-module-queries";
 import { SubmittalPanelActionBar } from "@/components/submittal-panel-actions";
 import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
@@ -190,16 +190,12 @@ export function SubmittalPanelHost({
   const pastRevision = picked?.kind === "button" && picked.past ? picked.revisionNo : null;
   // Choosing a Revision is a new history entry (the browser's Back returns to the one before), and the
   // panel scrolls to the top once it is read; its file viewer, sheet and menus reset with the item.
-  const scrollOnRead = useRef(false);
+  const pathname = usePathname();
+  const [revisionOpened, setRevisionOpened] = useState<string | null>(null);
   const openRevision = (id: string) => {
-    scrollOnRead.current = true;
-    window.history.pushState(null, "", submittalPanelHref(window.location.pathname, window.location.search, id));
+    setRevisionOpened(id);
+    window.history.pushState(null, "", submittalPanelHref(pathname, window.location.search, id));
   };
-  useEffect(() => {
-    if (!itemId || !scrollOnRead.current) return;
-    scrollOnRead.current = false;
-    document.querySelector("[data-submittal-panel] .sdp-body")?.scrollTo({ top: 0 });
-  }, [itemId]);
   const tNew = useTranslations("newSubmittal");
   // On a phone the item is a page with a back arrow, as the create panel is (RP-1152 row 7; RP-1237 row 43).
   const phone = useMediaQuery(phoneQuery, false);
@@ -241,6 +237,7 @@ export function SubmittalPanelHost({
         labelledBy={item ? ids.labelledBy : undefined}
         label={item ? undefined : loading ? t("loading") : t("unavailable")}
         busy={loading}
+        scrollTopKey={item && item.id === revisionOpened ? item.id : null}
         identity={
           item && (
             <SubmittalPanelIdentity

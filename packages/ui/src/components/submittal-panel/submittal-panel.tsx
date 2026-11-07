@@ -86,6 +86,8 @@ export type SubmittalPanelProps = {
   label?: string;
   /** The item is being read: the body says so to assistive technology. */
   busy?: boolean;
+  /** Each time it changes to a value, the body scrolls to the top (an earlier Revision opened, RP-1253 gap row 20). */
+  scrollTopKey?: string | null;
   /** Top-bar controls before Close (the size switch, RP-1063). */
   topBarEnd?: ReactNode;
   identity?: ReactNode;
@@ -135,6 +137,7 @@ export function SubmittalPanel({
   labelledBy,
   label,
   busy = false,
+  scrollTopKey = null,
   topBarEnd,
   identity,
   route,
@@ -146,6 +149,10 @@ export function SubmittalPanel({
   className,
 }: SubmittalPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollTopKey !== null) body.current?.scrollTo({ top: 0 });
+  }, [scrollTopKey]);
   // A new item has no place among the loaded rows: nothing to count or move to (RP-1152 row 9).
   const creating = mode === "create";
   const position = creating ? undefined : itemPosition;
@@ -266,7 +273,7 @@ export function SubmittalPanel({
           </>
         )}
       </div>
-      <div aria-busy={busy || undefined} className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={body} aria-busy={busy || undefined} className="sdp-body min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="sdp-layout flex min-w-0">
           <div className="sdp-main min-w-0 flex-1 pb-6">
             {identity}

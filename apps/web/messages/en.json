@@ -3457,14 +3457,6 @@
       "sendBack": "Back to {company}, with no code.",
       "comments": "Your Comments continue in the Snag List."
     },
-    "revisions": {
-      "title": "Revisions you can see",
-      "open": "Open",
-      "original": "Original",
-      "draft": "Draft",
-      "revision": "Revision {n}",
-      "revisionNoNumber": "Revision {n}: no number yet"
-    },
     "sheet": {
       "title": "What happens when you confirm",
       "stage": "Stage becomes {stage}",

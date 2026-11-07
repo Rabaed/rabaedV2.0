@@ -555,7 +555,7 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
 });
 
 // RP-1253: the Revision picker's menu and the "Replaced by Rev n" banner come from this read alone. The original
-// and Rev 1 close at Code C in Building A; Rev 2 moves to Building B and is Submitted. An Owner Representative
+// and Rev 1 close at Code C in Building A; Rev 2 moves to Building C and is Submitted. An Owner Representative
 // covering only Building A sees the original and Rev 1, so for them Rev 1 is the latest: Rev 2 is never listed,
 // not even by its number, so nothing on the page can say it was replaced. The Project Admin sees the whole chain.
 describe("the Revision picker's chain (RP-1253-1, RP-1253-2)", () => {

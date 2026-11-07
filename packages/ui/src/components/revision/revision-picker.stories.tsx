@@ -1,4 +1,4 @@
-import type { RevisionChain } from "@rabaed/domain";
+import { formatDate, type Locale, type RevisionChain } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -44,6 +44,9 @@ const rev2: Revision = {
   outcome: null,
 };
 const draftRev2: Revision = { ...rev2, documentNumber: null, stage: stage("draft", "draft", "Draft", "مسودة"), submissionDate: null };
+
+/** An event date as the picker shows it. */
+const day = (at: string, locale: Locale) => formatDate(new Date(at), locale);
 
 const copy = {
   code: { en: "Code C", ar: "الرمز C" },
@@ -107,15 +110,15 @@ export const LatestOpen: Story = {
     await expect(context.canvas.queryByRole("status")).toBeNull();
     const menu = await openMenu(context);
     await expect(picker(context)).toHaveAttribute("aria-expanded", "true");
-    await expect(rowNames(menu)).toEqual(["Rev 2", "Rev 1", labels.name(0)]);
+    await expect(rowNames(menu)).toEqual(["Rev 2", "Rev 1", labels.revision.original]);
     const rows = within(menu).getAllByRole("menuitemradio");
     await expect(rows.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
     await expect(rows[0]).toHaveTextContent(labels.current);
     await expect(rows[1]).not.toHaveTextContent(labels.current);
-    await expect(rows[0]).toHaveTextContent(labels.submitted(rev2.submissionDate!));
+    await expect(rows[0]).toHaveTextContent(labels.submitted(day(rev2.submissionDate!, locale)));
     await expect(rows[0]).toHaveTextContent(rev2.stage.name[locale]);
-    await expect(rows[1]).toHaveTextContent(labels.returned(rev1.closedAt!));
-    await expect(rows[2]).toHaveTextContent(labels.returned(original.closedAt!));
+    await expect(rows[1]).toHaveTextContent(labels.closed(day(rev1.closedAt!, locale)));
+    await expect(rows[2]).toHaveTextContent(labels.closed(day(original.closedAt!, locale)));
     await expect(within(rows[1]!).getByText((_, el) => el?.getAttribute("data-outcome") === "C")).toBeTruthy();
     // The open row has the focus; the arrows move between rows; Esc closes the menu.
     await waitFor(() => expect(rows[0]).toHaveFocus());
@@ -163,10 +166,10 @@ export const EarlierOpen: Story = {
   play: async (context) => {
     const locale = storyLocale(context);
     const labels = revisionBannerLabels[locale];
-    await expect(picker(context)).toHaveTextContent(labels.name(0));
+    await expect(picker(context)).toHaveTextContent(labels.revision.original);
     await expect(picker(context)).toHaveAttribute("data-revision-picker", "past");
     const banner = context.canvas.getByRole("status");
-    await expect(banner).toHaveTextContent(labels.viewing(labels.name(0), "C"));
+    await expect(banner).toHaveTextContent(labels.viewing(labels.revision.original, "C"));
     await expect(banner).toHaveTextContent(labels.replaced("Rev 2"));
     await userEvent.click(within(banner).getByRole("button", { name: labels.goTo("Rev 2") }));
     await expect(context.args.onOpen).toHaveBeenCalledOnce();
@@ -192,7 +195,7 @@ export const LaterRevisionHidden: Story = {
     await expect(picker(context)).toHaveAttribute("data-revision-picker", "latest");
     await expect(context.canvas.queryByRole("status")).toBeNull();
     const menu = await openMenu(context);
-    await expect(rowNames(menu)).toEqual(["Rev 1", labels.name(0)]);
+    await expect(rowNames(menu)).toEqual(["Rev 1", labels.revision.original]);
     await expect(within(menu).getAllByRole("menuitemradio")[0]).toHaveTextContent(labels.current);
     await expect(document.body).not.toHaveTextContent("Rev 2");
     await userEvent.keyboard("{Escape}");

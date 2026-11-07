@@ -3,6 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { revisionPickerLabels } from "../../storybook/revision.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -85,7 +86,8 @@ const chipLabels = (locale: Locale): SubmittalPanelBarChipLabels => ({
   pool: (count) => (locale === "ar" ? `في مجموعة المراجعة · ${count}` : `In the review pool · ${count}`),
   pickedUp: (name) => (locale === "ar" ? `استلمه ${name}` : `Picked up by ${name}`),
   viewOnly: copy.viewOnly[locale],
-  pastRevision: (revisionNo) => `${revisionNo > 0 ? `Rev ${revisionNo}` : locale === "ar" ? "الأصلي" : "Original"} · ${locale === "ar" ? "للقراءة فقط" : "read only"}`,
+  pastRevision: (revision) => `${revision} · ${locale === "ar" ? "للقراءة فقط" : "read only"}`,
+  revision: revisionPickerLabels[locale].revision,
 });
 
 function BarDemo({ context, state, width, pastRevision = null }: { context: StoryContext; state: keyof typeof cases; width: number; pastRevision?: number | null }) {
