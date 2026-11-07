@@ -13,21 +13,54 @@ const cases = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../../
 /** The demo people's first names, as the cases' Who lines use them. */
 const PEOPLE = ["Saeed", "Hafiz", "Ali", "Omar", "Yousef", "Nasser", "Ahmed", "Sara", "Mohammed", "Layla", "Faisal", "Noura", "Hind"];
 
-/** The Document Numbers of a Project's Submittals as the seed raises them: each Contractor's MARs in its own series, from 0001, Drafts and Cancelled-before-send none. */
+/** The Document Numbers of a Project's Submittals as the seed raises them: each Contractor's own series per Type (MAR, SAR), from 0001, Drafts none. */
 function numbersInOrder(code: string, staged: Staged[]): Map<string, string> {
-  const next = { tmc: 0, beta: 0 };
+  const next = new Map<string, number>();
   const out = new Map<string, string>();
   for (const s of staged) {
     if (s.kind !== "submittal" || s.item.end === "draft") continue;
     const owner = s.item.owner ?? "tmc";
-    out.set(s.item.title, `${code}-MAR-${owner === "tmc" ? "01" : "02"}-${String(++next[owner]).padStart(4, "0")}`);
+    const key = `${owner}:${s.item.type}`;
+    next.set(key, (next.get(key) ?? 0) + 1);
+    out.set(s.item.title, `${code}-${s.item.type}-${owner === "tmc" ? "01" : "02"}-${String(next.get(key)).padStart(4, "0")}`);
   }
   return out;
 }
 
+describe("the UAT roles (RP-1248, RP-1249)", () => {
+  it("are UAT 01 to 05 so far, one person each, named for the role and the person", () => {
+    expect(UAT_ROLES.map((r) => [r.n, r.code, r.person])).toEqual([
+      ["01", "UAT01", "hafiz"],
+      ["02", "UAT02", "ali"],
+      ["03", "UAT03", "saeed"],
+      ["04", "UAT04", "ahmed"],
+      ["05", "UAT05", "mohammed"],
+    ]);
+    for (const r of UAT_ROLES) {
+      expect(r.name.en, r.n).toMatch(new RegExp(`^UAT ${r.n} · .+ \\(${r.personName.en}\\)$`));
+      expect(r.name.ar, r.n).toMatch(new RegExp(`^UAT ${r.n} · .+ \\(${r.personName.ar}\\)$`));
+    }
+  });
+});
+
 describe.each(UAT_ROLES)("UAT $n: $name.en", (role) => {
   const staged = role.staged();
   const mine = cases.filter((c) => c.role === role.n);
+  const packages = role.packages?.() ?? [];
+
+  it("names each of its Packages, by name, in the cases that use it, and builds them from its own items", () => {
+    const titles = new Set(staged.map((s) => s.item.title));
+    for (const p of packages) {
+      for (const id of p.cases) {
+        const c = mine.find((x) => x.id === id);
+        expect(c, `${p.package.name.en}: ${id} is in the section`).toBeDefined();
+        expect(`${c!.steps}\n${c!.expected}`, `${id} names ${p.package.name.en}`).toContain(p.package.name.en);
+      }
+      for (const title of p.package.existing) expect(titles.has(title), `${p.package.name.en} takes in ${title}`).toBe(true);
+      for (const d of p.package.drafts) expect(titles.has(d.title), `${d.title} is the Package's own, not a staged item too`).toBe(false);
+    }
+    expect(uatRecords(role).packages).toEqual(packages.map((p) => p.package));
+  });
 
   it("plans each Submittal's Document Number in the order the seed raises them", () => {
     const expected = numbersInOrder(role.code, staged);

@@ -626,117 +626,29 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Open a made-up Project address, /en/projects/00000000-0000-4000-8000-000000000000.
 - **Expected result:** Jeddah Corniche Villas is not in Hafiz's Projects, Home counts, search or notifications; the made-up address gives the one not-found page (404, never 403). Carried over from RP-463 A-11 (RP-474).
 
-## 2. Submittals (17 cases)
+## 2. Sign in as Ali · open UAT 02 · Contractor Project Manager (Ali) (45 cases)
+
+Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the one person named above: open it from Projects, not from Home.
 
 ### SUB-07 Submit with a Cover Note and an Internal Note
 
 - **Key:** `RP-704` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ali (TMC PM); Ahmed (DCL engineer)
+- **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Ali: Submit; Cover Note "Panels for Level 2, as drawing E-201"; Internal Note "Quantities checked against the BOQ"; confirm.
-  2. Ahmed opens the item.
-- **Expected result:** Stage is Pending Approval. TMC sees "With Design Consultants LLC", never a Consultant's name. Ahmed's history shows the Submit with the Cover Note by "TMC Constructions" (no person); the Internal Note is not there. The Submission Date is set.
-
-### SUB-08 Pick up and Return to pool in the Consultant pool
-
-- **Key:** `RP-707` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Layla (DCL Authorized Person); Ahmed, Sara (DCL engineers); Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Sara covers Mechanical only in the demo (RP-1207), so an Electrical MAR's pool is Ahmed alone: Layla gives Sara Electrical again (Participants > Members > Visibility) before the Submit.
-  2. Ahmed and Sara open the Submitted MAR.
-  3. Ahmed: Pick up.
-  4. Sara refreshes Need My Action and her bell.
-  5. Ahmed: Return to pool, then Pick up again.
-- **Expected result:** Both Engineers see "not picked up yet: ..." with both names; Mohammed is not in this pool and reads it read-only. After Pick up the item leaves Sara's Need My Action and her unread "Step reached" is withdrawn; Return to pool is offered because the pool has two Members and does not bring the notification back.
-
-### SUB-09 The Consultant reads the Form and cannot edit it
-
-- **Key:** `RP-709` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ahmed (DCL engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Once the item is Ahmed's (at once, as Sara covers Mechanical only, RP-1207; or after a Pick up), read every Form section, open the Datasheet PDF and the Sample photo.
-  2. Try to change an answer.
-- **Expected result:** Every answer, the Items table and the total are shown read-only; Documents are frozen; the photo shows time and place. No edit control is offered (the Form is the raiser's).
-
-### SUB-10 Send to Manager needs the verification
-
-- **Key:** `RP-712` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ahmed (DCL engineer); Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ahmed: Send to Manager with the verification empty.
-  2. Answer Sample checked Yes, Matches specification No; leave the Verification note empty.
-  3. Write the note, set Recommended Code C and an Internal Note.
-  4. Confirm.
-- **Expected result:** Steps 1 and 2 are refused: the Verification note becomes required when Matches specification is No. After step 4 the item sits with Mohammed, the only Consultant Manager, at once. Ahmed's answers, Recommended Code and Internal Note are in DCL's history only, marked internal.
-
-### SUB-11 Code A closes the item with the final verification
-
-- **Key:** `RP-716` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the item; Approve A.
-  2. Check the Final verification pop-up is filled from Ahmed's reply; Remarks left empty.
-  3. Confirm.
-- **Expected result:** Remarks are optional with Code A. The item closes Approved, Code A, and accepts no more moves. Download PDF appears (SIG-02).
-
-### SUB-12 Code B turns each comment into a Comment
-
-- **Key:** `RP-718` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Mohammed (DCL manager); Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On a new Submitted MAR, Mohammed: Approve with Comments B with three comment rows and Remarks.
-  2. Ali opens the MAR and the Snag List.
-- **Expected result:** The MAR closes at Code B. Three Comment items are in the Snag List, raised by Design Consultants and Open with TMC. The MAR page reads "Comments: 3 open / 0 closed". Remarks are required with B.
-
-### SUB-13 Code C needs Remarks and Return to Engineer works
-
-- **Key:** `RP-720` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Mohammed (DCL manager); Ahmed (DCL engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ahmed sends a MAR to Mohammed with Matches specification No.
-  2. Mohammed: Return to Engineer, reason "Check the photometric report".
-  3. Ahmed sends it again unchanged.
-  4. Mohammed: Revise and Resubmit C with Remarks empty, then with Remarks.
-- **Expected result:** Return to Engineer gives it back to Ahmed. Code C is refused until Remarks are written, then closes at C with its Remarks and final verification. TMC is offered Create Revision (SUB-15).
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0001 "SUB-07 Wiring devices – ready to Submit", which Hafiz sent for review and is with you.
+  2. Submit; Cover Note "Sockets for Level 2, as drawing E-201"; Internal Note "Quantities checked against the BOQ"; confirm.
+- **Expected result:** UAT02-MAR-01-0001 is in Pending Approval. Ali reads "With Design Consultants LLC", never a Consultant's name (V14). In the history the Submit shows the Cover Note, and the Internal Note is marked internal, TMC's only (V5). The Submission Date is set.
 
 ### SUB-18 Download gives the item as it last arrived
 
 - **Key:** `RP-735` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ali (TMC PM); Mohammed (DCL manager)
+- **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. On a Submitted MAR choose Download from the row menu as Ali, then as Mohammed.
-  2. Try Download on a Draft.
-- **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers Download of its Working Copy.
-
-### SUB-20 A SAR closed at Code A adds the supplier to the list
-
-- **Key:** `RP-739` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz; Ali; Ahmed; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Raise a Supplier Approval Request "UAT SUB-20 Delta Cables" (Electrical), send, Submit.
-  2. Ahmed (it is his at once: Sara covers Mechanical only, RP-1207) sends to Manager; Mohammed: Approve A.
-  3. Project Settings > Approved Supplier List.
-- **Expected result:** The SAR runs 2 to 2 and closes. "UAT SUB-20 Delta Cables" is listed for Electrical, approved. A second SAR for the same name in other letter case adds no second entry. A MAR now offers it under Approved supplier.
-
-### SUB-21 A DAR ends with the Owner's review
-
-- **Key:** `RP-741` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz; Ali; Mohammed; Noura (Al Waha PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Raise a Document Approval Request "UAT SUB-21 Cable schedule", send, Ali Submits.
-  2. Mohammed recommends Code A to the Owner.
-  3. Noura opens it and chooses Confirm.
-- **Expected result:** Mohammed's Recommendation goes to Noura, who holds the Owner's review; Confirm issues Code A and closes the item. TMC sees it "With Owner review" until then (VIS-27).
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: on UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants" choose Download from the row menu.
+  2. Choose Download on the Draft "SUB-18 LED downlights – TMC Draft".
+- **Expected result:** The download holds the item as it last arrived at Design Consultants: shared answers, shared moves by Company only, no Step, no person, no Internal Note (V5, V14). The Draft offers Download of its Working Copy.
 
 ### SUB-22 Watch and Unwatch
 
@@ -744,7 +656,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open a Submitted MAR; note Watching (raiser and Submitter watch from the start).
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants"; note Watching (you Submitted it, so you watch it from the start).
   2. Unwatch, then Watch again.
 - **Expected result:** The button flips between Watch and Watching. Nobody sees who else watches an item or how many.
 
@@ -754,12 +666,12 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Submittals List: search by Document Number, Subject, Type, Trade, Location.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals List: search by Document Number (UAT02-MAR-01-0007), Subject, Type, Trade, Location.
   2. Filter panel: pick several values for Type, Stage, With, Step Age, Submission Date.
   3. Toggle Need My Action.
   4. Sort by a column; Columns > move one > Save as my default; reload.
   5. Group by Stage.
-- **Expected result:** Results match the filters; Stage counts match the rows; Need My Action keeps only items waiting on Ali (his own Drafts stay in view, uncounted); the saved columns come back after reload; the column header for the holder reads With.
+- **Expected result:** Results match the filters; Stage counts match the rows; Need My Action keeps only the items waiting on Ali, each reading With Ali Sonour; TMC's Drafts stay in view, uncounted; the saved columns come back after reload; the column header for the holder reads With.
 
 ### SUB-24 List export holds what the viewer sees
 
@@ -767,11 +679,11 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Export > what you see > CSV, then Excel.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals List: Export > what you see > CSV, then Excel.
   2. Export the whole table.
-  3. Search first, then export.
-  4. Put =1+1 in the Subject of a Draft and export.
-- **Expected result:** Rows and columns equal the screen; the whole table adds every List field; under a search only the rows read so far; a cell that looks like a formula is written as text.
+  3. Search "Code" first, then export.
+  4. Find the Draft "=1+1 SUB-24 Subject that looks like a formula" in the export.
+- **Expected result:** Rows and columns equal the screen; the whole table adds every List field; under a search only the rows read so far; the Draft's Subject "=1+1 SUB-24 Subject that looks like a formula" is written as text, never worked out as a formula. Nothing of Beta Build's is in any export.
 
 ### SUB-25 Kanban: columns, counts and moving a card
 
@@ -779,10 +691,10 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Kanban: columns are the Stages with counts.
-  2. Drag a card, or use Move to, to a Stage Ali's Step allows.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Kanban: columns are the Stages with counts.
+  2. Drag UAT02-MAR-01-0003 "SUB-25 Emergency luminaires – move on the Kanban" from Internal Review to Pending Approval, or use Move to.
   3. Open the filter panel (Owner, Role, Created date).
-- **Expected result:** Dropping or choosing a move opens the same Action Form as the item page; the card moves after confirm; a move that is not allowed is not offered. Internal Review shows TMC's own Steps with counts (Engineer, PM). The other Company is one lane by its name.
+- **Expected result:** Dropping or choosing a move opens the same Action Form as the item page (the Submit pop-up); the card moves after confirm; a move that is not allowed is not offered. Internal Review shows TMC's own Steps with counts (Engineer, PM). Design Consultants is one lane by its name (V14).
 
 ### SUB-26 Project Dashboard: Type cards and Activity Feed
 
@@ -790,9 +702,9 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open the Project (Dashboard).
+  1. Projects > UAT 02 · Contractor Project Manager (Ali): the Dashboard.
   2. Click a number on a Type card.
-- **Expected result:** Type cards show counts over what Ali sees; each number opens the List with the same filter and the same count. The Activity Feed sits beside them; it lists Company names for other Companies and no person of theirs.
+- **Expected result:** Type cards show counts over what Ali sees; each number opens the List with the same filter and the same count. The Activity Feed sits beside them; it lists Design Consultants by Company name and no person of theirs (V14), and nothing of Beta Build's (V3).
 
 ### SUB-27 Home: counts, Need My Action list, Recent activity
 
@@ -801,29 +713,8 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Open Home.
-  2. Compare Active Projects, Need My Action, My Company 4+ weeks at step, My Company waiting with others and each Project card's submittal count with the Project's List.
-- **Expected result:** Every number equals the sum of the Project reads and opens the matching list; Drafts are never counted as Need My Action; Recent activity shows at most four entries.
-
-### SUB-28 Activity Feed page
-
-- **Key:** `RP-759` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Project > Activity Feed after some Submits and Codes.
-- **Expected result:** Entries read as events (submitted, returned, approved) with the Project; TMC appears by Company name only; no answers_changed or Document upload entries.
-
-## 3. Workflows (15 cases)
-
-### WF-01 Every Member reads the Project Workflows
-
-- **Key:** `RP-763` · **Part:** WF · **Round:** 0
-- **Sign in as:** Ali (TMC PM); Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Project > Settings > Workflows.
-  2. Open the MAR Workflow and a published Version.
-- **Expected result:** The page lists which Workflow each Work Item Type runs, its Version and every published Version whole, with every Company's Steps and Returns. Neither can open the builder or see a draft.
+  2. Compare Active Projects, Need My Action, My Company 4+ weeks at step, My Company waiting with others and the UAT 02 card's submittal count with Projects > UAT 02 · Contractor Project Manager (Ali)'s List.
+- **Expected result:** Every number equals the sum of the Project reads and opens the matching list; Drafts are never counted as Need My Action; Recent activity shows at most four entries. Home sums every Project Ali is on, every UAT Project among them.
 
 ### WF-02 View workflow on an item pins its Version
 
@@ -831,18 +722,384 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open a Submitted MAR; click Workflow: name, Version n.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants"; click Workflow: name, Version n.
   2. Switch map and list.
-  3. Open the same item as Ahmed and move it between DCL Steps.
-- **Expected result:** The drawer shows the Version the item is pinned to. Ali's own Steps are shown one by one; Design Consultants is one part marked With Design Consultants LLC. Ahmed sending to Mohammed changes nothing Ali reads.
+- **Expected result:** The drawer shows the Version the item is pinned to. Ali's own Steps are shown one by one; Design Consultants is one part marked With Design Consultants LLC, with none of its Steps marked and no name of theirs (V14).
+
+### PKG-01 Packages is a third view beside List and Kanban
+
+- **Key:** `RP-892` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > the view toggle.
+  2. Choose Packages.
+- **Expected result:** A Packages Kanban with three columns Open, In Progress and Done, each with a count: UAT 02's seeded TMC Packages are under Open (PKG-03, PKG-04, PKG-05) and In Progress ("PKG-07 Package to add to", "PKG-08 Package in progress"). A New Package button for TMC; search and filters (Trade, owning Company). Matches packages.html except where spec RP-616 differs. No Package of Beta Build's appears.
+
+### PKG-02 Open a Package and number it
+
+- **Key:** `RP-895` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages > New Package: name EN and AR.
+  2. Open it.
+  3. Make a second one.
+- **Expected result:** The Package gets TMC's next Package number, after the six seeded ones (PKG-001 to PKG-006), shown left to right also in Arabic, beside TMC's name, Open, with no submittals. The second gets the next number.
+
+### PKG-03 Add submittals from Drafts and review
+
+- **Key:** `RP-897` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-03 Package to fill" > Add items.
+  2. Pick the Drafts "PKG-03 Earthing – Draft 1" and "PKG-03 Busbar trunking – Draft 2" and UAT02-MAR-01-0010 "PKG-03 Smoke detectors – in Internal Review".
+  3. Try to add "PKG-03 Wiring devices – in another Package", which is in "PKG-03 Package holding a Draft".
+- **Expected result:** Only TMC's own submittals Ali can see are offered, with search and a Trade filter. The Draft already in PKG-03 Package holding a Draft is marked and cannot be picked: a submittal belongs to at most one Package.
+
+### PKG-04 While Open: remove, rename, delete
+
+- **Key:** `RP-898` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-04 Package to change".
+  2. Remove "PKG-04 LED downlights – in the Package".
+  3. Rename the Package.
+  4. Delete it.
+- **Expected result:** Remove and delete work only while Open; Delete says the Drafts stay, without a Package. Rename is allowed in every status.
+
+### PKG-05 Submit Package is all or nothing
+
+- **Key:** `RP-899` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-05 Package to submit" > Add items: the Draft "PKG-05 Lighting fixtures – Datasheet missing".
+  2. Open Submit Package.
+  3. Remove that Draft again, then Submit Package and confirm.
+- **Expected result:** A not-ready list names "PKG-05 Lighting fixtures – Datasheet missing" with each required answer it lacks (its Description, Items and Datasheet) and links to it; Submit is disabled until the list is empty. After the removal one confirm submits "PKG-05 Exit signs – ready Draft", which gets the next Document Number in TMC's MAR series; the Package is In Progress. If any item fails, none is submitted.
+
+### PKG-07 After Submit: add yes, remove no
+
+- **Key:** `RP-684` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-07 Package to add to" (UAT02-MAR-01-0011 "PKG-07 Cable trays – Submitted, in a Package", with Design Consultants).
+  2. Add the Draft "PKG-07 Wiring devices – Draft to add".
+  3. Try to remove an item.
+  4. Rename the Package.
+- **Expected result:** Adding works; removing is not offered. Rename works and is recorded.
+
+### PKG-08 The Package chip and filter on submittals
+
+- **Key:** `RP-687` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: List and Kanban.
+  2. Use the Package filter: "PKG-08 Package in progress".
+  3. Click the Package chip on the card of UAT02-MAR-01-0005 "PKG-08 Fire alarm control unit – Submitted, in a Package" and on its item page.
+- **Expected result:** Cards and the item page show the Package's number with its name; the chip opens the Package page; the filter narrows List and Kanban to its items. Package is not a Form field.
+
+### PKG-11 Comments show on the Package for information
+
+- **Key:** `RP-696` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-08 Package in progress" > its Comments section. UAT02-MAR-01-0006 "PKG-11 Lighting control panel – Code B" closed at Code B with two Comments.
+- **Expected result:** The Comments raised from its submittals are listed with their Stage and the note that Comments are not part of the Package; they do not change its status.
+
+### SIG-01 Every Transition is confirmed in its pop-up
+
+- **Key:** `RP-702` · **Part:** SIG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0002 "SIG-01 Cable trays – Submit in its pop-up" and choose Submit.
+  2. Look for a Sign button or checkbox.
+  3. Confirm.
+- **Expected result:** The pop-up keeps the Transition's own label; there is no separate signing step. Taking it without confirming (API without confirmed true) is refused not_confirmed. After confirm the history records who, from which Participant and when.
+
+### SIG-02 Download PDF on a closed item makes the sealed record
+
+- **Key:** `RP-705` · **Part:** SIG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0007 "Main distribution board – Code A" and press Download PDF.
+- **Expected result:** A PDF downloads through a short-lived link. If the record is not made yet the page says it is not ready and to try again in a minute; no partial file.
+
+### SIG-03 The tracer record prints title, outcome and approval flow
+
+- **Key:** `RP-711` · **Part:** SIG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open the record of UAT02-MAR-01-0007 "Main distribution board – Code A" (SIG-02).
+  2. Check the title block, outcome and date, Verification Code, link, approval flow, footer.
+- **Expected result:** Type names and code, Subject, Project and Document Number UAT02-MAR-01-0007 (left to right, Rev included); the outcome with the date; the Verification Code and verification link; each Transition on the path with label, Member, Positions, Company, date and time (Riyadh time) and its content hash; Arabic then English; Latin digits; every page footed Issued electronically through Rabaed, Verification Code, page X of Y. (Page 1 and Form body come with SIG-08.)
+
+### SIG-08 Record page 1 and Form body
+
+- **Key:** `RP-719` · **Part:** SIG · **Round:** 2
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Download the record of UAT02-MAR-01-0007 "Main distribution board – Code A".
+  2. Read page 1: Companies, title block, parties, classification, final decision with chips and QR, reply, approval flow, then the Form.
+- **Expected result:** The layout matches form-engine section 6 items 1 to 9; tables and photos print as tables and a photo grid; Documents are listed.
+
+### SIG-12 Signature cards, Stamps, Review Comments, endings and Disclaimer
+
+- **Key:** `RP-731` · **Part:** SIG · **Round:** 2
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Download the records of UAT02-MAR-01-0007 "Main distribution board – Code A", UAT02-MAR-01-0008 "Sub-distribution boards – Code C" and UAT02-MAR-01-0009 "LV power cables – Code D".
+  2. Read the Signatures, Stamps and ending pages.
+- **Expected result:** One card per Transition on the path with Signature as it was then; the Stamp of every acting Company; Review Comments numbered; a Next step card with Code C (Revision n+1) or D (a new submittal replaces this one); an internal reviewer's card says Reviewed with no Code; the Disclaimer in Arabic and English (V7).
+
+### SIG-13 Appendix of Documents
+
+- **Key:** `RP-733` · **Part:** SIG · **Round:** 2
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Download the record of UAT02-MAR-01-0007 "Main distribution board – Code A", closed with its Datasheet PDF and a Sample photo.
+- **Expected result:** The shared Datasheet PDF and the Sample photo follow as pages of the appendix; a Company's internal Documents are not included. (No DWG is seeded on UAT 02: a file other than PDF or image, attached inside the PDF, is not checked here.)
+
+### SIG-16 Working Copy of an unfinished item
+
+- **Key:** `RP-749` · **Part:** SIG · **Round:** 2
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants" and request its Working Copy.
+- **Expected result:** The Working Copy is watermarked Not Final / غير نهائي (or the Project text), unsealed, with no Verification Code; Companies by name only, no person, no Signature or Stamp, and nothing of Design Consultants' own Steps (V7, V14).
+
+### SNG-01 The Snag List tab: List, Kanban and empty state
+
+- **Key:** `RP-751` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List.
+  2. Switch List and Kanban.
+  3. Use the Types chips (All, Snags, Comments), Stage, Trade, Company and search by number (UAT02-SNG-03-0001) or Subject.
+- **Expected result:** Items are grouped by Stage with counts; type chips and Stage counts count only visible items; the Comments raised from UAT02-MAR-01-0006 are under Comments. Filters with no match say nothing you can see matches. (The empty list, No snags. Nice work., shows on a Project with none.)
+
+### SNG-05 A Contractor raises a Snag on itself
+
+- **Key:** `RP-758` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List > New Snag raised by TMC on its own work: Subject "UAT SNG-05 Socket not level", Trade Electrical Works, Location Tower A Level 03.
+  2. Move it through Start work, Resolve, Verify, Close.
+- **Expected result:** The raiser holds Draft and Verify, so TMC works and closes its own Snag; Design Consultants and Beta Build never see it (informing the Consultant is SNG-09).
+
+### SNG-06 Comments from Code B live in the Snag List
+
+- **Key:** `RP-760` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List > Comments: the two raised from UAT02-MAR-01-0006 "PKG-11 Lighting control panel – Code B".
+  2. Resolve one.
+  3. Open the MAR.
+- **Expected result:** Each Comment shows Raised from (UAT02-MAR-01-0006, its Subject, Code B), is raised by Design Consultants and held by TMC, and counts on the MAR's Comments line (2 open / 0 closed). After the Resolve the Comment waits at Design Consultants, who raised it, to be closed. The photo thumbnail is the first photo the viewer may see.
+
+### SNG-07 New offers no Comment type
+
+- **Key:** `RP-762` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List > New.
+- **Expected result:** The menu offers Snag (and later Site Observation and Question) and not Comment; Comments only come from a Code B.
+
+### SNG-12 Bulk actions and exports
+
+- **Key:** `RP-782` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List: select UAT02-SNG-03-0001 "SNG-12 Loose cable tray cover" and UAT02-SNG-03-0002 "SNG-12 Missing socket cover"; reassign within TMC; Export Excel.
+- **Expected result:** Bulk applies within TMC only; the export holds exactly the visible rows.
+
+### SNG-15 Snag PDF report
+
+- **Key:** `RP-789` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Snag List > Export PDF report.
+- **Expected result:** A PDF of the visible Snags with photos, UAT02-SNG-03-0001 and UAT02-SNG-03-0002 among them; no Snag the viewer cannot see.
+
+### NOT-01 The bell, the Notifications page and Mark all as read
+
+- **Key:** `RP-871` · **Part:** NOT · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Look at the bell badge: Hafiz's items in Projects > UAT 02 · Contractor Project Manager (Ali) (UAT02-MAR-01-0001 to 0003) reached you when he sent them for review.
+  2. Open Notifications; open one entry.
+  3. Mark all as read.
+- **Expected result:** The badge counts unread; each entry reads Reached you at <Step> and opens the item; Mark all as read clears the badge. In-app notifications are always sent: there is no in-app switch.
+
+### I18N-07 Desktop 1366 and 1920
+
+- **Key:** `RP-692` · **Part:** I18N · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Home, then Projects > UAT 02 · Contractor Project Manager (Ali): List, Kanban and UAT02-MAR-01-0004, at 1366 and 1920 px.
+- **Expected result:** Layout follows the reference screens at both widths (see strategy section 3 for the ui-ux-tester pass).
+
+### UX-02 Home matches the design and reads at a glance
+
+- **Key:** `RP-924` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Home at 1366 and 1920, EN and AR.
+  2. Follow each number and row.
+- **Expected result:** Matches the kit Home with RP-405 changes: Active Projects, Need My Action, 4+ weeks at their step (Step Age dots, never Overdue), Waiting with others, Recent activity. Every number opens the List with its filter.
+
+### UX-03 Projects page and Project Dashboard
+
+- **Key:** `RP-925` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Projects, then Projects > UAT 02 · Contractor Project Manager (Ali)'s Dashboard, EN and AR, 1366 and 1920.
+  2. Click each card figure.
+- **Expected result:** Cards match the kit; the Dashboard Type cards, Revision line and Activity Feed are laid out as designed; no squashed card (the RP-405 audit fault); each figure opens the List with the same filter.
+
+### UX-08 Activity page
+
+- **Key:** `RP-930` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Activity, EN and AR.
+  2. Page back; open entries.
+- **Expected result:** Laid out as design/prompts/activity.md: entries worded from what happened, another Company by name only, newest first, paging that keeps its place.
+
+### UX-09 Notifications page and the bell
+
+- **Key:** `RP-931` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open the bell, then the Notifications page, EN and AR.
+  2. Open an entry; Mark all as read.
+- **Expected result:** Laid out as design/prompts/notifications.md: unread state, grouping, the item it opens, empty state; the bell badge matches the unread count.
+
+### UX-10 Profile and notification settings
+
+- **Key:** `RP-932` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Profile, EN and AR.
+  2. Change language, email per group, Pause all, a Project mute (UAT 02).
+- **Expected result:** Laid out as profile-notification-settings.md: no In-app switch; each change confirms it saved; the language change keeps the page.
+
+### UX-23 Packages view and Package page
+
+- **Key:** `RP-945` · **Part:** UX · **Round:** 1
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages, then "PKG-08 Package in progress", EN and AR, 1366 and 1920: cards, counts, item table, bulk bar, Comments section.
+- **Expected result:** Matches packages.html where spec RP-616 does not differ (the table of known differences in design/prompts/packages.md).
+
+### UX-26 Documental Record and Working Copy read like the owner samples
+
+- **Key:** `RP-948` · **Part:** UX · **Round:** 2
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Download the Documental Record of UAT02-MAR-01-0007 "Main distribution board – Code A" and the Working Copy of UAT02-MAR-01-0004, EN and AR record language.
+  2. Compare with the owner samples of RP-151.
+- **Expected result:** Page 1, the Form body, Signature cards and appendix follow the samples where they agree with visibility.md and GLOSSARY.md; Latin digits; Document Numbers left to right; readable when printed.
+
+### VIS-08 The Record Data inside the PDF holds only what the pages print
+
+- **Key:** `RP-766` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open the record of UAT02-MAR-01-0007 "Main distribution board – Code A" (SIG-02): open the PDF's attachments and extract the Record Data XML.
+  2. Compare each value with the PDF text.
+- **Expected result:** Every value in the XML (Transitions on the path with name, Position, Company, times and hashes; Verification Code and link) is printed in the PDF; the XML holds no Internal Note, Recommended Code, Chat or Return (V7).
+
+### VIS-20 Search finds nothing inside answers or replies
+
+- **Key:** `RP-798` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: UAT02-MAR-01-0008 "Sub-distribution boards – Code C" was closed with Mohammed's Remarks "Revise and resubmit with the specified finish." and, inside Design Consultants, Ahmed's Internal Note "Recommend resubmission: see the verification."
+  2. Search "resubmit" and "resubmission" in the List and Kanban.
+  3. Search by Document Number, Subject, Type, Trade, Location and "Design Consultants".
+- **Expected result:** No result for either word: Search never reads answers, replies or notes. Search by Document Number, Subject, Type, Trade, Location and the raiser Company works; a holder phrase finds TMC's own people and Design Consultants by name only. Opening UAT02-MAR-01-0008 shows the Code and its Remarks, never the Internal Note or Ahmed's Recommended Code (V5).
+
+### VIS-25 The workflow map folds the other Company into one block
+
+- **Key:** `RP-816` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants" > View workflow.
+  2. Read the map and the list.
+- **Expected result:** Ali reads the whole Version with every Company's Steps, but the item is With Design Consultants LLC over Design Consultants' part: none of its Steps is marked, and no name of theirs shows (V14). Design Consultants' own moves on it (Ahmed to Mohammed) change nothing Ali reads.
+
+### VIS-30 Another Project or a non-admin cannot read or change Tower setup
+
+- **Key:** `RP-832` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Settings: Trades and Locations (look for add, rename and deactivate on a Scope), Numbering (the counters), Workflows, Visibility.
+- **Expected result:** Ali reads UAT 02's Trades, Scopes, Locations and published Workflows (V16); he is offered no change, and none of the numbering counters. A change asked for anyway (an old link, the API) gets the plain 404 and changes nothing. Saeed, the Project Admin, makes these changes (UAT 03).
+
+### VIS-38 After the Submit only the Step holder changes anything
+
+- **Key:** `RP-855` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open UAT02-MAR-01-0004 "Exit signs – Submitted to Design Consultants", which you Submitted.
+  2. Look for an edit control on the Form, a Document upload, and any Transition.
+- **Expected result:** After the Submit only the Step holder changes anything: Design Consultants hold it, so Ali is offered no Transition, no Form edit and no Document upload; the Form and Documents read as they were Submitted (V13). A change asked for anyway (an old link, the API) is refused and changes nothing.
+
+### VIS-57 The Activity Feed names other Companies only by name
+
+- **Key:** `RP-912` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ali (TMC PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Activity Feed and the Dashboard's Recent activity: the seed Submitted UAT02-MAR-01-0004, and Design Consultants reviewed and closed UAT02-MAR-01-0006 to 0009.
+  2. Search Submittals for "Beta Build", UAT02-MAR-02-0001 and UAT02-MAR-02-0002.
+- **Expected result:** Ali sees TMC's people by name and Design Consultants by Company name only: no person of theirs, Pick up, Send to Manager, Internal Note, Recommended Code, answers_changed or Document upload (V5, V14). Nothing of Beta Build's appears in the feed, a List, a count or a search: not its Draft "Beta Build – standby generator, Draft", nor UAT02-MAR-02-0001 (with Beta Build's PM) or UAT02-MAR-02-0002 (Submitted) (V1, V3). No setup changes appear.
+
+## 3. Sign in as Saeed · open UAT 03 · Project Admin (Saeed) (24 cases)
+
+Every case here is run in **UAT 03 · Project Admin (Saeed)**, as the one person named above: open it from Projects, not from Home.
 
 ### WF-03 Duplicate a Rabaed Default into the Project
 
 - **Key:** `RP-770` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed (TMC Authorized Person, Project Admin)
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Settings > Workflows > duplicate the MAR Workflow as "UAT MAR copy".
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: duplicate the MAR Workflow as "UAT MAR copy".
   2. Open it.
 - **Expected result:** A draft Version 1 of a new Project Workflow with no link to the original. Only Project Admins see it.
 
@@ -852,7 +1109,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open the copy in the builder.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: open "UAT MAR copy" (WF-03) in the builder.
   2. Drag a Step from the palette into a Stage band; connect two Steps by dragging from a dot.
   3. Undo and redo (Ctrl+Z, Ctrl+Shift+Z).
   4. Auto-layout; switch Curved and Orthogonal arrows.
@@ -865,31 +1122,20 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. In the copy, leave a Step with no way forward.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: in "UAT MAR copy", leave a Step with no way forward.
   2. Validate.
   3. Fix it, Publish with no Change Note, then with one.
 - **Expected result:** Validate counts the errors and selects the first; Publish lists what changed, the count of items that keep their Version and requires the Change Note. After publishing the builder stays open.
 
-### WF-06 A new Version applies to new items only
-
-- **Key:** `RP-779` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed; Hafiz; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Bind the published copy to MAR (Settings > Workflows > Use for MAR).
-  2. Hafiz raises a new MAR.
-  3. Open an older MAR.
-- **Expected result:** The new MAR runs the new Version; the older item keeps its Version and shows a notice that a later Version exists. Binding another Workflow reaches only items created afterwards.
-
 ### WF-07 Versions history shows Change Notes and running counts
 
 - **Key:** `RP-781` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Hafiz
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open the Workflow's Versions page.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: open the Versions page of "UAT MAR copy" once it has two (WF-05).
   2. Compare two Versions.
-- **Expected result:** Newest first with date and Change Note; the N running figure counts only items the reader sees; Compare marks added, removed and changed. Hafiz sees Versions but no Change Note.
+- **Expected result:** Newest first with date and Change Note; the N running figure counts only items the reader sees; Compare marks added, removed and changed. Change Notes are the Workflow's authors' only: a plain Member reads the Versions without them.
 
 ### WF-08 Exception for one Participant must not name it
 
@@ -897,9 +1143,9 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Copy MAR as "Beta Build MARs" and try to bind it as an exception for Beta Build.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: copy MAR as "Beta Build MARs" and try to bind it as an exception for Beta Build.
   2. Rename it "MARs, short route" and bind it for Beta Build.
-- **Expected result:** The first is refused because the name holds a Participant's name. The second binds; Yousef's new MARs run it, TMC's do not. Others learn of no Participant.
+- **Expected result:** The first is refused because the name holds a Participant's name. The second binds: the MAR row lists the exception for Beta Build to the Project Admin, and nothing in the Workflow's name or Versions names a Participant, so others learn of none.
 
 ### WF-09 Build a Workflow with a Send Back (fixture FX-SB)
 
@@ -907,21 +1153,10 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Copy the MAR Workflow.
-  2. Add a Send Back from Consultant Engineer to the Contractor Draft Step; on the Draft Step set After a Send Back to Comment only (and a second copy to Edit the Form).
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: copy the MAR Workflow.
+  2. Add a Send Back from Consultant Engineer to the Contractor Draft Step; on the Draft Step set After a Send Back to Comment only (and, in a second copy, to Edit the Form).
   3. Validate, Publish, bind.
-- **Expected result:** It validates and publishes. If publish refuses the Send Back, record a Bug: VIS-15 and VIS-16 need this Workflow.
-
-### WF-10 Drafts visible to: the author only
-
-- **Key:** `RP-790` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Hafiz; Omar; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In a copy, set the Draft Step to Drafts visible to the author only; publish and bind.
-  2. Hafiz saves a Draft.
-  3. Omar and Ali open the List and the item URL.
-- **Expected result:** Omar and Ali see no Draft, no count, and the 404 page; Hafiz sees and edits it. After Send for Review TMC reads it as before.
+- **Expected result:** It validates and publishes. If publish refuses the Send Back, record a Bug: the Send Back visibility cases (VIS-14, VIS-15) need this Workflow.
 
 ### WF-11 Transition rules: Restrict, Validate and Effects
 
@@ -929,98 +1164,41 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. In a copy open a Transition > Add rule.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: in a copy open a Transition > Add rule.
   2. Add Restrict by Position, a Validate with a message in EN and AR, an Effect Offer Assign to.
   3. Test run the Workflow.
 - **Expected result:** Rules show under Condition with AND between Restrict rules; Test run opens each pop-up in test mode and saves nothing; a Transition whose Restrict fails is not offered.
 
-### WF-12 Return goes to the author, not the other engineer
-
-- **Key:** `RP-794` · **Part:** WF · **Round:** 0
-- **Sign in as:** Hafiz; Omar; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Omar (Tower 2 only) and Hafiz both cover a Tower 2 item.
-  2. Hafiz sends a Tower 2 Draft for review.
-  3. Ali Returns it.
-- **Expected result:** It goes back to Hafiz, who sent it, not to Omar.
-
 ### WF-13 Stages and Outcomes pages
 
 - **Key:** `RP-796` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Ali
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Settings > Stages: rename a Stage, add one.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Stages: rename a Stage, add one.
   2. Settings > Outcomes.
-  3. As Ali open the same pages.
-- **Expected result:** Project Admin changes show in the Stage set, List and Kanban columns; Ali reads them and cannot change them. Another Project is unchanged.
+- **Expected result:** The changes show in UAT 03's Stage set and its List and Kanban columns; another Project (UAT 01, Al Nakheel) is unchanged. Every Member reads the pages; only a Project Admin changes them.
 
 ### WF-14 Library: save, mark default, new Project copies it
 
 - **Key:** `RP-805` · **Part:** WF · **Round:** 0
-- **Sign in as:** Saeed (Authorized Person)
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Library > Workflows: Save a Project Workflow to the Library.
+  1. Library > Workflows: save "UAT MAR copy" from Projects > UAT 03 · Project Admin (Saeed) (WF-03) to the Library.
   2. Mark it default for MAR.
-  3. Create a new Project.
+  3. Projects > New Project "UAT WF-14 Library check", code UATL, role Contractor.
 - **Expected result:** The Library copy has no link to the original; the new Project starts with a copy as its MAR Workflow, bound. A plain Member sees the Library read-only.
-
-### WF-17 Assign to offers only your own Company's Members
-
-- **Key:** `RP-812` · **Part:** WF · **Round:** 0 · **Needs:** setup
-- **Sign in as:** Saeed (Project Admin); Hafiz; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Saeed: in the Project's MAR Workflow (fixture FX-SB copy) add Assign to on Send for Review and on Submit; publish.
-  2. Hafiz: new MAR, Send for Review, open Assign to.
-  3. Ali: Submit, open Assign to.
-- **Expected result:** Hafiz is offered only TMC Members who may hold the Contractor PM Step; Ali only TMC Members (never a DCL engineer by name; the Consultant is one Participant). A pick it could not have offered is refused like a made-up one. Carried over from RP-463 B-06 (RP-487).
-
-## 4. Forms and Screens (3 cases)
-
-### FRM-08 The Form belongs to the raiser; replies are Screens
-
-- **Key:** `RP-833` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Ahmed; Mohammed; Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ahmed Send to Manager: read the pop-up fields.
-  2. Mohammed Approve: read the Code pop-up.
-  3. Open the Form as Mohammed.
-- **Expected result:** Replies are pop-up Screens (verification, Recommended Code, final verification, Remarks); no Form field is editable by the Consultant. Fields a Screen marks internal never reach TMC.
 
 ### FRM-09 Screens: read, edit and publish in Project Settings
 
 - **Key:** `RP-836` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Ali
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Settings > Screens: open Code reply.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Screens: open Code reply.
   2. Edit a copy, publish a new Version.
-  3. Start a MAR and take it to the Code; compare the pop-up.
 - **Expected result:** Every Member reads Screens; only Project Admins change them. An item already running keeps the Screen Version its Workflow Version pinned; new Workflow Versions pick the new one.
-
-### FRM-11 Member and Participant fields offer only what the filler may see
-
-- **Key:** `RP-842` · **Part:** FRM
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On an item with a member or participant field (if the Form offers one) open the choices.
-- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
-
-## 5. Participants and Visibility setup (14 cases)
-
-### PAR-03 An email that belongs to another Company is refused without naming it
-
-- **Key:** `RP-851` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Hind (Al Waha Authorized Person)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Members > Invite hafiz.hamdan@tmc.demo.rabaed.test.
-- **Expected result:** Refused: the person is already registered on Rabaed with another Company. TMC is never named and nothing else about Hafiz shows. An email of Hind's own Company gives the ordinary already-a-Member answer.
 
 ### PAR-04 Create a Project
 
@@ -1035,12 +1213,469 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 ### PAR-05 Trades, Locations and Scopes
 
 - **Key:** `RP-856` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Ali
+- **Sign in as:** Saeed (Project Admin)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Settings > Trades and Locations: add a Trade, a Zone, a Building, a Floor, a Scope and Sub-scope.
-  2. Ali opens the same page.
-- **Expected result:** Saeed adds; Ali reads Trades, Scopes and Locations and cannot add. Names show in EN and AR.
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Trades and Locations: add a Trade, a Zone, a Building, a Floor, a Scope and Sub-scope.
+- **Expected result:** Each is added with its names in EN and AR, the Locations under their parents. Only a Project Admin adds them; every Project Member reads the Trades, Scopes and Locations (V16, VIS-30).
+
+### PAR-07 Grant Participant Visibility and read the Visibility Gap warning
+
+- **Key:** `RP-862` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Visibility: give Design Consultants LLC Electrical only.
+  2. Take Mechanical Works out of every Participant's Visibility.
+- **Expected result:** The grant saves. A Visibility Gap warning names the value no active Participant covers. It is worked out from Participant grants alone (V16).
+
+### PAR-10 Participant Codes and Numbering settings
+
+- **Key:** `RP-870` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Numbering: read the pattern and examples.
+  2. Set Al Waha PMC's Participant Code (2 to 6 letters or digits); try to change TMC's, which TMC's UAT03-MAR-01-0001 "PAR-10 Cable trays – numbered with TMC's code" already carries.
+  3. Save a pattern that leaves out the Participant Code.
+- **Expected result:** Examples use the Admin's real next numbers. TMC's code is in use and cannot change; Al Waha's can be set. Leaving out the Participant Code is refused until the shared-counter warning is accepted.
+
+### PAR-11 Show Inspections inside the Submittals tab
+
+- **Key:** `RP-874` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Modules: choose Inside the Submittals tab.
+  2. Open the Project's tabs.
+- **Expected result:** The Inspections tab is hidden; WIRs show in the Submittals List and Kanban with WIR as one more Type. Switching back restores the tab. Only a Project Admin changes it.
+
+### PAR-12 Approved Supplier List: add and withdraw by hand
+
+- **Key:** `RP-877` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Approved Supplier List: add a supplier for Mechanical Works; withdraw "Eastern Province Building Materials" (Civil Works).
+- **Expected result:** Entries show name, Trade, Scope and status; the withdrawn one stays listed as withdrawn. No source, person or time shows (V10). Only a Project Admin adds or withdraws.
+
+### INS-01 Checklist Templates: create, edit into Version 2, retire
+
+- **Key:** `RP-791` · **Part:** INS · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Checklist Templates > New: name EN and AR, Trade, items with answers, comment and photo rules and Raise a Snag.
+  2. Save; edit and Save as Version 2.
+  3. Retire one.
+- **Expected result:** The three seeded templates (Cable containment and wiring, Pipework installation, Concrete pour) are listed per Trade with items, Version and availability. Saving makes the next Version, and WIRs that copied an earlier one keep its items. Only a Project Admin changes them.
+
+### INS-02 Required links setting
+
+- **Key:** `RP-800` · **Part:** INS · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Required links: turn on Approved submittals required.
+- **Expected result:** The setting saves and says what it requires: with it on, a WIR cannot leave Draft without an Approved submittal, and its form names the field. Every Member reads the setting; only a Project Admin changes it.
+
+### UX-12 Members, Participants and a Member Visibility page
+
+- **Key:** `RP-934` · **Part:** UX · **Round:** 0
+- **Sign in as:** Saeed (Authorized Person, Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. My Company > Members and Participants.
+  2. Projects > UAT 03 · Project Admin (Saeed) > Participants: open a Participant and a TMC Member's Visibility page; narrow and save.
+- **Expected result:** Laid out as design/prompts/participants.md: Trades and Locations pickers usable with many values, the Visibility Gap warning readable, counts only of the viewer own Company.
+
+### UX-13 Project Settings pages
+
+- **Key:** `RP-935` · **Part:** UX · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings: open each page: Trades and Locations, Visibility, Modules, Stages, Outcomes, Required links, Approved suppliers, Checklist Templates, Screens.
+  2. Do one change on each.
+- **Expected result:** Every page uses the Settings template of the kit and project-settings.md: one layout, save and cancel in the same place, Arabic mirrored. (The read-only state for a plain Member is Ali's, VIS-30.)
+
+### UX-14 Settings > Numbering
+
+- **Key:** `RP-936` · **Part:** UX · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Numbering, EN and AR.
+  2. Edit a pattern; read the preview and the shared-counter warning.
+- **Expected result:** Matches settings-numbering.html and D:\Artifacts\Rabaed Document Numbering.html: pattern builder, preview left to right, warning wording.
+
+### UX-15 Settings > Workflows, the builder and the Library
+
+- **Key:** `RP-937` · **Part:** UX · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Workflows: a Workflow, its Versions.
+  2. Open the builder: add a Step, connect, undo, auto-layout, Validate, Publish.
+  3. Open the Library.
+- **Expected result:** Matches settings-workflows.html with wf/, D:\Artifacts\Rabaed Settings Workflows.html and Rabaed Workflow Builder V2.html: canvas, Step panel, problems list, Change Note; usable at 1366.
+
+### VIS-33 Member Visibility pages belong to their own Company
+
+- **Key:** `RP-840` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed) > Participants: open TMC's Participant, its Members and Hafiz's Visibility page.
+  2. Open Design Consultants LLC's Participant, then look for its Members and Sara's Visibility page.
+- **Expected result:** Saeed reads and sets TMC's own Members' Visibility. For Design Consultants he reads the Participant's grant (every Trade and Location of UAT 03, which he set), never its Members or how it splits its Visibility among them: nothing shows that Sara covers Mechanical Works only, and a Design Consultants Member's Visibility page is the plain 404, even by its address (V16).
+
+### VIS-44 Members page counts only the viewer own Company Projects
+
+- **Key:** `RP-875` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Saeed (Authorized Person)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. My Company > Members.
+- **Expected result:** The list holds TMC's people only, never a Design Consultants, Beta Build or Al Waha person (V15). Its Projects column counts each TMC Member's active Projects of TMC's own (every UAT Project among them for Hafiz and Ali); nothing of another Company's Projects.
+
+## 4. Sign in as Ahmed · open UAT 04 · Consultant Engineer (Ahmed) (13 cases)
+
+Every case here is run in **UAT 04 · Consultant Engineer (Ahmed)**, as the one person named above: open it from Projects, not from Home.
+
+### SUB-08 Pick up and Return to pool in the Consultant pool
+
+- **Key:** `RP-707` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Submittals: open UAT04-MAR-01-0004 "SUB-08 Fan coil units – in the Engineers' pool" (Mechanical Works, which Sara covers as well).
+  2. Pick up.
+  3. Return to pool, then Pick up again.
+- **Expected result:** Before the Pick up the item reads "not picked up yet" with both names, Ahmed bin Said and Sara; Mohammed is not in this pool. After the Pick up it is Ahmed's; Return to pool is offered because the pool has two Members, and puts it back with both names. These pool names are Design Consultants' own: TMC reads "With Design Consultants LLC" only (V14).
+
+### SUB-09 The Consultant reads the Form and cannot edit it
+
+- **Key:** `RP-709` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Submittals: open UAT04-MAR-01-0001 "SUB-09 Emergency lighting control panel – with you" (Electrical: Ahmed's at once, as Sara covers Mechanical only).
+  2. Read every Form section, open the Datasheet PDF and the Sample photo.
+  3. Try to change an answer.
+- **Expected result:** Every answer, the Items table and the total are shown read-only; Documents are frozen; the photo shows time and place. No edit control is offered: the Form is the raiser's (V13).
+
+### SUB-10 Send to Manager needs the verification
+
+- **Key:** `RP-712` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Submittals: open UAT04-MAR-01-0002 "SUB-10 Smoke detectors – send to the Manager".
+  2. Send to Manager with the verification empty.
+  3. Answer Sample checked Yes, Matches specification No; leave the Verification note empty.
+  4. Write the note, set Recommended Code C and an Internal Note; confirm.
+- **Expected result:** Steps 2 and 3 are refused: the Verification note becomes required when Matches specification is No. After step 4 the item is at the Consultant Manager Step, with Mohammed, the only Consultant Manager, at once. Ahmed's answers, Recommended Code and Internal Note are in Design Consultants' history only, marked internal (V5).
+
+### FRM-08 The Form belongs to the raiser; replies are Screens
+
+- **Key:** `RP-833` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Submittals: open UAT04-MAR-01-0003 "FRM-08 Sub-distribution boards – the reply Screens".
+  2. Open Send to Manager and read the pop-up's fields; cancel.
+  3. Read the Form.
+- **Expected result:** The reply is a pop-up Screen (verification, Recommended Code, Internal Note); no Form field is editable by the Consultant. Fields the Screen marks internal never reach TMC (V5, V13). (The Manager's Code pop-up is Mohammed's, UAT 05.)
+
+### INS-07 Inspections tab and the in-Submittals setting
+
+- **Key:** `RP-811` · **Part:** INS · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Inspections: List and Kanban. UAT04-WIR-01-0001 "INS-09 Cable containment Level 03 – inspect on site" and UAT04-WIR-01-0002 are TMC's WIRs, Submitted to Design Consultants.
+- **Expected result:** The tab uses the Submittals pages and Stages: List columns, filters and Kanban as for submittals. (With Inside the Submittals tab on, WIRs show in the Submittals List instead: that setting is Saeed's, PAR-11 in UAT 03.)
+
+### INS-09 The Engineer answers the checklist on site
+
+- **Key:** `RP-815` · **Part:** INS · **Round:** 4
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 px: Projects > UAT 04 · Consultant Engineer (Ahmed) > Inspections: open UAT04-WIR-01-0001 "INS-09 Cable containment Level 03 – inspect on site": per item Pass, Fail or N/A, comment and photos.
+  2. Fail an item and give it a comment and a photo.
+- **Expected result:** Large segmented controls; on a Fail the comment and photo show; a sticky summary counts Pass, Fail and N/A with progress; a failed item can raise a Snag (ticked by default).
+
+### INS-14 WIR shares Stages with submittals
+
+- **Key:** `RP-830` · **Part:** INS · **Round:** 4
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Inspections > Kanban, then Submittals > Kanban.
+- **Expected result:** UAT04-WIR-01-0001 "INS-09 Cable containment Level 03 – inspect on site" sits in the Pending Approval column, the same Stage and column name as the Submitted MARs such as UAT04-MAR-01-0001 on the Submittals Kanban.
+
+### NOT-02 Step reached and Submit notify the right people
+
+- **Key:** `RP-873` · **Part:** NOT · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open the bell and Notifications: UAT04-MAR-01-0001 "SUB-09 Emergency lighting control panel – with you" and the other items TMC Submitted in Projects > UAT 04 · Consultant Engineer (Ahmed) reached Ahmed.
+- **Expected result:** Each entry reads Reached you at Consultant Engineer and opens the item; the text names TMC as a Company, never a person (V14). Ahmed is told of the Electrical items, which are his alone (Sara covers Mechanical only), and of UAT04-MAR-01-0004, in the pool he shares with Sara. Nothing reaches him of TMC's items still in Internal Review (V1).
+
+### UX-17 Snag List on the desktop
+
+- **Key:** `RP-939` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Snag List: List grouped by Stage, Kanban, type chips, filters, EN and AR. UAT04-SNG-03-0001 "VIS-51 Unlabelled circuit breakers – resolved by TMC" and UAT04-SNG-03-0002 "UX-17 Cracked light diffuser" are Design Consultants' Snags on TMC.
+- **Expected result:** Matches snag-list.html: groups, chips, Step Age dots, filters; Comments from Code B shown as designed.
+
+### UX-18 WIR request and on-site inspection on a phone
+
+- **Key:** `RP-940` · **Part:** UX · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 px (phone): Projects > UAT 04 · Consultant Engineer (Ahmed) > Inspections: open UAT04-WIR-01-0002 "UX-18 Cable containment Level 04 – on a phone" on site: checklist, photos, annotate, EN and AR.
+- **Expected result:** Laid out as inspection-on-phone.md: phone-first, large touch targets, camera first, annotate tools reachable with a thumb, nothing cut off.
+
+### VIS-01 A new Draft and a MAR in internal review are TMC's alone
+
+- **Key:** `RP-734` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed): Submittals List, Kanban, Dashboard, Home, Activity Feed and the bell; note every count.
+  2. Search for "TMC – cable trays", UAT04-MAR-01-0007, "TMC – wiring devices", "Beta Build" and UAT04-MAR-02-0001.
+- **Expected result:** Nothing of TMC's before its Submit appears anywhere: not its Draft "TMC – wiring devices, Draft not sent" nor UAT04-MAR-01-0007 "TMC – cable trays, in Internal Review", and nothing of Beta Build's Draft "Beta Build – standby generator, Draft" or UAT04-MAR-02-0001 (with Beta Build's PM): in no List, Kanban, count, badge, Dashboard figure, search result, feed entry or notification (V1). The counts are of Submitted items only. (TMC's own reading of its Draft and Internal Review is Hafiz's and Ali's.)
+
+### VIS-23 Who holds an item: pool names stay inside the holding Company
+
+- **Key:** `RP-804` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Submittals: open UAT04-MAR-01-0005 "VIS-23 Fan coil units – stays in the Engineers' pool" (leave it in the pool) and read With on the item, List and Kanban.
+  2. Open UAT04-MAR-01-0006 "VIS-23 Wiring devices – Code B, Comments with TMC" and its Comment in the Snag List, which waits in TMC's pool.
+- **Expected result:** Design Consultants' own item reads its pool's names ("not picked up yet: Ahmed bin Said, Sara"), then the holder. The Comment reads "With TMC Constructions" only: never a TMC person, its pool's names or who picks it up, in the item, List, Kanban, history, feed or notifications (V14). (TMC's half, reading Design Consultants by name only, is Hafiz's and Ali's.)
+
+### VIS-51 Snag Steps are shared only as Transitions
+
+- **Key:** `RP-905` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Ahmed (DCL engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed) > Snag List: open UAT04-SNG-03-0001 "VIS-51 Unlabelled circuit breakers – resolved by TMC", which Ahmed raised on TMC and TMC resolved.
+  2. Read its history.
+  3. Verify: Pick up if it is offered, then Close it, or Return to Open with a reason.
+- **Expected result:** Ahmed reads TMC's Resolve and its note ("Done and checked on site."), never who in TMC picked it up or TMC's own moves; TMC is named as a Company only (V5, V14). The Verify Step is Design Consultants': once he holds it, Close and Return to Open are offered to him.
+
+## 5. Sign in as Mohammed · open UAT 05 · Consultant Manager (Mohammed) (12 cases)
+
+Every case here is run in **UAT 05 · Consultant Manager (Mohammed)**, as the one person named above: open it from Projects, not from Home.
+
+### SUB-11 Code A closes the item with the final verification
+
+- **Key:** `RP-716` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals: open UAT05-MAR-01-0001 "SUB-11 Main distribution board – recommended Code A" (Ahmed sent it with Recommended Code A); Approve A.
+  2. Check the Final verification pop-up is filled from Ahmed's reply; leave Remarks empty.
+  3. Confirm.
+- **Expected result:** Remarks are optional with Code A. The item closes Approved, Code A, and accepts no more moves. Download PDF appears (SIG-02).
+
+### SUB-12 Code B turns each comment into a Comment
+
+- **Key:** `RP-718` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals: open UAT05-MAR-01-0002 "SUB-12 Lighting control panel – recommended Code B".
+  2. Approve with Comments B with the Remarks empty, then with Remarks and three comment rows; confirm.
+- **Expected result:** Remarks are required with B. The MAR closes at Code B. Three Comment items are in the Snag List, raised by Design Consultants and Open with TMC Constructions (by Company name only, V14). The MAR page reads "Comments: 3 open / 0 closed".
+
+### SUB-13 Code C needs Remarks and Return to Engineer works
+
+- **Key:** `RP-720` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals: open UAT05-MAR-01-0003 "SUB-13 LED downlights – Return to Engineer"; Return to Engineer, reason "Check the photometric report".
+  2. Open UAT05-MAR-01-0004 "SUB-13 Smoke detectors – Code C needs Remarks" (Ahmed sent it with Matches specification No); Revise and Resubmit C with Remarks empty, then with Remarks.
+- **Expected result:** Return to Engineer gives UAT05-MAR-01-0003 back to Ahmed, inside Design Consultants (TMC reads With Design Consultants LLC throughout, V14). Code C on UAT05-MAR-01-0004 is refused until Remarks are written, then it closes at C with its Remarks and final verification; TMC is offered Create Revision.
+
+### SUB-20 A SAR closed at Code A adds the supplier to the list
+
+- **Key:** `RP-739` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals: open UAT05-SAR-01-0001 "SUB-20 Delta Cables – Supplier Approval Request" (Electrical; Ahmed sent it with Recommended Code A); Approve A and confirm.
+  2. Projects > UAT 05 · Consultant Manager (Mohammed) > Settings > Approved Supplier List.
+- **Expected result:** The SAR closes at Code A. "UAT SUB-20 Delta Cables" is listed for Electrical Works, approved, with no source, person or time (V10). A MAR of UAT 05 now offers it under Approved supplier.
+
+### SUB-28 Activity Feed page
+
+- **Key:** `RP-759` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Activity Feed.
+- **Expected result:** Entries read as events (submitted, returned, approved) with the Project; TMC appears by Company name only (V14); no answers_changed or Document upload entries; nothing of TMC's or Beta Build's Drafts (V1).
+
+### WF-01 Every Member reads the Project Workflows
+
+- **Key:** `RP-763` · **Part:** WF · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Settings > Workflows.
+  2. Open the MAR Workflow and a published Version.
+- **Expected result:** The page lists which Workflow each Work Item Type runs, its Version and every published Version whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.
+
+### PKG-09 Bulk Transition applies one Action Form to many
+
+- **Key:** `RP-690` · **Part:** PKG · **Round:** 1
+- **Sign in as:** Mohammed (DCL manager, with a Signature)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals > Packages: open "PKG-09 Package waiting at the Manager" (TMC's, In Progress): UAT05-MAR-01-0005 "PKG-09 Exit signs – bulk Code A" and UAT05-MAR-01-0006 "PKG-09 Wiring devices – bulk Code A" both wait at Mohammed with Recommended Code A.
+  2. Select both, choose Approve A, fill the Action Form once, confirm.
+- **Expected result:** With a Signature: one Action Form applies to each item; each is signed exactly as a single Transition is and gets its own event, Issued Code and Documental Record. Bulk is offered only while every selected item offers the same Transition and Action Form; had one not, nothing would be done and the message would name it. (The bulk Code by a Design Consultants Member without a Signature is not in this section.) Owner decision 2026-10-19 (story 44 reworded on RP-616).
+
+### SNG-10 Question and Site Observation Types
+
+- **Key:** `RP-778` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Snag List > New > Question; then New > Site Observation.
+- **Expected result:** The Type chips appear; each has its own Form and Workflow; Questions have no reviewed item behind them; Site Observation is not called Violation.
+
+### SNG-14 Pick the Contractor when two cover a Location
+
+- **Key:** `RP-787` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Snag List > New Snag: Subject "UAT SNG-14 Exposed cable", Trade Electrical Works, Location Tower A Level 03 (TMC and Beta Build both cover every Location of UAT 05).
+  2. Raise.
+- **Expected result:** The Raise pop-up asks which Contractor (TMC Constructions or Beta Build); pick TMC. The Snag is Open with TMC, and Beta Build never sees it (V3).
+
+### INS-11 The Manager proposes a Code from the checklist
+
+- **Key:** `RP-821` · **Part:** INS · **Round:** 4
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Inspections: open UAT05-WIR-01-0001 "INS-11 Cable containment Level 02 – all passed" and UAT05-WIR-01-0002 "INS-11 Cable containment Level 03 – one failed" (Ahmed failed "Cables labelled at both ends").
+  2. Open the Code pop-up on each; cancel.
+- **Expected result:** The pop-up pre-selects A on the one with no failed item and C on the one with a failed item; the Manager can change it; each pop-up lists the Snags that will be raised, if any.
+
+### INS-12 A WIR ends with a Review Code and a re-inspection Revision
+
+- **Key:** `RP-824` · **Part:** INS · **Round:** 4
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Inspections: close UAT05-WIR-01-0003 "INS-12 Cable containment Level 04 – for Code A" at A, UAT05-WIR-01-0004 "INS-12 Cable containment Level 05 – for Code B" at B (with comment rows), UAT05-WIR-01-0005 "INS-12 Cable containment Level 06 – for Code C" at C and UAT05-WIR-01-0006 "INS-12 Cable containment Podium Level 01 – for Code D" at D.
+- **Expected result:** A to D close like a submittal; B makes Comments; C offers TMC a Revision as a re-inspection that copies the same checklist; D closes. No Passed or Failed result is shown.
+
+### VIS-12 A Revision Draft is hidden; the drop-down lists only what the viewer sees
+
+- **Key:** `RP-772` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Mohammed (DCL manager)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 05 · Consultant Manager (Mohammed) > Submittals: open UAT05-MAR-01-0007 "VIS-12 Cable trays – Code C, Rev 1 inside TMC", closed at Code C; TMC raised its Rev 1 and sent it for review, so it is in TMC's Internal Review.
+  2. Open its Revisions drop-down, the List and Kanban, and search for "VIS-12 Cable trays", "TMC – earthing" and "Beta Build".
+- **Expected result:** Mohammed reads UAT05-MAR-01-0007 at Code C, and the drop-down lists only what he sees: Rev 1 is nowhere (no row, card, count, search result or notification) until TMC Submits it. TMC's Draft "TMC – earthing, Draft not sent" and Beta Build's Draft "Beta Build – standby generator, Draft" appear nowhere either (V1).
+
+## 6. Submittals (1 cases)
+
+### SUB-21 A DAR ends with the Owner's review
+
+- **Key:** `RP-741` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz; Ali; Mohammed; Noura (Al Waha PM)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Raise a Document Approval Request "UAT SUB-21 Cable schedule", send, Ali Submits.
+  2. Mohammed recommends Code A to the Owner.
+  3. Noura opens it and chooses Confirm.
+- **Expected result:** Mohammed's Recommendation goes to Noura, who holds the Owner's review; Confirm issues Code A and closes the item. TMC sees it "With Owner review" until then (VIS-27).
+
+## 7. Workflows (4 cases)
+
+### WF-06 A new Version applies to new items only
+
+- **Key:** `RP-779` · **Part:** WF · **Round:** 0
+- **Sign in as:** Saeed; Hafiz; Ali
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Bind the published copy to MAR (Settings > Workflows > Use for MAR).
+  2. Hafiz raises a new MAR.
+  3. Open an older MAR.
+- **Expected result:** The new MAR runs the new Version; the older item keeps its Version and shows a notice that a later Version exists. Binding another Workflow reaches only items created afterwards.
+
+### WF-10 Drafts visible to: the author only
+
+- **Key:** `RP-790` · **Part:** WF · **Round:** 0
+- **Sign in as:** Saeed (Project Admin); Hafiz; Omar; Ali
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In a copy, set the Draft Step to Drafts visible to the author only; publish and bind.
+  2. Hafiz saves a Draft.
+  3. Omar and Ali open the List and the item URL.
+- **Expected result:** Omar and Ali see no Draft, no count, and the 404 page; Hafiz sees and edits it. After Send for Review TMC reads it as before.
+
+### WF-12 Return goes to the author, not the other engineer
+
+- **Key:** `RP-794` · **Part:** WF · **Round:** 0
+- **Sign in as:** Hafiz; Omar; Ali
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Omar (Tower 2 only) and Hafiz both cover a Tower 2 item.
+  2. Hafiz sends a Tower 2 Draft for review.
+  3. Ali Returns it.
+- **Expected result:** It goes back to Hafiz, who sent it, not to Omar.
+
+### WF-17 Assign to offers only your own Company's Members
+
+- **Key:** `RP-812` · **Part:** WF · **Round:** 0 · **Needs:** setup
+- **Sign in as:** Saeed (Project Admin); Hafiz; Ali
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Saeed: in the Project's MAR Workflow (fixture FX-SB copy) add Assign to on Send for Review and on Submit; publish.
+  2. Hafiz: new MAR, Send for Review, open Assign to.
+  3. Ali: Submit, open Assign to.
+- **Expected result:** Hafiz is offered only TMC Members who may hold the Contractor PM Step; Ali only TMC Members (never a DCL engineer by name; the Consultant is one Participant). A pick it could not have offered is refused like a made-up one. Carried over from RP-463 B-06 (RP-487).
+
+## 8. Forms and Screens (1 cases)
+
+### FRM-11 Member and Participant fields offer only what the filler may see
+
+- **Key:** `RP-842` · **Part:** FRM
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. On an item with a member or participant field (if the Form offers one) open the choices.
+- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
+
+## 9. Participants and Visibility setup (8 cases)
+
+### PAR-03 An email that belongs to another Company is refused without naming it
+
+- **Key:** `RP-851` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Hind (Al Waha Authorized Person)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Members > Invite hafiz.hamdan@tmc.demo.rabaed.test.
+- **Expected result:** Refused: the person is already registered on Rabaed with another Company. TMC is never named and nothing else about Hafiz shows. An email of Hind's own Company gives the ordinary already-a-Member answer.
 
 ### PAR-06 Invite a Company by CR number and accept
 
@@ -1052,16 +1687,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Layla: Company Projects shows the invitation (name, Host Company, offered role).
   3. Accept.
 - **Expected result:** Until accepted, only Layla and the Project Admin see it; TMC's other Members do not. After accepting, DCL is a Participant in the role Consultant.
-
-### PAR-07 Grant Participant Visibility and read the Visibility Gap warning
-
-- **Key:** `RP-862` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Visibility: give the new Consultant Electrical only.
-  2. Remove all coverage of Mechanical from every Participant.
-- **Expected result:** The grant saves. A Visibility Gap warning names the value no active Participant covers. It is worked out from Participant grants alone.
 
 ### PAR-08 The Authorized Person adds a Member to the Project with a Position and Visibility
 
@@ -1083,37 +1708,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Hafiz holds two Tower 2 MARs at Contractor Engineer (Omar covers Tower 2 as well) and one Tower 1 MAR (Omar does not cover it).
   2. Saeed: Members > Deactivate Hafiz.
 - **Expected result:** The Handover dialog lists his open Steps and Drafts (Project, Document Number or No number yet, Subject, Step). The Tower 2 Steps pre-fill Omar as the single candidate. The Tower 1 Step has nobody else who can take it, so the change is refused with Nobody else can take <Step> on <Project>. Give someone the Position or Visibility first, naming only TMC's own Step and the Project; nothing saves until every Step has a new holder.
-
-### PAR-10 Participant Codes and Numbering settings
-
-- **Key:** `RP-870` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Numbering: read the pattern and examples.
-  2. Set a Participant Code (2 to 6 letters or digits).
-  3. Save a pattern that leaves out the Participant Code.
-- **Expected result:** Examples use the Admin's real next numbers. A code in use cannot change. Leaving out the Participant Code is refused until the shared-counter warning is accepted.
-
-### PAR-11 Show Inspections inside the Submittals tab
-
-- **Key:** `RP-874` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Modules: choose Inside the Submittals tab.
-  2. Open Submittals and the Project tabs.
-- **Expected result:** The Inspections tab is hidden; WIRs show in the Submittals List and Kanban with WIR as one more Type. Switching back restores the tab. Only a Project Admin changes it.
-
-### PAR-12 Approved Supplier List: add and withdraw by hand
-
-- **Key:** `RP-877` · **Part:** PAR · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Approved Supplier List: add a supplier for Mechanical; withdraw one.
-  2. Hafiz opens the list.
-- **Expected result:** Entries show name, Trade, Scope and status; a withdrawn one stays listed as withdrawn. Hafiz cannot add or withdraw. No source, person or time shows.
 
 ### PAR-13 Company Projects page
 
@@ -1154,59 +1748,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Reem accepts, grants Electrical and Mechanical, all Locations, and adds a PM Member (Sami UAT) with Position Project Manager.
 - **Expected result:** UAT Owner Co is a Participant with oversight over Submitted items it covers. Later Owner scenarios use it.
 
-## 6. Packages (11 cases)
-
-### PKG-01 Packages is a third view beside List and Kanban
-
-- **Key:** `RP-892` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Submittals > the view toggle.
-  2. Choose Packages.
-- **Expected result:** A Packages Kanban with three columns Open, In Progress and Done, each with a count; a New Package button for a Company that can build one; search and filters (Trade, owning Company). Matches packages.html except where spec RP-616 differs.
-
-### PKG-02 Open a Package and number it
-
-- **Key:** `RP-895` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New Package: name EN and AR.
-  2. Open it.
-- **Expected result:** The Package is numbered PKG-001 (left to right, also in Arabic) beside TMC's name, Open, with no submittals. A second Package is PKG-002. Beta Build's first Package is also PKG-001.
-
-### PKG-03 Add submittals from Drafts and review
-
-- **Key:** `RP-897` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open an Open Package > Add items.
-  2. Pick two Drafts and one item in internal review.
-  3. Try to add an item already in another Package.
-- **Expected result:** Only TMC's own submittals Ali can see are offered, with search and a Trade filter. An item in another Package is marked and cannot be picked. A submittal belongs to at most one Package.
-
-### PKG-04 While Open: remove, rename, delete
-
-- **Key:** `RP-898` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Remove one item.
-  2. Rename the Package.
-  3. Delete the Package.
-- **Expected result:** Remove and delete work only while Open; Delete says the Drafts stay, without a Package. Rename is allowed in every status.
-
-### PKG-05 Submit Package is all or nothing
-
-- **Key:** `RP-899` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Add a Draft with a required field missing.
-  2. Open Submit Package.
-- **Expected result:** A not-ready list names each blocking item (for example required field Supplier missing) and links to it; Submit is disabled until the list is empty. Then one confirm submits every not-yet-submitted item; each gets its own Document Number. If any fails, none is submitted.
+## 10. Packages (2 cases)
 
 ### PKG-06 Status runs Open, In Progress, Done
 
@@ -1219,48 +1761,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Create a Revision for the Code C item and a replacement for D.
 - **Expected result:** In Progress as soon as anything is submitted. Done only when every latest submittal has closed at A, B or D; a Code C waits for its Revision, which joins the Package by itself; a later replacement or added submittal puts it back In Progress. The word is Done, never Closed.
 
-### PKG-07 After Submit: add yes, remove no
-
-- **Key:** `RP-684` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In an In Progress Package add a submittal.
-  2. Try to remove one.
-- **Expected result:** Adding works; removing is not offered. Rename works and is recorded.
-
-### PKG-08 The Package chip and filter on submittals
-
-- **Key:** `RP-687` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open List and Kanban.
-  2. Use the Package filter.
-  3. Click the chip on a card and on the item page.
-- **Expected result:** Cards and the item page show PKG-001 with the name; the chip opens the Package page; the filter narrows List and Kanban. Package is not a Form field.
-
-### PKG-09 Bulk Transition applies one Action Form to many
-
-- **Key:** `RP-690` · **Part:** PKG · **Round:** 1 · **Needs:** setup
-- **Sign in as:** Mohammed (DCL manager, with a Signature); a DCL Member without a Signature (fixture: remove one in the profile)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In an In Progress Package select two items waiting on Mohammed that offer the same Code Transition (e.g. Code A).
-  2. Choose it; fill the Action Form once; confirm.
-  3. Repeat with an item that cannot take it.
-  4. As a DCL Member without a Signature, select two items waiting on them and take the same Code in bulk.
-- **Expected result:** With a Signature: one Action Form applies to each item (with Assign to if offered); each item is signed exactly as a single Transition is and gets its own event, Issued Code and Documental Record. All or nothing: if one item cannot take it nothing is done and the message names that item and why. Not offered unless every selected item offers the same Transition and Action Form. Without a Signature: the bulk Code is refused for all items, nothing is taken, and the reason (no Signature) is shown; there is no separate signing Step state. Owner decision 2026-10-19 (story 44 reworded on RP-616).
-
-### PKG-11 Comments show on the Package for information
-
-- **Key:** `RP-696` · **Part:** PKG · **Round:** 1
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. After a Code B on an item of the Package open the Package Comments section.
-- **Expected result:** Comments raised from its submittals are listed with their Stage and the note that Comments are not part of the Package; they do not change its status.
-
 ### PKG-12 A Package is seen only through submittals the viewer sees
 
 - **Key:** `RP-699` · **Part:** PKG · **Round:** 1
@@ -1272,38 +1772,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. After the Submit look again as Sara (Mechanical-only) and Ahmed.
 - **Expected result:** Another Company's Open Package is never shown (not its name, Drafts or count). After the Submit Ahmed sees all submittals of his Trades; Sara sees only the Mechanical ones and their counts; status shows as one word. Yousef sees nothing.
 
-## 7. Signing and Documental Record (13 cases)
-
-### SIG-01 Every Transition is confirmed in its pop-up
-
-- **Key:** `RP-702` · **Part:** SIG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open any Transition (Submit).
-  2. Look for a Sign button or checkbox.
-  3. Confirm.
-- **Expected result:** The pop-up keeps the Transition's own label; there is no separate signing step. Taking it without confirming (API without confirmed true) is refused not_confirmed. After confirm the history records who, from which Participant and when.
-
-### SIG-02 Download PDF on a closed item makes the sealed record
-
-- **Key:** `RP-705` · **Part:** SIG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open a closed MAR (Code A) and press Download PDF.
-  2. Repeat right after the Code, before the worker finishes.
-- **Expected result:** A PDF downloads through a short-lived link. If the record is not made yet the page says it is not ready and to try again in a minute; no partial file.
-
-### SIG-03 The tracer record prints title, outcome and approval flow
-
-- **Key:** `RP-711` · **Part:** SIG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the downloaded PDF.
-  2. Check the title block, outcome and date, Verification Code, link, approval flow, footer.
-- **Expected result:** Type names and code, Subject, Project and Document Number (left to right, Rev included); the outcome with the date; the Verification Code and verification link; each Transition on the path with label, Member, Positions, Company, date and time (Riyadh time) and its content hash; Arabic then English; Latin digits; every page footed Issued electronically through Rabaed, Verification Code, page X of Y. (Page 1 and Form body come with SIG-08.)
+## 11. Signing and Documental Record (6 cases)
 
 ### SIG-04 The record names everyone on the path and leaves out the rest
 
@@ -1314,16 +1783,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Take a MAR through Send for Review, a Return, a second send, Submit with Internal Note, Ahmed Send to Manager with Recommended Code C, Mohammed Code A.
   2. Read the PDF.
 - **Expected result:** It names every Member who took a Transition on the path, TMC's and DCL's alike, with the first entry dated at the raiser's last send out of Draft (a Returned send is off the path). It holds no Return, Internal Note, Recommended Code, Chat or in-progress answer.
-
-### SIG-08 Record page 1 and Form body
-
-- **Key:** `RP-719` · **Part:** SIG · **Round:** 2
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Download a record.
-  2. Read page 1: Companies, title block, parties, classification, final decision with chips and QR, reply, approval flow, then the Form.
-- **Expected result:** The layout matches form-engine section 6 items 1 to 9; tables and photos print as tables and a photo grid; Documents are listed.
 
 ### SIG-09 Company logo and Stamp
 
@@ -1354,26 +1813,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. With no Signature saved open any Transition.
 - **Expected result:** Add your Signature to act. Every action you confirm is signed with it. Add Signature goes to the profile and returns to the item with nothing typed lost; Cancel closes.
 
-### SIG-12 Signature cards, Stamps, Review Comments, endings and Disclaimer
-
-- **Key:** `RP-731` · **Part:** SIG · **Round:** 2
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Download a record closed at A, then at C and at D.
-  2. Read the Signatures, Stamps and ending pages.
-- **Expected result:** One card per Transition on the path with Signature as it was then; the Stamp of every acting Company; Review Comments numbered; a Next step card with Code C (Revision n+1) or D (a new submittal replaces this one); an internal reviewer's card says Reviewed with no Code; the Disclaimer in Arabic and English.
-
-### SIG-13 Appendix of Documents
-
-- **Key:** `RP-733` · **Part:** SIG · **Round:** 2
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Close a MAR with PDF and image Documents and one DWG.
-  2. Download the record.
-- **Expected result:** Shared PDF and image Documents follow as pages; other files are attached inside the PDF; a Company's internal Documents are not included.
-
 ### SIG-15 Verification page
 
 - **Key:** `RP-747` · **Part:** SIG · **Round:** 2
@@ -1384,16 +1823,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Type the Verification Code with and without the Document Number.
   3. Drop a copy of the PDF.
 - **Expected result:** Genuine, Document Number, Subject, Project, outcome, sealed date, signers' names, Positions and Companies; no Documents, answers or live item. The code alone is refused like a wrong code; attempts are limited per visitor; a dropped copy is checked in the browser against the fingerprint, uploading nothing.
-
-### SIG-16 Working Copy of an unfinished item
-
-- **Key:** `RP-749` · **Part:** SIG · **Round:** 2
-- **Sign in as:** Ali (TMC PM); Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. While a MAR is with DCL, request a Working Copy as Ali and as Mohammed.
-  2. Compare the two PDFs.
-- **Expected result:** Both Working Copies are the same: watermarked Not Final / غير نهائي (or the Project text), unsealed, no Verification Code, Companies by name only, no person, no Signature or Stamp. A Draft Working Copy is made only for Members who see the Draft.
 
 ### SIG-17 Distribution link and Signatory Access
 
@@ -1406,18 +1835,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Withdraw a Participant and open its Authorized Person records.
 - **Expected result:** The record reaches people only through ordinary notifications inside Rabaed. A removed Member keeps the Project name and the records they signed; the Company keeps those its Members signed through its Authorized Person; open items of a withdrawn Participant are Cancelled.
 
-## 8. Snag List (10 cases)
-
-### SNG-01 The Snag List tab: List, Kanban and empty state
-
-- **Key:** `RP-751` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Project > Snag List.
-  2. Switch List and Kanban.
-  3. Use the Types chips (All, Snags, Comments), Stage, Trade, Company and search by number or Subject.
-- **Expected result:** Items are grouped by Stage with counts; type chips and Stage counts count only visible items; an empty list reads No snags. Nice work. Filters with no match say nothing you can see matches.
+## 12. Snag List (2 cases)
 
 ### SNG-02 The Consultant raises a Snag on the Contractor
 
@@ -1430,36 +1848,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Raise.
 - **Expected result:** The Snag is Open with TMC (the one Contractor covering Tower 1). With two Contractors covering the Location, Raise is refused with the plain This can not be handed over yet answer (RP-658 adds the pick).
 
-### SNG-05 A Contractor raises a Snag on itself
-
-- **Key:** `RP-758` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New Snag raised by TMC on its own work.
-  2. Move it through Start work, Resolve, Verify, Close.
-- **Expected result:** The raiser holds Draft and Verify, so TMC works and closes its own Snag; Design Consultants and Beta Build never see it (informing the Consultant is SNG-09).
-
-### SNG-06 Comments from Code B live in the Snag List
-
-- **Key:** `RP-760` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. After SUB-12 open the Comments.
-  2. Resolve one; Mohammed closes it.
-  3. Open the MAR.
-- **Expected result:** Each Comment shows Raised from (number, Subject, Code B), is held by TMC, and counts on the MAR: Comments 2 open / 1 closed after one closes. The photo thumbnail is the first photo the viewer may see.
-
-### SNG-07 New offers no Comment type
-
-- **Key:** `RP-762` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Snag List > New.
-- **Expected result:** The menu offers Snag (and later Site Observation and Question) and not Comment; Comments only come from a Code B.
-
 ### SNG-09 Informed Participants
 
 - **Key:** `RP-774` · **Part:** SNG · **Round:** 3
@@ -1469,76 +1857,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Raise a Snag and name Informed Participants.
 - **Expected result:** The named Participants are told and can read; others are not.
 
-### SNG-10 Question and Site Observation Types
-
-- **Key:** `RP-778` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Mohammed; Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New > Question; New > Site Observation.
-- **Expected result:** The Type chips appear; each has its own Form and Workflow; Questions have no reviewed item behind them; Site Observation is not called Violation.
-
-### SNG-12 Bulk actions and exports
-
-- **Key:** `RP-782` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Select several Snags; reassign within TMC; Export Excel.
-- **Expected result:** Bulk applies within TMC only; the export holds exactly the visible rows.
-
-### SNG-14 Pick the Contractor when two cover a Location
-
-- **Key:** `RP-787` · **Part:** SNG · **Round:** 3 · **Needs:** setup
-- **Sign in as:** Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Leave Beta Build covering Tower 1 as in the seed.
-  2. Raise a Snag on Tower 1.
-- **Expected result:** The Raise pop-up asks which Contractor; the other never sees it.
-
-### SNG-15 Snag PDF report
-
-- **Key:** `RP-789` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Snag List > Export PDF report.
-- **Expected result:** A PDF of the visible Snags with photos; no Snag the viewer cannot see.
-
-## 9. Inspections (WIR) (10 cases)
-
-### INS-01 Checklist Templates: create, edit into Version 2, retire
-
-- **Key:** `RP-791` · **Part:** INS · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Checklist Templates > New: name EN and AR, Trade, items with answers, comment and photo rules and Raise a Snag.
-  2. Save; edit and Save as Version 2.
-  3. Retire one.
-  4. Open as Ali.
-- **Expected result:** The two seeded templates (Concrete pour, Cable trays and containment) are listed per Trade with items, Version and availability. Saving makes the next Version and WIRs that copied an earlier one keep its items. Ali reads and cannot change.
-
-### INS-02 Required links setting
-
-- **Key:** `RP-800` · **Part:** INS · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Settings > Required links: turn on Approved submittals required.
-  2. Hafiz tries to send a WIR without one.
-- **Expected result:** Every Member reads the setting; only a Project Admin changes it. With it on a WIR cannot leave Draft without an Approved submittal and the form names the field.
-
-### INS-07 Inspections tab and the in-Submittals setting
-
-- **Key:** `RP-811` · **Part:** INS · **Round:** 0
-- **Sign in as:** Ali; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the Inspections tab (List and Kanban).
-  2. Turn Inside the Submittals tab on (PAR-11) and open Submittals.
-- **Expected result:** The tab uses the Submittals pages and Stages. With the setting on, WIRs appear in the Submittals List, counts, type filter and Kanban for those who may see them.
+## 13. Inspections (WIR) (3 cases)
 
 ### INS-08 The WIR runs to the Consultant and the Manager
 
@@ -1550,16 +1869,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Ahmed picks it up.
 - **Expected result:** The WIR numbers like a submittal and reaches the Consultant Engineer pool. The Consultant fills the checklist on site (INS-09).
 
-### INS-09 The Engineer answers the checklist on site
-
-- **Key:** `RP-815` · **Part:** INS · **Round:** 4
-- **Sign in as:** Ahmed (DCL engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 px open the WIR: per item Pass, Fail or N/A, comment and photos.
-  2. Fail an item whose Checklist Template requires a comment and photo.
-- **Expected result:** Large segmented controls; on a Fail the comment and photo show required; a sticky summary like 18 Pass / 2 Fail / 1 N/A with progress; a failed item can raise a Snag (ticked by default).
-
 ### INS-10 Raise Snags from failed items
 
 - **Key:** `RP-818` · **Part:** INS · **Round:** 4
@@ -1569,25 +1878,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Fail two items, one with Raise a Snag unticked.
   2. Mohammed issues any Code.
 - **Expected result:** Whatever the Code, each ticked failed item becomes a Snag raised by the Consultant for the Contractor, linked to the WIR.
-
-### INS-11 The Manager proposes a Code from the checklist
-
-- **Key:** `RP-821` · **Part:** INS · **Round:** 4
-- **Sign in as:** Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open a WIR with one failed item and one with none.
-- **Expected result:** The pop-up pre-selects C when any item failed, else A; the Manager can change it; each pop-up lists the Snags that will be raised.
-
-### INS-12 A WIR ends with a Review Code and a re-inspection Revision
-
-- **Key:** `RP-824` · **Part:** INS · **Round:** 4
-- **Sign in as:** Mohammed; Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Close WIRs at A, B (with comment rows), C and D.
-  2. Hafiz creates the Revision after C.
-- **Expected result:** A to D close like a submittal; B makes Comments; C offers a Revision as a re-inspection that copies the same checklist; D closes. No Passed or Failed result is shown for new WIRs.
 
 ### INS-13 The Contractor reads the checklist only after the Code
 
@@ -1599,16 +1889,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. After the Code, again.
 - **Expected result:** Before Ahmed sends it to the Manager Hafiz reads none of the answers, comments or photos; after the Code he reads them. Ahmed's Recommended Code and Internal Note never reach Hafiz.
 
-### INS-14 WIR shares Stages with submittals
-
-- **Key:** `RP-830` · **Part:** INS · **Round:** 4
-- **Sign in as:** Ali; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. With the WIR in Pending Approval open the Kanban.
-- **Expected result:** A WIR sits in the same column as a submittal at the same Stage.
-
-## 10. Submittal Register Import (2 cases)
+## 14. Submittal Register Import (2 cases)
 
 ### IMP-10 Assign to for imported Drafts
 
@@ -1630,28 +1911,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Save the mapping and reuse it.
 - **Expected result:** New Packages take the next PKG number; an In Progress or Done Package makes its rows bad; the mapping is kept for the Company only.
 
-## 11. Notifications (4 cases)
-
-### NOT-01 The bell, the Notifications page and Mark all as read
-
-- **Key:** `RP-871` · **Part:** NOT · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. After SUB-04 look at the bell badge.
-  2. Open Notifications; open one entry.
-  3. Mark all as read.
-- **Expected result:** The badge counts unread; each entry reads Reached you at <Step> and opens the item; Mark all as read clears the badge. In-app notifications are always sent: there is no in-app switch.
-
-### NOT-02 Step reached and Submit notify the right people
-
-- **Key:** `RP-873` · **Part:** NOT · **Round:** 0
-- **Sign in as:** Ali; Ahmed; Sara; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ali Submits an Electrical MAR.
-  2. Check Ahmed's and Sara's bells and Mohammed's.
-- **Expected result:** Ahmed (the pool, since Sara covers Mechanical only in the demo, RP-1207) is told; Sara is not; Mohammed is not until it reaches him; the text names TMC as a Company, never a person. If Layla gave Sara Electrical first, Ahmed and Sara are both told.
+## 15. Notifications (2 cases)
 
 ### NOT-08 A Revision notifies when it gets its number
 
@@ -1674,7 +1934,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Mohammed Sends Back a Submitted item.
 - **Expected result:** Hafiz and TMC Members who see it are told, with DCL named as a Company; Faisal is not told of internal moves.
 
-## 12. Arabic, RTL and phone width (4 cases)
+## 16. Arabic, RTL and phone width (3 cases)
 
 ### I18N-03 Document Numbers stay left to right
 
@@ -1696,15 +1956,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Sign out and sign in again.
 - **Expected result:** Opens in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.
 
-### I18N-07 Desktop 1366 and 1920
-
-- **Key:** `RP-692` · **Part:** I18N · **Round:** 0
-- **Sign in as:** Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Home, List, Kanban, an item at 1366 and 1920 px.
-- **Expected result:** Layout follows the reference screens at both widths (see strategy section 3 for the ui-ux-tester pass).
-
 ### I18N-08 The not-found page says nothing
 
 - **Key:** `RP-695` · **Part:** I18N · **Round:** 0
@@ -1716,7 +1967,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Repeat in /ar.
 - **Expected result:** Both show the same page: We can not find this page, it may not exist, or you may not have access, with a Projects button; identical in both languages; never a 403 or a hint which case it is.
 
-## 13. UI and UX against the design (17 cases)
+## 17. UI and UX against the design (4 cases)
 
 ### UX-01 App shell, sidebar and top bar match the design
 
@@ -1729,97 +1980,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. At 820 and 375 open the drawer.
 - **Expected result:** Matches saas-shell.html (and D:\Artifacts\Rabaed Responsive Anatomy.html for the drawer): sidebar entries of RP-405 decision 5 only (no Overdue, Payments, Subscriptions, Roles, theme toggle), Company name not a switcher, Arabic mirrored. UI issues and UX recommendations reported apart.
 
-### UX-02 Home matches the design and reads at a glance
-
-- **Key:** `RP-924` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Home at 1366 and 1920, EN and AR, with items in every state.
-  2. Follow each number and row.
-- **Expected result:** Matches the kit Home with RP-405 changes: Active Projects, Need My Action, 4+ weeks at their step (Step Age dots, never Overdue), Waiting with others, Recent activity. Every number opens the List with its filter. Empty state reads well for a new Member.
-
-### UX-03 Projects page and Project Dashboard
-
-- **Key:** `RP-925` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ali; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Projects, then a Project Dashboard, EN and AR, 1366 and 1920.
-  2. Click each card figure.
-- **Expected result:** Cards match the kit; the Dashboard Type cards, Revision line and Activity Feed are laid out as designed; no squashed card (the RP-405 audit fault); each figure opens the List with the same filter.
-
-### UX-08 Activity page
-
-- **Key:** `RP-930` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ali; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the Project Activity page, EN and AR.
-  2. Page back; open entries.
-- **Expected result:** Laid out as design/prompts/activity.md: entries worded from what happened, another Company by name only, newest first, paging that keeps its place.
-
-### UX-09 Notifications page and the bell
-
-- **Key:** `RP-931` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the bell, then the Notifications page, EN and AR.
-  2. Open an entry; Mark all as read.
-- **Expected result:** Laid out as design/prompts/notifications.md: unread state, grouping, the item it opens, empty state; the bell badge matches the unread count.
-
-### UX-10 Profile and notification settings
-
-- **Key:** `RP-932` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Profile, EN and AR.
-  2. Change language, email per group, Pause all, a Project mute.
-- **Expected result:** Laid out as profile-notification-settings.md: no In-app switch; each change confirms it saved; the language change keeps the page.
-
-### UX-12 Members, Participants and a Member Visibility page
-
-- **Key:** `RP-934` · **Part:** UX · **Round:** 0
-- **Sign in as:** Saeed (Authorized Person, Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open My Company > Members and Participants.
-  2. Open a Participant and a Member Visibility page; narrow and save.
-- **Expected result:** Laid out as design/prompts/participants.md: Trades and Locations pickers usable with many values, the Visibility Gap warning readable, counts only of the viewer own Company.
-
-### UX-13 Project Settings pages
-
-- **Key:** `RP-935` · **Part:** UX · **Round:** 0
-- **Sign in as:** Saeed (Project Admin); Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open each Settings page: Trades and Locations, Visibility, Modules, Stages, Outcomes, Required links, Approved suppliers, Checklist Templates, Screens.
-  2. Do one change on each as Saeed; open them as Ali.
-- **Expected result:** Every page uses the Settings template of the kit and project-settings.md: one layout, save and cancel in the same place, read-only state clear for Ali, Arabic mirrored.
-
-### UX-14 Settings > Numbering
-
-- **Key:** `RP-936` · **Part:** UX · **Round:** 0
-- **Sign in as:** Saeed; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Numbering EN and AR.
-  2. Edit a pattern; read the preview and the shared-counter warning.
-- **Expected result:** Matches settings-numbering.html and D:\Artifacts\Rabaed Document Numbering.html: pattern builder, preview left to right, warning wording; Ali sees examples only.
-
-### UX-15 Settings > Workflows, the builder and the Library
-
-- **Key:** `RP-937` · **Part:** UX · **Round:** 0
-- **Sign in as:** Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Settings > Workflows, a Workflow, its Versions.
-  2. Open the builder: add a Step, connect, undo, auto-layout, Validate, Publish.
-  3. Open the Library.
-- **Expected result:** Matches settings-workflows.html with wf/, D:\Artifacts\Rabaed Settings Workflows.html and Rabaed Workflow Builder V2.html: canvas, Step panel, problems list, Change Note; usable at 1366.
-
 ### UX-16 Register Import wizard and Imports page
 
 - **Key:** `RP-938` · **Part:** UX · **Round:** 0
@@ -1830,24 +1990,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Open the result page and the Imports page. EN and AR.
 - **Expected result:** Laid out as design/prompts/register-import.md, except that no import time is shown (visibility.md wins): each step says where you are, bad rows show every reason, confirm says how many Drafts.
 
-### UX-17 Snag List on the desktop
-
-- **Key:** `RP-939` · **Part:** UX · **Round:** 0
-- **Sign in as:** Ahmed (DCL engineer); Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the Snag List: List grouped by Stage, Kanban, type chips, filters, EN and AR.
-- **Expected result:** Matches snag-list.html: groups, chips, Step Age dots, filters; Comments from Code B shown as designed.
-
-### UX-18 WIR request and on-site inspection on a phone
-
-- **Key:** `RP-940` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 (phone), raise a WIR and open it on site as Ahmed: checklist, photos, annotate, EN and AR.
-- **Expected result:** Laid out as inspection-on-phone.md: phone-first, large touch targets, camera first, annotate tools reachable with a thumb, nothing cut off.
-
 ### UX-20 Empty, loading and error states
 
 - **Key:** `RP-942` · **Part:** UX · **Round:** 0
@@ -1856,15 +1998,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Visit each built page with no data, while loading (slow network), and with the api stopped for a moment.
 - **Expected result:** Every page has a designed empty state with a next step, a loading state with no layout jump, and an error that says what to do; the not-found page says nothing about the request.
-
-### UX-23 Packages view and Package page
-
-- **Key:** `RP-945` · **Part:** UX · **Round:** 1
-- **Sign in as:** Ali (TMC PM); Mohammed (DCL manager)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the Packages view and a Package page, EN and AR, 1366 and 1920: cards, counts, item table, bulk bar, Comments section.
-- **Expected result:** Matches packages.html where spec RP-616 does not differ (the table of known differences in design/prompts/packages.md).
 
 ### UX-25 Add Signature, the no-Signature and no-Stamp pop-ups, Company logo and Stamp
 
@@ -1877,28 +2010,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Company profile: logo and Stamp.
 - **Expected result:** Laid out as signature-and-stamp.md and its Claude Design screens (RP-665): clear what is missing and how to add it, EN and AR.
 
-### UX-26 Documental Record and Working Copy read like the owner samples
-
-- **Key:** `RP-948` · **Part:** UX · **Round:** 2
-- **Sign in as:** Ali; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Download the Documental Record of a closed MAR and a Working Copy, EN and AR record language.
-  2. Compare with the owner samples of RP-151.
-- **Expected result:** Page 1, the Form body, Signature cards and appendix follow the samples where they agree with visibility.md and GLOSSARY.md; Latin digits; Document Numbers left to right; readable when printed.
-
-## 14. Visibility (52 cases)
-
-### VIS-01 A new Draft and a MAR in internal review are TMC's alone
-
-- **Key:** `RP-734` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Hafiz, Ali (TMC). Must NOT see: Yousef (Beta Build), Ahmed, Sara, Mohammed (DCL), Faisal, Noura (Al Waha), Owner PM (UAT Owner Co)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz saves a Draft MAR "UAT VIS-01 Draft".
-  2. Each observer: Submittals List, Kanban, Dashboard, Home, Activity Feed, bell, and search for the Subject; note every count.
-  3. Hafiz sends it for review (Ali holds it); repeat 2.
-- **Expected result:** Observers must NOT see the item in any List, Kanban, count, badge, Dashboard figure, search result, feed entry or notification, before or after the send. Their counts are unchanged by it.
+## 18. Visibility (40 cases)
 
 ### VIS-02 After the Submit only the covering Consultant and oversight see the MAR
 
@@ -1953,16 +2065,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Each person presses Download PDF on the item and from the List row; Yousef also requests the item id and the record URL directly.
 - **Expected result:** Ali, Ahmed, Faisal and the Owner PM download the same record; Yousef gets the plain 404 page everywhere and no row. A made-up id and an item whose record is not made yet give the same 404.
 
-### VIS-08 The Record Data inside the PDF holds only what the pages print
-
-- **Key:** `RP-766` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Ali (TMC)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the PDF's attachments and extract the Record Data XML.
-  2. Compare each value with the PDF text.
-- **Expected result:** Every value in the XML (Transitions on the path with name, Position, Company, times and hashes; Verification Code and link) is printed in the PDF; the XML holds no Internal Note, Recommended Code, Chat or Return.
-
 ### VIS-09 A Link to an item the viewer cannot see shows number and Subject only
 
 - **Key:** `RP-768` · **Part:** VIS · **Round:** 0
@@ -1987,18 +2089,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Hafiz Submits MAR-2; read again.
   4. Needs FX-C2: Mohammed raises a Snag that links MAR-1; Hafiz reads MAR-1's Linked from.
 - **Expected result:** MAR-2 is not listed while it is a Draft or in internal review, then appears. Hafiz sees Mohammed's item as number and Subject; opening it says he may not see its details; its answers, history and Documents stay hidden and its URL is 404.
-
-### VIS-12 A Revision Draft is hidden; the drop-down lists only what the viewer sees
-
-- **Key:** `RP-772` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Hafiz (TMC). Must NOT see: Mohammed, Faisal
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz creates Revision 1 of a Code C MAR and keeps it Draft.
-  2. Mohammed and Faisal open the original: drop-down, Links, and the Revision URL.
-  3. Hafiz Submits it.
-  4. Hafiz discards another Draft Revision and creates it again.
-- **Expected result:** Before the Submit the drop-down lists only the original, there is no Link to the Draft and its URL is 404. After it both Revisions are listed and the original shows its own answers, Documents and history. A discarded Revision never reaches Mohammed; the re-created one is Rev 1 again.
 
 ### VIS-13 A Revision moved to another Location: each oversight Member sees only theirs
 
@@ -2048,29 +2138,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   4. Compare again.
 - **Expected result:** Fresh seed: Ali Pending 2 (0002 and 0003 Rev 1, one per chain) and In preparation 1 (the seeded Draft); Ahmed Pending 2 and no In preparation figure; Yousef 0 of everything. After step 2 Ali In preparation 3 and Pending unchanged; Ahmed and Yousef unchanged. DCL card shows awaiting revision while TMC card shows Revision in progress; each chain counts once; Yousef Revision line holds nothing of TMC.
 
-### VIS-20 Search finds nothing inside answers or replies
-
-- **Key:** `RP-798` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Ali (TMC); Mohammed (DCL)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Mohammed issues a Code with Remarks containing the word zircon.
-  2. Ali and Mohammed search zircon in List and Kanban.
-  3. Search the owner name and a Floor name.
-- **Expected result:** No result for zircon: Search never reads answers or replies. Search by Document Number, Subject, Type, Trade, Location and the raiser Company works; an owner phrase finds the viewer own Company people and the other Company by name only.
-
-### VIS-23 Who holds an item: pool names stay inside the holding Company
-
-- **Key:** `RP-804` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Ali, Hafiz (TMC); Layla, Ahmed, Sara, Mohammed (DCL)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Layla gives Sara Electrical again (the demo has her on Mechanical only, RP-1207). Ali Submits a MAR: it waits in DCL pool of two Engineers.
-  2. Ali reads With on the item, List and Kanban.
-  3. Ahmed picks it up; Sara and Ali read again.
-  4. Mohammed issues Code B; the Comments wait in TMC pool.
-- **Expected result:** Ali reads With Design Consultants LLC and never the pool names, the holder or a Pick up event, in the item, List, Kanban, history, feed or notifications. DCL reads the pool names then the holder. Mohammed reads TMC by name only, even while the Comments wait in TMC pool.
-
 ### VIS-24 The Owner review: With Owner review and the Recommended Code
 
 - **Key:** `RP-807` · **Part:** VIS · **Round:** 0
@@ -2082,17 +2149,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Noura Sends Back; Mohammed recommends C; Noura Confirms.
   4. The UAT Owner PM reads the item at each step.
 - **Expected result:** While Noura reviews, TMC reads With Owner review (no Company name) in the List, search, Kanban lane, item, workflow map and weekly report, and no Code anywhere (not in History, feed, bell, Dashboard). Mohammed and Noura read the Recommended Code; the UAT Owner PM (Owner, not holder) reads none until it is issued. Confirm issues the Code for everyone; Comments with B come from Mohammed rows and are held by TMC; Code C offers a Revision.
-
-### VIS-25 The workflow map folds the other Company into one block
-
-- **Key:** `RP-816` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Ali (TMC); Ahmed, Mohammed (DCL); UAT Owner PM
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ali and the Owner PM open View workflow on a Submitted MAR.
-  2. Ahmed sends it to Mohammed.
-  3. Read the map again.
-- **Expected result:** Both read the whole Version with every Company Steps, but the item is With Design Consultants LLC over DCL part: no DCL Step is marked and the Ahmed to Mohammed move changes nothing they read. DCL sees Mohammed Step marked.
 
 ### VIS-26 Workflow authoring is 404 for everyone but the authors
 
@@ -2137,16 +2193,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Reopen the publish dialog and Versions.
 - **Expected result:** The Change Note naming a Participant on an exception is refused; N items keep their Version counts only the items the reader sees; only authors read Change Notes.
 
-### VIS-30 Another Project or a non-admin cannot read or change Tower setup
-
-- **Key:** `RP-832` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Ali (TMC PM, not Project Admin); Layla (DCL Authorized Person); Nasser (Project Admin of JCV)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Each opens Tower Settings: Scopes add, rename, deactivate; numbering counters; Workflow settings; Visibility.
-  2. Saeed (Project Admin) does the same.
-- **Expected result:** Ali, Layla and Nasser get the plain 404 for every change and for the numbering counters; the Scope is unchanged. Saeed can do them. Every Project Member reads Tower Trades, Scopes, Locations and published Workflows.
-
 ### VIS-32 Pending invitations: one answer whatever the CR number
 
 - **Key:** `RP-837` · **Part:** VIS · **Round:** 0
@@ -2158,17 +2204,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Layla opens Company Projects.
   4. Saeed withdraws both invitations.
 - **Expected result:** Both invitations show on Saeed list by CR number only and read the same; Hafiz sees DCL nowhere; Layla sees only the invitation (Project name, Host Company, offered role); after the withdrawals both leave Saeed list in exactly the same way and DCL list too; nothing shows which CR number was on Rabaed.
-
-### VIS-33 Member Visibility pages belong to their own Company
-
-- **Key:** `RP-840` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz (TMC); Saeed (Project Admin); Layla (DCL Authorized Person)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz opens DCL Participant page and Ahmed Visibility page by URL.
-  2. Saeed does the same.
-  3. Layla, not yet a Project Member, opens her Participant page.
-- **Expected result:** Hafiz and Saeed get the 404 for DCL Member Visibility; Saeed does see DCL Participant grant. Layla sees only the Trades and Locations DCL covers (with the Locations above, such as Tower 1 > Floor 02) and the Scopes under those Trades, and nothing else of the Project.
 
 ### VIS-34 Narrowing has limits and Handover tells only counts across Companies
 
@@ -2212,16 +2247,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Ali Submits.
   4. Ahmed and Yousef again.
 - **Expected result:** Before the Submit Yousef, Ahmed and the off-Project Member get the 404 (same as a made-up id) naming nothing. After it Ahmed sees and downloads the Documents and photo with time and place, and TMC as the uploader Company, not the engineer; Yousef still gets 404 for the list and the URLs.
-
-### VIS-38 After the Submit only the Step holder changes anything
-
-- **Key:** `RP-855` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Ali (TMC PM); Hafiz; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. With the MAR at Consultant review, Hafiz and Ali try to save an answer, add a Document and edit a Link.
-  2. Ahmed tries to change an answer.
-- **Expected result:** All refused: after the Submit the Form is the raiser own and read-only to everyone but the raiser at a Step that lets it edit; the Consultant answers only in its reply Screen.
 
 ### VIS-40 A Code D replacement is invisible while it is a Draft
 
@@ -2269,17 +2294,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Mohammed tries Duplicate.
   4. Yousef and the stranger try Download and Duplicate by id.
 - **Expected result:** Each export holds exactly that viewer rows and fields (Creation Date for TMC only; the owner is Mohammed to DCL and DCL by name to TMC); Download gives the same shared content to both; Duplicate is refused for Mohammed (one word for every reason) and 404 for Yousef and the stranger.
-
-### VIS-44 Members page counts only the viewer own Company Projects
-
-- **Key:** `RP-875` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Saeed (Authorized Person); Hafiz (plain Member); Layla
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Saeed opens Members.
-  2. Hafiz opens it.
-  3. Layla opens hers.
-- **Expected result:** The Projects column counts each own Member active Projects (the same for Saeed and Hafiz, who read nothing but the count); never DCL people or Projects; DCL list holds DCL people only.
 
 ### VIS-45 The Approved Supplier List is Project-wide but hides its source
 
@@ -2346,17 +2360,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Yousef opens the Snag List, its counts, Kanban and filters (Company, Raised from, Comment Type), the Snag by id, history, Links and Documents.
 - **Expected result:** Yousef sees the Snag nowhere and the filters offer only his own Company; Raised from offers nothing; a Comment raised from a source Yousef cannot see is not named by number. By id everything is 404.
 
-### VIS-51 Snag Steps are shared only as Transitions
-
-- **Key:** `RP-905` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz (TMC); Mohammed (DCL)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. TMC moves the Snag Start work and Resolve with a note.
-  2. Mohammed reads the history.
-  3. Mohammed holds Verify.
-- **Expected result:** Mohammed reads TMC Resolve and its note, never Start work, internal moves or who picked it up; TMC reads DCL Raise, never its Draft or who holds Verify.
-
 ### VIS-52 A Snag stays with the Contractor that holds it
 
 - **Key:** `RP-907` · **Part:** VIS · **Round:** 0
@@ -2411,15 +2414,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Hafiz confirms.
   4. Everyone opens the Imports page and the import by id.
 - **Expected result:** Before confirm only Hafiz reads the preview. After it every TMC Member reads the import, its file name, mapping and rows; Beta Build, DCL and Al Waha see an empty Imports page and the 404 for the import and its confirm; none of its Drafts; no import time anywhere.
-
-### VIS-57 The Activity Feed names other Companies only by name
-
-- **Key:** `RP-912` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Yousef (Beta Build); Ahmed, Mohammed (DCL); Ali (TMC)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. After a Submit, a Pick up, an internal Send to Manager, a Return and a Code, each person opens Project > Activity Feed and Dashboard Recent activity.
-- **Expected result:** Ali sees TMC people and DCL by name only; Ahmed sees DCL people and TMC by name only; nobody sees the other Company internal events, Internal Notes, Recommended Codes, answers_changed or Document uploads; Yousef sees only Beta Build items. No setup changes appear.
 
 ### VIS-58 Direct URLs and ids give the same 404 page, never a 403
 

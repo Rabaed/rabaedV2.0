@@ -1,5 +1,5 @@
 import type { BilingualText } from "@rabaed/domain";
-import type { Product, SampleInspection, SampleSnag, SampleSubmittal } from "./sample-project-plan.ts";
+import type { Product, SampleDraft, SampleInspection, SamplePackage, SampleSnag, SampleSubmittal } from "./sample-project-plan.ts";
 import type { SampleRecords } from "./sample-project.ts";
 
 // The UAT Projects (RP-1246, RP-1248): one Project per role, so a tester signs in as one demo person
@@ -25,6 +25,14 @@ export interface UatRole {
   personName: BilingualText;
   /** What the seed stages in it, in the order it raises them (so each gets the Document Number planned for it). */
   staged: () => Staged[];
+  /** Its Packages (RP-1249), put together after its items, from them and from Drafts of their own; none when left out. */
+  packages?: () => UatPackage[];
+}
+
+/** One Package the seed puts together, and the sheet's cases that use it, which name it by its name. */
+export interface UatPackage {
+  cases: string[];
+  package: SamplePackage;
 }
 
 /**
@@ -67,6 +75,8 @@ const P = {
   transformers: product("Dry type transformers", "Siemens", "GEAFOL", "26 22 00", "Cast resin dry type transformers, 1600 kVA.", "Transformer", 2, "pcs"),
   switchgear: product("MV switchgear", "Schneider Electric", "SM AirSeT", "26 13 00", "Medium voltage switchgear panels.", "Switchgear panel", 5, "pcs"),
   busbar: product("Busbar trunking", "Legrand", "Zucchini SCP", "26 25 00", "Busbar trunking for the risers.", "Busbar", 120, "m"),
+  // Mechanical Works, which Sara covers too: an item of it waits in the Consultant Engineers' pool of two (RP-1249).
+  fanCoils: product("Fan coil units", "Trane", "FCD", "23 82 19", "Ducted fan coil units, 3-speed EC motor.", "Fan coil unit", 180, "pcs"),
 };
 
 /** A Submittal of TMC's by default, on Electrical Works at a Floor of the make (sample-project-plan.ts). */
@@ -81,16 +91,21 @@ const mar = (title: string, location: string, end: SampleSubmittal["end"], produ
   ...extra,
 });
 
-/** TMC's and Beta Build's MAR series on UAT 01. */
-const tmc = (n: number) => `UAT01-MAR-01-${String(n).padStart(4, "0")}`;
-const beta = (n: number) => `UAT01-MAR-02-${String(n).padStart(4, "0")}`;
+/** A UAT Project's Document Number series: TMC's (Participant Code 01), Beta Build's (02) and Design Consultants' (03), by Type. */
+const series = (code: string, type: "MAR" | "SAR" | "SNG" | "WIR", participant: "01" | "02" | "03") => (n: number) => `${code}-${type}-${participant}-${String(n).padStart(4, "0")}`;
+
+/** A staged Submittal for `cases`. */
+const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
+/** Another Company's Submittal, or TMC's before its Submit, that the role must not see: its visibility `cases` look for it. */
+const hidden = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ ...s(cases, item, number), mustNotSee: true });
 
 /**
  * UAT 01, Hafiz (Contractor Engineer, TMC): what his cases act on, waiting at him, and what he must not see.
  * TMC's MARs are numbered in this order; Beta Build's own come between them, so VIS-39 sees TMC's run on with no gaps.
  */
 function uat01(): Staged[] {
-  const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
+  const tmc = series("UAT01", "MAR", "01");
+  const beta = series("UAT01", "MAR", "02");
   /** Beta Build's own item, for VIS-19: Hafiz must not see it. */
   const betaHidden = (item: SampleSubmittal, number?: string): Staged => ({ ...s(["VIS-19"], { ...item, owner: "beta" }, number), mustNotSee: true });
   return [
@@ -136,6 +151,173 @@ function uat01(): Staged[] {
   ];
 }
 
+/** A Draft of a Package's own: never sent, so no Document Number. */
+const packageDraft = (title: string, location: string, p: Product): SampleDraft => ({ title, trade: "EL", location, product: p });
+
+/** A Package of TMC's, which Ali puts together. */
+const tmcPackage = (en: string, ar: string, status: SamplePackage["status"], existing: string[], drafts: SampleDraft[] = []): SamplePackage => ({ name: { en, ar }, owner: "tmc", status, existing, submitted: [], drafts });
+
+/**
+ * UAT 02, Ali (Contractor Project Manager, TMC): items waiting at his Step to Submit or move, Submitted and closed items to
+ * read, download and Watch, Drafts and Packages to put together, Snags held by TMC, and Beta Build's work he must not see.
+ */
+function uat02(): Staged[] {
+  const tmc = series("UAT02", "MAR", "01");
+  const beta = series("UAT02", "MAR", "02");
+  const snag = series("UAT02", "SNG", "03");
+  return [
+    // With Ali in Internal Review, each for one case that moves it.
+    s(["SUB-07"], mar("SUB-07 Wiring devices – ready to Submit", "A02", "with_pm", P.wiring), tmc(1)),
+    s(["SIG-01"], mar("SIG-01 Cable trays – Submit in its pop-up", "A03", "with_pm", P.trays), tmc(2)),
+    s(["SUB-25"], mar("SUB-25 Emergency luminaires – move on the Kanban", "A04", "with_pm", P.luminaires), tmc(3)),
+    hidden(["VIS-57"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
+    hidden(["VIS-57"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
+    // Submitted to Design Consultants, read only: Watch, the workflow map, a Working Copy.
+    s(["SUB-18", "SUB-22", "WF-02", "SIG-16", "VIS-25", "VIS-38"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(4)),
+    // In the In Progress Package PKG-08 reads: one still with Design Consultants, one closed at Code B with two Comments open with TMC.
+    s(["PKG-08"], mar("PKG-08 Fire alarm control unit – Submitted, in a Package", "A05", "with_consultant_engineer", P.fireAlarm), tmc(5)),
+    s(["PKG-11", "SNG-06"], mar("PKG-11 Lighting control panel – Code B", "P01", "code_b", P.lightingPanel, {
+      recommendedCode: "B",
+      comments: [
+        { comment: "Submit the factory test certificates before delivery: lighting control panel.", reference: "Datasheet p. 2", end: "open" },
+        { comment: "Show the cable entry on the shop drawing: lighting control panel.", reference: "Shop drawing", end: "open" },
+      ],
+    }), tmc(6)),
+    // Closed by Design Consultants, read only: the Documental Records.
+    s(["SIG-02", "SIG-03", "SIG-08", "SIG-12", "SIG-13", "VIS-08", "UX-26"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(7)),
+    s(["SIG-12", "VIS-20"], mar("Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(8)),
+    s(["SIG-12"], mar("LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(9)),
+    hidden(["VIS-57"], mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(2)),
+    s(["PKG-03"], mar("PKG-03 Smoke detectors – in Internal Review", "A06", "with_pm", P.smoke), tmc(10)),
+    // In the In Progress Package PKG-07 adds to and renames.
+    s(["PKG-07"], mar("PKG-07 Cable trays – Submitted, in a Package", "A04", "with_consultant_engineer", P.trays), tmc(11)),
+    // Hafiz's Drafts, which TMC reads: one to download, one whose Subject reads as a formula, and those for the Packages.
+    s(["SUB-18"], mar("SUB-18 LED downlights – TMC Draft", "A03", "draft", P.downlights)),
+    s(["SUB-24"], mar("=1+1 SUB-24 Subject that looks like a formula", "A04", "draft", P.fixtures)),
+    s(["PKG-03"], mar("PKG-03 Earthing – Draft 1", "A06", "draft", P.earthing)),
+    s(["PKG-03"], mar("PKG-03 Busbar trunking – Draft 2", "A06", "draft", P.busbar)),
+    s(["PKG-05"], mar("PKG-05 Lighting fixtures – Datasheet missing", "A02", "draft", P.fixtures, { bare: true })),
+    s(["PKG-07"], mar("PKG-07 Wiring devices – Draft to add", "A03", "draft", P.wiring)),
+    // Snags Design Consultants raised on TMC, Open with TMC.
+    { kind: "snag", cases: ["SNG-12", "SNG-15"], number: snag(1), item: { title: "SNG-12 Loose cable tray cover", type: "SNG", trade: "EL", location: "A03", end: "open", raisedBy: "ahmed", description: "The cable tray cover is loose along the corridor. / غطاء حامل الكابلات غير مثبت على طول الممر.", photos: 1 } },
+    { kind: "snag", cases: ["SNG-12", "SNG-15"], number: snag(2), item: { title: "SNG-12 Missing socket cover", type: "SNG", trade: "EL", location: "A04", end: "open", raisedBy: "ahmed", description: "A socket outlet has no cover plate. / مقبس بلا غطاء." } },
+  ];
+}
+
+/**
+ * UAT 02's Packages, TMC's, one for each Package case that changes one, so they run in any order: four Open (one empty,
+ * one only holding a Draft another Package can't take), two In Progress (one to add to and rename, one to read).
+ */
+function uat02Packages(): UatPackage[] {
+  return [
+    { cases: ["PKG-03"], package: tmcPackage("PKG-03 Package to fill", "PKG-03 حزمة للتعبئة", "open", []) },
+    { cases: ["PKG-03"], package: tmcPackage("PKG-03 Package holding a Draft", "PKG-03 حزمة فيها مسودة", "open", [], [packageDraft("PKG-03 Wiring devices – in another Package", "A05", P.wiring)]) },
+    {
+      cases: ["PKG-04"],
+      package: tmcPackage("PKG-04 Package to change", "PKG-04 حزمة للتعديل", "open", [], [packageDraft("PKG-04 Wiring devices – in the Package", "A05", P.wiring), packageDraft("PKG-04 LED downlights – in the Package", "A05", P.downlights)]),
+    },
+    { cases: ["PKG-05"], package: tmcPackage("PKG-05 Package to submit", "PKG-05 حزمة للتقديم", "open", [], [packageDraft("PKG-05 Exit signs – ready Draft", "A06", P.exitSigns)]) },
+    { cases: ["PKG-07"], package: tmcPackage("PKG-07 Package to add to", "PKG-07 حزمة للإضافة إليها", "in_progress", ["PKG-07 Cable trays – Submitted, in a Package"]) },
+    {
+      cases: ["PKG-01", "PKG-08", "PKG-11", "UX-23"],
+      package: tmcPackage("PKG-08 Package in progress", "PKG-08 حزمة قيد التنفيذ", "in_progress", ["PKG-08 Fire alarm control unit – Submitted, in a Package", "PKG-11 Lighting control panel – Code B"]),
+    },
+  ];
+}
+
+/** UAT 03, Saeed (Project Admin, TMC's Authorized Person): Project Settings only, so one item, whose number puts TMC's Participant Code in use. */
+function uat03(): Staged[] {
+  return [s(["PAR-10"], mar("PAR-10 Cable trays – numbered with TMC's code", "A02", "with_consultant_engineer", P.trays), series("UAT03", "MAR", "01")(1))];
+}
+
+/**
+ * UAT 04, Ahmed (Consultant Engineer, Design Consultants): items Submitted to Design Consultants and waiting at him (an
+ * Electrical one is his at once; a Mechanical one waits in the pool he shares with Sara), Inspections to carry out, a
+ * Snag TMC resolved back with him to Verify, and TMC's and Beta Build's internal work he must not see.
+ */
+function uat04(): Staged[] {
+  const tmc = series("UAT04", "MAR", "01");
+  const beta = series("UAT04", "MAR", "02");
+  const snag = series("UAT04", "SNG", "03");
+  const wir = series("UAT04", "WIR", "01");
+  return [
+    s(["SUB-09", "NOT-02"], mar("SUB-09 Emergency lighting control panel – with you", "A02", "with_consultant_engineer", P.controlPanel, { samplePhoto: true }), tmc(1)),
+    s(["SUB-10"], mar("SUB-10 Smoke detectors – send to the Manager", "A03", "with_consultant_engineer", P.smoke), tmc(2)),
+    s(["FRM-08"], mar("FRM-08 Sub-distribution boards – the reply Screens", "A04", "with_consultant_engineer", P.sdb), tmc(3)),
+    s(["SUB-08"], mar("SUB-08 Fan coil units – in the Engineers' pool", "A05", "with_consultant_engineer", P.fanCoils, { trade: "ME" }), tmc(4)),
+    // Read only, for VIS-23: one in the Engineers' pool (SUB-08 picks up its own), one closed at Code B whose Comment waits in TMC's pool.
+    s(["VIS-23"], mar("VIS-23 Fan coil units – stays in the Engineers' pool", "A06", "with_consultant_engineer", P.fanCoils, { trade: "ME" }), tmc(5)),
+    s(["VIS-23"], mar("VIS-23 Wiring devices – Code B, Comments with TMC", "A06", "code_b", P.wiring, {
+      recommendedCode: "B",
+      comments: [{ comment: "Confirm the socket heights with the Architect: wiring devices.", reference: "Room finishes drawing", end: "open" }],
+    }), tmc(6)),
+    // TMC's own, before the Submit, and Beta Build's: none of it reaches Design Consultants (V1). TMC's item in Internal Review
+    // takes TMC's last number, so the numbers Ahmed reads (0001 to 0006) run on with no gap.
+    hidden(["VIS-01"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(7)),
+    hidden(["VIS-01"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
+    hidden(["VIS-01"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
+    hidden(["VIS-01"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
+    // Raised by Ahmed on TMC: one resolved by TMC, back with him at Verify; one still Open with TMC.
+    { kind: "snag", cases: ["VIS-51", "UX-17"], number: snag(1), item: { title: "VIS-51 Unlabelled circuit breakers – resolved by TMC", type: "SNG", trade: "EL", location: "A05", end: "resolved", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات." } },
+    { kind: "snag", cases: ["UX-17"], number: snag(2), item: { title: "UX-17 Cracked light diffuser", type: "SNG", trade: "EL", location: "A06", end: "open", raisedBy: "ahmed", description: "A downlight diffuser is cracked. / غطاء ناشر الضوء مكسور.", photos: 1 } },
+    // TMC's Work Inspection Requests, Submitted and picked up by Ahmed, each for one case that answers its Checklist.
+    { kind: "inspection", cases: ["INS-09", "INS-07", "INS-14"], number: wir(1), item: { title: "INS-09 Cable containment Level 03 – inspect on site", owner: "tmc", trade: "EL", location: "A03", end: "with_consultant_engineer", consultantEngineer: "ahmed", description: "Cable containment on Tower A Level 03, ready for inspection." } },
+    { kind: "inspection", cases: ["UX-18"], number: wir(2), item: { title: "UX-18 Cable containment Level 04 – on a phone", owner: "tmc", trade: "EL", location: "A04", end: "with_consultant_engineer", consultantEngineer: "ahmed", description: "Cable containment on Tower A Level 04, ready for inspection." } },
+  ];
+}
+
+/**
+ * UAT 05, Mohammed (Consultant Manager, Design Consultants): Submittals and WIRs waiting at him with Ahmed's Recommended Code,
+ * one item for each Code case; two in a TMC Package for the bulk Code; and a Code C whose Revision is still inside TMC.
+ */
+function uat05(): Staged[] {
+  const tmc = series("UAT05", "MAR", "01");
+  const wir = series("UAT05", "WIR", "01");
+  const atManager = (title: string, location: string, p: Product, code: "A" | "B" | "C" | "D") => mar(title, location, "with_consultant_manager", p, { recommendedCode: code });
+  const inspection = (cases: string[], n: number, title: string, location: string, code: "A" | "B" | "C" | "D", failing: string[] = []): Staged => ({
+    kind: "inspection",
+    cases,
+    number: wir(n),
+    item: { title, owner: "tmc", trade: "EL", location, end: "with_consultant_manager", recommendedCode: code, ...(failing.length ? { failing } : {}), description: `${title}: ready for inspection.` },
+  });
+  return [
+    s(["SUB-11"], atManager("SUB-11 Main distribution board – recommended Code A", "PB1", P.mdb, "A"), tmc(1)),
+    s(["SUB-12"], atManager("SUB-12 Lighting control panel – recommended Code B", "P01", P.lightingPanel, "B"), tmc(2)),
+    s(["SUB-13"], atManager("SUB-13 LED downlights – Return to Engineer", "A02", P.downlights, "C"), tmc(3)),
+    s(["SUB-13"], atManager("SUB-13 Smoke detectors – Code C needs Remarks", "A03", P.smoke, "C"), tmc(4)),
+    s(["PKG-09"], atManager("PKG-09 Exit signs – bulk Code A", "A04", P.exitSigns, "A"), tmc(5)),
+    s(["PKG-09"], atManager("PKG-09 Wiring devices – bulk Code A", "A05", P.wiring, "A"), tmc(6)),
+    // A Supplier Approval Request waiting at him for Code A, which adds its supplier to the Approved Supplier List.
+    s(["SUB-20"], {
+      title: "SUB-20 Delta Cables – Supplier Approval Request",
+      type: "SAR",
+      trade: "EL",
+      location: "A02",
+      end: "with_consultant_manager",
+      product: P.cables,
+      supplier: { name: { en: "UAT SUB-20 Delta Cables", ar: "UAT SUB-20 دلتا للكابلات" }, crNumber: "1010000201", country: "Saudi Arabia", supply: "Low voltage power cables for Tower A." },
+      consultantEngineer: "ahmed",
+      recommendedCode: "A",
+    }, series("UAT05", "SAR", "01")(1)),
+    // Closed at Code C; TMC raised its Rev 1 and sent it for review, so it is in TMC's Internal Review, which Mohammed must not see (V1).
+    s(["VIS-12"], mar("VIS-12 Cable trays – Code C, Rev 1 inside TMC", "A06", "code_c", P.trays, { recommendedCode: "C", revision: "with_pm" }), tmc(7)),
+    hidden(["VIS-12"], mar("TMC – earthing, Draft not sent", "A06", "draft", P.earthing)),
+    hidden(["VIS-12"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
+    // WIRs with Ahmed's Recommended Code: two to read the proposed Code, four to close at A, B, C and D.
+    inspection(["INS-11"], 1, "INS-11 Cable containment Level 02 – all passed", "A02", "A"),
+    inspection(["INS-11"], 2, "INS-11 Cable containment Level 03 – one failed", "A03", "C", ["labels"]),
+    inspection(["INS-12"], 3, "INS-12 Cable containment Level 04 – for Code A", "A04", "A"),
+    inspection(["INS-12"], 4, "INS-12 Cable containment Level 05 – for Code B", "A05", "B"),
+    inspection(["INS-12"], 5, "INS-12 Cable containment Level 06 – for Code C", "A06", "C", ["supports"]),
+    inspection(["INS-12"], 6, "INS-12 Cable containment Podium Level 01 – for Code D", "P01", "D", ["supports", "earthing"]),
+  ];
+}
+
+/** UAT 05's Package: TMC's, In Progress, its two items waiting at Mohammed for the same Code. */
+function uat05Packages(): UatPackage[] {
+  return [{ cases: ["PKG-09"], package: tmcPackage("PKG-09 Package waiting at the Manager", "PKG-09 حزمة لدى المدير", "in_progress", ["PKG-09 Exit signs – bulk Code A", "PKG-09 Wiring devices – bulk Code A"]) }];
+}
+
 /* eslint-enable rabaed/no-avoid-terms */
 
 export const UAT_ROLES: UatRole[] = [
@@ -147,15 +329,50 @@ export const UAT_ROLES: UatRole[] = [
     personName: { en: "Hafiz", ar: "حافظ" },
     staged: uat01,
   },
+  {
+    n: "02",
+    code: "UAT02",
+    // eslint-disable-next-line rabaed/no-avoid-terms -- the Contractor PM's Position, as GLOSSARY.md's Position entry names it.
+    name: { en: "UAT 02 · Contractor Project Manager (Ali)", ar: "UAT 02 · مدير مشروع المقاول (علي)" },
+    person: "ali",
+    personName: { en: "Ali", ar: "علي" },
+    staged: uat02,
+    packages: uat02Packages,
+  },
+  {
+    n: "03",
+    code: "UAT03",
+    name: { en: "UAT 03 · Project Admin (Saeed)", ar: "UAT 03 · مسؤول المشروع (سعيد)" },
+    person: "saeed",
+    personName: { en: "Saeed", ar: "سعيد" },
+    staged: uat03,
+  },
+  {
+    n: "04",
+    code: "UAT04",
+    name: { en: "UAT 04 · Consultant Engineer (Ahmed)", ar: "UAT 04 · مهندس الاستشاري (أحمد)" },
+    person: "ahmed",
+    personName: { en: "Ahmed", ar: "أحمد" },
+    staged: uat04,
+  },
+  {
+    n: "05",
+    code: "UAT05",
+    name: { en: "UAT 05 · Consultant Manager (Mohammed)", ar: "UAT 05 · مدير الاستشاري (محمد)" },
+    person: "mohammed",
+    personName: { en: "Mohammed", ar: "محمد" },
+    staged: uat05,
+    packages: uat05Packages,
+  },
 ];
 
-/** What the seed builds for a role's Project: its staged items, in order; a UAT Project has no Packages. */
+/** What the seed builds for a role's Project: its staged items, in order, then its Packages (none when it has none). */
 export function uatRecords(role: UatRole): SampleRecords {
   const staged = role.staged();
   return {
     submittals: staged.flatMap((x) => (x.kind === "submittal" ? [x.item] : [])),
     snags: staged.flatMap((x) => (x.kind === "snag" ? [x.item] : [])),
     inspections: staged.flatMap((x) => (x.kind === "inspection" ? [x.item] : [])),
-    packages: [],
+    packages: (role.packages?.() ?? []).map((p) => p.package),
   };
 }
