@@ -256,6 +256,23 @@ export function sampleSubmittals(): SampleSubmittal[] {
   });
 }
 
+/**
+ * A Document Approval Request of TMC's (RP-1250, a UAT Project's): it runs 1→1 with the Owner's review (ADR 0022), so
+ * Hafiz raises it with its document, Ali Submits it, and Mohammed recommends `recommendedCode` to the Owner. It waits
+ * there, at the Owner Representative's review, which Noura holds.
+ */
+export interface SampleDar {
+  title: string;
+  trade: TradeCode;
+  /** A Floor's code. */
+  location: string;
+  documentType: "report" | "calculation";
+  recommendedCode: "A" | "B" | "C" | "D";
+  /** A recommended Code B's Comments, for the Owner to read with it. */
+  comments?: { comment: string; reference: string }[];
+  end: "with_owner";
+}
+
 /** Where a Snag List item ends: its Stage. */
 export type SnagEnd =
   | "draft"

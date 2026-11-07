@@ -15,6 +15,7 @@ import {
   samplePackages,
   sampleSnags,
   sampleSubmittals,
+  type SampleDar,
   type SampleDraft,
   type SampleInspection,
   type SamplePackage,
@@ -52,14 +53,40 @@ const PEOPLE = {
   mohammed: ["mohammed.alshamsi", "designconsultants"],
   faisal: ["faisal.alotaibi", "alwaha"],
   noura: ["noura.alharbi", "alwaha"],
+  // On the UAT Projects only (RP-1250): the sample Project leaves him off, as before.
+  omar: ["omar.alharbi", "tmc"],
 } as const;
-type Who = keyof typeof PEOPLE;
+/** A demo person the sample Project's runs sign in as. */
+export type SampleWho = keyof typeof PEOPLE;
+type Who = SampleWho;
+
+/** A Company on the Project, named by its Authorized Person: TMC's Saeed, Beta Build's Nasser, Design Consultants' Layla, Al Waha's Hind. */
+export type SampleCompany = "saeed" | "nasser" | "layla" | "hind";
+
+/** Trades and Locations by their codes; all of the Project's where one is left out. */
+export interface SampleGrant {
+  trades?: TradeCode[];
+  /** Location codes; a Zone's covers what is under it. */
+  locations?: string[];
+}
+
+/**
+ * Where a Project's people differ from the sample's (RP-1250): Members added or left off, a Member's or a Participant's
+ * Visibility narrowed. The sample Project, Al Nakheel, takes none; the UAT Projects add Omar, and UAT 06 narrows
+ * Design Consultants for Layla's cases.
+ */
+export interface SamplePeople {
+  add?: { who: Who; company: SampleCompany; positions: string[]; grant?: SampleGrant }[];
+  leaveOff?: Who[];
+  grants?: Partial<Record<Who, SampleGrant>>;
+  participants?: Partial<Record<SampleCompany, SampleGrant>>;
+}
 
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position's key, as GLOSSARY.md's Position entry names it.
 const PM = "project_manager";
 
 /** Each Company on the Project: its Authorized Person, CR number (seed.ts's made-up ones), Role and Members with their Positions. */
-const COMPANIES: { ap: Who; crNumber: string; role: BaseRole; members: [Who, string[]][] }[] = [
+const COMPANIES: { ap: SampleCompany; crNumber: string; role: BaseRole; members: [Who, string[]][] }[] = [
   { ap: "saeed", crNumber: "9999000001", role: "contractor", members: [["hafiz", ["engineer"]], ["ali", [PM]]] },
   // Yousef is Beta Build's only Member here, so he also Submits its Packages (RP-1220): Project Manager beside Engineer.
   { ap: "nasser", crNumber: "9999000002", role: "contractor", members: [["yousef", ["engineer", PM]]] },
@@ -93,6 +120,8 @@ export interface SampleRecords {
   /** Its Inspections (RP-1220): items of their own, as the Submittals are. */
   inspections: SampleInspection[];
   packages: SamplePackage[];
+  /** Its DARs at the Owner's review (RP-1250, a UAT Project's); none on the sample Project. */
+  dars?: SampleDar[];
 }
 
 /** The whole sample Project, as sample-project-plan.ts lays it out. */
@@ -121,6 +150,8 @@ export interface SampleProjectOptions {
   records?: SampleRecords;
   /** Which Project; the sample Project when left out (a seam test names one of its own). */
   project?: SampleProjectName;
+  /** Its people where they differ from the sample's (RP-1250); none when left out. */
+  people?: SamplePeople;
 }
 
 /**
@@ -132,14 +163,14 @@ export async function addSampleProject(
   app: FastifyInstance,
   migrator: Db,
   password: string,
-  { log = () => {}, concurrency = 4, records = sampleRecords(), project: which = SAMPLE_PROJECT }: SampleProjectOptions = {},
+  { log = () => {}, concurrency = 4, records = sampleRecords(), project: which = SAMPLE_PROJECT, people = {} }: SampleProjectOptions = {},
 ): Promise<SampleProjectResult> {
   return migrator.connection().execute(async (connection) => {
     await sql`select pg_advisory_lock(${LOCK_KEY})`.execute(connection);
     try {
       const as = await signInAll(app, password);
       const projectId = await project(as.saeed, which);
-      const ids = await setUp(as, projectId, which);
+      const ids = await setUp(as, projectId, which, people);
       const titled = async (title: string) =>
         (await sql<{ id: string }>`select id from work_item where project_id = ${projectId}::uuid and title = ${title}`.execute(connection)).rows.map((r) => r.id);
       const { rows } = await sql<{ title: string }>`select distinct title from work_item where project_id = ${projectId}::uuid`.execute(connection);
@@ -149,6 +180,7 @@ export async function addSampleProject(
         ...records.submittals.map((item) => ({ title: item.title, move: () => run.submittal(item) })),
         ...records.snags.map((item) => ({ title: item.title, move: () => run.snag(item) })),
         ...records.inspections.map((item) => ({ title: item.title, move: () => run.inspection(item) })),
+        ...(records.dars ?? []).map((item) => ({ title: item.title, move: () => run.dar(item) })),
       ];
       const todo = planned.filter((p) => !existing.has(p.title));
       log(`sample project: ${planned.length - todo.length} of ${planned.length} item(s) already there; adding ${todo.length}`);
@@ -204,7 +236,7 @@ export async function sampleProjectStatus(
   { records = sampleRecords(), project: which = SAMPLE_PROJECT }: Pick<SampleProjectOptions, "records" | "project"> = {},
 ): Promise<{ project: boolean; present: number; planned: number; packages: { present: number; planned: number } }> {
   // Every item it raises by Subject: a Package's own too, so a missing one shows before its Package.
-  const titles = [...records.submittals, ...records.snags, ...records.inspections, ...records.packages.flatMap((p) => [...p.submitted, ...p.drafts])].map((p) => p.title);
+  const titles = [...records.submittals, ...records.snags, ...records.inspections, ...(records.dars ?? []), ...records.packages.flatMap((p) => [...p.submitted, ...p.drafts])].map((p) => p.title);
   const { rows } = await sql<{ title: string }>`
     select distinct w.title from work_item w join project p on p.id = w.project_id
     where p.code = ${which.code} and p.name ->> 'en' = ${which.name.en} and w.title = any(${titles}::text[])
@@ -276,8 +308,8 @@ interface Ids {
 const sameGrant = (a: VisibilityGrant, b: VisibilityGrant) => a.isAll === b.isAll && [...a.valueIds].sort().join() === [...b.valueIds].sort().join();
 const sameVisibility = (a: Visibility, b: Visibility) => sameGrant(a.trade, b.trade) && sameGrant(a.location, b.location);
 
-/** Trades, Locations, suppliers, Participants and Members: each added only where it is missing. */
-async function setUp(as: People, projectId: string, which: SampleProjectName): Promise<Ids> {
+/** Trades, Locations, suppliers, Participants and Members: each added only where it is missing, `people`'s changes with them. */
+async function setUp(as: People, projectId: string, which: SampleProjectName, people: SamplePeople): Promise<Ids> {
   const admin = as.saeed;
   const dimensions = () => admin<DimensionValues>("GET", `/v1/projects/${projectId}/dimensions`);
   let have = await dimensions();
@@ -303,23 +335,31 @@ async function setUp(as: People, projectId: string, which: SampleProjectName): P
       (await admin<{ id: string }>("POST", url, { tradeId: trade[t.code], scopeId: null, name: SAMPLE_SUPPLIERS[t.code] })).id;
   }
 
+  /** A grant of `people`'s by codes, as the Project's value ids: every value where it names none. */
+  const grantOf = (g: SampleGrant = {}): Visibility => ({
+    trade: g.trades ? { isAll: false, valueIds: g.trades.map((c) => trade[c]) } : all,
+    location: g.locations ? { isAll: false, valueIds: g.locations.map((c) => location[c]!) } : all,
+  });
   for (const company of COMPANIES) {
     const ap = as[company.ap];
     const participantId = await participantOf(as, ap, projectId, which, company.crNumber, company.role);
+    const own = grantOf(people.participants?.[company.ap]);
     const visibility = await admin<{ visibility: Visibility }>("GET", `/v1/participants/${participantId}/visibility`);
-    if (!sameVisibility(visibility.visibility, { trade: all, location: all })) {
-      await admin("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all });
-    }
+    if (!sameVisibility(visibility.visibility, own)) await admin("PUT", `/v1/participants/${participantId}/visibility`, own);
     const { members: colleagues } = await ap<{ members: { id: string; email: string }[] }>("GET", "/v1/members");
-    for (const [who, positions] of company.members) {
+    const members: [Who, string[], SampleGrant | undefined][] = [
+      ...company.members.filter(([who]) => !people.leaveOff?.includes(who)).map(([who, positions]): [Who, string[], SampleGrant | undefined] => [who, positions, people.grants?.[who]]),
+      ...(people.add ?? []).filter((a) => a.company === company.ap).map((a): [Who, string[], SampleGrant | undefined] => [a.who, a.positions, a.grant]),
+    ];
+    for (const [who, positions, grant] of members) {
       const email = demoEmail(PEOPLE[who][0], PEOPLE[who][1]);
       const memberId = colleagues.find((m) => m.email === email)?.id;
       if (!memberId) throw new Error(`Sample project: the demo person "${who}" is not a Member of their Company`);
       const onProject = await ap<ParticipantMembers>("GET", `/v1/participants/${participantId}/members`);
       const member = onProject.members.find((m) => m.id === memberId);
       if (!member) await ap("POST", `/v1/participants/${participantId}/members`, { memberId });
-      // Sara works Mechanical only, as on Riyadh Gate Tower (RP-1207); everyone else all of their Participant's.
-      const wanted: Visibility = who === "sara" ? { trade: { isAll: false, valueIds: [trade.ME] }, location: all } : { trade: all, location: all };
+      // Sara works Mechanical only, as on Riyadh Gate Tower (RP-1207); everyone else all of their Participant's, unless `people` narrows them.
+      const wanted: Visibility = grant ? grantOf(grant) : who === "sara" ? { trade: { isAll: false, valueIds: [trade.ME] }, location: all } : own;
       const current = await ap<{ visibility: Visibility }>("GET", `/v1/participants/${participantId}/members/${memberId}/visibility`);
       if (!sameVisibility(current.visibility, wanted)) await ap("PUT", `/v1/participants/${participantId}/members/${memberId}/visibility`, wanted);
       if (!member || [...member.positions].sort().join() !== [...positions].sort().join()) {
@@ -590,6 +630,35 @@ class Runner {
     await this.act(pm, rev1, "submit", { answers: { cover_note: "Corrected and ready again. / تم التصحيح وجاهز مجدداً." } });
     if (i.revision === "open") await this.inspected(rev1, i, "with_consultant_engineer", undefined, []);
     else await this.inspected(rev1, { ...i, comments: [] }, "code_a", "A", []);
+  }
+
+  /**
+   * A DAR (RP-1250) on the 1→1 Workflow with the Owner's review: Hafiz raises it with its document and sends it, Ali
+   * Submits it, Mohammed recommends its Code to the Owner (a B with its Comments), and it waits at the Owner's review.
+   */
+  async dar(d: SampleDar) {
+    const { hafiz, ali, mohammed } = this.as;
+    const answers = {
+      document_type: d.documentType,
+      document_title: d.title,
+      document_revision: "R0",
+      specification_section: "26 05 19",
+      trade: this.ids.trade[d.trade],
+      location: this.ids.location[d.location],
+    };
+    const { id } = await hafiz<{ id: string }>("POST", `/v1/projects/${this.projectId}/work-items`, { type: "DAR", title: d.title, answers });
+    await this.upload(hafiz, id, "document", "document.pdf", "application/pdf", demoPdf([d.title, "Demo document: made up for the Rabaed demo."]));
+    await this.act(hafiz, id, "send_for_review");
+    await this.act(ali, id, "submit", { answers: { cover_note: `${d.title}, for the Owner's review.` } });
+    const matches = d.recommendedCode === "A" || d.recommendedCode === "B";
+    const remarks = matches ? "Recommended for approval. / موصى باعتماده." : "Recommended for resubmission. / موصى بإعادة تقديمه.";
+    await this.act(mohammed, id, `recommend_${d.recommendedCode.toLowerCase()}`, {
+      answers: {
+        ...verified(matches, "The document does not meet the specification. / المستند لا يطابق المواصفات."),
+        remarks,
+        ...(d.recommendedCode === "B" ? { items_to_create: (d.comments ?? []).map(({ comment, reference }) => ({ comment, reference })) } : {}),
+      },
+    });
   }
 
   /** From the Consultant Engineer's Step on, for an Inspection: its Checklist answered, `failing` Failed, then `end`. */

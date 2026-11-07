@@ -31,6 +31,11 @@ const demo = {
   yousef: "yousef.karim@betabuild.demo.rabaed.test",
   ahmed: "ahmed.binsaid@designconsultants.demo.rabaed.test",
   mohammed: "mohammed.alshamsi@designconsultants.demo.rabaed.test",
+  // UAT 06–10's people (RP-1250).
+  layla: "layla.mansour@designconsultants.demo.rabaed.test",
+  noura: "noura.alharbi@alwaha.demo.rabaed.test",
+  omar: "omar.alharbi@tmc.demo.rabaed.test",
+  sara: "sara@designconsultants.demo.rabaed.test",
 } as const;
 type Who = keyof typeof demo;
 const as = {} as Record<Who, Caller>;
@@ -53,13 +58,14 @@ async function idOf(title: string): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Who raised the staged item: TMC's Hafiz, Beta Build's Yousef or Design Consultants' Ahmed. */
+/** Who raised the staged item: TMC's Hafiz (a DAR's too), Beta Build's Yousef or Design Consultants' Ahmed. */
 const raiserOf = (s: Staged): Caller => {
   if (s.kind === "snag") return s.item.raisedBy === "ahmed" ? as.ahmed : as.hafiz;
+  if (s.kind === "dar") return as.hafiz;
   return s.item.owner === "beta" ? as.yousef : as.hafiz;
 };
 
-const MODULE = { submittal: "submittals", snag: "snag_list", inspection: "inspections" } as const;
+const MODULE = { submittal: "submittals", snag: "snag_list", inspection: "inspections", dar: "submittals" } as const;
 
 /** Every item `by` reads on the Project's List of the Module a staged item of `kind` is in, page by page. */
 const listOf = (project: string, kind: Staged["kind"]) => async (by: Caller) => {
@@ -165,8 +171,14 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
   };
 
   it("is on its person's Projects, with the four Companies on it", async () => {
-    const { projects } = (await as[person].get("/v1/projects")).json() as { projects: { id: string; name: { en: string } }[] };
-    expect(projects.find((p) => p.id === project)?.name.en).toBe(r.name.en); // not hidden-from: the person's own Project, by id
+    if (person === "layla") {
+      // An Authorized Person, on no Project as a Member: her Company Projects list it (V15).
+      const { participants } = (await as.layla.get("/v1/participants")).json() as { participants: { project: { id: string } }[] };
+      expect(participants.map((p) => p.project.id)).toContain(project); // not hidden-from: Layla's own Company's Participant, by id
+    } else {
+      const { projects } = (await as[person].get("/v1/projects")).json() as { projects: { id: string; name: { en: string } }[] };
+      expect(projects.find((p) => p.id === project)?.name.en).toBe(r.name.en); // not hidden-from: the person's own Project, by id
+    }
     const { rows } = await sql<{ n: number }>`select count(*)::int as n from participant where project_id = ${project}::uuid`.execute(migrator);
     expect(rows[0]!.n).toBe(4); // not hidden-from: the seed's four Companies, read as the migrator
   });
@@ -180,7 +192,8 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
   });
 
   // The Project Admin's cases are settings: UAT 03's one item only puts TMC's Participant Code in use, and Saeed holds no Step on it.
-  const actsOnItems = r.n !== "03";
+  // UAT 06's Layla, an Authorized Person, is on no Project's Steps either and UAT 06 holds no item (RP-1250).
+  const actsOnItems = r.n !== "03" && r.n !== "06";
   it.runIf(actsOnItems)("leaves each item one of its person's cases acts on where the case needs it", async () => {
     for (const s of items.filter((x) => !x.mustNotSee)) {
       const end = s.item.end;
@@ -190,7 +203,14 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
       const atStep = Boolean(d.actions.pickUp) || keys.length > 0;
       if (end === "draft") expect(d.stage.key, title).toBe("draft");
       if (end === "with_pm") expect(keys, `${title}: ${keys.join(", ")}`).toContain("submit");
-      if (end === "with_consultant_engineer" && person === "ahmed") expect(atStep, title).toBe(true);
+      // Sara shares the Engineers' pool on a Mechanical item (RP-1250).
+      if (end === "with_consultant_engineer" && (person === "ahmed" || person === "sara")) expect(atStep, title).toBe(true);
+      // Noura holds the Owner's review of a DAR (RP-1250): she picks it up, then Confirm or Send Back is hers.
+      if (end === "with_owner") expect(Boolean(d.actions.pickUp) || keys.includes("confirm_a") || keys.includes("confirm_b"), `${title}: ${keys.join(", ")}`).toBe(true);
+      // A Returned item goes back to Hafiz, who sent it, never to Omar, who covers it too (WF-12, RP-1250).
+      if (end === "returned" && person === "omar") expect(atStep, `${title}: ${keys.join(", ")}`).toBe(false);
+      // Omar, Noura and Yousef read Submitted TMC or Beta Build items they hold no Step on: read-only.
+      if (end === "with_consultant_engineer" && (person === "omar" || person === "noura")) expect(atStep, title).toBe(false);
       // Mohammed, the only Consultant Manager, holds it or picks it up first.
       if (end === "with_consultant_manager") expect(Boolean(d.actions.pickUp) || keys.includes("approve_a"), `${title}: ${keys.join(", ")}`).toBe(true);
       // Back at Design Consultants' Verify Step, in its pool: Ahmed picks it up, then Close is his.
@@ -246,6 +266,78 @@ describe("UAT 02's and UAT 05's internal work at Design Consultants and inside T
   });
 });
 
+// UAT 06–10's own checks (RP-1250): who is on which UAT Project, as Layla's and Omar's cases need (V15, V4), and what
+// Noura, Yousef and Sara must not read beyond the generic checks above (V3, V5).
+describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
+  const code = (n: string) => UAT_ROLES.find((r) => r.n === n)!;
+  /** The Projects `by` reads on their Projects list, as rows with the Project's id. */
+  const projectsOf = async (by: Caller) => ((await by.get("/v1/projects")).json() as { projects: { id: string }[] }).projects;
+
+  it("lists all ten UAT Projects among Layla's Company Projects: an Authorized Person sees every Project of her Company (V15)", async () => {
+    const { participants } = (await as.layla.get("/v1/participants")).json() as { participants: { project: { id: string } }[] };
+    const mine = participants.map((p) => p.project.id);
+    for (const r of UAT_ROLES) expect(mine, r.code).toContain(await projectOf(r.code)); // not hidden-from: Design Consultants' own Participants
+  });
+
+  it("keeps UAT 06 off Sara's and Mohammed's Projects, who are Members of every other UAT Project but not of it (V15)", async () => {
+    const uat06 = await projectOf("UAT06");
+    await expectHiddenFrom({ read: projectsOf, target: uat06, seenBy: as.ahmed, hiddenFrom: [as.sara, as.mohammed], name: nameOf, label: "RP-1250 UAT 06" });
+    for (const who of [as.sara, as.mohammed]) expect((await projectsOf(who)).map((p) => p.id)).toContain(await projectOf("UAT10")); // not hidden-from: a UAT Project they are on
+  });
+
+  it("covers Electrical and Mechanical only for Design Consultants on UAT 06, and Electrical only for Ahmed, its one Member there (V4)", async () => {
+    const uat06 = await projectOf("UAT06");
+    const { participants } = (await as.layla.get("/v1/participants")).json() as { participants: { id: string; project: { id: string } }[] };
+    const dcl = participants.find((p) => p.project.id === uat06)!.id; // not hidden-from: Design Consultants' own Participant on UAT 06
+    const own = ((await as.layla.get(`/v1/participants/${dcl}/visibility`)).json() as { visibility: { trade: { isAll: boolean; valueIds: string[] } } }).visibility;
+    expect(own.trade.isAll).toBe(false);
+    expect(own.trade.valueIds).toHaveLength(2);
+    const { members } = (await as.layla.get(`/v1/participants/${dcl}/members`)).json() as { members: { id: string; email?: string; name?: { en: string } }[] };
+    expect(members).toHaveLength(1); // not hidden-from: Design Consultants' own Members on UAT 06, read by its Authorized Person
+    const ahmed = ((await as.layla.get(`/v1/participants/${dcl}/members/${members[0]!.id}/visibility`)).json() as { visibility: { trade: { isAll: boolean; valueIds: string[] } } }).visibility;
+    expect(ahmed.trade).toEqual({ isAll: false, valueIds: [expect.any(String)] });
+  });
+
+  it("puts Omar on every UAT Project, TMC's, where he reads a Podium item and not a Tower A one (V4)", async () => {
+    const mine = (await projectsOf(as.omar)).map((p) => p.id);
+    for (const r of UAT_ROLES) expect(mine, r.code).toContain(await projectOf(r.code)); // not hidden-from: Omar's own Projects
+    const uat09 = await projectOf("UAT09");
+    const staged = code("09").staged();
+    const podium = staged.find((s) => s.cases.includes("VIS-09") && !s.mustNotSee)!.item.title;
+    expect((await detail(as.omar, (await idsOn(uat09, podium))[0]!)).documentNumber).toBe("UAT09-MAR-01-0003");
+  });
+
+  it("keeps the Recommended Code on Noura's DARs from TMC while she holds the Owner's review (V5)", async () => {
+    const uat07 = await projectOf("UAT07");
+    for (const s of code("07").staged().filter((x) => x.kind === "dar")) {
+      const [item] = await idsOn(uat07, s.item.title);
+      const recommended = async (by: Caller) => {
+        const res = await by.get(`/v1/work-items/${item}/history`);
+        expect(res.statusCode, res.body).toBe(200);
+        return (res.json() as WorkItemHistory).events.some((e) => e.type === "recommend_code") ? [{ id: item! }] : []; // not hidden-from: the read expectHiddenFrom calls below
+      };
+      await expectHiddenFrom({ read: recommended, target: item!, seenBy: [as.mohammed, as.noura], hiddenFrom: [as.hafiz, as.ali], name: nameOf, label: `RP-1250 ${s.item.title}` });
+    }
+  });
+
+  it("keeps TMC's Code B Comment off Yousef's Snag List and its id (V3)", async () => {
+    const uat08 = await projectOf("UAT08");
+    const [comment] = await idsOn(uat08, "Submit the factory test certificates before delivery: lighting control panel, UAT 08.");
+    expect(comment).toBeDefined();
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${comment}`), target: comment!, seenBy: as.hafiz, hiddenFrom: as.yousef, name: nameOf, label: "RP-1250 VIS-05 Comment" });
+    await expectHiddenFrom({ read: listOf(uat08, "snag"), target: comment!, seenBy: as.hafiz, hiddenFrom: as.yousef, name: nameOf, label: "RP-1250 VIS-05 Comment on the Snag List" });
+  });
+
+  it("shows Sara TMC's Submitted Package but never its Open one, which only TMC reads", async () => {
+    const uat10 = await projectOf("UAT10");
+    const packagesOf = async (by: Caller) => ((await by.get(`/v1/projects/${uat10}/packages`)).json() as { packages: { id: string; name: { en: string } }[] }).packages;
+    const all = await packagesOf(as.ali);
+    const open = all.find((p) => p.name.en === "PKG-12 Package of Drafts")!.id; // not hidden-from: TMC's own Package, found by its PM
+    await expectHiddenFrom({ read: packagesOf, target: open, seenBy: as.ali, hiddenFrom: as.sara, name: nameOf, label: "RP-1250 PKG-12 Open Package" });
+    expect((await packagesOf(as.sara)).map((p) => p.name.en)).toContain("PKG-12 Package of both Trades"); // not hidden-from: the Submitted Package Sara reads
+  });
+});
+
 describe("adding the UAT Projects again", () => {
   it("changes nothing: no item, Participant, Member or Package more, and every Document Number stays", async () => {
     const ids = Object.fromEntries(await Promise.all(UAT_ROLES.map(async (r) => [r.code, r.n === "01" ? projectId : await projectOf(r.code)] as const)));
@@ -265,7 +357,7 @@ describe("adding the UAT Projects again", () => {
       const result = await addUatProjects(app, migrator, DEFAULT_PASSWORD);
       for (const r of UAT_ROLES) {
         const records = uatRecords(r);
-        const planned = records.submittals.length + records.snags.length + records.inspections.length;
+        const planned = records.submittals.length + records.snags.length + records.inspections.length + (records.dars?.length ?? 0);
         expect(result[r.code], r.code).toEqual({ projectId: ids[r.code], added: 0, present: planned, packages: { added: 0, present: records.packages.length } });
       }
     } finally {
