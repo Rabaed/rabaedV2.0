@@ -83,7 +83,7 @@ export default async function NewWorkItemPage({
       ) : (
         <>
           <NewItemTypePicker projectId={project.id} types={raisable.types} selected={chosen.code} moduleKey={moduleKey} locale={locale} />
-          {mine.trade.length === 0 ? (
+          {mine.trade.every((v) => !v.active) ? (
             <p className="text-muted">{t("noTradesCovered")}</p>
           ) : (
             <CreateWorkItemForm
@@ -96,7 +96,7 @@ export default async function NewWorkItemPage({
               optionLists={optionLists}
               suppliers={suppliers}
               checklistTemplates={checklistTemplates}
-              startTradeId={defaultTradeId(form.schema, mine.trade)}
+              startTradeId={defaultTradeId(form.schema, mine.trade.filter((v) => v.active))}
               locale={locale}
             />
           )}

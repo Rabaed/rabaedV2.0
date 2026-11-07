@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { impliedBySelection, treeOrder } from "./dimension-tree.ts";
+import { impliedBySelection, pickable, treeOrder } from "./dimension-tree.ts";
 
 const v = (id: string, parentId: string | null = null) => ({ id, parentId });
 // As the API lists them: by depth, then sort.
@@ -28,5 +28,18 @@ describe("impliedBySelection", () => {
   it("is everything beneath a selected Location", () => {
     expect([...impliedBySelection(values, new Set(["T1"]))].sort()).toEqual(["BA", "BB", "F1"]);
     expect([...impliedBySelection(values, new Set(["BA", "T2"]))]).toEqual(["F1"]);
+  });
+});
+
+describe("pickable (RP-1239)", () => {
+  const a = (id: string, active: boolean, parentId: string | null = null) => ({ id, parentId, active });
+  const all = [a("T1", true), a("T2", false), a("BA", false, "T2"), a("F1", true, "T1")];
+
+  it("offers active values only, for a new pick", () => {
+    expect(pickable(all, new Set()).map((x) => x.id)).toEqual(["T1", "F1"]);
+  });
+
+  it("keeps an archived value the grant already covers, so it can be unticked", () => {
+    expect(pickable(all, new Set(["BA"])).map((x) => x.id)).toEqual(["T1", "BA", "F1"]);
   });
 });

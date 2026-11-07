@@ -9,6 +9,7 @@ import {
   type SetMemberVisibilityRequest,
   type SetParticipantVisibilityRequest,
   type SetVisibilityRequest,
+  type UpdateDimensionValueRequest,
   type Visibility,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
@@ -40,6 +41,7 @@ export type ValueRow = {
   code: string;
   name: BilingualText;
   level_name: BilingualText | null;
+  status: "active" | "deactivated";
 };
 
 export function toValues(rows: ValueRow[]): DimensionValues {
@@ -52,6 +54,7 @@ export function toValues(rows: ValueRow[]): DimensionValues {
       levelName: r.level_name,
       code: r.code,
       name: r.name,
+      active: r.status === "active",
     });
   }
   return values;
@@ -77,7 +80,7 @@ export function listDimensions(db: Db, memberId: string, projectId: string): Pro
     const rows = await trx
       .selectFrom("dimension_value as v")
       .innerJoin("visibility_dimension as d", "d.id", "v.dimension_id")
-      .select(["d.kind", "v.id", "v.parent_id", "v.depth", "v.code", "v.name", "v.level_name"])
+      .select(["d.kind", "v.id", "v.parent_id", "v.depth", "v.code", "v.name", "v.level_name", "v.status"])
       .where("v.project_id", "=", projectId)
       .orderBy("v.depth")
       .orderBy("v.sort")
@@ -108,12 +111,37 @@ export function addDimensionValue(
   );
 }
 
+const updateValueRefusals = ["not_found", "project_closed", "general_trade", "parent_deactivated"] as const;
+export type UpdateValueResult = { ok: true } | { ok: false; reason: (typeof updateValueRefusals)[number] };
+
+/**
+ * A Project Admin renames a Trade or Location, deactivates or reactivates it (RP-1239); `not_found`
+ * for anyone else, as for a made-up id or a value of the other dimension.
+ */
+export function updateDimensionValue(
+  db: Db,
+  memberId: string,
+  kind: DimensionKind,
+  valueId: string,
+  input: UpdateDimensionValueRequest,
+  now: Date,
+): Promise<UpdateValueResult> {
+  return withMember(db, memberId, async (trx): Promise<UpdateValueResult> => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.update_dimension_value(
+        ${valueId}::uuid, ${kind}, ${input.name ? JSON.stringify(input.name) : null}::jsonb, ${input.active ?? null}::boolean, ${now}) as outcome
+    `.execute(trx);
+    const outcome = checkedOutcome(rows[0]!.outcome, ["updated", ...updateValueRefusals]);
+    return outcome === "updated" ? { ok: true } : { ok: false, reason: outcome };
+  });
+}
+
 /** The values the acting Member covers on one of their Projects; null when it isn't one of theirs. */
 export function myVisibility(db: Db, memberId: string, projectId: string): Promise<DimensionValues | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await onProject(trx, projectId))) return null;
     const { rows } = await sql<ValueRow>`
-      select mv.kind, v.id, v.parent_id, v.depth, v.code, v.name, v.level_name
+      select mv.kind, v.id, v.parent_id, v.depth, v.code, v.name, v.level_name, v.status
       from app.my_visibility(${projectId}::uuid) mv
       join dimension_value v on v.id = mv.value_id
       order by v.depth, v.sort, v.id

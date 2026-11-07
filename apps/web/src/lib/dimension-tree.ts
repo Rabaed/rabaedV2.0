@@ -25,6 +25,14 @@ export function treeOrder<T extends Node>(values: T[]): (T & { level: number })[
   return out;
 }
 
+/**
+ * What a grant editor offers (RP-1239): the active values, and an archived one only while `kept`
+ * (what the grant already covers) holds it, so it can be unticked but never picked anew.
+ */
+export function pickable<T extends Node & { active: boolean }>(values: T[], kept: ReadonlySet<string>): T[] {
+  return values.filter((v) => v.active || kept.has(v.id));
+}
+
 /** The values covered through a selected ancestor: granting a Location covers everything beneath it. */
 export function impliedBySelection(values: Node[], selected: ReadonlySet<string>): Set<string> {
   const parentOf = new Map(values.map((v) => [v.id, v.parentId]));

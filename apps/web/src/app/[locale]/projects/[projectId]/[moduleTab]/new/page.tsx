@@ -3,6 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { SnagPhoneNew } from "@/components/snag-phone-new";
 import { redirect } from "@/i18n/navigation";
+import { pickable } from "@/lib/dimension-tree";
 import { newItemHref } from "@/lib/new-item-route";
 import { parsePhoneStep, phoneFlowStep } from "@/lib/snag-phone-flow";
 import { getMe, getMyVisibility, getNewWorkItemForm, getRaisableTypes, getWorkItem, getWorkItemDocuments } from "@/lib/session";
@@ -56,8 +57,9 @@ export default async function ModuleTabNewPage({
       photosField={photosField.key}
       askDescription={!!description}
       photosMissing={missing !== undefined}
-      trades={covered.trade}
-      locations={covered.location}
+      // No archived Trade or Location is picked anew; a Draft keeps its own (RP-1239).
+      trades={pickable(covered.trade, new Set(draft ? [draft.trade.id] : []))}
+      locations={pickable(covered.location, new Set(draft?.location ? [draft.location.id] : []))}
       draft={
         draft && documents
           ? {

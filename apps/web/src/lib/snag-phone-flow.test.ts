@@ -7,7 +7,7 @@ const b = (en: string) => Object.fromEntries([
   ["en", en],
   ["ar", en],
 ]) as { en: string; ar: string };
-const place = (id: string, parentId: string | null, depth: number) => ({ id, parentId, depth, levelName: null, code: id.toUpperCase(), name: b(id) });
+const place = (id: string, parentId: string | null, depth: number) => ({ id, parentId, depth, levelName: null, code: id.toUpperCase(), name: b(id), active: true });
 const locations: DimensionValues["location"] = [place("zone", null, 1), place("t1", "zone", 2), place("t1f1", "t1", 3), place("t1f2", "t1", 3), place("t2", "zone", 2)];
 const draft = (answers: Record<string, unknown>, category: "draft" | "in_progress" = "draft") => ({ answers, stage: { category } });
 

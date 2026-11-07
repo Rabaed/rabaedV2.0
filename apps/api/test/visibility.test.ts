@@ -90,6 +90,7 @@ describe("Trades and Locations", () => {
       levelName: null,
       code: "EL",
       name: bilingual("el"),
+      active: true,
     });
     const floor = location.find((l: DimensionValue) => l.id === loc.floor1);
     expect(floor).toMatchObject({ parentId: loc.buildingA, depth: 3, levelName: { en: "Floor", ar: "الطابق" } });

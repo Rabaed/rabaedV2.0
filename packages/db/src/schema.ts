@@ -289,6 +289,8 @@ export interface DimensionValueTable {
   code: string;
   name: ColumnType<Bilingual, string, string>;
   sort: Generated<number>;
+  /** "Archived" on screen (RP-1239): kept where used, never picked anew. */
+  status: Generated<"active" | "deactivated">;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
