@@ -16,6 +16,14 @@ export function attachmentKind(contentType: string): SubmittalPanelAttachmentKin
   return imageTypes.has(contentType) ? "image" : "other";
 }
 
+/**
+ * A file card's page count (RP-1189): the one the API stored when the file was processed, shown at once; for a
+ * PDF with none stored (one confirmed before it), what pdf.js reads once it has loaded the file; else none.
+ */
+export function attachmentPages(stored: number | null | undefined, loaded: number | undefined): number | undefined {
+  return stored ?? loaded;
+}
+
 /** Zoom steps, as the design has them (`drawer.js`): 10% in the inline preview, 25% in Open large. */
 export const attachmentZoomStep = { preview: 10, large: 25 } as const;
 const minZoom = 50;
