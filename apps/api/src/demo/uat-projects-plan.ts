@@ -1,6 +1,6 @@
 import type { BilingualText } from "@rabaed/domain";
-import type { Product, SampleDraft, SampleInspection, SamplePackage, SampleSnag, SampleSubmittal } from "./sample-project-plan.ts";
-import type { SampleRecords } from "./sample-project.ts";
+import type { Product, SampleDar, SampleDraft, SampleInspection, SamplePackage, SampleSnag, SampleSubmittal } from "./sample-project-plan.ts";
+import type { SamplePeople, SampleRecords } from "./sample-project.ts";
 
 // The UAT Projects (RP-1246, RP-1248): one Project per role, so a tester signs in as one demo person
 // and runs that person's whole section of the hand-run sheet without switching user. Every UAT Project
@@ -27,6 +27,8 @@ export interface UatRole {
   staged: () => Staged[];
   /** Its Packages (RP-1249), put together after its items, from them and from Drafts of their own; none when left out. */
   packages?: () => UatPackage[];
+  /** Its own changes to the sample's people (RP-1250), beside Omar, whom every UAT Project adds (uatPeople). */
+  people?: SamplePeople;
 }
 
 /** One Package the seed puts together, and the sheet's cases that use it, which name it by its name. */
@@ -44,6 +46,7 @@ export type Staged = { cases: string[]; number?: string; mustNotSee?: true } & (
   | { kind: "submittal"; item: SampleSubmittal }
   | { kind: "snag"; item: SampleSnag }
   | { kind: "inspection"; item: SampleInspection }
+  | { kind: "dar"; item: SampleDar }
 );
 
 const product = (name: string, manufacturer: string, model: string, specificationSection: string, description: string, fixture: string, quantity: number, unit: string): Product => ({
@@ -92,7 +95,7 @@ const mar = (title: string, location: string, end: SampleSubmittal["end"], produ
 });
 
 /** A UAT Project's Document Number series: TMC's (Participant Code 01), Beta Build's (02) and Design Consultants' (03), by Type. */
-const series = (code: string, type: "MAR" | "SAR" | "SNG" | "WIR", participant: "01" | "02" | "03") => (n: number) => `${code}-${type}-${participant}-${String(n).padStart(4, "0")}`;
+const series = (code: string, type: "MAR" | "SAR" | "DAR" | "SNG" | "WIR", participant: "01" | "02" | "03") => (n: number) => `${code}-${type}-${participant}-${String(n).padStart(4, "0")}`;
 
 /** A staged Submittal for `cases`. */
 const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
@@ -318,6 +321,130 @@ function uat05Packages(): UatPackage[] {
   return [{ cases: ["PKG-09"], package: tmcPackage("PKG-09 Package waiting at the Manager", "PKG-09 حزمة لدى المدير", "in_progress", ["PKG-09 Exit signs – bulk Code A", "PKG-09 Wiring devices – bulk Code A"]) }];
 }
 
+/**
+ * UAT 06, Layla (Design Consultants' Authorized Person): her cases are her Company's Members, Positions and Visibility
+ * and its Company Projects, so the Project holds no items. Its people do the work instead (uatPeople): Design
+ * Consultants covers Electrical and Mechanical only, never Civil, and only Ahmed is on it, on Electrical, so no Member
+ * covers Mechanical (the gap VIS-35 warns of) and Sara and Mohammed are on every UAT Project but this one (V15).
+ */
+function uat06(): Staged[] {
+  return [];
+}
+
+/** A staged DAR for `cases`, waiting at the Owner's review (RP-1250). */
+const dar = (cases: string[], item: SampleDar, number: string): Staged => ({ kind: "dar", cases, item, number });
+
+/**
+ * UAT 07, Noura (Al Waha's Project Manager, the Owner Representative): DARs waiting at her Owner's review, one per case
+ * that acts on it; TMC's Submitted and closed items, which Al Waha reads as oversight; and TMC's work before its Submit,
+ * which she must not see (V1).
+ */
+function uat07(): Staged[] {
+  const tmc = series("UAT07", "MAR", "01");
+  const dars = series("UAT07", "DAR", "01");
+  return [
+    s(["VIS-07", "I18N-03"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A" }), tmc(1)),
+    s(["VIS-02", "I18N-03"], mar("VIS-02 Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns, { links: ["Main distribution board – Code A"] }), tmc(2)),
+    // TMC's own before its Submit: its item in Internal Review takes TMC's last number, so Noura's run 0001 to 0002 with no gap.
+    hidden(["VIS-02"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(3)),
+    hidden(["VIS-02"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
+    dar(["SUB-21"], { title: "SUB-21 Cable schedule – recommended Code A", trade: "EL", location: "A03", documentType: "report", recommendedCode: "A", end: "with_owner" }, dars(1)),
+    dar(["VIS-24"], {
+      title: "VIS-24 Lighting calculation – recommended Code B",
+      trade: "EL",
+      location: "A04",
+      documentType: "calculation",
+      recommendedCode: "B",
+      comments: [{ comment: "Show the emergency lighting levels on the escape routes: lighting calculation.", reference: "Calculation p. 3" }],
+      end: "with_owner",
+    }, dars(2)),
+  ];
+}
+
+/**
+ * UAT 08, Yousef (Beta Build, the second Contractor): Beta Build's own items, his to read, count and act on, and TMC's
+ * work in the same Trades and Locations, which he must never see (V3): its submittals at every Stage, a Code B whose
+ * Comments are Open with TMC, a SAR whose supplier is on the Approved Supplier List, and Snags held by TMC.
+ */
+function uat08(): Staged[] {
+  const tmc = series("UAT08", "MAR", "01");
+  const beta = series("UAT08", "MAR", "02");
+  const dcl = series("UAT08", "SNG", "03");
+  const tmcSnag = series("UAT08", "SNG", "01");
+  return [
+    // Beta Build's own: his Draft, one with him as its PM, one Submitted to Design Consultants.
+    s(["VIS-18"], mar("VIS-18 Beta Build – earthing, your Draft", "A04", "draft", P.earthing, { owner: "beta" })),
+    s(["VIS-18"], mar("VIS-18 Beta Build – busbar trunking, with you as PM", "A05", "with_pm", P.busbar, { owner: "beta" }), beta(1)),
+    s(["VIS-18"], mar("VIS-18 Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(2)),
+    // TMC's, in the same Trade and Locations: none of it reaches Beta Build.
+    hidden(["VIS-18"], mar("TMC – downlights, Submitted", "A04", "with_consultant_engineer", P.downlights), tmc(1)),
+    hidden(["VIS-05"], mar("TMC – lighting control panel, Code B", "P01", "code_b", P.lightingPanel, {
+      recommendedCode: "B",
+      comments: [{ comment: "Submit the factory test certificates before delivery: lighting control panel, UAT 08.", reference: "Datasheet p. 2", end: "open" }],
+    }), tmc(2)),
+    hidden(["VIS-45"], {
+      title: "TMC – Delta Cables, Supplier Approval Request",
+      type: "SAR",
+      trade: "EL",
+      location: "A02",
+      end: "code_a",
+      product: P.cables,
+      supplier: { name: { en: "UAT 08 Delta Cables", ar: "UAT 08 دلتا للكابلات" }, crNumber: "1010000801", country: "Saudi Arabia", supply: "Low voltage power cables for Tower A." },
+      consultantEngineer: "ahmed",
+      recommendedCode: "A",
+    }, series("UAT08", "SAR", "01")(1)),
+    // TMC's last number: its item in Internal Review.
+    hidden(["VIS-18"], mar("TMC – smoke detectors, in Internal Review", "A05", "with_pm", P.smoke), tmc(3)),
+    hidden(["VIS-18"], mar("TMC – wiring devices, Draft not sent", "A05", "draft", P.wiring)),
+    // Snags held by TMC: raised by Design Consultants (one In Progress, one Returned to Open) and by TMC on itself, Closed.
+    { kind: "snag", cases: ["VIS-50"], mustNotSee: true, number: dcl(1), item: { title: "TMC – unlabelled breakers, In Progress with TMC", type: "SNG", trade: "EL", location: "A05", end: "in_progress", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات.", photos: 1 } },
+    { kind: "snag", cases: ["VIS-52"], mustNotSee: true, number: dcl(2), item: { title: "TMC – loose cable tray cover, Returned to Open", type: "SNG", trade: "EL", location: "A03", end: "returned_to_open", raisedBy: "ahmed", description: "The cable tray cover is loose along the corridor. / غطاء حامل الكابلات غير مثبت على طول الممر." } },
+    { kind: "snag", cases: ["VIS-53"], mustNotSee: true, number: tmcSnag(1), item: { title: "TMC – missing socket cover, raised by TMC, Closed", type: "SNG", trade: "EL", location: "A04", end: "closed", raisedBy: "hafiz", description: "A socket outlet has no cover plate. / مقبس بلا غطاء." } },
+  ];
+}
+
+/**
+ * UAT 09, Omar (TMC's Contractor Engineer on the Podium only, as Riyadh Gate Tower narrows him to Tower 2): a Podium
+ * item Ali Returned to Hafiz, who sent it; a Podium item linking a Tower A one he can't see; and Beta Build's item at
+ * the same Location, which he must not see (V3).
+ */
+function uat09(): Staged[] {
+  const tmc = series("UAT09", "MAR", "01");
+  const beta = series("UAT09", "MAR", "02");
+  return [
+    s(["WF-12"], mar("WF-12 Lighting control panel – returned by Ali to Hafiz", "P01", "returned", P.lightingPanel), tmc(1)),
+    hidden(["VIS-09"], mar("VIS-09 Exit signs – Tower A Level 02, Submitted", "A02", "with_consultant_engineer", P.exitSigns), tmc(2)),
+    s(["VIS-09"], mar("VIS-09 Emergency lighting control panel – Podium, links the exit signs", "PGF", "with_consultant_engineer", P.controlPanel, { links: ["VIS-09 Exit signs – Tower A Level 02, Submitted"] }), tmc(3)),
+    hidden(["VIS-09"], mar("Beta Build – MV switchgear, Podium, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(1)),
+  ];
+}
+
+/**
+ * UAT 10, Sara (Design Consultants' Engineer on Mechanical only, RP-1207): TMC's Mechanical items, Submitted and in the
+ * Engineers' pool she shares with Ahmed, and its Electrical ones beside them, which she must not see; one Mechanical item
+ * links an Electrical one; and a Package of each Trade.
+ */
+function uat10(): Staged[] {
+  const tmc = series("UAT10", "MAR", "01");
+  const me = { trade: "ME" as const };
+  return [
+    hidden(["PAR-15"], mar("PAR-15 Wiring devices – Electrical, Submitted", "A02", "with_consultant_engineer", P.wiring), tmc(1)),
+    s(["PAR-15"], mar("PAR-15 Fan coil units – Mechanical, in the Engineers' pool", "A03", "with_consultant_engineer", P.fanCoils, me), tmc(2)),
+    hidden(["VIS-47"], mar("VIS-47 Main distribution board – Electrical, Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A" }), tmc(3)),
+    s(["VIS-47"], mar("VIS-47 Fan coil units – links the distribution board", "A04", "with_consultant_engineer", P.fanCoils, { ...me, links: ["VIS-47 Main distribution board – Electrical, Code A"] }), tmc(4)),
+    hidden(["PKG-12"], mar("PKG-12 Smoke detectors – Electrical, in a Package", "A05", "with_consultant_engineer", P.smoke), tmc(5)),
+    s(["PKG-12"], mar("PKG-12 Fan coil units – Mechanical, in a Package", "A06", "with_consultant_engineer", P.fanCoils, me), tmc(6)),
+  ];
+}
+
+/** UAT 10's Packages, TMC's: one In Progress with an item of each Trade, and one Open with a Draft only, which Design Consultants never sees. */
+function uat10Packages(): UatPackage[] {
+  return [
+    { cases: ["PKG-12"], package: tmcPackage("PKG-12 Package of both Trades", "PKG-12 حزمة بتخصصين", "in_progress", ["PKG-12 Smoke detectors – Electrical, in a Package", "PKG-12 Fan coil units – Mechanical, in a Package"]) },
+    { cases: ["PKG-12"], package: tmcPackage("PKG-12 Package of Drafts", "PKG-12 حزمة مسودات", "open", [], [{ ...packageDraft("PKG-12 Fan coil units – Draft", "A06", P.fanCoils), trade: "ME" }]) },
+  ];
+}
+
 /* eslint-enable rabaed/no-avoid-terms */
 
 export const UAT_ROLES: UatRole[] = [
@@ -364,7 +491,60 @@ export const UAT_ROLES: UatRole[] = [
     staged: uat05,
     packages: uat05Packages,
   },
+  {
+    n: "06",
+    code: "UAT06",
+    name: { en: "UAT 06 · Consultant Authorized Person (Layla)", ar: "UAT 06 · مفوّض الاستشاري (ليلى)" },
+    person: "layla",
+    personName: { en: "Layla", ar: "ليلى" },
+    staged: uat06,
+    people: { participants: { layla: { trades: ["EL", "ME"] } }, leaveOff: ["sara", "mohammed"], grants: { ahmed: { trades: ["EL"] } } },
+  },
+  {
+    n: "07",
+    code: "UAT07",
+    name: { en: "UAT 07 · Owner Representative (Noura)", ar: "UAT 07 · ممثل المالك (نورة)" },
+    person: "noura",
+    personName: { en: "Noura", ar: "نورة" },
+    staged: uat07,
+  },
+  {
+    n: "08",
+    code: "UAT08",
+    name: { en: "UAT 08 · Rival Contractor (Yousef)", ar: "UAT 08 · المقاول المنافس (يوسف)" },
+    person: "yousef",
+    personName: { en: "Yousef", ar: "يوسف" },
+    staged: uat08,
+  },
+  {
+    n: "09",
+    code: "UAT09",
+    name: { en: "UAT 09 · Contractor Engineer, Podium only (Omar)", ar: "UAT 09 · مهندس المقاول، المنصة فقط (عمر)" },
+    person: "omar",
+    personName: { en: "Omar", ar: "عمر" },
+    staged: uat09,
+  },
+  {
+    n: "10",
+    code: "UAT10",
+    name: { en: "UAT 10 · Consultant Engineer, Mechanical only (Sara)", ar: "UAT 10 · مهندسة الاستشاري، الميكانيكا فقط (سارة)" },
+    person: "sara",
+    personName: { en: "Sara", ar: "سارة" },
+    staged: uat10,
+    packages: uat10Packages,
+  },
 ];
+
+/**
+ * Omar on every UAT Project (RP-1250): TMC's second Contractor Engineer, on the Podium only, as Riyadh Gate Tower narrows
+ * him to Tower 2. The sample Project leaves him off.
+ */
+const OMAR: NonNullable<SamplePeople["add"]>[number] = { who: "omar", company: "saeed", positions: ["engineer"], grant: { locations: ["PD"] } };
+
+/** A role's Project's people where they differ from the sample's: Omar on all of them, and the role's own changes. */
+export function uatPeople(role: UatRole): SamplePeople {
+  return { ...role.people, add: [OMAR, ...(role.people?.add ?? [])] };
+}
 
 /** What the seed builds for a role's Project: its staged items, in order, then its Packages (none when it has none). */
 export function uatRecords(role: UatRole): SampleRecords {
@@ -373,6 +553,7 @@ export function uatRecords(role: UatRole): SampleRecords {
     submittals: staged.flatMap((x) => (x.kind === "submittal" ? [x.item] : [])),
     snags: staged.flatMap((x) => (x.kind === "snag" ? [x.item] : [])),
     inspections: staged.flatMap((x) => (x.kind === "inspection" ? [x.item] : [])),
+    dars: staged.flatMap((x) => (x.kind === "dar" ? [x.item] : [])),
     packages: (role.packages?.() ?? []).map((p) => p.package),
   };
 }

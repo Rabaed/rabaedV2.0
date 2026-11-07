@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { UAT_ROLES, uatRecords, type Staged } from "./uat-projects-plan.ts";
+import { UAT_ROLES, uatPeople, uatRecords, type Staged } from "./uat-projects-plan.ts";
 
 // The UAT Projects' plan (RP-1248) against the hand-run sheet's cases (planning/uat/round-0/test-cases.json):
 // each case of a role names the items staged for it, by Document Number or, for a Draft, by Subject, and asks the
 // tester to be that role's person only. The seeded numbers themselves are checked at seam 1 (test/uat-projects.test.ts).
 
-type Case = { id: string; who: string; title: string; steps: string; expected: string; role?: string; needs?: string[] };
+type Case = { id: string; who: string; title: string; steps: string; expected: string; role?: string; needs?: string[]; leftover?: string };
 const cases = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../../planning/uat/round-0/test-cases.json"), "utf8")) as Case[];
 
 /** The demo people's first names, as the cases' Who lines use them. */
@@ -18,28 +18,47 @@ function numbersInOrder(code: string, staged: Staged[]): Map<string, string> {
   const next = new Map<string, number>();
   const out = new Map<string, string>();
   for (const s of staged) {
-    if (s.kind !== "submittal" || s.item.end === "draft") continue;
-    const owner = s.item.owner ?? "tmc";
-    const key = `${owner}:${s.item.type}`;
+    // A DAR (RP-1250) is TMC's, and numbers in its own series as a SAR does.
+    const item = s.kind === "submittal" ? s.item : s.kind === "dar" ? { ...s.item, type: "DAR", owner: "tmc" as const } : undefined;
+    if (!item || item.end === "draft") continue;
+    const owner = item.owner ?? "tmc";
+    const key = `${owner}:${item.type}`;
     next.set(key, (next.get(key) ?? 0) + 1);
-    out.set(s.item.title, `${code}-${s.item.type}-${owner === "tmc" ? "01" : "02"}-${String(next.get(key)).padStart(4, "0")}`);
+    out.set(item.title, `${code}-${item.type}-${owner === "tmc" ? "01" : "02"}-${String(next.get(key)).padStart(4, "0")}`);
   }
   return out;
 }
 
-describe("the UAT roles (RP-1248, RP-1249)", () => {
-  it("are UAT 01 to 05 so far, one person each, named for the role and the person", () => {
+describe("the UAT roles (RP-1248, RP-1249, RP-1250)", () => {
+  it("are UAT 01 to 10, one person each, named for the role and the person", () => {
     expect(UAT_ROLES.map((r) => [r.n, r.code, r.person])).toEqual([
       ["01", "UAT01", "hafiz"],
       ["02", "UAT02", "ali"],
       ["03", "UAT03", "saeed"],
       ["04", "UAT04", "ahmed"],
       ["05", "UAT05", "mohammed"],
+      ["06", "UAT06", "layla"],
+      ["07", "UAT07", "noura"],
+      ["08", "UAT08", "yousef"],
+      ["09", "UAT09", "omar"],
+      ["10", "UAT10", "sara"],
     ]);
     for (const r of UAT_ROLES) {
       expect(r.name.en, r.n).toMatch(new RegExp(`^UAT ${r.n} · .+ \\(${r.personName.en}\\)$`));
       expect(r.name.ar, r.n).toMatch(new RegExp(`^UAT ${r.n} · .+ \\(${r.personName.ar}\\)$`));
     }
+  });
+
+  it("put Omar on TMC in every UAT Project, Podium only, as Riyadh Gate Tower narrows him to one Location (RP-1250)", () => {
+    for (const r of UAT_ROLES) expect(uatPeople(r).add, r.n).toEqual([{ who: "omar", company: "saeed", positions: ["engineer"], grant: { locations: ["PD"] } }]);
+  });
+
+  it("leave Design Consultants on UAT 06 without Civil, with Ahmed alone on Electrical, so Layla's cases have a Trade it lacks and a gap to warn of (RP-1250)", () => {
+    const people = uatPeople(UAT_ROLES.find((r) => r.n === "06")!);
+    expect(people.participants).toEqual({ layla: { trades: ["EL", "ME"] } });
+    expect(people.leaveOff).toEqual(["sara", "mohammed"]);
+    expect(people.grants).toEqual({ ahmed: { trades: ["EL"] } });
+    for (const r of UAT_ROLES.filter((x) => x.n !== "06")) expect(uatPeople(r).leaveOff ?? [], r.n).toEqual([]);
   });
 });
 
@@ -64,18 +83,19 @@ describe.each(UAT_ROLES)("UAT $n: $name.en", (role) => {
 
   it("plans each Submittal's Document Number in the order the seed raises them", () => {
     const expected = numbersInOrder(role.code, staged);
-    for (const s of staged.filter((x) => x.kind === "submittal")) expect(s.number, s.item.title).toBe(expected.get(s.item.title));
+    for (const s of staged.filter((x) => x.kind === "submittal" || x.kind === "dar")) expect(s.number, s.item.title).toBe(expected.get(s.item.title));
   });
 
   it("gives every staged item a Subject of its own, the seed's key for it", () => {
     const titles = staged.map((s) => s.item.title);
     expect(new Set(titles).size).toBe(titles.length);
     const records = uatRecords(role);
-    expect(records.submittals.length + records.snags.length + records.inspections.length).toBe(staged.length);
+    expect(records.submittals.length + records.snags.length + records.inspections.length + (records.dars?.length ?? 0)).toBe(staged.length);
   });
 
   it("stages items only for cases in its section, and its section's cases are in the sheet", () => {
     expect(mine.length).toBeGreaterThan(0);
+    for (const c of mine) expect(c.leftover, `${c.id} is in a section and left over`).toBeUndefined();
     const ids = new Set(mine.map((c) => c.id));
     for (const s of staged) for (const id of s.cases) expect(ids.has(id), `${s.item.title}: ${id}`).toBe(true);
   });

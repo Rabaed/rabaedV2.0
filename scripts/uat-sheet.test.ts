@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { demoPeople } from "./demo-session.ts";
-import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, PEOPLE_MAP, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
+import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, PEOPLE_MAP, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, sectionProblems, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
 import { readEntry, recordEntry, testerCell, workFile } from "./uat-sheet/work.mjs";
 import { UAT_ROLES } from "../apps/api/src/demo/uat-projects-plan.ts";
@@ -383,6 +383,47 @@ describe("tagProblems", () => {
     const rows = JSON.parse(text) as ScenarioRow[];
     expect(tagProblems(rows)).toEqual([]);
     expect(casesFromScenarios(text, "https://uat.example")).toHaveLength(rows.length);
+  });
+});
+
+describe("every case in exactly one section (RP-1250)", () => {
+  const row = (id: string, extra: Partial<ScenarioRow> = {}): ScenarioRow => ({ id, jira: `RP-${id}`, part: id.split("-")[0]!, title: "t", ...extra });
+
+  it("passes a role case, an owner's case and a leftover with its reason", () => {
+    expect(sectionProblems([row("SUB-1", { role: "01" }), row("ADM-1", { needs: ["owner"] }), row("VIS-1", { leftover: "Needs Hafiz and Ali together." })])).toEqual([]);
+  });
+
+  it("fails a case with no section, so a new case can't be added without one", () => {
+    expect(sectionProblems([row("SUB-1")])).toEqual(["SUB-1 is in no role's section: give it a role, the owner need, or a leftover reason"]);
+  });
+
+  it("fails a case in two sections, and a role with no UAT Project", () => {
+    expect(sectionProblems([row("SUB-1", { role: "01", leftover: "x" }), row("ADM-1", { needs: ["owner"], leftover: "x" }), row("SUB-2", { role: "11" })])).toEqual([
+      "SUB-1 has a role and a leftover reason: one section only",
+      "ADM-1 is the owner's and has a leftover reason: one section only",
+      "SUB-2 names UAT role 11, which has no UAT Project",
+    ]);
+  });
+
+  it("fails an empty leftover reason and a case ID used twice", () => {
+    expect(sectionProblems([row("SUB-1", { leftover: " " }), row("SUB-2", { role: "01" }), row("SUB-2", { role: "02" })])).toEqual([
+      "SUB-1 is in no role's section: give it a role, the owner need, or a leftover reason",
+      "SUB-2 is in the sheet twice",
+    ]);
+  });
+
+  it("holds for the real test-cases.json: each case in the ten role sections, the owner's, or the listed leftovers, and in exactly one section of the sheet", () => {
+    const text = readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8");
+    expect(sectionProblems(JSON.parse(text) as ScenarioRow[])).toEqual([]);
+    const cases = casesFromScenarios(text, "https://uat.example");
+    const placed = sectionsOf(cases).flatMap((s) => s.cases.map((c) => c.key));
+    expect(placed.sort()).toEqual(cases.map((c) => c.key).sort());
+  });
+
+  it("names a leftover's reason in the Markdown, so the owner sees why it has no role", () => {
+    const [c] = casesFromScenarios(JSON.stringify([row("VIS-1", { leftover: "Needs Hafiz and Ali together." })]), "https://uat.example");
+    expect(c!.leftover).toBe("Needs Hafiz and Ali together.");
+    expect(renderMarkdown({ round: "R", cases: [c!], built: "x" })).toContain("- **Left for the owner:** Needs Hafiz and Ali together.");
   });
 });
 
