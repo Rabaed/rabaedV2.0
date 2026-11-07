@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  formatNumber,
+  forwardKinds,
   offersRevision,
   outcomeLook,
   type BilingualText,
@@ -32,9 +34,6 @@ import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
-
-/** The kinds that move an item forward to its next holder. */
-const forwardKinds: readonly string[] = ["submit", "send"];
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -127,6 +126,7 @@ export function SubmittalPanelActionBar({
     proposed: tr.proposed ? tActions("proposed") : undefined,
   });
 
+  const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly") };
   const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks });
   const busy = opener.calls.pending || opener.waiting;
   const proposing = item.actions.transitions.some((tr) => tr.proposed);
@@ -134,6 +134,19 @@ export function SubmittalPanelActionBar({
   const primary = (tr: SubmittalPanelBarTransition) => forwardKinds.includes(tr.kind) && (!proposing || tr.proposed === true);
   const byKey = new Map(item.actions.transitions.map((tr) => [tr.key, tr]));
   const save = editing && form?.editable && saveDraft ? saveDraft : null;
+
+  const returnToPool = bar.returnToPool && (
+    <Button variant="secondary" disabled={opener.calls.pending} onClick={() => void opener.calls.send("return-to-pool")} className="gap-2">
+      <Icon name="arrow-back-up" size={17} />
+      {tActions("returnToPool")}
+    </Button>
+  );
+  const transitionButton = (tr: SubmittalPanelBarTransition, variant: "primary" | "secondary") => (
+    <Button key={tr.key} variant={variant} disabled={busy} aria-busy={opener.waiting || undefined} onClick={() => opener.open(tr)} className="gap-2">
+      {tr.label[locale]}
+      {tr.proposed && <Badge tone="neutral">{tActions("proposed")}</Badge>}
+    </Button>
+  );
 
   return (
     <>
@@ -144,11 +157,7 @@ export function SubmittalPanelActionBar({
         <SubmittalPanelWaiting
           chip={bar.chip}
           locale={locale}
-          labels={{
-            pool: (count) => t("pool", { count, n: String(count) }),
-            pickedUp: (name, weeks) => (weeks === null ? t("pickedUpNoAge", { name }) : t("pickedUp", { name, weeks, n: String(Math.max(1, Math.floor(weeks))) })),
-            viewOnly: t("viewOnly"),
-          }}
+          labels={waitingLabels}
         />
       )}
       {/* Its Documental Record once closed, its Working Copy while open (V7): always there, for everyone. */}
@@ -157,11 +166,7 @@ export function SubmittalPanelActionBar({
         <SubmittalPanelWaiting
           chip={bar.chip}
           locale={locale}
-          labels={{
-            pool: (count) => t("pool", { count, n: String(count) }),
-            pickedUp: (name, weeks) => (weeks === null ? t("pickedUpNoAge", { name }) : t("pickedUp", { name, weeks, n: String(Math.max(1, Math.floor(weeks))) })),
-            viewOnly: t("viewOnly"),
-          }}
+          labels={waitingLabels}
         />
       )}
       {bar.edit &&
@@ -179,45 +184,17 @@ export function SubmittalPanelActionBar({
       {bar.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard look="page" />}
       {bar.createRevision && <CreateRevisionButton key={item.id} workItemId={item.id} />}
       {bar.createReplacement && <CreateReplacementButton key={item.id} workItemId={item.id} />}
-      {/* The other moves first (a Return, a Cancel), then Return to pool, then the forward one, the primary, last. */}
-      {bar.buttons.filter((tr) => !primary(tr)).map((tr) => (
-        <Button
-          key={tr.key}
-          variant={primary(tr) ? "primary" : "secondary"}
-          disabled={busy}
-          aria-busy={opener.waiting || undefined}
-          onClick={() => opener.open(tr)}
-          className="gap-2"
-        >
-          {tr.label[locale]}
-          {tr.proposed && <Badge tone="neutral">{tActions("proposed")}</Badge>}
-        </Button>
-      ))}
-      {bar.returnToPool && (
-        <Button variant="secondary" disabled={opener.calls.pending} onClick={() => void opener.calls.send("return-to-pool")} className="gap-2">
-          <Icon name="arrow-back-up" size={17} />
-          {tActions("returnToPool")}
-        </Button>
-      )}
-      {bar.buttons.filter(primary).map((tr) => (
-        <Button
-          key={tr.key}
-          variant={primary(tr) ? "primary" : "secondary"}
-          disabled={busy}
-          aria-busy={opener.waiting || undefined}
-          onClick={() => opener.open(tr)}
-          className="gap-2"
-        >
-          {tr.label[locale]}
-          {tr.proposed && <Badge tone="neutral">{tActions("proposed")}</Badge>}
-        </Button>
-      ))}
+      {/* The other moves first (a Return, a Cancel), then the forward one; Return to pool just before the primary (row 49): the menu, or else the forward one. */}
+      {bar.buttons.filter((tr) => !primary(tr)).map((tr) => transitionButton(tr, "secondary"))}
+      {!bar.menu && returnToPool}
+      {bar.buttons.filter(primary).map((tr) => transitionButton(tr, "primary"))}
       {bar.pickUp && (
         <Button disabled={opener.calls.pending} onClick={() => void opener.calls.send("pick-up")} className="gap-2">
           <Icon name="hand-grab" size={17} />
           {tActions("pickUp")}
         </Button>
       )}
+      {bar.menu && returnToPool}
       {bar.menu && (
         <SubmittalPanelCodeMenu
           label={t("menu")}

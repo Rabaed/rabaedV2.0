@@ -33,7 +33,7 @@ import { Link } from "@/i18n/navigation";
 import { submittalPanelLinks } from "@/lib/submittal-panel-links";
 
 /** The Built-in Fields the Scope and Location sections show: the Form leaves them out while it is read (RP-1237 row 12). */
-const shownBySections = ["trade", "scopes", "location"] as const;
+const builtInsShownBySections = ["trade", "scopes", "location"] as const;
 
 /**
  * The Submittal Panel's tabs and Details sections (RP-1066; RP-1237 rows 11–14): Subject, Scope and
@@ -197,7 +197,7 @@ export function SubmittalPanelDetails({
         workItemId={item.id}
         documents={ready.documents}
         replyChecklists={item.replyChecklists}
-        hide={shownBySections}
+        hiddenFieldTypes={builtInsShownBySections}
         look={{ answers: "page" }}
         folding={{
           lead: lead(ready),

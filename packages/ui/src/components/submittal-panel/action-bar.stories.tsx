@@ -83,7 +83,7 @@ const cases: Record<string, { actions: Actions; heldBy: WorkItemDetail["heldBy"]
 
 const chipLabels = (locale: Locale): SubmittalPanelBarChipLabels => ({
   pool: (count) => (locale === "ar" ? `في مجموعة المراجعة · ${count}` : `In the review pool · ${count}`),
-  pickedUp: (name, weeks) => (locale === "ar" ? `استلمه ${name} · ${weeks} أسبوع` : `Picked up by ${name} · ${weeks} week${weeks === 1 ? "" : "s"}`),
+  pickedUp: (name) => (locale === "ar" ? `استلمه ${name}` : `Picked up by ${name}`),
   viewOnly: copy.viewOnly[locale],
 });
 
@@ -226,7 +226,10 @@ export const PickedUpByAnother: Story = {
   render: (_args, context) => <BarDemo context={context} state="pickedUp" width={640} />,
   play: async (context) => {
     const bar = barOf(context);
-    await expect(bar.querySelector('[data-bar-chip="pickedUp"]')).toHaveTextContent(storyText(context, bi("Picked up by Ahmed bin Said · 1 week", "استلمه أحمد بن سعيد · 1 أسبوع")));
+    const chip = bar.querySelector<HTMLElement>('[data-bar-chip="pickedUp"]')!;
+    await expect(chip).toHaveTextContent(storyText(context, bi("Picked up by Ahmed bin Said", "استلمه أحمد بن سعيد")));
+    // Its Step Age as everywhere: the shared dots and words, in weeks.
+    await expect(chip).toHaveTextContent(storyText(context, bi("1 week at this step", "أسبوع واحد في هذه الخطوة")));
     await expect(bar.querySelectorAll("button")).toHaveLength(1);
     await expect(bar).not.toHaveTextContent(/\b\d+ ?d\b|days?/);
   },

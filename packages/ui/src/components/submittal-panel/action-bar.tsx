@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale, OutcomeLook } from "@rabaed/domain";
+import { stepAgeLabel, type Locale, type OutcomeLook } from "@rabaed/domain";
 import { Fragment, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
@@ -8,6 +8,7 @@ import { Button } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
+import { AgeDots } from "../status/age-dots.tsx";
 import { CodeTile } from "../work-item-page/page-parts.tsx";
 import type { SubmittalPanelBarChip } from "./action-bar-model.ts";
 
@@ -128,8 +129,8 @@ export function SubmittalPanelCodeMenu({ label, codes, others = [], onSelect, di
 export type SubmittalPanelBarChipLabels = {
   /** "In the review pool · 3". */
   pool: (count: number) => string;
-  /** "Picked up by Ahmed · 1 week": its Step Age in weeks, or the name alone when it doesn't age. */
-  pickedUp: (name: string, weeks: number | null) => string;
+  /** "Picked up by Ahmed": its Step Age follows as the shared dots and words (1–4+ weeks). */
+  pickedUp: (name: string) => string;
   viewOnly: string;
 };
 
@@ -144,7 +145,7 @@ export function SubmittalPanelWaiting({ chip, labels, locale }: { chip: Submitta
       ? // eslint-disable-next-line rabaed/no-avoid-terms -- the icon's name
         ["users", labels.pool(chip.count)]
       : chip.kind === "pickedUp"
-        ? ["lock", labels.pickedUp(chip.name[locale], chip.weeks)]
+        ? ["lock", labels.pickedUp(chip.name[locale])]
         : ["eye", labels.viewOnly];
   return (
     <span
@@ -156,6 +157,14 @@ export function SubmittalPanelWaiting({ chip, labels, locale }: { chip: Submitta
     >
       <Icon name={icon} size={15} className="shrink-0" />
       <span>{text}</span>
+      {/* Step Age as everywhere: the dots (which carry the words for screen readers), then the words. Never days. */}
+      {chip.kind === "pickedUp" && chip.weeks !== null && (
+        <>
+          <span aria-hidden="true">·</span>
+          <AgeDots weeks={chip.weeks} locale={locale} />
+          <span aria-hidden="true">{stepAgeLabel(chip.weeks, locale)}</span>
+        </>
+      )}
     </span>
   );
 }
