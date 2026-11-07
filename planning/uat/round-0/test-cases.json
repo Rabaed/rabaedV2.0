@@ -1614,7 +1614,7 @@
   "title": "Snag List on a phone",
   "who": "Hafiz",
   "steps": "1) At 375 px open the Snag List and raise a Snag with the camera.",
-  "expected": "Photo-first cards, filters in a sheet, large New button, the camera opens from Take photo; saved as you go.",
+  "expected": "Photo-first cards, filters in a sheet, large New button, the camera opens from Take a photo / التقاط صورة; saved as you go.",
   "priority": "High",
   "mode": "Manual",
   "waits": "RP-28: SNAG-10 phone (RP-630)",
