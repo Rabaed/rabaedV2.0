@@ -144,12 +144,12 @@ export interface ScenarioRow {
   leftover?: string;
 }
 
+/* eslint-disable rabaed/no-avoid-terms -- the test sheet's own sections and its UAT roles (UAT_ROLES), not product terms. */
 /**
  * The whole-sheet check (RP-1250): every case is in exactly one section, a UAT role's (its `role`), the UAT owner's (the
  * owner need) or, while the owner decides, its Part's as a listed leftover with its reason. A case with none is refused,
  * so a new case can't join the sheet without a section.
  */
-/* eslint-disable rabaed/no-avoid-terms -- the test sheet's own sections and its UAT roles (UAT_ROLES), not product terms. */
 export function sectionProblems(rows: ScenarioRow[]): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();

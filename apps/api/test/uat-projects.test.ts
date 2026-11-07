@@ -209,7 +209,7 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
       if (end === "with_owner") expect(Boolean(d.actions.pickUp) || keys.includes("confirm_a") || keys.includes("confirm_b"), `${title}: ${keys.join(", ")}`).toBe(true);
       // A Returned item goes back to Hafiz, who sent it, never to Omar, who covers it too (WF-12, RP-1250).
       if (end === "returned" && person === "omar") expect(atStep, `${title}: ${keys.join(", ")}`).toBe(false);
-      // Omar, Noura and Yousef read Submitted TMC or Beta Build items they hold no Step on: read-only.
+      // Omar and Noura read Submitted TMC or Beta Build items they hold no Step on: read-only.
       if (end === "with_consultant_engineer" && (person === "omar" || person === "noura")) expect(atStep, title).toBe(false);
       // Mohammed, the only Consultant Manager, holds it or picks it up first.
       if (end === "with_consultant_manager") expect(Boolean(d.actions.pickUp) || keys.includes("approve_a"), `${title}: ${keys.join(", ")}`).toBe(true);
@@ -269,7 +269,7 @@ describe("UAT 02's and UAT 05's internal work at Design Consultants and inside T
 // UAT 06–10's own checks (RP-1250): who is on which UAT Project, as Layla's and Omar's cases need (V15, V4), and what
 // Noura, Yousef and Sara must not read beyond the generic checks above (V3, V5).
 describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
-  const code = (n: string) => UAT_ROLES.find((r) => r.n === n)!;
+  const roleOf = (n: string) => UAT_ROLES.find((r) => r.n === n)!;
   /** The Projects `by` reads on their Projects list, as rows with the Project's id. */
   const projectsOf = async (by: Caller) => ((await by.get("/v1/projects")).json() as { projects: { id: string }[] }).projects;
 
@@ -302,14 +302,16 @@ describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
     const mine = (await projectsOf(as.omar)).map((p) => p.id);
     for (const r of UAT_ROLES) expect(mine, r.code).toContain(await projectOf(r.code)); // not hidden-from: Omar's own Projects
     const uat09 = await projectOf("UAT09");
-    const staged = code("09").staged();
+    const staged = roleOf("09").staged();
     const podium = staged.find((s) => s.cases.includes("VIS-09") && !s.mustNotSee)!.item.title;
     expect((await detail(as.omar, (await idsOn(uat09, podium))[0]!)).documentNumber).toBe("UAT09-MAR-01-0003");
+    const [towerA] = await idsOn(uat09, "VIS-09 Exit signs – Tower A Level 02, Submitted");
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${towerA}`), target: towerA!, seenBy: as.hafiz, hiddenFrom: as.omar, name: nameOf, label: "RP-1250 VIS-09 Tower A item" });
   });
 
   it("keeps the Recommended Code on Noura's DARs from TMC while she holds the Owner's review (V5)", async () => {
     const uat07 = await projectOf("UAT07");
-    for (const s of code("07").staged().filter((x) => x.kind === "dar")) {
+    for (const s of roleOf("07").staged().filter((x) => x.kind === "dar")) {
       const [item] = await idsOn(uat07, s.item.title);
       const recommended = async (by: Caller) => {
         const res = await by.get(`/v1/work-items/${item}/history`);

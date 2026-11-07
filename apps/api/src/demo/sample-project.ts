@@ -347,9 +347,11 @@ async function setUp(as: People, projectId: string, which: SampleProjectName, pe
     const visibility = await admin<{ visibility: Visibility }>("GET", `/v1/participants/${participantId}/visibility`);
     if (!sameVisibility(visibility.visibility, own)) await admin("PUT", `/v1/participants/${participantId}/visibility`, own);
     const { members: colleagues } = await ap<{ members: { id: string; email: string }[] }>("GET", "/v1/members");
-    const members: [Who, string[], SampleGrant | undefined][] = [
-      ...company.members.filter(([who]) => !people.leaveOff?.includes(who)).map(([who, positions]): [Who, string[], SampleGrant | undefined] => [who, positions, people.grants?.[who]]),
-      ...(people.add ?? []).filter((a) => a.company === company.ap).map((a): [Who, string[], SampleGrant | undefined] => [a.who, a.positions, a.grant]),
+    /** A Member on this Project: who, their Positions, and their own grant when narrower than their Participant's. */
+    type OnProject = [Who, string[], SampleGrant | undefined];
+    const members: OnProject[] = [
+      ...company.members.filter(([who]) => !people.leaveOff?.includes(who)).map(([who, positions]): OnProject => [who, positions, people.grants?.[who]]),
+      ...(people.add ?? []).filter((a) => a.company === company.ap).map((a): OnProject => [a.who, a.positions, a.grant]),
     ];
     for (const [who, positions, grant] of members) {
       const email = demoEmail(PEOPLE[who][0], PEOPLE[who][1]);
