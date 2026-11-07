@@ -36,6 +36,11 @@ describe("projectTabOf", () => {
     expect(projectTabOf("p1", "/projects/p1/work-items/new", "inspections", ["inspections", "snag_list"])).toBe("inspections");
   });
 
+  it("is Submittals on a Package page, whose path names no Project: Packages live inside Submittals (RP-1164)", () => {
+    expect(projectTabOf("p1", "/packages/k1", null, tabs)).toBe("submittals");
+    expect(projectTabOf("p1", "/packages", null, tabs)).toBeUndefined();
+  });
+
   it("keeps Submittals for a Module the URL names wrongly, or on a page other than New", () => {
     expect(projectTabOf("p1", "/projects/p1/work-items/new", "nonsense", tabs)).toBe("submittals");
     expect(projectTabOf("p1", "/projects/p1/work-items/import", "inspections", tabs)).toBe("submittals");
