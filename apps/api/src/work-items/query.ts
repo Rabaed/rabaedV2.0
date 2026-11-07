@@ -776,14 +776,16 @@ const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_n
 //   nothing here is asked of another Company's items (V5, V14).
 const holderJoins = sql`left join lateral (
     -- The Step each event reached, from app.event_steps_reached (RP-1203): a closed item's terminal Step is everyone's.
-    select e.actor_participant_id, e.actor_member_id
+    select e.id, e.actor_participant_id
     from work_item_event e
     join app.event_steps_reached(array(select x.id from work_item_event x where r.closed and x.work_item_id = r.id)) rs on rs.event_id = e.id
     where r.closed and e.work_item_id = r.id and rs.to_step_id = r.step_id
     order by e.seq desc
     limit 1
   ) ce on true
-  left join member cm on cm.id = ce.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
+  -- Its actor's id, which app.event_actor_members gives for one's own Company's Member only (RP-1139).
+  left join lateral (select a.actor_member_id from app.event_actor_members(array[ce.id]) a where ce.id is not null) ca on true
+  left join member cm on cm.id = ca.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
   left join member m on m.id = r.assignee_member_id
   left join lateral (
     select p.key, p.name, p.sort, pr.name as project_role
