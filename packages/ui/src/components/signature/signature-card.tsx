@@ -34,8 +34,7 @@ export function SignatureCard({ labels, person, imageUrl }: { labels: SignatureC
         <div className="text-xs text-muted">{person.date}</div>
       </div>
       <div className="flex min-h-[4.5rem] flex-col justify-end border-b border-text text-center">
-        {/* The Member's own drawing, a typed canvas or an upload held in the page: a data URL, not a static asset. */}
-        {/* eslint-disable-next-line @next/next/no-img-element -- a data URL made in the editor */}
+        {/* The Member's own drawing, a typed canvas or an upload held in the page: a data URL. */}
         {imageUrl && <img src={imageUrl} alt={labels.signature} className="mx-auto block max-h-16 max-w-full object-contain" />}
         <div className="text-xs text-muted">{labels.signature}</div>
       </div>
