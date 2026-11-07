@@ -2153,6 +2153,9 @@
       "blue": "أزرق"
     },
     "clear": "مسح",
+    "undo": "تراجع",
+    "cardTitle": "شكله في السجل",
+    "cardSignature": "التوقيع",
     "name": "اسمك",
     "hand": "الخط",
     "hands": {

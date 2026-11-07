@@ -278,8 +278,18 @@ defineCase("SIG-07", async (t) => {
   await page.mouse.up();
   await page.getByRole("radio", { name: "Blue" }).click().catch(() => undefined);
   await t.shot(page, "draw-375");
-  const undo = await page.getByRole("button", { name: /undo/i }).count();
-  t.note(`Undo button on the pad: ${undo > 0 ? "present" : "not present (the page offers Clear only)"}.`);
+  // RP-1165: Undo takes back the last stroke, and the Signature card previews the drawing.
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  c.check("Undo is offered beside Clear once something is drawn", (await undoButton.count()) > 0 && (await undoButton.isEnabled()));
+  const card = page.getByRole("group", { name: "How it looks on a record" });
+  const company = ((await hafiz.get("/me")).body as { company: { legalName: { en: string } } }).company.legalName.en;
+  c.check("the Signature card shows the Member's Company and the drawing", (await card.getByRole("img", { name: "Signature" }).count()) > 0 && (await card.innerText()).includes(company), company);
+  await undoButton.click();
+  c.check("Undo removed the only stroke: nothing left to save or preview", (await undoButton.isDisabled()) && (await card.getByRole("img", { name: "Signature" }).count()) === 0);
+  await page.mouse.move(box.x + 20, box.y + box.height * 0.6);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + 20 + i * ((box.width - 40) / 12), box.y + box.height * (0.5 + 0.2 * Math.sin(i)));
+  await page.mouse.up();
   await page.getByRole("button", { name: "Save Signature" }).click();
   await page.waitForURL(/\/profile$/, { timeout: 15_000 }).catch(() => undefined);
   await settle(page);
@@ -302,8 +312,8 @@ defineCase("SIG-07", async (t) => {
   await page.getByRole("tab", { name: "Type" }).or(page.getByRole("radio", { name: "Type" })).or(page.getByRole("button", { name: "Type" })).first().click();
   await page.getByRole("textbox", { name: /full name/i }).fill("Hafiz Hamdan");
   await page.waitForTimeout(600);
-  const preview = (await page.locator("main img, main canvas, main svg[role=img]").count()) > 0;
-  c.check("Type shows a preview as on a record", preview);
+  const preview = (await page.getByRole("group", { name: "How it looks on a record" }).getByRole("img", { name: "Signature" }).count()) > 0;
+  c.check("Type shows a preview as on a record (the Signature card)", preview);
   await t.shot(page, "type-375");
   await page.getByRole("button", { name: "Save Signature" }).click();
   await page.waitForURL(/\/profile$/, { timeout: 15_000 }).catch(() => undefined);

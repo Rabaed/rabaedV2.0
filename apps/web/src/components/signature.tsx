@@ -1,7 +1,14 @@
 "use client";
 
 import type { MySignature, SaveSignatureRequest } from "@rabaed/domain";
-import { buttonVariants, SignatureEditor, SignatureRequiredDialog, type SaveSignatureCall, type SignatureEditorLabels } from "@rabaed/ui";
+import {
+  buttonVariants,
+  SignatureEditor,
+  SignatureRequiredDialog,
+  type SaveSignatureCall,
+  type SignatureCardPerson,
+  type SignatureEditorLabels,
+} from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import type { Reading } from "@/lib/transition-gate";
@@ -23,6 +30,9 @@ function useEditorLabels(): SignatureEditorLabels {
     ink: t("ink"),
     inks: { black: t("inks.black"), blue: t("inks.blue") },
     clear: t("clear"),
+    undo: t("undo"),
+    cardTitle: t("cardTitle"),
+    cardSignature: t("cardSignature"),
     name: t("name"),
     hand: t("hand"),
     hands: { flowing: t("hands.flowing"), upright: t("hands.upright") },
@@ -46,7 +56,7 @@ function useEditorLabels(): SignatureEditorLabels {
  * Member back where they came from (`returnTo`, the item the pop-up sent them from), or to
  * their profile.
  */
-export function AddSignature({ defaultName, returnTo }: { defaultName: string; returnTo: string | null }) {
+export function AddSignature({ defaultName, card, returnTo }: { defaultName: string; card: SignatureCardPerson; returnTo: string | null }) {
   const t = useTranslations("signature");
   const router = useRouter();
   const save: SaveSignatureCall = async (signature: SaveSignatureRequest) => {
@@ -67,6 +77,7 @@ export function AddSignature({ defaultName, returnTo }: { defaultName: string; r
     <SignatureEditor
       labels={useEditorLabels()}
       defaultName={defaultName}
+      card={card}
       onSave={save}
       secondaryAction={
         <Link href={returnTo ?? "/profile"} className={buttonVariants({ variant: "ghost" })}>

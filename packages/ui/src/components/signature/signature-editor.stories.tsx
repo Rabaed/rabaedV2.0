@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
-import { signatureEditorLabels } from "../../storybook/signature.ts";
+import { signatureCards, signatureEditorLabels } from "../../storybook/signature.ts";
 import { SignatureEditor, type SaveSignatureCall } from "./signature-editor.tsx";
 
 // Profile → Add Signature (RP-85, ADR 0023): draw (pen style and ink), type in a handwriting
@@ -14,9 +14,9 @@ const ok: SaveSignatureCall = async () => ({ ok: true });
 const meta = {
   title: "People/SignatureEditor",
   component: SignatureEditor,
-  args: { labels: signatureEditorLabels.en, defaultName: names.en, onSave: fn<SaveSignatureCall>(ok) },
+  args: { labels: signatureEditorLabels.en, defaultName: names.en, card: signatureCards.en, onSave: fn<SaveSignatureCall>(ok) },
   render: (args, context) => (
-    <SignatureEditor {...args} labels={signatureEditorLabels[storyLocale(context)]} defaultName={names[storyLocale(context)]} />
+    <SignatureEditor {...args} labels={signatureEditorLabels[storyLocale(context)]} defaultName={names[storyLocale(context)]} card={signatureCards[storyLocale(context)]} />
   ),
   decorators: [(Story) => <div className="max-w-2xl">{Story()}</div>],
 } satisfies Meta<typeof SignatureEditor>;
@@ -44,6 +44,23 @@ async function drawOn(pad: HTMLElement) {
   pad.dispatchEvent(new PointerEvent("pointerup", at(0.85, 0.4)));
 }
 
+/** A finger's stroke across the pad (touch pointer events). */
+async function touchOn(pad: HTMLElement) {
+  const box = pad.getBoundingClientRect();
+  const at = (fx: number, fy: number) => ({ clientX: box.left + box.width * fx, clientY: box.top + box.height * fy, pointerId: 2, pointerType: "touch", bubbles: true });
+  pad.dispatchEvent(new PointerEvent("pointerdown", at(0.2, 0.8)));
+  pad.dispatchEvent(new PointerEvent("pointermove", at(0.5, 0.2)));
+  pad.dispatchEvent(new PointerEvent("pointerup", at(0.5, 0.2)));
+}
+
+/** Whether any pixel of the pad is inked. */
+function inked(pad: HTMLElement) {
+  const canvas = pad as HTMLCanvasElement;
+  const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) return true;
+  return false;
+}
+
 /** The image a Save sent, decoded: its first bytes say it is a PNG. */
 const isPng = (data: string) => atob(data).startsWith("\x89PNG");
 
@@ -69,6 +86,67 @@ export const Draw: Story = {
     const sent = (args.onSave as ReturnType<typeof fn<SaveSignatureCall>>).mock.calls[0]![0];
     await expect(sent).toMatchObject({ method: "drawn", contentType: "image/png" });
     await expect(isPng(sent.data)).toBe(true);
+  },
+};
+
+/**
+ * Undo removes the last stroke only (mouse, then finger), Clear removes them all; with nothing
+ * drawn both are off. The Signature card beside it shows the Member's lines and the drawing.
+ */
+export const DrawUndo: Story = {
+  play: async (context) => {
+    const { canvas } = context;
+    const l = labelsOf(context);
+    const c = signatureCards[storyLocale(context)];
+    const undo = canvas.getByRole("button", { name: l.undo });
+    const clear = canvas.getByRole("button", { name: l.clear });
+    const pad = canvas.getByRole("img", { name: l.pad });
+    await expect(undo).toBeDisabled();
+    await expect(clear).toBeDisabled();
+
+    const card = canvas.getByRole("group", { name: l.cardTitle });
+    await expect(within(card).getByText(c.name)).toBeVisible();
+    await expect(within(card).getByText(c.positions[0]!)).toBeVisible();
+    await expect(within(card).getByText(c.company)).toBeVisible();
+    await expect(within(card).getByText(c.date)).toBeVisible();
+    await expect(within(card).getByText(l.cardSignature)).toBeVisible();
+    await expect(within(card).queryByRole("img")).toBeNull();
+
+    await drawOn(pad);
+    await touchOn(pad);
+    await expect(undo).toBeEnabled();
+    await expect(inked(pad)).toBe(true);
+    await expect(await within(card).findByRole("img", { name: l.cardSignature })).toBeVisible();
+
+    // The finger's stroke goes first; the mouse's stays.
+    await userEvent.click(undo);
+    await expect(inked(pad)).toBe(true);
+    await expect(undo).toBeEnabled();
+    await userEvent.click(undo);
+    await expect(inked(pad)).toBe(false);
+    await expect(undo).toBeDisabled();
+    await expect(within(card).queryByRole("img")).toBeNull();
+
+    await drawOn(pad);
+    await drawOn(pad);
+    await userEvent.click(clear);
+    await expect(inked(pad)).toBe(false);
+    await expect(undo).toBeDisabled();
+  },
+};
+
+/** The card shows the typed Signature, and the uploaded image, too. */
+export const CardOnEveryWay: Story = {
+  play: async (context) => {
+    const { canvas } = context;
+    const l = labelsOf(context);
+    const card = canvas.getByRole("group", { name: l.cardTitle });
+    await userEvent.click(canvas.getByRole("tab", { name: l.typed }));
+    await expect(await within(card).findByRole("img", { name: l.cardSignature })).toBeVisible();
+    await userEvent.click(canvas.getByRole("tab", { name: l.uploaded }));
+    await expect(within(card).queryByRole("img")).toBeNull();
+    await userEvent.upload(canvas.getByLabelText(l.file), new File([tinyPng], "signature.png", { type: "image/png" }));
+    await waitFor(() => expect(within(card).getByRole("img", { name: l.cardSignature })).toBeVisible());
   },
 };
 
