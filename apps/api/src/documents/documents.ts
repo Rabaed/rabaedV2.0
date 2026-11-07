@@ -12,7 +12,7 @@ import { sql } from "kysely";
 import type { ApiConfig } from "../config.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import type { FileStore } from "./file-store.ts";
-import { countPdfPages } from "./pdf-pages.ts";
+import { countPdfPages, MAX_PDF_BYTES } from "./pdf-pages.ts";
 import { readPhotoMetadata } from "./photo-metadata.ts";
 
 // Documents: the Attachments System Field (RP-269). Rows are read through RLS,
@@ -186,8 +186,9 @@ export function confirmUpload(
         if (bytes) photo = await readPhotoMetadata(bytes);
       }
       // A PDF's pages, counted in the stored file itself, for its card (RP-1189).
-      if (stored.contentType === "application/pdf") {
-        const bytes = await files.read(pendingKey);
+      // Never over the cap, and never failing the upload over a count: the card then shows none.
+      if (stored.contentType === "application/pdf" && stored.sizeBytes <= MAX_PDF_BYTES) {
+        const bytes = await files.read(pendingKey).catch(() => null);
         if (bytes) pageCount = await countPdfPages(bytes);
       }
     }
