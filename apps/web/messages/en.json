@@ -3340,7 +3340,7 @@
       "menu": "Issue Review Code",
       "edit": "Edit",
       "pool": "In the review pool · {n}",
-      "pickedUp": "Picked up by {name} · {weeks, plural, one {# week} other {{n} weeks}}",
+      "pickedUp": "Picked up by {name} · {weeks, plural, one {{n} week} other {{n} weeks}}",
       "pickedUpNoAge": "Picked up by {name}",
       "viewOnly": "View only",
       "closes": "Closes it. {company} is told.",
