@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { demoPeople } from "./demo-session.ts";
 import { caseFromIssue, casesFromScenarios, DEMO_PEOPLE, numberedSteps, orderCases, PEOPLE_MAP, renderMarkdown, renderSheet, sectionsOf, roundFromWaits, searchIssues, startUrl, tagProblems, vercelWording, type JiraIssue, type ScenarioRow, type SheetCase } from "./uat-sheet.ts";
 import { buildXlsx } from "./uat-sheet/xlsx.mjs";
+import { readEntry, recordEntry, testerCell, workFile } from "./uat-sheet/work.mjs";
+import { UAT_ROLES } from "../apps/api/src/demo/uat-projects-plan.ts";
 
 // fflate is the zip the sheet inlines; the test loads the same copy from the pnpm store.
 const store = resolve(import.meta.dirname, "../node_modules/.pnpm");
@@ -183,7 +185,7 @@ describe("renderSheet", () => {
   });
 
   it("opens with a How to start guide for the tester, in English and Arabic, with the UAT address (RP-1201)", () => {
-    const html = renderSheet({ round: "R", cases, built: "x", uatUrl: "https://uat.example" });
+    const html = renderSheet({ round: "R", cases: [...cases, { ...cases[0]!, key: "RP-726", id: "ADM-01", needs: ["owner"] }], built: "x", uatUrl: "https://uat.example" });
     expect(html).toContain('"uatUrl":"https://uat.example"');
     for (const text of ["How to start", "كيف تبدأ", "private window", "نافذة خاصة", "Cases the UAT owner runs", "يشغّلها مسؤول الاختبار", "section by section", "قسمًا قسمًا"]) expect(html).toContain(text);
   });
@@ -198,6 +200,8 @@ describe("renderSheet", () => {
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
     expect(scripts.length).toBeGreaterThan(0);
     for (const code of scripts) expect(() => new vm.Script(code)).not.toThrow();
+    // The page's scripts share one global scope: a name two of them declare would stop the page.
+    expect(() => new vm.Script(scripts.join("\n;\n"))).not.toThrow();
   });
 });
 
@@ -250,6 +254,43 @@ describe("sections and the Markdown for an AI (RP-1204)", () => {
       [0, "OWNER", ["ADM-1"]],
     ]);
     expect(s[0]!.name).toEqual({ en: "Submittals", ar: "التقديمات" });
+  });
+
+  it("puts each role's section first (RP-1248): who to sign in as and the UAT Project to open, then the Parts, then the owner's", () => {
+    const hafiz = (id: string, part: string) => ({ ...make(id, part), role: "01" });
+    const s = sectionsOf([...cases, hafiz("SUB-9", "SUB"), hafiz("VIS-9", "VIS")]);
+    expect(s.map((x) => [x.n, x.part, x.cases.map((c) => c.id)])).toEqual([
+      [1, "UAT01", ["SUB-9", "VIS-9"]],
+      [2, "SUB", ["SUB-1", "SUB-2"]],
+      [3, "WF", ["WF-1"]],
+      [4, "VIS", ["VIS-1"]],
+      [0, "OWNER", ["ADM-1"]],
+    ]);
+    expect(s[0]!.name).toEqual({ en: "Sign in as Hafiz · open UAT 01 · Contractor Engineer (Hafiz)", ar: "سجّل الدخول باسم حافظ · افتح UAT 01 · مهندس المقاول (حافظ)" });
+    expect(s[0]!.project).toEqual(UAT_ROLES[0]!.name);
+  });
+
+  it("refuses a case whose role has no UAT Project, and a role case only the UAT owner can run", () => {
+    expect(() => sectionsOf([{ ...make("SUB-9", "SUB"), role: "99" }])).toThrow(/SUB-9.*99/);
+    expect(() => sectionsOf([{ ...make("SUB-9", "SUB", ["owner"]), role: "01" }])).toThrow(/SUB-9.*owner/);
+  });
+
+  it("reads a scenario's role, and hands the sections to the page so it draws the same ones", () => {
+    const row = { id: "SUB-01", jira: "RP-685", part: "SUB", title: "t", role: "01" };
+    const [c] = casesFromScenarios(JSON.stringify([row, { ...row, id: "SUB-02", jira: "RP-686", role: undefined }]), "https://uat.example");
+    expect(c!.role).toBe("01");
+    const html = renderSheet({ round: "R", cases: casesFromScenarios(JSON.stringify([row]), "https://uat.example"), built: "x" });
+    expect(html).toContain('"sections":[{"id":"s-UAT01","n":1,"part":"UAT01"');
+    expect(html).not.toMatch(/const SECTIONS = \(\(\) =>/);
+  });
+
+  it("tells the tester to open a UAT Project from Projects, never Home, in English and Arabic and in the Markdown", () => {
+    const html = renderSheet({ round: "R", cases, built: "x" });
+    expect(html).toContain("open it from Projects, not from Home");
+    expect(html).toContain("افتحه من المشاريع لا من الرئيسية");
+    const md = renderMarkdown({ round: "R", cases: [{ ...make("SUB-9", "SUB"), role: "01" }], built: "x" });
+    expect(md).toContain("## 1. Sign in as Hafiz · open UAT 01 · Contractor Engineer (Hafiz) (1 cases)");
+    expect(md).toContain("open it from Projects, not from Home");
   });
 
   it("writes every case under its numbered section, with the people and no password", () => {
@@ -386,6 +427,43 @@ describe("the sheet's colours", () => {
   it("reads the mail note and the plain tags at 4.5:1 or better", () => {
     expect(contrast(...pair(".note"))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(...pair(".tag"))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("who ran each case (RP-1248): the tester's name on every result", () => {
+  const e = (status: string, extra: Record<string, unknown> = {}) => ({ status, comment: "", shots: [], at: "07/11/2026, 10:00:00", ...extra });
+
+  it("records the name typed at the top on each case as it is saved, and keeps an earlier name when none is typed", () => {
+    expect(recordEntry(e("pass"), " Ahmad ")).toMatchObject({ status: "pass", tester: "Ahmad" });
+    expect(recordEntry(e("fail", { tester: "Ahmad" }), "")).toMatchObject({ tester: "Ahmad" });
+    expect(recordEntry(e("fail", { tester: "Ahmad" }), "Sami")).toMatchObject({ tester: "Sami" });
+  });
+
+  it("writes the name on every entry of the saved JSON, the sheet's name where an entry has none", () => {
+    const out = workFile({ round: "R", tester: "Ahmad", at: "2026-11-07T10:00:00Z", entries: [["RP-1", e("pass", { tester: "Sami" })], ["RP-2", e("fail")], ["RP-3", e("")]], shots: [] });
+    expect(out).toMatchObject({ sheet: "rabaed-uat-sheet", round: "R", tester: "Ahmad" });
+    expect(out.entries["RP-1"].tester).toBe("Sami");
+    expect(out.entries["RP-2"].tester).toBe("Ahmad");
+    expect(out.entries["RP-3"]).toBeUndefined();
+  });
+
+  it("keeps each entry's name when a saved JSON is loaded, else the file's name", () => {
+    const shotOk = (id: string) => id === "RP-1:1";
+    expect(readEntry({ status: "pass", comment: "ok", shots: ["RP-1:1", "x"], tester: "Sami", at: "t" }, { fileTester: "Ahmad", shotOk, now: "n" })).toEqual({ status: "pass", comment: "ok", shots: ["RP-1:1"], tester: "Sami", at: "t" });
+    expect(readEntry({ status: "fail" }, { fileTester: "Ahmad", shotOk, now: "n" })).toEqual({ status: "fail", comment: "", shots: [], tester: "Ahmad", at: "n" });
+    expect(readEntry({ status: "maybe", tester: 7 }, { fileTester: undefined, shotOk, now: "n" })).toMatchObject({ status: "", tester: "7" });
+  });
+
+  it("puts the name in the Excel row of every case with a result, and none in a row with nothing recorded", () => {
+    expect(testerCell(e("pass", { tester: "Sami" }), "Ahmad")).toBe("Sami");
+    expect(testerCell(e("pass"), "Ahmad")).toBe("Ahmad");
+    expect(testerCell(e(""), "Ahmad")).toBe("");
+  });
+
+  it("is in the page, which uses it to save, load and export", () => {
+    const html = renderSheet({ round: "R", cases: [], built: "x" });
+    for (const name of ["function recordEntry", "function workFile", "function readEntry", "function testerCell"]) expect(html).toContain(name);
+    expect(html).not.toContain("/*__WORK__*/");
   });
 });
 

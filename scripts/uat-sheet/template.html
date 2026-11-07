@@ -190,6 +190,7 @@
 <input type="file" id="pick" accept="image/*" multiple hidden>
 <script>/*__FFLATE__*/</script>
 <script>/*__XLSX__*/</script>
+<script>/*__WORK__*/</script>
 <script>
 "use strict";
 const DATA = /*__DATA__*/null;
@@ -216,7 +217,7 @@ const T = {
           "Work section by section: open section 1, run its cases in order, then section 2, and so on. Each section shows how many of its cases you have done.",
           "For each case: read Steps, do them, compare with Expected result, then press Pass, Fail, Blocked (you could not test it) or Not run.",
           "On Fail or Blocked, write what you saw in Comment (English or Arabic) and add a screenshot: click into the case and press Ctrl+V, drag the image in, or click the box to pick a file. Add as many as you need.",
-          "Your work saves in this browser as you go (Saved hh:mm under each case). Use the same browser each time. To change computer, Save work (.json) and Load it on the other one.",
+          "Write your name at the top before you start: each case you record keeps who ran it, in the saved .json and the Excel file. Your work saves in this browser as you go (Saved hh:mm under each case). Use the same browser each time. To change computer, Save work (.json) and Load it on the other one.",
           "When you finish, or at the end of each day, write your name at the top, press Export to Excel and send the .xlsx to the owner. It holds every status, comment and screenshot.",
           "Working with an AI? Download for an AI (.md) gives the same cases as a Markdown file, and the JSON format to hand back; Load work (.json) reads that JSON into this sheet.",
           "Demo data only: never type real names, phone numbers or documents. The last section is for the UAT owner: skip it unless they ask you to.",
@@ -242,7 +243,7 @@ const T = {
           "اعمل قسمًا قسمًا: افتح القسم 1 ونفّذ حالاته بالترتيب، ثم القسم 2، وهكذا. يُظهر كل قسم عدد ما أنجزته من حالاته.",
           "في كل حالة: اقرأ الخطوات ونفّذها، وقارن بالنتيجة المتوقعة، ثم اضغط ناجح أو فاشل أو متعذّر (لم تستطع اختبارها) أو لم يُنفَّذ.",
           "عند فاشل أو متعذّر اكتب ما رأيت في الملاحظة (بالعربية أو الإنجليزية) وأضف لقطة شاشة: انقر داخل الحالة واضغط Ctrl+V، أو اسحب الصورة، أو انقر المربع لاختيار ملف. أضف ما تحتاج من لقطات.",
-          "يُحفظ عملك في هذا المتصفح أولًا بأول (حُفظ hh:mm تحت كل حالة). استخدم المتصفح نفسه كل مرة. للانتقال إلى جهاز آخر احفظ العمل (.json) وحمّله هناك.",
+          "اكتب اسمك في الأعلى قبل أن تبدأ: كل حالة تسجّلها تحفظ من نفّذها، في ملف .json المحفوظ وفي ملف Excel. يُحفظ عملك في هذا المتصفح أولًا بأول (حُفظ hh:mm تحت كل حالة). استخدم المتصفح نفسه كل مرة. للانتقال إلى جهاز آخر احفظ العمل (.json) وحمّله هناك.",
           "عند الانتهاء، أو في نهاية كل يوم، اكتب اسمك في الأعلى واضغط تصدير إلى Excel وأرسل ملف .xlsx إلى المسؤول. فيه كل حالة وملاحظة ولقطة شاشة.",
           "تعمل مع ذكاء اصطناعي؟ يعطيك تنزيل للذكاء الاصطناعي (.md) الحالات نفسها في ملف Markdown مع صيغة JSON المطلوبة للنتائج؛ ويقرأ تحميل العمل (.json) ذلك الملف في هذه الورقة.",
           "بيانات تجريبية فقط: لا تكتب أسماء أو أرقام هواتف أو مستندات حقيقية. القسم الأخير لمسؤول الاختبار: تخطّه إلا إذا طلب منك ذلك.",
@@ -283,7 +284,9 @@ const all = (store) => new Promise((ok, no) => {
 const entry = (key) => entries.get(key) ?? { status: "", comment: "", shots: [], at: "" };
 
 async function saveEntry(key, e) {
-  e.at = now(); entries.set(key, e);
+  // Who ran it goes on the case itself (RP-1248), so a work file loaded into another tester's sheet keeps it.
+  // Updated in place: a comment's delayed save and a status click hold the same entry.
+  Object.assign(e, recordEntry({ ...e, at: now() }, $("tester").value)); entries.set(key, e);
   const card = document.querySelector(`.case[data-key="${key}"] .saved`);
   try { if (!db) throw new Error("no db"); await tx("entries", "readwrite", (s) => s.put(e, key)); if (card) card.textContent = t("saved") + " " + e.at; }
   catch { if (card) card.textContent = t("notSaved"); }
@@ -334,19 +337,9 @@ async function removeShotNow(key, id) {
   await saveEntry(key, e); drawShots(key);
 }
 
-// ---- Sections (RP-1204): the tester's cases by Part, numbered; the owner's cases last ----
+// ---- Sections, as the generator made them (sectionsOf): each UAT Project's role first (RP-1248), then the Parts (RP-1204), the owner's cases last ----
 const isOwner = (c) => c.needs.includes("owner");
-const SECTIONS = (() => {
-  const list = [];
-  for (const c of cases.filter((x) => !isOwner(x))) {
-    let s = list.find((x) => x.part === c.part);
-    if (!s) { s = { id: "s-" + c.part, n: list.length + 1, part: c.part, name: PARTS[c.part] ?? { en: c.partName, ar: c.partName }, cases: [] }; list.push(s); }
-    s.cases.push(c);
-  }
-  const owner = cases.filter(isOwner);
-  if (owner.length) list.push({ id: "s-owner", n: 0, part: "OWNER", name: { en: "Cases the UAT owner runs", ar: "حالات يشغّلها مسؤول الاختبار" }, cases: owner });
-  return list;
-})();
+const SECTIONS = (DATA.sections ?? []).map((s) => ({ ...s, cases: s.keys.map((k) => byKey.get(k)).filter(Boolean) }));
 const openSections = new Set();
 const statusOf = (c) => entry(c.key).status || "unset";
 function matches(c) {
@@ -471,7 +464,9 @@ const linkPeople = (who) => {
 function drawGuide() {
   const url = DATA.uatUrl + "/en", urlAr = DATA.uatUrl + "/ar";
   const link = (u) => `<a href="${esc(u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}</a>`;
-  $("guideList").innerHTML = t("guide").map((line) => `<li><span>${esc(line).replace("{url}", link(url)).replace("{urlAr}", link(urlAr))}</span></li>`).join("");
+  const lines = [...t("guide")];
+  if (DATA.projectsNotHome) lines.splice(2, 0, DATA.projectsNotHome[lang] ?? DATA.projectsNotHome.en);
+  $("guideList").innerHTML = lines.map((line) => `<li><span>${esc(line).replace("{url}", link(url)).replace("{urlAr}", link(urlAr))}</span></li>`).join("");
 }
 
 // ---- A case ----
@@ -612,7 +607,7 @@ $("export").addEventListener("click", async () => {
     const names = e.shots.map((id) => shots.get(id)?.name).filter(Boolean);
     return [sectionLabel(c), c.key, c.id, c.part, c.round, c.title, c.who, c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"), c.expected,
       c.needs.join(", "), isOwner(c) ? "UAT owner" : "Tester", c.url,
-      EN(e.status), e.comment, names.length ? `${names.length} on the Screenshots sheet: ${names.join(", ")}` : "", e.status || e.comment || names.length ? tester : "", e.at];
+      EN(e.status), e.comment, names.length ? `${names.length} on the Screenshots sheet: ${names.join(", ")}` : "", testerCell(e, tester), e.at];
   })];
   const shotRows = [["Key", "ID", "File", "Screenshot"]], images = [], heights = {};
   for (const c of ordered) for (const id of entry(c.key).shots) {
@@ -646,8 +641,7 @@ $("mdBtn").addEventListener("click", () => {
 const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 $("saveJson").addEventListener("click", async () => {
-  const out = { sheet: "rabaed-uat-sheet", round: DATA.round, tester: $("tester").value, at: new Date().toISOString(), entries: {}, shots: [] };
-  for (const [k, e] of entries) if (e.status || e.comment || e.shots.length) out.entries[k] = e;
+  const out = workFile({ round: DATA.round, tester: $("tester").value.trim(), at: new Date().toISOString(), entries, shots: [] });
   for (const s of shots.values()) out.shots.push({ id: s.id, key: s.key, name: s.name, type: s.type, w: s.w, h: s.h, data: b64(new Uint8Array(await s.blob.arrayBuffer())) });
   download(`Rabaed-UAT-${roundTag}-${fileTag()}${stamp()}.json`, new Blob([JSON.stringify(out)], { type: "application/json" }));
   flash(t("savedJson"));
@@ -670,8 +664,8 @@ $("importFile").addEventListener("change", async () => {
   let n = 0;
   for (const [k, raw] of Object.entries(data.entries ?? {})) {
     if (!byKey.has(k)) continue;
-    // Only the four statuses; a hand-made or AI-made file may hold anything.
-    const e = { status: STATUSES.includes(raw.status) ? raw.status : "", comment: String(raw.comment ?? ""), shots: (raw.shots ?? []).filter((id) => shots.has(id) || known.has(id)), at: raw.at || now() };
+    // Only the four statuses, and who ran it kept (RP-1248); a hand-made or AI-made file may hold anything.
+    const e = readEntry(raw ?? {}, { fileTester: data.tester, shotOk: (id) => shots.has(id) || known.has(id), now: now() });
     // Screenshots of the entry being replaced that the loaded one doesn't keep are removed, not left orphaned.
     for (const old of entry(k).shots) if (!e.shots.includes(old)) {
       const s = shots.get(old); if (s) URL.revokeObjectURL(s.url); shots.delete(old);
