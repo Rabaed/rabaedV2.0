@@ -47,7 +47,7 @@ export function ActionSheetEffects({ effects, labels, locale }: { effects: reado
     }
   };
   return (
-    <section aria-label={labels.title} data-sheet-effects="" className="rounded-[12px] bg-surface-subtle px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+    <section aria-label={labels.title} data-sheet-effects="" className="rounded-[12px] bg-surface-subtle px-3 py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
       <h3 className="mb-2 text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase rtl:tracking-normal">{labels.title}</h3>
       <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13px] text-text-secondary sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
         {effects.map((effect) => (
