@@ -345,6 +345,20 @@ describe("tagProblems", () => {
   });
 });
 
+describe("the app's wording in a case (RP-1232)", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const label = (lang: "en" | "ar") => {
+    const messages = JSON.parse(readFileSync(join(root, `apps/web/messages/${lang}.json`), "utf8"));
+    return messages.snagList.mobile.flow.camera.takePhoto as string;
+  };
+
+  it("SNG-13 names the New Snag camera button as the app words it, in English and Arabic", () => {
+    const rows = JSON.parse(readFileSync(join(root, "planning/uat/round-0/test-cases.json"), "utf8")) as ScenarioRow[];
+    const snag = rows.find((r) => r.id === "SNG-13")!;
+    expect(snag.expected).toContain(`${label("en")} / ${label("ar")}`);
+  });
+});
+
 describe("the sheet's colours", () => {
   // WCAG 2.x contrast of 12px text: at least 4.5:1.
   const luminance = (hex: string) => {

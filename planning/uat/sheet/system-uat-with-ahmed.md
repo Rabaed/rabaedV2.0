@@ -1,6 +1,6 @@
 # Rabaed UAT test sheet: System UAT with Ahmed
 
-Built 2026-11-06. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
+Built 2026-11-07. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
 
 ## How to use this file
 
@@ -1174,7 +1174,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. At 375 px open the Snag List and raise a Snag with the camera.
-- **Expected result:** Photo-first cards, filters in a sheet, large New button, the camera opens from Take photo; saved as you go.
+- **Expected result:** Photo-first cards, filters in a sheet, large New button, the camera opens from Take a photo / التقاط صورة; saved as you go.
 
 ### SNG-14 Pick the Contractor when two cover a Location
 
