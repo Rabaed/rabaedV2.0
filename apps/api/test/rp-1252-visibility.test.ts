@@ -14,7 +14,7 @@ let at: Tower;
 let c1: Company;
 let k1: Company;
 let c3: Company;
-let k1Engineer: { id: string; caller: Caller };
+let k1Engineer: Caller;
 
 type Viewer = { by: Caller; name: string };
 const viewer = (by: Caller, name: string): Viewer => ({ by, name });
@@ -41,7 +41,7 @@ beforeAll(async () => {
   k1 = await api.authorizedPerson();
   c3 = await api.projectCreator();
   at = await buildTower(api, { c1, k1 }, "RGA");
-  k1Engineer = await memberOnProject(api, k1, at.k1ParticipantId!, ["engineer"]);
+  k1Engineer = (await memberOnProject(api, k1, at.k1ParticipantId!, ["engineer"])).caller;
   await api.createProject(c3.caller, { code: "RGO" });
 });
 
@@ -76,7 +76,7 @@ describe("scenario RP-1252-1: the Visibility Gap counts no discarded Draft as a 
       hiddenFrom: [
         viewer(at.c1Engineer, "C1's engineer, who raised the Draft"),
         viewer(k1.caller, "K1's Authorized Person"),
-        viewer(k1Engineer.caller, "K1's engineer"),
+        viewer(k1Engineer, "K1's engineer"),
         viewer(c3.caller, "another Project's Authorized Person and Admin"),
       ],
       name: (v: Viewer) => v.name,
@@ -85,7 +85,8 @@ describe("scenario RP-1252-1: the Visibility Gap counts no discarded Draft as a 
   });
 
   it("drops the Zone once deactivated, as only a discarded Draft uses it", async () => {
+    expect(await gapIds(c1.caller)).toContain(discarded);
     await ok(c1.caller.request("PATCH", `/v1/locations/${discarded}`, { active: false }));
-    expect(await gapIds(c1.caller)).not.toContain(discarded); // not hidden-from: the Admin's own gap, which the Zone left (state); the test above read it there first
+    expect(await gapIds(c1.caller)).not.toContain(discarded); // not hidden-from: the Admin's own gap, which the Zone left (state); the line above read it there first
   });
 });

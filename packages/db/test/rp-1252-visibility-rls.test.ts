@@ -58,10 +58,13 @@ describe("scenario RP-1252-1: the Visibility Gap counts no discarded Draft as a 
     discarded = await addZone("ZX");
     live = await addZone("ZL");
     closed = await addZone("ZC");
-    const discardedDraft = await draftAt(discarded);
+    // The live and closed Zones each have a discarded Draft too: one live use is enough.
+    const discards = [await draftAt(discarded), await draftAt(live), await draftAt(closed)];
     await draftAt(live);
     const closedItem = await draftAt(closed);
-    expect(await t.outcome(t.c1.members.engineer, sql`select app.discard_draft(${discardedDraft}::uuid, now()) as outcome`)).toBe("discarded");
+    for (const id of discards) {
+      expect(await t.outcome(t.c1.members.engineer, sql`select app.discard_draft(${id}::uuid, now()) as outcome`)).toBe("discarded");
+    }
     // A closed item that was never discarded (closed here by hand: how it closed does not matter to the gap).
     await migrator.query("update work_item set outcome = 'cancelled', closed_at = now() where id = $1", [closedItem]);
     // Every Participant covers Buildings A and B only, so the three Zones are in the gap.
@@ -76,17 +79,18 @@ describe("scenario RP-1252-1: the Visibility Gap counts no discarded Draft as a 
     expect((await gap(t.c1.ap)).map((v) => v.id).sort()).toEqual([discarded, live, closed].sort());
   });
 
-  it("drops the deactivated Zone only a discarded Draft uses, and keeps the ones a live or closed item uses", async () => {
+  it("drops the deactivated Zone only a discarded Draft uses, and keeps the ones a live or closed item also uses", async () => {
     for (const id of [discarded, live, closed]) {
       expect(await t.outcome(t.c1.ap, sql`select app.update_dimension_value(${id}::uuid, 'location', null::jsonb, false, now()) as outcome`)).toBe("updated");
     }
+    const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
     const rows = await gap(t.c1.ap);
     expect(rows.map((v) => v.id)).not.toContain(discarded);
-    expect(rows.sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+    expect(rows.sort(byId)).toEqual(
       [
         { id: live, status: "deactivated" },
         { id: closed, status: "deactivated" },
-      ].sort((a, b) => a.id.localeCompare(b.id)),
+      ].sort(byId),
     );
   });
 
