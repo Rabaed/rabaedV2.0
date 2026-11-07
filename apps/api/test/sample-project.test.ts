@@ -81,6 +81,9 @@ function planned(include: (s: SampleSubmittal) => boolean, { revisions }: { revi
     code_b: "approved",
     code_c: "revise_resubmit",
     code_d: "rejected",
+    // A UAT Project's ends (RP-1248); the sample Project has none.
+    draft: "draft",
+    cancelled: "cancelled",
   };
   const counts: Record<string, number> = {};
   for (const s of plan.filter(include)) {

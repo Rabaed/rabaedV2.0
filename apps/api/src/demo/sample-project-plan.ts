@@ -126,7 +126,11 @@ export type SubmittalEnd =
   /** Revise and Resubmit. */
   | "code_c"
   /** Rejected. */
-  | "code_d";
+  | "code_d"
+  /** A UAT Project's (RP-1248): still a Draft, never sent. */
+  | "draft"
+  /** A UAT Project's (RP-1248): sent for review, then Cancelled by the PM. */
+  | "cancelled";
 
 /** The demo people the seed acts as, by their key in seed.ts. */
 export type ConsultantEngineer = "ahmed" | "sara";
@@ -154,6 +158,12 @@ export interface SampleSubmittal {
   comments?: { comment: string; reference: string; end: "open" | "resolved" | "closed" }[];
   /** With a Sample photo besides its Datasheet. */
   samplePhoto?: boolean;
+  /** Its raising Contractor; TMC when left out. A UAT Project's rival items are Beta Build's (RP-1248). */
+  owner?: "tmc" | "beta";
+  /** The Subjects of Submitted items it links, as Related submittals and as free Links, while a Draft (RP-1248). */
+  links?: string[];
+  /** A Draft with its Manufacturer, supplier, Trade and Location only: no Description, Items or Datasheet (RP-1248). */
+  bare?: boolean;
 }
 
 const COUNTS: [SubmittalEnd, number][] = [
@@ -247,7 +257,15 @@ export function sampleSubmittals(): SampleSubmittal[] {
 }
 
 /** Where a Snag List item ends: its Stage. */
-export type SnagEnd = "draft" | "open" | "in_progress" | "on_hold" | "resolved" | "closed";
+export type SnagEnd =
+  | "draft"
+  | "open"
+  | "in_progress"
+  | "on_hold"
+  | "resolved"
+  | "closed"
+  /** A UAT Project's (RP-1248): resolved by the Contractor, then Returned to Open by its raiser with a reason. */
+  | "returned_to_open";
 
 export interface SampleSnag {
   title: string;
