@@ -9,33 +9,55 @@ import { parse } from "yaml";
 // workflow carries it. The two steps run the script alone, which prints no secret.
 const SECRET = "VISITOR_FORWARD_SECRET";
 const FROM_UAT = "${{ secrets.VISITOR_FORWARD_SECRET }}";
+const JOB = "deploy";
 const STEPS = { web: "web: settings and variables", api: "api: settings and variables" } as const;
+const ALLOWED: readonly string[] = Object.values(STEPS);
 
 type Step = { name?: string; run?: string; env?: Record<string, unknown> };
-type Workflow = { env?: Record<string, unknown>; jobs: Record<string, { env?: Record<string, unknown>; steps?: Step[] }> };
+type Workflow = { jobs?: Record<string, { steps?: Step[] }> };
 
 const WORKFLOWS = new URL("../.github/workflows/", import.meta.url);
 const read = (file: string) => readFileSync(new URL(file, WORKFLOWS), "utf8");
 const deployUat = read("deploy-uat.yml");
 
-const stepIn = (workflow: string, name: string) => (parse(workflow) as Workflow).jobs.deploy?.steps?.find((step) => step.name === name);
+const stepIn = (workflow: string, name: string) => (parse(workflow) as Workflow).jobs?.[JOB]?.steps?.find((step) => step.name === name);
 
-/** Every place a workflow names the secret, as "<file> <where>", leaving out the env of the steps in `allowed`. */
-function mentions(file: string, text: string, allowed: readonly string[] = []): string[] {
+/**
+ * Every place in a workflow that names the secret, as "<file> <path>", anywhere in it (env, run,
+ * with, secrets, container, services, workflow_call), leaving out only the env key of the steps of
+ * deploy-uat.yml's deploy job that `allowed` names.
+ */
+function placesNamingSecret(file: string, text: string, allowed: readonly string[] = []): string[] {
   const workflow = parse(text) as Workflow;
-  const named = (value: unknown) => JSON.stringify(value ?? null).includes(SECRET);
-  const found: string[] = [];
-  if (named(workflow.env)) found.push(`${file} workflow env`);
-  for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
-    if (named(job.env)) found.push(`${file} job ${id} env`);
-    for (const step of job.steps ?? []) {
-      const { env, ...rest } = step;
-      if (named(rest)) found.push(`${file} step "${step.name ?? "(unnamed)"}"`);
-      if (named(env) && !(id === "deploy" && allowed.includes(step.name ?? ""))) found.push(`${file} step "${step.name ?? "(unnamed)"}" env`);
-    }
+  for (const step of workflow.jobs?.[JOB]?.steps ?? []) {
+    if (allowed.includes(step.name ?? "") && step.env) delete step.env[SECRET];
   }
-  return found;
+  // A Set: a key and its value can both name the secret, one place.
+  const found = new Set<string>();
+  const walk = (value: unknown, path: string) => {
+    if (typeof value === "string") {
+      if (value.includes(SECRET)) found.add(`${file} ${path}`);
+    } else if (Array.isArray(value)) {
+      value.forEach((item: unknown, index) => walk(item, `${path}[${index}]`));
+    } else if (typeof value === "object" && value !== null) {
+      for (const [key, item] of Object.entries(value)) {
+        if (key.includes(SECRET)) found.add(`${file} ${path}.${key}`);
+        walk(item, `${path}.${key}`);
+      }
+    }
+  };
+  walk(workflow, "");
+  return [...found];
 }
+
+const inDeployUat = (text: string) => placesNamingSecret("deploy-uat.yml", text, ALLOWED);
+
+/** deploy-uat.yml with `from` replaced by `to`; fails when `from` is not there, so a check never no-ops. */
+const changed = (from: string | RegExp, to: string) => {
+  const text = deployUat.replace(from, to);
+  expect(text, `deploy-uat.yml has ${String(from)}`).not.toBe(deployUat);
+  return text;
+};
 
 describe("deploy-uat.yml's VISITOR_FORWARD_SECRET", () => {
   it.each(Object.entries(STEPS))("passes the uat environment's secret to %s's variables step", (project, name) => {
@@ -49,31 +71,34 @@ describe("deploy-uat.yml's VISITOR_FORWARD_SECRET", () => {
   it("goes to no other step, job or workflow", () => {
     const files = readdirSync(WORKFLOWS).filter((file) => /\.ya?ml$/.test(file));
     expect(files).toContain("deploy-uat.yml");
-    expect(files.flatMap((file) => mentions(file, read(file), file === "deploy-uat.yml" ? Object.values(STEPS) : []))).toEqual([]);
+    expect(files.flatMap((file) => placesNamingSecret(file, read(file), file === "deploy-uat.yml" ? ALLOWED : []))).toEqual([]);
   });
 });
 
 describe("the check itself", () => {
   const line = `          ${SECRET}: ${FROM_UAT}\n`;
+  const adminStep = '      - name: "Admin: settings and variables"\n        env:\n';
 
-  it("sees the secret on Admin's step, in a job's env, or read by a script", () => {
-    const admin = deployUat.replace('      - name: "Admin: settings and variables"\n        env:\n', (match) => match + line);
-    expect(admin, "the workflow has Admin's step as this check expects").not.toBe(deployUat);
-    expect(mentions("deploy-uat.yml", admin, Object.values(STEPS))).toEqual(['deploy-uat.yml step "Admin: settings and variables" env']);
+  it("sees the secret on Admin's step, in the job's env, in a script, or passed on as a reusable workflow's secret", () => {
+    const admin = inDeployUat(changed(adminStep, adminStep + line));
+    expect(admin).toEqual([expect.stringMatching(/^deploy-uat\.yml \.jobs\.deploy\.steps\[\d+\]\.env\.VISITOR_FORWARD_SECRET$/)]);
 
-    const job = deployUat.replace("    env:\n      VERSION:", `    env:\n      ${SECRET}: ${FROM_UAT}\n      VERSION:`);
-    expect(job).not.toBe(deployUat);
-    expect(mentions("deploy-uat.yml", job, Object.values(STEPS))).toEqual(["deploy-uat.yml job deploy env"]);
+    expect(inDeployUat(changed("    env:\n      VERSION:", `    env:\n      ${SECRET}: ${FROM_UAT}\n      VERSION:`))).toEqual(["deploy-uat.yml .jobs.deploy.env.VISITOR_FORWARD_SECRET"]);
 
-    const echoed = deployUat.replace("run: node scripts/uat-deploy.ts project web", `run: echo "$${SECRET}"`);
-    expect(echoed).not.toBe(deployUat);
-    expect(mentions("deploy-uat.yml", echoed, Object.values(STEPS))).toEqual(['deploy-uat.yml step "web: settings and variables"']);
+    expect(inDeployUat(changed("run: node scripts/uat-deploy.ts project web", `run: echo "$${SECRET}"`))).toEqual([expect.stringMatching(/\.steps\[\d+\]\.run$/)]);
+
+    const reusable = `on: push\njobs:\n  call:\n    uses: ./.github/workflows/other.yml\n    secrets:\n      ${SECRET}: ${FROM_UAT}\n`;
+    expect(placesNamingSecret("other.yml", reusable)).toEqual(["other.yml .jobs.call.secrets.VISITOR_FORWARD_SECRET"]);
   });
 
-  it("sees a step that lost the secret, or another value", () => {
-    const lost = deployUat.replace(new RegExp(`\\n\\s+${SECRET}: .*`), "");
-    expect(lost).not.toBe(deployUat);
-    expect([stepIn(lost, STEPS.web)?.env?.[SECRET], stepIn(lost, STEPS.api)?.env?.[SECRET]]).toContain(undefined);
-    expect(stepIn(deployUat.replaceAll(FROM_UAT, "${{ secrets.CRON_SECRET }}"), STEPS.web)?.env?.[SECRET]).not.toBe(FROM_UAT);
+  it("leaves out only the allowed steps' env key: the same line elsewhere in those steps is seen", () => {
+    expect(inDeployUat(changed("run: node scripts/uat-deploy.ts project api", `run: node scripts/uat-deploy.ts project api "$${SECRET}"`))).toEqual([expect.stringMatching(/\.steps\[\d+\]\.run$/)]);
+  });
+
+  it.each(Object.entries(STEPS))("sees %s's step lose the secret, or get another value", (_project, name) => {
+    const stepStart = `      - name: "${name}"\n        env:\n          VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}\n`;
+    expect(stepIn(changed(stepStart + line, stepStart), name)?.env?.[SECRET]).toBeUndefined();
+    const other = "${{ secrets.CRON_SECRET }}";
+    expect(stepIn(changed(stepStart + line, `${stepStart}          ${SECRET}: ${other}\n`), name)?.env?.[SECRET]).toBe(other);
   });
 });
