@@ -64,8 +64,7 @@ const refusalsAr = {
 
 export const packagePageLabels: Record<Locale, PackagePageLabels> = {
   en: {
-    breadcrumb: "Breadcrumb",
-    back: "Submittals",
+    back: "Back",
     kind: "Package",
     status: { open: "Open", in_progress: "In Progress", done: "Done" },
     ownedBy: "Owned by",
@@ -139,8 +138,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     },
   },
   ar: {
-    breadcrumb: "مسار التنقل",
-    back: "الاعتمادات",
+    back: "رجوع",
     kind: "حزمة",
     status: { open: "مفتوحة", in_progress: "قيد التنفيذ", done: "منجزة" },
     ownedBy: "المالك",

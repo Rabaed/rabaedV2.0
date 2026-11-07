@@ -3556,5 +3556,8 @@
     "notifications": "الإشعارات",
     "subjectMissing": "أعطِ المسودة موضوعًا.",
     "tradeMissing": "اختر التخصص أولًا: لا تُحفظ المسودة بدونه."
+  },
+  "backLink": {
+    "label": "رجوع"
   }
 }

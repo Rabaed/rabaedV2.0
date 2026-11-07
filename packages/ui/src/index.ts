@@ -113,6 +113,7 @@ export {
 } from "./components/signature/company-images.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
+export { BackLink, type BackLinkProps } from "./components/navigation/back-link.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";
 export { Popover, PopoverClose, PopoverContent, PopoverTrigger, type PopoverContentProps } from "./components/overlay/popover.tsx";
 export { Sheet, SheetClose, SheetContent, SheetFooter, SheetTrigger, type SheetContentProps } from "./components/overlay/sheet.tsx";

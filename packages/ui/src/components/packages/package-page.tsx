@@ -22,6 +22,7 @@ import { CompanyChip } from "../data/avatar.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { TableCard } from "../list/table-card.tsx";
+import { BackLink } from "../navigation/back-link.tsx";
 import { scrollClear } from "../views/work-item-list.tsx";
 import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work-item-table.tsx";
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
@@ -42,9 +43,7 @@ import { PackageNotReadyList, SubmitPackageDialog, type SubmitPackageCall, type 
 export type PackageCall = () => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type PackagePageLabels = {
-  /** The breadcrumb's name. */
-  breadcrumb: string;
-  /** The way back: the Submittals. */
+  /** The way back, "Back" (RP-1241). */
   back: string;
   /** The tag before the number, "Package". */
   kind: string;
@@ -86,7 +85,7 @@ export type PackagePageProps = {
   pkg: PackageDetail;
   locale: Locale;
   labels: PackagePageLabels;
-  /** The Submittals, where the breadcrumb leads back. */
+  /** The page's fixed parent, the Project's Packages: where "Back" goes when the page before wasn't inside Rabaed. */
   backHref: string;
   itemHref: (id: string) => string;
   linkAs?: ElementType;
@@ -154,16 +153,7 @@ export function PackagePage({
 
   return (
     <div data-package-page="" className="flex min-w-0 flex-col gap-4">
-      <nav aria-label={labels.breadcrumb} className="flex items-center gap-1.5 text-sm text-muted">
-        <Link href={backHref} className={cn("inline-flex items-center gap-1.5 rounded-xs font-medium text-text-secondary hover:text-text", focusRing)}>
-          <Icon name="arrow-left" size={16} />
-          {labels.back}
-        </Link>
-        <Icon name="chevron-right" size={14} className="text-faint" />
-        <bdi dir="ltr" translate="no" aria-current="page" className="font-ui font-semibold text-text-secondary">
-          {pkg.number}
-        </bdi>
-      </nav>
+      <BackLink href={backHref} label={labels.back} linkAs={Link} />
 
       <header className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1 basis-80">

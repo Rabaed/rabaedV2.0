@@ -37,6 +37,7 @@ export default async function ParticipantPage({ params }: { params: Promise<{ lo
     <div className="space-y-6">
       <ParticipantsBreadcrumb
         label={t("breadcrumb")}
+        back="/participants"
         crumbs={[{ label: t("myCompany") }, { label: t("title"), href: "/participants" }, { label: project }]}
       />
       <ParticipantsHeading

@@ -23,7 +23,6 @@ import { useLocale, useTranslations } from "next-intl";
 import NextLink from "next/link";
 import { useCallback, useRef } from "react";
 import { usePackageBulkCalls } from "@/components/package-bulk";
-import { useRememberedHref } from "@/components/remembered-module-queries";
 import { getPathname, useRouter } from "@/i18n/navigation";
 import { messageKeys } from "@/lib/message-keys";
 
@@ -46,12 +45,12 @@ const packageColumns = ["documentNumber", "revision", "subject", "type", "trade"
 /** The Package page's words, from the app's messages. */
 function usePackageLabels(): PackagePageLabels {
   const t = useTranslations("packages");
+  const tBack = useTranslations("backLink");
   const v = useTranslations("workItemViews");
   const locale = useLocale() as Locale;
   const keys = messageKeys((key) => t(key));
   return {
-    breadcrumb: t("breadcrumb"),
-    back: t("back"),
+    back: tBack("label"),
     kind: t("kind"),
     status: keys("status", ["open", "in_progress", "done"] as const),
     ownedBy: t("ownedBy"),
@@ -111,7 +110,6 @@ export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "loc
   // Submit Package's key, kept until it is taken, so a double click or a retry Submits once.
   const submitKey = useRef<string | null>(null);
   const back = `/projects/${pkg.projectId}/work-items`;
-  const remembered = useRememberedHref();
   const refreshed = async (result: Promise<Result>) => {
     const r = await result;
     if (r.ok) router.refresh();
@@ -155,8 +153,8 @@ export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "loc
       pkg={pkg}
       locale={locale}
       labels={labels}
-      // Back to the Submittals with the Member's last filters there (RP-1240).
-      backHref={remembered(getPathname({ href: back, locale }))}
+      // "Back" (RP-1241): its fixed parent is the Packages in the Project's Submittals tab, whose filters are not remembered (RP-1240).
+      backHref={getPathname({ href: `${back}?view=packages`, locale })}
       itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
       // The hrefs already carry their locale (getPathname): next/link keeps navigation client-side without adding it again.
       linkAs={NextLink}
