@@ -10,16 +10,16 @@ import { useRouter } from "@/i18n/navigation";
 import { impliedBySelection, treeOrder } from "@/lib/dimension-tree";
 import { PathLabel } from "./participants-parts";
 
-type Grant = { isAll: boolean; selected: ReadonlySet<string> };
-type Draft = Record<DimensionKind, Grant>;
+export type Grant = { isAll: boolean; selected: ReadonlySet<string> };
+export type Draft = Record<DimensionKind, Grant>;
 
-const draftOf = (visibility: Visibility): Draft => ({
+export const draftOf = (visibility: Visibility): Draft => ({
   trade: { isAll: visibility.trade.isAll, selected: new Set(visibility.trade.valueIds) },
   location: { isAll: visibility.location.isAll, selected: new Set(visibility.location.valueIds) },
 });
 
 /** What is saved of a grant: "all", or the chosen values that no chosen ancestor already covers. */
-function stored(values: DimensionValue[], grant: Grant) {
+export function stored(values: DimensionValue[], grant: Grant) {
   if (grant.isAll) return { isAll: true, valueIds: [] as string[] };
   const implied = impliedBySelection(values, grant.selected);
   return { isAll: false, valueIds: [...grant.selected].filter((id) => !implied.has(id)).sort() };
@@ -133,7 +133,7 @@ export function MemberVisibilityEditor({
   );
 }
 
-function DimensionCard({
+export function DimensionCard({
   kind,
   title,
   allLabel,
@@ -144,17 +144,20 @@ function DimensionCard({
   readOnly,
   locale,
   onChange,
+  plainNames = false,
 }: {
   kind: DimensionKind;
   title: string;
   allLabel: string;
-  caption: string;
+  caption?: string;
   emptyText: string;
   values: DimensionValue[];
   grant: Grant;
   readOnly: boolean;
   locale: Locale;
   onChange: (grant: Grant) => void;
+  /** Each value by its own name and code (the Project's settings panel), not its path. */
+  plainNames?: boolean;
 }) {
   const ordered = useMemo(() => treeOrder(values), [values]);
   const byId = useMemo(() => new Map(values.map((v) => [v.id, v])), [values]);
@@ -205,7 +208,16 @@ function DimensionCard({
                 style={{ paddingInlineStart: `${v.level * 1.75}rem` }}
               >
                 <Field
-                  label={<span className={top ? "font-semibold text-text" : "text-text"}>{kind === "location" ? <PathLabel value={v} byId={byId} locale={locale} /> : v.name[locale]}</span>}
+                  label={
+                    <span className={top ? "font-semibold text-text" : "text-text"}>
+                      {kind === "location" && !plainNames ? <PathLabel value={v} byId={byId} locale={locale} /> : v.name[locale]}
+                      {plainNames && (
+                        <bdi dir="ltr" className="ms-2 rounded-xs border border-border px-1.5 py-px font-mono text-xs font-semibold text-muted">
+                          {v.code}
+                        </bdi>
+                      )}
+                    </span>
+                  }
                   layout="inline"
                   readOnly={readOnly}
                   disabled={locked}
@@ -217,7 +229,7 @@ function DimensionCard({
           })}
         </ul>
       )}
-      <p className="mt-3 rounded-md bg-hover px-3 py-2 text-xs text-muted">{caption}</p>
+      {caption && <p className="mt-3 rounded-md bg-hover px-3 py-2 text-xs text-muted">{caption}</p>}
     </fieldset>
   );
 }
