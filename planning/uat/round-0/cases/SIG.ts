@@ -278,8 +278,17 @@ defineCase("SIG-07", async (t) => {
   await page.mouse.up();
   await page.getByRole("radio", { name: "Blue" }).click().catch(() => undefined);
   await t.shot(page, "draw-375");
-  const undo = await page.getByRole("button", { name: /undo/i }).count();
-  t.note(`Undo button on the pad: ${undo > 0 ? "present" : "not present (the page offers Clear only)"}.`);
+  // RP-1165: Undo takes back the last stroke, and the Signature card previews the drawing.
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  c.check("Undo is offered beside Clear once something is drawn", (await undoButton.count()) > 0 && (await undoButton.isEnabled()));
+  const card = page.getByRole("group", { name: "How it looks on a record" });
+  c.check("the Signature card shows the Member's Company and the drawing", (await card.getByRole("img", { name: "Signature" }).count()) > 0 && (await card.innerText()).includes("Signature"));
+  await undoButton.click();
+  c.check("Undo removed the only stroke: nothing left to save or preview", (await undoButton.isDisabled()) && (await card.getByRole("img", { name: "Signature" }).count()) === 0);
+  await page.mouse.move(box.x + 20, box.y + box.height * 0.6);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + 20 + i * ((box.width - 40) / 12), box.y + box.height * (0.5 + 0.2 * Math.sin(i)));
+  await page.mouse.up();
   await page.getByRole("button", { name: "Save Signature" }).click();
   await page.waitForURL(/\/profile$/, { timeout: 15_000 }).catch(() => undefined);
   await settle(page);
