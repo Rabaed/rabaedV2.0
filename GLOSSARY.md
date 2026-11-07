@@ -83,11 +83,11 @@ A way a Project is divided that controls who sees which Work Items, such as Trad
 _Avoid_: Filter, category, scope
 
 **Trade**:
-A discipline of the works, such as Civil, Architectural, Electrical or Mechanical. Rabaed supplies a default list that each Project can extend.
+A discipline of the works, such as Civil, Architectural, Electrical or Mechanical. Rabaed supplies a default list that each Project can extend. A Project Admin can rename a Trade (its code never changes) or deactivate it ("Archive" on screen): a deactivated Trade stays on the Work Items that use it but is never picked for new ones. The General Trade (GEN) is never deactivated. Outside the screen it is "deactivated", as for Scopes: "archived" is kept for Closed Projects.
 _Avoid_: Discipline, package
 
 **Location**:
-A place in the Project's physical breakdown, such as a Zone, Building, Villa or Floor, or a Sector on infrastructure projects. A Location can be drawn on the Project's site map or floor plans so Work Items and Drawings can be shown on it.
+A place in the Project's physical breakdown, such as a Zone, Building, Villa or Floor, or a Sector on infrastructure projects. A Location can be drawn on the Project's site map or floor plans so Work Items and Drawings can be shown on it. A Project Admin can rename a Location (its code never changes) or deactivate it ("Archive" on screen) with every Location inside it: it stays on the Work Items that use it but is never picked for new ones.
 _Avoid_: Area, WBS
 
 **Visibility**:
