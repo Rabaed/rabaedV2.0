@@ -33,12 +33,6 @@ export default async function WorkflowVersionsPage({ params, searchParams }: { p
       <SettingsHeader
         title={t("versionsTitle", { name: read.name[locale], n: formatNumber(versionNo, locale) })}
         description={t("versionsIntro")}
-        actions={
-          <Link href={base} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-fg hover:underline">
-            <Icon name="arrow-left" size={15} />
-            {t("backToWorkflows")}
-          </Link>
-        }
       />
       {justPublished && (
         <p role="status" className="flex items-center gap-2 rounded-md bg-success-tint px-3 py-2.5 text-sm font-semibold text-success-fg">

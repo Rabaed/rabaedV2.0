@@ -33,6 +33,7 @@ import { Switch } from "../form/switch.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import type { ActionFormLabels } from "../form-engine/action-form.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
+import { BackLink } from "../navigation/back-link.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 import { ToastProvider, useToast } from "../overlay/toast.tsx";
 import { stageColour } from "../status/stage-colour.ts";
@@ -494,14 +495,8 @@ function Builder(props: WorkflowBuilderProps) {
   return (
     <div className="flex h-full min-h-[520px] flex-col gap-2.5 p-3 sm:px-4">
       <div className="flex items-center gap-2">
-        <a
-          href={backHref}
-          aria-label={labels.back}
-          title={labels.back}
-          className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-sm text-on-ghost hover:bg-ghost-hover", focusRing)}
-        >
-          <Icon name="arrow-left" size={16} />
-        </a>
+        {/* Back in this tab's history inside Rabaed, else to the Workflows (RP-1241). */}
+        <BackLink href={backHref} label={labels.back} iconOnly />
         {/* The full name in a tooltip on hover and on keyboard focus, when the bar cuts it short. */}
         <div className="relative min-w-0">
           <h1 className={cn("peer m-0 truncate rounded-xs text-[17px] font-bold", focusRing)} tabIndex={0}>

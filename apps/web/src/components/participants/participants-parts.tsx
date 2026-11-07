@@ -1,6 +1,7 @@
 import type { DimensionKind, DimensionValue, DimensionValues, Locale } from "@rabaed/domain";
 import { Icon, buttonVariants, cn, type IconName } from "@rabaed/ui";
 import type { ReactNode } from "react";
+import { PageBackLink } from "@/components/page-back-link";
 import { Link } from "@/i18n/navigation";
 
 // The parts the three Participants pages share (RP-1155, the owner's reference).
@@ -27,9 +28,12 @@ export function PathLabel({ value, byId, locale }: { value: DimensionValue; byId
 
 export type Crumb = { label: string; href?: string };
 
-/** "My Company › Participants › Project › Member · Visibility"; the last crumb is the page itself. */
-export function ParticipantsBreadcrumb({ label, crumbs }: { label: string; crumbs: Crumb[] }) {
-  return (
+/**
+ * "My Company › Participants › Project › Member · Visibility"; the last crumb is the page itself.
+ * On an inner page, "Back" above it (RP-1241), `back` being the page's fixed parent.
+ */
+export function ParticipantsBreadcrumb({ label, crumbs, back }: { label: string; crumbs: Crumb[]; back?: string }) {
+  const nav = (
     <nav aria-label={label}>
       <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
         {crumbs.map((c, i) => {
@@ -51,6 +55,13 @@ export function ParticipantsBreadcrumb({ label, crumbs }: { label: string; crumb
         })}
       </ol>
     </nav>
+  );
+  if (back === undefined) return nav;
+  return (
+    <div className="flex flex-col gap-2">
+      <PageBackLink parent={back} />
+      {nav}
+    </div>
   );
 }
 

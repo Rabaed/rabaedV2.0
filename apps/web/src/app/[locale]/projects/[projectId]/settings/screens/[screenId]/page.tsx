@@ -1,10 +1,10 @@
 import { fieldKinds } from "@/lib/screen-editor";
 import { itemsToCreate, type Locale } from "@rabaed/domain";
-import { Icon, SettingsHeader } from "@rabaed/ui";
+import { SettingsHeader } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ScreenEditor } from "@/components/screen-editor";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import { getMe, getScreen, getScreenPins, getTypeOutcomes, getWorkflowSettings } from "@/lib/session";
 
 type Params = { locale: Locale; projectId: string; screenId: string };
@@ -55,12 +55,6 @@ export default async function ScreenPage({ params }: { params: Promise<Params> }
       <SettingsHeader
         title={screen.name[locale]}
         description={t("editorIntro")}
-        actions={
-          <Link href={`/projects/${projectId}/settings/screens`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-fg hover:underline">
-            <Icon name="arrow-left" size={15} />
-            {t("backToScreens")}
-          </Link>
-        }
       />
       <ScreenEditor
         projectId={projectId}

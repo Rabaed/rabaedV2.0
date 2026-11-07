@@ -4,6 +4,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ProjectSettingsNav } from "@/components/project-settings-nav";
+import { SettingsBackLink } from "@/components/settings-back-link";
 import { redirect } from "@/i18n/navigation";
 import { getMe, getProject, getProjectParticipants } from "@/lib/session";
 
@@ -30,6 +31,8 @@ export default async function ProjectSettingsLayout({
       className="has-[[data-settings-wide]]:max-w-none"
       nav={<ProjectSettingsNav projectId={project.id} isProjectAdmin={project.isProjectAdmin} ownParticipantId={ownParticipant?.id} />}
     >
+      {/* "Back" above each page's title (RP-1241); none on the Workflow builder, whose bar has its own. */}
+      <SettingsBackLink />
       {children}
     </SettingsLayout>
   );

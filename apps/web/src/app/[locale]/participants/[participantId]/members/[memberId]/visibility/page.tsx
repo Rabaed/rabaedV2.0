@@ -39,6 +39,7 @@ export default async function MemberVisibilityPage({
     <div className="space-y-6">
       <ParticipantsBreadcrumb
         label={tp("breadcrumb")}
+        back={`/participants/${participantId}`}
         crumbs={[
           { label: tp("myCompany") },
           { label: tp("title"), href: "/participants" },

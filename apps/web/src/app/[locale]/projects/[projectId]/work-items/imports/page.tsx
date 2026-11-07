@@ -2,7 +2,7 @@ import { formatNumber, type Locale } from "@rabaed/domain";
 import { EmptyState, Icon, PackageCell, Table, TableBody, TableCard, TableCell, TableEmpty, TableHead, TableHeader, TableRow, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { RememberedModuleLink } from "@/components/remembered-module-queries";
+import { PageBackLink } from "@/components/page-back-link";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getRaisableTypes, getRegisterImports } from "@/lib/session";
 
@@ -27,11 +27,8 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          {/* Back to the Submittals with the Member's last filters there (RP-1240). */}
-          <RememberedModuleLink href={`/projects/${project.id}/work-items`} className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-text hover:underline">
-            <Icon name="arrow-left" size={14} />
-            {t("backToSubmittals")}
-          </RememberedModuleLink>
+          {/* Back (RP-1241), else to the Submittals with the Member's last filters there (RP-1240). */}
+          <PageBackLink parent={`/projects/${project.id}/work-items`} />
           <h1 className="text-h3 font-bold">{t("imports")}</h1>
           <p className="text-[14px] text-muted">{t("importsHint")}</p>
         </div>

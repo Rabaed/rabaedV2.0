@@ -3548,5 +3548,8 @@
     "notifications": "Notifications",
     "subjectMissing": "Give the Draft a Subject.",
     "tradeMissing": "Pick the Trade first: a Draft can't be saved without one."
+  },
+  "backLink": {
+    "label": "Back"
   }
 }
