@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import type { SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -322,33 +322,13 @@ function stepMarks(): (step: string) => void {
   };
 }
 
-/** This file's items: the only ones its drains make records for. */
-const ownItems = new Set<string>();
-/** The record jobs this file's drains took: run for its own items, or left for another file's. */
-const recordJobs = { ours: 0, leftForOthers: 0 };
-
 /**
- * `handle`, for this file's items only (RP-1233). Every item that closes in the test database queues
- * a record job, and the seeded demo alone leaves dozens: making them here, each a Chromium print and
- * a veraPDF run, took most of this hook (157 s of 165 s on a lane, 73 jobs) and passed its 300 s on a
- * slow CI runner. Another file's job fails here as it does in any file without a record handler, and
- * waits its backoff. A record job names its item `closed_work_item_id`, a Re-produce `work_item_id`.
+ * This file's Project, the only one its drains make records for (RP-1233, RP-1236). Every item that
+ * closes in the test database queues a record job, and the seeded demo alone leaves dozens: making
+ * them here, each a Chromium print and a veraPDF run, took most of this hook (157 s of 165 s on a
+ * lane, 73 jobs) and passed its 300 s on a slow CI runner. Other Projects' jobs wait, untouched.
  */
-function forOwnItems(handle: OutboxHandler): OutboxHandler {
-  return async (trx, row) => {
-    if (!ownItems.has(String(row.payload.closed_work_item_id ?? row.payload.work_item_id))) {
-      recordJobs.leftForOthers++;
-      throw new Error(`${row.kind} of another test file's item: not made by documental-record-appendix.test.ts`);
-    }
-    const started = performance.now();
-    try {
-      await handle(trx, row);
-    } finally {
-      recordJobs.ours++;
-      console.log(`RP-1233 ${row.kind} job: ${Math.round(performance.now() - started)} ms`);
-    }
-  };
-}
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 
 /** Rabaed's cancel when a Company leaves the Project (workflow-engine.md §9; its command isn't built yet): the close, as the owner. */
 async function rabaedCancels(id: string): Promise<void> {
@@ -380,7 +360,7 @@ beforeAll(async () => {
   const c2Participant = await api.addParticipant(at.admin!, at.projectId, c2.company, "contractor");
   await ok(at.admin!.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: { isAll: true, valueIds: [] }, location: { isAll: true, valueIds: [] } }));
   c2Engineer = (await memberOnProject(api, c2, c2Participant, ["engineer"])).caller;
-  handler = forOwnItems(await recordHandler());
+  handler = await recordHandler();
   mark("Companies, tower, Stamps, logo, Members and Signatures");
 
   const draft = async (title: string) => {
@@ -390,7 +370,6 @@ beforeAll(async () => {
         201,
       )
     ).json().id as string;
-    ownItems.add(id);
     return id;
   };
   const submit = async (id: string) => {
@@ -428,8 +407,8 @@ beforeAll(async () => {
   await rabaedCancels(heldId);
   mark("the item closed while C1 holds it");
 
-  await drainOutbox(worker, { documental_record: handler });
-  mark(`the drain: record jobs ${JSON.stringify(recordJobs)}`);
+  await drainOutbox(worker, { documental_record: handler }, own());
+  mark("the drain: this file's records");
   made.full = await download(c1Pm, fullId);
   made.fullAsK1 = await bytesOf(k1Pm, fullId);
   made.held = await download(c1Engineer, heldId);
@@ -634,7 +613,7 @@ describe("scenario RP-155-3: Re-produce of a record with Signature cards, Stamps
   let engineer: Awaited<ReturnType<typeof admin.signedInEngineer>>;
   const reproduce = async (id: string, rendering: PdfRenderer = renderer) => {
     expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: REASON })).statusCode).toBe(202);
-    await drainOutbox(worker, { documental_record_reproduce: forOwnItems(reproduceHandler(await recordDeps(rendering))) });
+    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps(rendering)) }, own());
   };
   /** The Record Data's facts: without where things land on the pages (the worker's LAYOUT_DERIVED). */
   const facts = (xml: string) =>

@@ -5,25 +5,18 @@
 // The record is published only when veraPDF passes; its seal is the UAT test key; every page
 // prints "UAT"; and the public verification page says it is a test record.
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import { recordVerification, type RecordVerification, type SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
-  chromiumRenderer,
   documentalRecordHandler,
-  fallbackFonts,
-  localSealSigner,
-  localTimestampAuthority,
   newUatAuthority,
   PINNED_VERAPDF_IMAGE,
-  projectFilesFromEnv,
   recordJobFromEnv,
-  s3RecordFiles,
   UAT_MARK,
   UAT_SIGNER_NAME,
   veraPdfDockerSession,
   verifySeal,
-  type PdfAValidator,
 } from "@rabaed/worker/record";
 import { sql } from "kysely";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -33,24 +26,22 @@ import { bilingual, buildTower, draft, memberOnProject, ok, take, type Company, 
 
 /** veraPDF, in one container for the file. */
 const veraPdf = veraPdfDockerSession(PINNED_VERAPDF_IMAGE);
-/** Stands in for veraPDF on the records other suites left behind. */
-const unvalidated: PdfAValidator = { validate: async () => ({ compliant: true, problems: [] }) };
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
-const leftovers = chromiumRenderer();
 let uat: ReturnType<typeof recordJobFromEnv> | undefined;
 afterAll(async () => {
   await veraPdf.close();
   await uat?.close();
-  await leftovers.close();
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
 });
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let c1Pm: Caller;
 let id = "";
 let pdf: Uint8Array = new Uint8Array();
@@ -76,20 +67,6 @@ async function pageTexts(bytes: Uint8Array): Promise<string[]> {
 }
 
 beforeAll(async () => {
-  // Records other suites left behind are not ours: made quickly with the local key first.
-  const signer = await localSealSigner();
-  const timestamps = await localTimestampAuthority();
-  const quick = documentalRecordHandler({
-    files: s3RecordFiles(projectFilesFromEnv()),
-    renderer: leftovers,
-    signer: async () => signer,
-    timestamps: async () => timestamps,
-    fonts: async () => fallbackFonts(),
-    webUrl: "https://rabaed.test",
-    validator: unvalidated,
-  });
-  await drainOutbox(worker, { documental_record: quick });
-
   const c1 = await api.projectCreator();
   const onboarded = await api.onboardCompany({ legalName: bilingual("Records Container Consultants") }); // not hidden-from: setup, onboarding K1
   const k1: Company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
@@ -116,7 +93,7 @@ beforeAll(async () => {
   await take(c1Pm, id, "submit");
   await ok(k1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Pm, id, "approve_a");
-  await drainOutbox(worker, handlers);
+  await drainOutbox(worker, handlers, own());
 
   pdf = await download(c1Pm, id);
   pages = await pageTexts(pdf);

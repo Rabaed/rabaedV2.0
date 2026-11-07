@@ -12,7 +12,7 @@
 // Rabaed Defaults (the WIR Form Version 3 and Workflow Version 4).
 import { createHash } from "node:crypto";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import type { ChecklistTemplates, DocumentList, SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -80,6 +80,8 @@ const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest(
 const squeeze = (s: string) => s.replace(/\s+/g, "");
 
 let projectId = "";
+/** This file's Project: its drains make only its records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [projectId], migrator });
 let hafiz: { id: string; caller: Caller }; // C1 Contractor Engineer: raises the WIR.
 let ali: { id: string; caller: Caller }; // C1's Project Manager: Submits it.
 let ahmed: { id: string; caller: Caller }; // K1 Consultant Engineer: answers the checklist.
@@ -168,7 +170,6 @@ beforeAll(async () => {
   faisal = await memberOnProject(api, o1, o1ParticipantId, ["engineer"], { name: "Faisal Al Otaibi" });
   yousef = await memberOnProject(api, c2, c2ParticipantId, ["engineer"], { name: "Yousef Karim" });
   const handler: OutboxHandler = documentalRecordHandler(await recordDeps());
-  await drainOutbox(worker, { documental_record: handler });
 
   wir = (
     await ok(
@@ -197,7 +198,7 @@ beforeAll(async () => {
   await take(ahmed.caller, wir, "send_to_manager", { recommendedCode: "C", internalNote: INTERNAL_NOTE });
   await take(mohammed.caller, wir, "revise_c", { answers: { ...VERIFIED, remarks: REMARKS } });
 
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   made = await download(hafiz.caller, wir);
 }, 600_000);
 
@@ -277,7 +278,7 @@ describe("Re-produce of the WIR's record", () => {
   it("gives the same facts, the checklist and its photos found again by their fingerprints", { timeout: 300_000 }, async () => {
     const engineer = await admin.signedInEngineer();
     expect((await engineer.browser.post(`/v1/work-items/${wir}/documental-record/reproduce`, { reason: "The PDF maker had a layout bug" })).statusCode).toBe(202);
-    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps()) });
+    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(await recordDeps()) }, own());
     const { rows } = await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
       select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
       where r.work_item_id = ${wir}::uuid order by c.ran_at, c.id
