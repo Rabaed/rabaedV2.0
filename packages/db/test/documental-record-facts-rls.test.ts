@@ -471,10 +471,10 @@ describe("page 1's Trade list leaves deactivated Trades out, except the item's o
       expect(await takeWith(k1.members.engineer, id, "send_to_manager", { recommended: "A" })).toBe("applied");
       expect(await tower.pickUp(k1.members.manager, id)).toBe("picked_up");
       expect(await takeWith(k1.members.manager, id, "approve_a")).toBe("applied");
-      const trades = (await factsOf(id)).trades.map((t) => [t.name.en, t.selected]);
-      expect(trades).toContainEqual(["EL", true]);
-      expect(trades).toContainEqual(["General", false]);
-      expect(trades.map(([name]) => name)).not.toContain(code);
+      // Page 1 prints names, not ids: the Trade's code is its name here (bilingual(code)).
+      const trades = (await factsOf(id)).trades.map(({ name, selected }) => [name.en, selected]); // not hidden-from: page 1's printed content
+      expect(trades).toContainEqual(["EL", true]); // not hidden-from: page 1's printed Trade names, as the Record prints them (content)
+      expect(trades.map(([name]) => name)).not.toContain(code); // not hidden-from: an archived Trade left off page 1's list (content), not a viewer's read
     } finally {
       expect(await deactivate(tower.tradeId, true)).toBe("updated");
     }

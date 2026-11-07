@@ -65,7 +65,7 @@ describe("scenario RP-1239-1: only the Project's Project Admins rename or deacti
       name: (v: Viewer) => v.name,
       label: "renaming a Trade",
     });
-    expect((await valueIn("trade", at.mechanical)).name.en).toBe("Mechanical");
+    expect((await valueIn("trade", at.mechanical)).name.en).toBe("Mechanical"); // not hidden-from: the refused writes changed nothing, read by the Admin (state)
     await expectHidden(patch(k1.caller, "locations", at.buildingA, { active: false })); // not hidden-from: a write refused, the 404's shape
     expect((await valueIn("location", at.buildingA)).active).toBe(true);
   });
@@ -150,7 +150,7 @@ describe("scenario RP-1239-4: the Visibility Gap counts a deactivated value only
     await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/visibility`, { trade: only(at.electrical), location: only(at.buildingA) }));
     expect((await gap(c1.caller)).location.map((v) => v.id)).toContain(zone);
     await ok(patch(c1.caller, "locations", zone, { active: false }));
-    expect((await gap(c1.caller)).location.map((v) => v.id)).not.toContain(zone);
+    expect((await gap(c1.caller)).location.map((v) => v.id)).not.toContain(zone); // not hidden-from: the Admin's own gap, which the Zone left (state); the line above read it first
     await expectHidden(k1.caller.get(`/v1/projects/${at.projectId}/visibility-gap`)); // not hidden-from: RP-1156-1 holds the read; the 404's shape
   });
 });
