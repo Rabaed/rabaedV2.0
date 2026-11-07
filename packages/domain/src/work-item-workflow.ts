@@ -40,6 +40,11 @@ export const workItemWorkflowMap = z.object({
   viewerRole: z.enum(baseRoles).nullable(),
   /** Null while an open item has no holder the viewer may know of. */
   position: workItemMapPosition.nullable(),
+  /**
+   * The people on each Step the viewer's own Participant works (RP-1189): its Step Pool's names, who of
+   * their own Company can act there. Another Company's Steps are never listed: no name, no id (V14, V15).
+   */
+  stepPeople: z.array(z.object({ stepKey: z.string(), names: z.array(bilingualText) })),
 });
 export type WorkItemWorkflowMap = z.infer<typeof workItemWorkflowMap>;
 

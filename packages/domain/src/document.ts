@@ -142,6 +142,11 @@ export const documentSummary = z.object({
    * Form's files and the Attachments'.
    */
   reply: z.object({ taken: z.boolean() }).optional(),
+  /**
+   * A PDF's pages, counted when its upload was confirmed (RP-1189); null for any other file, or a PDF that
+   * couldn't be read. The file list always gives it; absent from the reads that don't (the shared item's).
+   */
+  pageCount: z.number().int().positive().nullable().optional(),
 });
 export type DocumentSummary = z.infer<typeof documentSummary>;
 

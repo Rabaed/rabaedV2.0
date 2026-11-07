@@ -14,7 +14,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { addTestScreen, addTestWorkflow, drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestScreen, addTestWorkflow, drainOutbox, expectHiddenFrom, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import type { DocumentList, SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -98,6 +98,8 @@ const sha256 = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 const squeeze = (s: string) => s.replace(/\s+/g, "");
 
 let projectId = "";
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [projectId], migrator });
 let id = "";
 /** The Trade and Location every item here is raised with. */
 const where = { trade: "", location: "" };
@@ -219,8 +221,6 @@ beforeAll(async () => {
     validator: { validate: async () => ({ compliant: true, problems: [] }) },
   };
   const handler: OutboxHandler = documentalRecordHandler(deps);
-  // Anything earlier tests left in the outbox is not ours to judge.
-  await drainOutbox(worker, { documental_record: handler });
 
   id = (
     await ok(people.c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Pump skid", answers: { model: "PS-40", trade: electrical, location: buildingA } }), 201)
@@ -237,7 +237,7 @@ beforeAll(async () => {
   fileIds.codeReport = await addReplyFile(people.k1Manager, "code_reports", "codeReport", "application/pdf");
   await take(people.k1Manager, id, "revise_c", { answers: { remarks: "Raise the cover" } });
 
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   made = await download(people.c1Engineer);
 }, 600_000);
 
@@ -340,7 +340,7 @@ describe("RP-1029: a shared Transition Sent Back, then the item taken on again",
     await take(people.k1Engineer, item, "send_to_manager");
     await ok(people.k1Manager.post(`/v1/work-items/${item}/pick-up`));
     await take(people.k1Manager, item, "revise_c", { answers: { remarks: "Revise the chiller schedule" } });
-    await drainOutbox(worker, { documental_record: documentalRecordHandler(deps) });
+    await drainOutbox(worker, { documental_record: documentalRecordHandler(deps) }, own());
     record = await download(people.c1Engineer, item);
   }, 600_000);
 
@@ -366,7 +366,7 @@ describe("Re-produce of the record", () => {
   it("gives the same facts: the reply photo and the reply report found again by their fingerprints", { timeout: 300_000 }, async () => {
     const engineer = await admin.signedInEngineer();
     expect((await engineer.browser.post(`/v1/work-items/${id}/documental-record/reproduce`, { reason: "The PDF maker had a layout bug" })).statusCode).toBe(202);
-    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(deps) });
+    await drainOutbox(worker, { documental_record_reproduce: reproduceHandler(deps) }, own());
     const { rows } = await sql<{ run_kind: string; passed: boolean; problems: string[] }>`
       select c.run_kind, c.passed, c.problems from documental_record_check c join documental_record r on r.id = c.documental_record_id
       where r.work_item_id = ${id}::uuid order by c.ran_at, c.id

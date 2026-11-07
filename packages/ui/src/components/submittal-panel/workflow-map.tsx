@@ -1,9 +1,10 @@
 "use client";
 
-import { formatNumber, type Locale, type WorkItemWorkflowMap } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale, type WorkItemWorkflowMap } from "@rabaed/domain";
 import { useLayoutEffect, useRef, useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
+import { Avatar } from "../data/avatar.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import { Sheet, SheetContent } from "../overlay/sheet.tsx";
@@ -34,6 +35,8 @@ export type SubmittalWorkflowMapLabels = SubmittalRouteLabels & {
   hereNow: string;
   /** Under another Company's block, which lists its Steps by name only (row 58): who works on them and where it is stay theirs. */
   privateSteps: string;
+  /** The name of an own Step card's list of the Members on it (RP-1189), e.g. "Members on this Step". */
+  people: string;
 };
 
 export type SubmittalWorkflowMapProps = {
@@ -93,7 +96,7 @@ export function SubmittalWorkflowMap({ open, onOpenChange, locale, labels, map, 
             <TabsTrigger value="map">{labels.mapTab}</TabsTrigger>
           </TabsList>
           <TabsContent value="steps" className="flex-1 overflow-y-auto px-5 py-4">
-            <StepCards route={route} locale={locale} labels={labels} holder={holder} viewerRole={map.viewerRole} />
+            <StepCards route={route} locale={locale} labels={labels} holder={holder} viewerRole={map.viewerRole} stepPeople={map.stepPeople} />
           </TabsContent>
           <TabsContent value="map" className="flex-1 overflow-y-auto px-5 py-4">
             <MapView route={route} locale={locale} labels={labels} />
@@ -120,7 +123,14 @@ type ViewProps = { route: SubmittalRoute; locale: Locale; labels: SubmittalWorkf
  * that turns green as the item moves on. The viewer's own Steps one by one; another Company's as one
  * dashed block (row 58).
  */
-function StepCards({ route, locale, labels, holder, viewerRole }: ViewProps & { holder: string | undefined; viewerRole: WorkItemWorkflowMap["viewerRole"] }) {
+function StepCards({
+  route,
+  locale,
+  labels,
+  holder,
+  viewerRole,
+  stepPeople,
+}: ViewProps & { holder: string | undefined; viewerRole: WorkItemWorkflowMap["viewerRole"]; stepPeople: WorkItemWorkflowMap["stepPeople"] }) {
   // The viewer's own stop shows its Steps one by one: its role is the viewer's, and no other Company holds the
   // item there (a second Contractor reads the raiser's stop as a block).
   const ownStop = (stop: RouteStop) => viewerRole !== null && stop.role === viewerRole && stop.companyName === null;
@@ -146,7 +156,13 @@ function StepCards({ route, locale, labels, holder, viewerRole }: ViewProps & { 
             {!last && <span aria-hidden="true" className={cn("absolute start-[15px] top-8 bottom-0 w-0.5", state === "done" ? "bg-success" : "bg-border-subtle")} />}
             <StateDot state={state} number={step ? formatNumber(step.number, locale) : null} role={row.stop.role} own={row.own} block={!row.own && !closing} />
             {step ? (
-              <OwnStepCard step={step} labels={labels} locale={locale} holder={step.current ? holder : undefined} />
+              <OwnStepCard
+                step={step}
+                labels={labels}
+                locale={locale}
+                holder={step.current ? holder : undefined}
+                people={stepPeople.find((p) => p.stepKey === step.step.key)?.names ?? []}
+              />
             ) : closing ? (
               <div className="flex flex-col gap-1 rounded-[12px] bg-surface p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
                 <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
@@ -207,7 +223,20 @@ function StateDot({ state, number, role, own, block }: { state: RouteStop["state
   );
 }
 
-function OwnStepCard({ step, labels, locale, holder }: { step: RouteStep; labels: SubmittalWorkflowMapLabels; locale: Locale; holder: string | undefined }) {
+function OwnStepCard({
+  step,
+  labels,
+  locale,
+  holder,
+  people,
+}: {
+  step: RouteStep;
+  labels: SubmittalWorkflowMapLabels;
+  locale: Locale;
+  holder: string | undefined;
+  /** The Members on this Step: only ever the viewer's own Company's, and only on their own Step's card (RP-1189, V14). */
+  people: readonly BilingualText[];
+}) {
   return (
     <div
       data-step={step.step.key}
@@ -224,7 +253,24 @@ function OwnStepCard({ step, labels, locale, holder }: { step: RouteStep; labels
       </span>
       <b className="text-[14px] font-bold">{step.step.name[locale]}</b>
       <Happens labels={step.happens} name={labels.happens} locale={locale} />
-      {holder && (
+      {people.length > 0 && (
+        <ul aria-label={labels.people} className="flex flex-col gap-1.5 pt-1">
+          {people.map((name, i) => (
+            <li
+              // Names only (V14): two Members may share one, so the place in the list keys it.
+              key={i}
+              // The one holding it, marked as the holder's chip is (RP-1188).
+              data-holder={holder === name[locale] ? "" : undefined}
+              className={cn("flex items-center gap-2 text-[12.5px] font-semibold", holder === name[locale] && "-mx-1.5 self-start rounded-full bg-surface-subtle px-1.5 py-0.5")}
+            >
+              <Avatar name={name[locale]} size="sm" decorative />
+              <bdi>{name[locale]}</bdi>
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Who holds it, unless the list above already names them. */}
+      {holder && !people.some((name) => name[locale] === holder) && (
         <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-surface-subtle px-2 py-0.5 text-[12px] font-semibold">
           {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name: a person holds the Step. */}
           <Icon name="user" size={14} />

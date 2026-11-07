@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, expectHiddenFrom, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import { formatDate, formatHijriDate, type SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -113,6 +113,8 @@ const OWNER_TYPE = "RECOW";
 let ownerPm: Caller;
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let k1: Company;
 let k1ParticipantId = "";
 let c1Engineer: Caller;
@@ -376,7 +378,6 @@ beforeAll(async () => {
   k1Pm = k1PmMember.caller;
   projectName = ((await sql<{ name: { en: string } }>`select name from project where id = ${at.projectId}::uuid`.execute(migrator)).rows[0]!.name).en;
   handler = await recordHandler();
-  await drainOutbox(worker, { documental_record: handler });
 
   // Every record the tests read is made here, so a loaded machine pays for the setup once and the tests only read. The worker
   // makes a record with the Project's settings as they stand when it runs, so the items are closed together per setting and the
@@ -390,16 +391,16 @@ beforeAll(async () => {
     closed("Hijri revised trays", "revise_c", { documents: false }),
   ]);
   const revision = await reviseAfterC(revisedFirst);
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   await ok(setRecordSettings("ar", false));
   const ar = await closed("Arabic only trays", "approve_a", { documents: false });
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   await ok(setRecordSettings("en", false));
   const en = await closed("English only trays", "approve_a", { documents: false });
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   await ok(setRecordSettings("bilingual", true));
   const [hijri, hijriRevision] = await Promise.all([closed("Hijri trays", "approve_a", { documents: false }), reviseAfterC(hijriFirst)]);
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   await ok(setRecordSettings("bilingual", false));
 
   const made = await Promise.all([b, codeC, rejected, sentBack, revision, ar, en, hijri, hijriRevision].map(fetchRecord));
@@ -416,7 +417,6 @@ beforeAll(async () => {
     hijriRevision: made[8]!,
     hijriFirst,
   };
-  // It first makes every record other suites left behind.
 }, 240_000);
 
 describe("page 1 of a Code B record with Comments, in both languages", () => {
