@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/app-frame";
+import { RememberedModuleQueries } from "@/components/remembered-module-queries";
 import { SignedOutFrame } from "@/components/signed-out-frame";
 import { routing } from "@/i18n/routing";
 import { getMe, getNotifications } from "@/lib/session";
@@ -53,18 +54,21 @@ export default async function LocaleLayout({
         <NextIntlClientProvider>
           <DirectionProvider dir={directionOf(locale)}>
             {me ? (
-              <AppFrame
-                locale={locale}
-                memberName={me.member.fullName[locale]}
-                companyName={me.company.legalName[locale]}
-                notifications={notifications}
-                defaultCollapsed={collapsed}
-                appearance={appearance}
-                heading={heading}
-                tabs={tabs}
-              >
-                {children}
-              </AppFrame>
+              // Each Module tab's last query, kept for this Member in their own browser (RP-1240).
+              <RememberedModuleQueries memberId={me.member.id}>
+                <AppFrame
+                  locale={locale}
+                  memberName={me.member.fullName[locale]}
+                  companyName={me.company.legalName[locale]}
+                  notifications={notifications}
+                  defaultCollapsed={collapsed}
+                  appearance={appearance}
+                  heading={heading}
+                  tabs={tabs}
+                >
+                  {children}
+                </AppFrame>
+              </RememberedModuleQueries>
             ) : (
               <SignedOutFrame>{children}</SignedOutFrame>
             )}

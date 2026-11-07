@@ -64,6 +64,7 @@ import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
+import { useRememberedHref } from "@/components/remembered-module-queries";
 import { OpenerAlert, useTransitionOpener } from "@/components/work-item-actions";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
@@ -343,12 +344,14 @@ export function WorkItemPage(props: WorkItemPageProps) {
   // The bottom bar: Save Draft and the saved time while editing (every width), the Transitions under 880px.
   const saveDraft = useSaveDraft(locale);
   const save = form?.editable ? saveDraft : null;
+  // Back to the tab with the Member's last filters there (RP-1240).
+  const remembered = useRememberedHref();
 
   return (
     <>
       <WorkItemPageFrame
         locale={locale}
-        back={list}
+        back={{ ...list, href: remembered(list.href) }}
         linkAs={Link}
         crumb={
           number === null ? (

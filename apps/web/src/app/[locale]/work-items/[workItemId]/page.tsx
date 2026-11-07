@@ -32,6 +32,7 @@ import { SnagHeroPhoto, SnagItemCards } from "@/components/snag-item-cards";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { InspectionManager, InspectionShared, InspectionSummaryBar } from "@/components/inspection";
 import { InspectionProvider } from "@/components/inspection-context";
+import { RememberedModuleLink } from "@/components/remembered-module-queries";
 import { InspectionCounts, InspectionIssued, InspectionMeta, InspectionTextCard, InspectionRevision, InspectionWaiting } from "@/components/inspection-page-parts";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
@@ -351,9 +352,9 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           {wir ? (
             // Inspections › its Document Number, as the design's breadcrumb reads.
             <nav aria-label={t("inspection.breadcrumb")} className="flex flex-wrap items-center gap-2 text-sm">
-              <Link href={listHref} className="text-brand-fg underline underline-offset-4">
+              <RememberedModuleLink href={listHref} className="text-brand-fg underline underline-offset-4">
                 {moduleNames.inspections[locale]}
-              </Link>
+              </RememberedModuleLink>
               {item.documentNumber && (
                 <>
                   <span aria-hidden="true" className="text-muted">
@@ -366,9 +367,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               )}
             </nav>
           ) : (
-            <Link href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
+            // Back to the tab with the Member's last filters there (RP-1240).
+            <RememberedModuleLink href={listHref} className="text-sm text-brand-fg underline underline-offset-4">
               {snag ? moduleNames.snag_list[locale] : t("title")}
-            </Link>
+            </RememberedModuleLink>
           )}
           {snag && (
             <div className="flex flex-wrap items-center gap-2">
