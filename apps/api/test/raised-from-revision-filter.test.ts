@@ -115,7 +115,7 @@ describe("RP-1119-1: the Snag List filters by a Revision's Document Number, at e
 
   it("the chain is numbered Rev 0, \" Rev 1\" and \" Rev 2\", each with its own two Snags", () => {
     expect(chain.map((r) => r.number)).toEqual([chain[0]!.number, `${chain[0]!.number} Rev 1`, `${chain[0]!.number} Rev 2`]);
-    for (const r of chain) expect(r.snags).toHaveLength(2);
+    expect(chain.map((r) => r.snags.length)).toEqual([2, 2, 2]); // not hidden-from: setup, the raiser's own Snags
   });
 
   it("for C1 and K1, each Revision's number lists exactly its own two Snags, and counts them", async () => {
@@ -134,22 +134,28 @@ describe("RP-1119-1: the Snag List filters by a Revision's Document Number, at e
   });
 
   it("only narrows: C2 sees none of C1's Snags, and finds none by any of the chain's numbers, by row or by count (V3)", async () => {
+    /** What the filtered list tells `m`, as rows keyed by id: each row, and each Stage and Type that counts one. */
+    const told = async (m: { caller: Caller }, number: string) => {
+      const list = await snagList(m.caller, number);
+      return [
+        ...list.items.map((i) => ({ id: i.id })),
+        ...list.stages.filter((s) => s.count > 0).map((s) => ({ id: `stage:${s.key}` })),
+        ...(list.typeCounts ?? []).map((t) => ({ id: `type:${t.code}` })),
+      ];
+    };
     for (const r of chain) {
-      const list = await snagList(yousef.caller, r.number);
-      expect(list.items, r.number).toEqual([]);
-      expect(counted(list), r.number).toBe(0);
-      expect(list.typeCounts ?? [], r.number).toEqual([]);
-      for (const target of r.snags)
-        await expectHiddenFrom({ read: async (m) => (await snagList(m.caller, r.number)).items, target, seenBy: hafiz, hiddenFrom: yousef, name, label: `a Snag raised from ${r.number}` });
+      const stages = (await snagList(hafiz.caller, r.number)).stages.filter((s) => s.count > 0).map((s) => `stage:${s.key}`);
+      for (const target of [...r.snags, ...stages, "type:SNG"])
+        await expectHiddenFrom({ read: (m) => told(m, r.number), target, seenBy: hafiz, hiddenFrom: yousef, name, label: `${target} of ${r.number}` });
     }
-    // Nor does C2 get the chain's numbers offered as filter values.
-    const offered = (await snagList(yousef.caller)).filters.raisedFrom?.map((s) => s.documentNumber) ?? [];
-    for (const r of chain) expect(offered).not.toContain(r.number);
+    // Nor does C2 get the chain's numbers offered as filter values, which Hafiz does.
+    const offered = async (m: { caller: Caller }) => ((await snagList(m.caller)).filters.raisedFrom ?? []).map((s) => ({ id: s.documentNumber }));
+    for (const r of chain) await expectHiddenFrom({ read: offered, target: r.number, seenBy: hafiz, hiddenFrom: yousef, name, label: `the Raised from value ${r.number}` });
   });
 
   it("a Revision number nobody issued lists nothing", async () => {
     const list = await snagList(hafiz.caller, `${chain[0]!.number} Rev 9`);
-    expect(list.items).toEqual([]);
+    expect(list.items).toEqual([]); // not hidden-from: no item has this number, for anyone
     expect(counted(list)).toBe(0);
   });
 });
