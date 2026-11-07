@@ -1,8 +1,18 @@
+import type { Page } from "playwright";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
 import { Api, go, listRows, openList, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 import { defaultListColumns } from "../../../../packages/domain/src/list-columns.ts";
+
+// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+
+/** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
+async function chooseCode(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole("main").getByRole("button", { name: "Issue Review Code" }).click();
+  await page.getByRole("menuitem", { name }).first().click();
+}
 
 // Part SUB (Submittals). Setup goes through the api exactly as the web app calls it; the Expected
 // results are read from the pages as well as from the api. Each case makes its own items "UAT SUB-nn ...".
@@ -72,7 +82,7 @@ defineCase("SUB-02", async (t) => {
   await go(page, `/work-items/${id}`);
   await settle(page);
   await page.getByRole("main").getByRole("button", { name: "Send for Review" }).first().click();
-  const dlg = page.getByRole("dialog");
+  const dlg = page.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await dlg.getByRole("button", { name: "Send for Review" }).click();
   await settle(page, 1000);
@@ -226,7 +236,7 @@ defineCase("SUB-09", async (t) => {
   t.check("The Documents are frozen and no change is allowed", docs.documents.length > 0 && docs.documents.every((x: H.Json) => x.frozen === true) && docs.canChange === false, JSON.stringify({ n: docs.documents.length, canChange: docs.canChange }));
   const { page, text } = await H.viewItem(t, "ahmed", id, "ahmed-readonly-form", "en", { full: true });
   t.check("Every answer and the total show read-only", /Total Quantity\s*240/.test(text.replace(/\s+/g, " ")) && text.includes("Philips") && text.includes("Recessed panel"));
-  const editable = await page.getByRole("main").locator("input:not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly]), select:not([disabled]), [role=combobox]:not([disabled])").evaluateAll((els) => els.map((e) => `${e.tagName}#${e.id}`));
+  const editable = await page.locator("[data-submittal-panel]").locator("input:not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly]), select:not([disabled]), [role=combobox]:not([disabled])").evaluateAll((els) => els.map((e) => `${e.tagName}#${e.id}`));
   t.check("No edit control for the Form is on Ahmed's page", editable.length === 0, editable.join(","));
   const photo = (docs.documents as H.Json[]).find((x) => x.contentType === "image/jpeg");
   t.check("The photo shows time and place", !!photo?.takenAt && !!photo?.takenWhere);
@@ -241,7 +251,7 @@ defineCase("SUB-10", async (t) => {
   await go(pg, `/work-items/${id}`);
   await settle(pg);
   await pg.getByRole("main").getByRole("button", { name: "Send to Manager" }).first().click();
-  const dlg = pg.getByRole("dialog");
+  const dlg = pg.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await dlg.getByRole("button", { name: "Send to Manager" }).click();
   await settle(pg, 800);
@@ -276,8 +286,8 @@ defineCase("SUB-11", async (t) => {
   const { page: pg } = await pageAs("mohammed");
   await go(pg, `/work-items/${id}`);
   await settle(pg);
-  await pg.getByRole("main").getByRole("button", { name: /Approve/ }).first().click();
-  const dlg = pg.getByRole("dialog");
+  await chooseCode(pg, /^Approve/);
+  const dlg = pg.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await t.shot(pg, "code-a-popup");
   await dlg.getByRole("button", { name: /^Approve/ }).last().click();
@@ -395,7 +405,7 @@ defineCase("SUB-15", async (t) => {
   const chain = JSON.stringify((await hafiz.get(`/work-items/${id}/revisions`)).body);
   t.check("The drop-down lists the original and Rev 1 whole", chain.includes(orig.documentNumber) && chain.includes(`${orig.documentNumber} Rev 1`), chain.slice(0, 400));
   const { page } = await H.viewItem(t, "hafiz", revId, "revision-submitted");
-  await page.getByRole("main").getByLabel("Revision").first().click().catch(() => undefined);
+  await page.getByRole("main").getByRole("button", { name: /^(Original|Revision \d+|Draft)$/ }).first().click().catch(() => undefined);
   await t.shot(page, "revision-dropdown");
   const o = await H.detail(hafiz, id);
   t.check("The original keeps Code C and its Remarks", o.outcome === "C" && JSON.stringify(await H.eventsOf(hafiz, id)).includes("Revise the finish."));
@@ -614,22 +624,15 @@ defineCase("SUB-21", async (t) => {
 });
 
 defineCase("SUB-22", async (t) => {
+  // RP-1237 (gap table v3 row 4, owner 2026-11-06): Watch is dropped from the item view, so no screen offers it.
+  // The Submitter still watches from the start, as the API says; nobody reads who else watches.
   const tm = await H.team("hafiz", "ali");
   const id = await H.submittedMar(tm, `UAT SUB-22 watch ${H.stamp()}`);
-  const { page } = await pageAs("ali");
-  await go(page, `/work-items/${id}`);
-  await settle(page);
-  const header = page.getByRole("main").getByRole("button", { name: /^(Watching|Watch)$/ }).first();
-  t.check("Ali (the Submitter) watches from the start: the button reads Watching", (await header.innerText()).trim() === "Watching");
-  await t.shot(page, "watching");
-  await header.click();
-  await settle(page, 600);
-  t.check("After Unwatch it reads Watch", (await page.getByRole("main").getByRole("button", { name: /^(Watching|Watch)$/ }).first().innerText()).trim() === "Watch");
-  await page.getByRole("main").getByRole("button", { name: /^(Watching|Watch)$/ }).first().click();
-  await settle(page, 600);
-  t.check("And back to Watching", (await page.getByRole("main").getByRole("button", { name: /^(Watching|Watch)$/ }).first().innerText()).trim() === "Watching");
-  const body = await page.getByRole("main").innerText();
-  t.check("No page text counts or names other watchers", !/watchers?\b/i.test(body.replace(/Watching|Watch/g, "")));
+  const watch = (await tm.api.ali!.get(`/work-items/${id}/watch`)).body as H.Json;
+  t.check("Ali (the Submitter) watches from the start", watch?.watching === true, JSON.stringify(watch));
+  const { page, text } = await H.viewItem(t, "ali", id, "no-watch");
+  t.check("The item view offers no Watch button", (await page.getByRole("main").getByRole("button", { name: /^(Watching|Watch)$/ }).count()) === 0);
+  t.check("No page text counts or names other watchers", !/watchers?\b/i.test(text));
 });
 
 defineCase("SUB-23", async (t) => {

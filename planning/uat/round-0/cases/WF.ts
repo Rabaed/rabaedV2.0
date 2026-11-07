@@ -4,6 +4,9 @@ import type { Api } from "../harness/helpers.ts";
 import { go, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 
+// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+
 // Part WF (Workflows). Workflows of my own are named "UAT WF-nn ..."; a Workflow bound to the MAR for a
 // short while is bound as an exception for one Participant (never over the Project's MAR binding, which
 // the VIS agent owns) and the exception is removed again before the case ends.
@@ -106,8 +109,8 @@ defineCase("WF-02", async (t) => {
   const before = (await tm.api.ali!.get(`/work-items/${id}/workflow`)).text;
   const { page, text } = await H.viewItem(t, "ali", id);
   t.check("The item page names the Workflow and its Version", new RegExp(`Workflow: .*Version ${d.workflow.versionNo}`).test(text), text.match(/Workflow:[^\n]*/)?.[0]);
-  await page.getByRole("main").getByRole("button", { name: /View workflow/ }).click();
-  const dlg = page.getByRole("dialog");
+  await page.getByRole("main").getByRole("button", { name: /View workflow/ }).first().click();
+  const dlg = page.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await settle(page, 800);
   const map = (await dlg.innerText()).replace(/\s+/g, " ");
@@ -234,8 +237,8 @@ defineCase("WF-06", async (t) => {
   const { page: ap } = await pageAs("hafiz");
   await go(ap, `/work-items/${aId}`);
   await settle(ap);
-  await ap.getByRole("main").getByRole("button", { name: /View workflow/ }).click();
-  const dlg = ap.getByRole("dialog");
+  await ap.getByRole("main").getByRole("button", { name: /View workflow/ }).first().click();
+  const dlg = ap.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await settle(ap, 800);
   const txt = (await dlg.innerText()).replace(/\s+/g, " ");

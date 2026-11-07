@@ -3286,7 +3286,7 @@
     "linkCount": "{count, plural, =0 {لا روابط} one {رابط واحد} two {رابطان} few {{n} روابط} many {{n} رابطًا} other {{n} رابط}}",
     "noLinks": "لا روابط",
     "none": "—",
-    "toFix": "{count, plural, one {حقل واحد يحتاج انتباهك.} two {حقلان يحتاجان انتباهك.} few {{n} حقول تحتاج انتباهك.} many {{n} حقلًا يحتاج انتباهك.} other {{n} حقل يحتاج انتباهك.}}",
+    "toFix": "{count, plural, one {حقل واحد يحتاج انتباهك:} two {حقلان يحتاجان انتباهك:} few {{n} حقول تحتاج انتباهك:} many {{n} حقلًا يحتاج انتباهك:} other {{n} حقل يحتاج انتباهك:}} {fields}",
     "nothingAnswered": "لا إجابات بعد"
   },
   "submittalPanelAttachments": {

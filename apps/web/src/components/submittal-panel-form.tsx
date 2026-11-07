@@ -125,7 +125,7 @@ export function SubmittalPanelForm({
   const choices = editable && reads.filling ? fillingChoices(reads.filling.mine, reads.filling.scopes, locale, item) : readingChoices(item, locale);
   return (
     <WorkItemFormProvider
-      key={`${item.id}:${editable}`}
+      key={item.id}
       workItemId={item.id}
       projectId={item.projectId}
       documentNumber={item.documentNumber}

@@ -3286,7 +3286,7 @@
     "linkCount": "{count, plural, =0 {No Links} one {1 Link} other {{n} Links}}",
     "noLinks": "No Links",
     "none": "—",
-    "toFix": "{count, plural, one {1 field needs your attention.} other {{n} fields need your attention.}}",
+    "toFix": "{count, plural, one {1 field needs your attention:} other {{n} fields need your attention:}} {fields}",
     "nothingAnswered": "Nothing answered yet"
   },
   "submittalPanelAttachments": {

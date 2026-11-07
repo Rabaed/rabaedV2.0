@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, levelSeparator, listSeparator, type Locale, type WorkItemDetail } from "@rabaed/domain";
+import { formFields, formatNumber, levelSeparator, listSeparator, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import {
   DocNo,
   SubmittalPanelFields,
@@ -19,7 +19,7 @@ import {
   type SubmittalPanelTabItem,
 } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ReplyChecklists } from "@/components/reply-checklists";
 import { useSubmittalPanelAttachments } from "@/components/submittal-panel-attachments";
 import { useSubmittalPanelChatTab } from "@/components/submittal-panel-chat";
@@ -52,6 +52,7 @@ export function SubmittalPanelDetails({
   log,
   reads,
   failed,
+  onEdit,
 }: {
   item: WorkItemDetail;
   locale: Locale;
@@ -65,6 +66,8 @@ export function SubmittalPanelDetails({
   reads: SubmittalPanelReads | null;
   /** They couldn't be read. */
   failed: boolean;
+  /** Turns on Edit (the holder's, row 28). */
+  onEdit: () => void;
 }) {
   const t = useTranslations("submittalPanelDetails");
   const chat = useSubmittalPanelChatTab({ item, locale, refreshKey });
@@ -160,7 +163,14 @@ export function SubmittalPanelDetails({
   ];
 
   // The fields to fix, while its holder edits: the banner lists them; each section holding one stays open.
-  const toFix = editing ? (form?.errors.length ?? 0) : 0;
+  // A refused Send names the fields to fix (the Action Form's 'form_incomplete'): their labels, in Form order.
+  const marked = new Set(form?.errors.map((e) => e.key) ?? []);
+  const toFix = form ? formFields(form.schema).flatMap((f) => (marked.has(f.key) && "label" in f ? [f.label[locale]] : [])) : [];
+  // The holder then edits at once, so each field to fix is marked where it is (row 28).
+  const mayEdit = item.actions.saveAnswers;
+  useEffect(() => {
+    if (marked.size > 0 && !editing && mayEdit) onEdit();
+  }, [marked.size, editing, mayEdit, onEdit]);
   const details: ReactNode = failed ? (
     <p role="alert" className="px-5 py-6 text-sm text-muted">
       {t("unavailable")}
@@ -171,9 +181,9 @@ export function SubmittalPanelDetails({
     </p>
   ) : (
     <div className="flex flex-col gap-3">
-      {toFix > 0 && (
+      {toFix.length > 0 && (
         <p role="alert" className="mx-5 mt-3 rounded-[10px] bg-danger-tint px-3 py-2 text-sm font-semibold text-danger-fg">
-          {t("toFix", { count: toFix, n: latin(toFix) })}
+          {t("toFix", { count: toFix.length, n: latin(toFix.length), fields: toFix.join(listSeparator[locale]) })}
         </p>
       )}
       {/* The checklists its holder answers for the Transition that takes them (RP-86): theirs alone until then (V19). */}

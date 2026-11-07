@@ -168,6 +168,8 @@ export function SubmittalPanelHost({
   const { reads, failed } = useSubmittalPanelReads(item, refreshKey);
   // Edit (row 28): the Form's holder turns the Details into the Form; another item starts read again.
   const [editing, setEditing] = useState<string | null>(null);
+  const itemId = item?.id ?? null;
+  const startEditing = useCallback(() => setEditing(itemId), [itemId]);
   const typeOutcomes = item ? filters.outcomes.filter((o) => o.type === item.type.code) : [];
   const chain = item && reads?.id === item.id ? reads.chain : null;
   const tRevisions = useTranslations("submittalPanel.revisions");
@@ -263,7 +265,7 @@ export function SubmittalPanelHost({
             />
           )
         }
-        tabs={item && <SubmittalPanelDetails item={item} locale={locale} place={place} refreshKey={refreshKey} log={log} reads={reads} failed={failed} />}
+        tabs={item && <SubmittalPanelDetails item={item} locale={locale} place={place} refreshKey={refreshKey} log={log} reads={reads} failed={failed} onEdit={startEditing} />}
         rail={item && log.rail}
         actions={
           item &&
@@ -277,7 +279,7 @@ export function SubmittalPanelHost({
               me={log.me}
               events={log.events}
               editing={editing === item.id}
-              onEdit={() => setEditing(item.id)}
+              onEdit={startEditing}
             />
           )
         }
