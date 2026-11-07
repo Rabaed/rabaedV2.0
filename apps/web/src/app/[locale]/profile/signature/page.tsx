@@ -1,10 +1,10 @@
-import { signatureReturnPath, type Locale } from "@rabaed/domain";
+import { formatDate, signatureReturnPath, type Locale } from "@rabaed/domain";
 import { TitledCard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageBackLink } from "@/components/page-back-link";
 import { AddSignature } from "@/components/signature";
 import { redirect } from "@/i18n/navigation";
-import { getMe } from "@/lib/session";
+import { getMe, getNotificationSettings } from "@/lib/session";
 
 /**
  * Profile → Add Signature (RP-85, ADR 0023): draw, type or upload the Member's Signature.
@@ -21,8 +21,12 @@ export default async function AddSignaturePage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("signature");
-  const me = await getMe();
+  const [me, settings] = await Promise.all([getMe(), getNotificationSettings()]);
   if (!me) return redirect({ href: "/sign-in", locale });
+  // The preview card shows only the Member's own lines, as the record prints them: their name,
+  // their Positions on their Projects (the profile reads the same), their Company, today's date.
+  const positions = [...new Set((settings?.projects ?? []).flatMap((p) => p.positions.map((name) => name[locale])))];
+  const card = { name: me.member.fullName[locale], positions, company: me.company.legalName[locale], date: formatDate(new Date(), locale) };
   const { returnTo } = await searchParams;
   // Only back to a page of Rabaed's own: never another site.
   const back = signatureReturnPath(typeof returnTo === "string" ? returnTo : null);
@@ -36,7 +40,7 @@ export default async function AddSignaturePage({
         <p className="text-muted">{t("addSubtitle")}</p>
       </div>
       <TitledCard title={t("title")}>
-        <AddSignature defaultName={me.member.fullName[locale]} returnTo={back} />
+        <AddSignature defaultName={me.member.fullName[locale]} card={card} returnTo={back} />
       </TitledCard>
     </div>
   );

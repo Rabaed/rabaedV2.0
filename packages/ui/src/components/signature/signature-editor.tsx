@@ -20,6 +20,7 @@ import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { ImageFileButton } from "./image-file-button.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
+import { SignatureCard, type SignatureCardPerson } from "./signature-card.tsx";
 
 // Profile → Add Signature (RP-85, ADR 0023): the Member draws their Signature with the
 // mouse or a finger (a pen style and an ink), types their name in a handwriting style, or
@@ -40,6 +41,12 @@ export type SignatureEditorLabels = {
   ink: string;
   inks: Record<SignatureInk, string>;
   clear: string;
+  /** Takes back the last stroke drawn. */
+  undo: string;
+  /** The Signature card's name, e.g. "How it looks on a record". */
+  cardTitle: string;
+  /** The card's caption under the Signature, e.g. "Signature". */
+  cardSignature: string;
   name: string;
   hand: string;
   hands: Record<SignatureHand, string>;
@@ -71,6 +78,8 @@ export type SignatureEditorProps = {
   labels: SignatureEditorLabels;
   /** The Member's name, to start a typed Signature from. */
   defaultName: string;
+  /** The Member's own lines on the preview card: their name, Positions, Company and today's date. */
+  card: SignatureCardPerson;
   onSave: SaveSignatureCall;
   /** Beside Save, e.g. a link back. */
   secondaryAction?: ReactNode;
@@ -102,11 +111,36 @@ function drawTyped(canvas: HTMLCanvasElement, name: string, hand: SignatureHand,
   context.fillText(name.trim(), WIDTH / 2, HEIGHT / 2);
 }
 
-export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }: SignatureEditorProps) {
+/** One stroke of the pen: its points at the image's scale, with the pen's width and ink it was drawn in. */
+type Stroke = { points: { x: number; y: number }[]; width: number; ink: SignatureInk };
+
+/** `strokes` drawn again on an empty canvas. A one-point stroke is a dot. */
+function drawStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]) {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.clearRect(0, 0, WIDTH, HEIGHT);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const { points, width, ink } of strokes) {
+    context.strokeStyle = signatureInks[ink];
+    context.lineWidth = width;
+    context.beginPath();
+    context.moveTo(points[0]!.x, points[0]!.y);
+    if (points.length === 1) context.lineTo(points[0]!.x + 0.01, points[0]!.y);
+    for (const p of points.slice(1)) context.lineTo(p.x, p.y);
+    context.stroke();
+  }
+}
+
+export function SignatureEditor({ labels, defaultName, card, onSave, secondaryAction }: SignatureEditorProps) {
   const [method, setMethod] = useState<SignatureMethod>("drawn");
   const [pen, setPen] = useState<SignaturePen>("medium");
   const [ink, setInk] = useState<SignatureInk>("black");
-  const [drawn, setDrawn] = useState(false);
+  const [strokeCount, setStrokeCount] = useState(0);
+  const [drawnUrl, setDrawnUrl] = useState<string | null>(null);
+  const [typedUrl, setTypedUrl] = useState<string | null>(null);
+  const strokes = useRef<Stroke[]>([]);
+  const drawn = strokeCount > 0;
   const [name, setName] = useState(defaultName);
   const [hand, setHand] = useState<SignatureHand>("flowing");
   const [upload, setUpload] = useState<{ contentType: ImageFileType; dataUrl: string } | null>(null);
@@ -117,7 +151,9 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
   const last = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (typed.current) drawTyped(typed.current, name, hand, ink);
+    if (!typed.current) return;
+    drawTyped(typed.current, name, hand, ink);
+    setTypedUrl(name.trim() ? typed.current.toDataURL("image/png") : null);
   }, [name, hand, ink, method]);
 
   const point = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -125,27 +161,50 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
     return { x: ((event.clientX - box.left) / box.width) * WIDTH, y: ((event.clientY - box.top) / box.height) * HEIGHT };
   };
 
-  function stroke(to: { x: number; y: number }) {
+  /** The pad as an image, for the card; null while nothing is drawn. */
+  function showDrawn() {
+    setDrawnUrl(strokes.current.length > 0 && pad.current ? pad.current.toDataURL("image/png") : null);
+  }
+
+  /** `to` joins the stroke being drawn, or starts a new one (`begin`, a pen down). */
+  function stroke(to: { x: number; y: number }, begin = false) {
     const context = pad.current?.getContext("2d");
-    const from = last.current ?? to;
     if (!context) return;
-    context.strokeStyle = signatureInks[ink];
-    context.fillStyle = signatureInks[ink];
-    // The pen's width in CSS pixels, at the image's scale.
-    context.lineWidth = signaturePens[pen] * (WIDTH / Math.max(pad.current!.getBoundingClientRect().width, 1));
+    if (begin) {
+      // The pen's width in CSS pixels, at the image's scale.
+      const width = signaturePens[pen] * (WIDTH / Math.max(pad.current!.getBoundingClientRect().width, 1));
+      strokes.current.push({ points: [], width, ink });
+    }
+    const current = strokes.current[strokes.current.length - 1];
+    if (!current) return;
+    const from = last.current ?? to;
+    context.strokeStyle = signatureInks[current.ink];
+    context.lineWidth = current.width;
     context.lineCap = "round";
     context.lineJoin = "round";
     context.beginPath();
     context.moveTo(from.x, from.y);
     context.lineTo(to.x + (from.x === to.x && from.y === to.y ? 0.01 : 0), to.y);
     context.stroke();
+    current.points.push(to);
     last.current = to;
-    setDrawn(true);
+    setStrokeCount(strokes.current.length);
+  }
+
+  function undo() {
+    strokes.current.pop();
+    last.current = null;
+    if (pad.current) drawStrokes(pad.current, strokes.current);
+    setStrokeCount(strokes.current.length);
+    showDrawn();
   }
 
   function clear() {
+    strokes.current = [];
+    last.current = null;
     pad.current?.getContext("2d")?.clearRect(0, 0, WIDTH, HEIGHT);
-    setDrawn(false);
+    setStrokeCount(0);
+    showDrawn();
   }
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
@@ -228,7 +287,7 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
                 // A pointer the browser doesn't track (a synthetic one): draw without capture.
               }
               last.current = null;
-              stroke(point(event));
+              stroke(point(event), true);
             }}
             onPointerMove={(event) => {
               if (event.buttons !== 0 || event.pointerType === "touch") {
@@ -237,6 +296,12 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
             }}
             onPointerUp={() => {
               last.current = null;
+              showDrawn();
+            }}
+            onPointerCancel={() => {
+              // The browser took the touch (a scroll): the stroke ends as at a pen up.
+              last.current = null;
+              showDrawn();
             }}
             onPointerLeave={() => {
               last.current = null;
@@ -247,6 +312,9 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
               <SegmentedControl value={pen} onValueChange={(v) => setPen(v as SignaturePen)} options={pens.map((value) => ({ value, label: labels.pens[value] }))} />
             </Field>
             {inkControl}
+            <Button variant="ghost" onClick={undo} disabled={!drawn}>
+              {labels.undo}
+            </Button>
             <Button variant="ghost" onClick={clear} disabled={!drawn}>
               {labels.clear}
             </Button>
@@ -275,6 +343,11 @@ export function SignatureEditor({ labels, defaultName, onSave, secondaryAction }
           {upload && <img src={upload.dataUrl} alt={labels.preview} className={`${surface} object-contain`} />}
         </TabsContent>
       </Tabs>
+      <SignatureCard
+        labels={{ title: labels.cardTitle, signature: labels.cardSignature }}
+        person={card}
+        imageUrl={method === "drawn" ? drawnUrl : method === "typed" ? typedUrl : (upload?.dataUrl ?? null)}
+      />
       {error && (
         <p role="alert" className="text-sm text-danger-fg">
           {error}
