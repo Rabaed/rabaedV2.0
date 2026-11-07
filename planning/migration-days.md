@@ -180,5 +180,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271201 | RP-1221 | 42 | wir_type_description |
 | 20271203 | RP-1155 | 32 | participants_pages (20271202 is RP-1153 #669) |
 | 20271202 | RP-1153 | 12 | notification_pool |
-| 20271204 | RP-1157 | 32 | activity_feed_viewer_flags |
+| 20271206 | RP-1157 | 32 | activity_feed_viewer_flags (moved from 20271204: main's RP-1156 took 20271205) |
 | 20271205 | RP-1156 | 31 | project_visibility_gap (20271204 is RP-1157's, lane 32) |
