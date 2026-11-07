@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { casesOf, changedMessages, flattenMessages, keyUsed, literalPieces, missingFromBody, searchedTexts, textBroken, textUsed, touchedCases, verdict } from "./check-uat-touch.ts";
+import { caseFiles, casesOf,changedMessages, flattenMessages, keyUsed, literalPieces, missingFromBody, searchedTexts, textBroken, textUsed, touchedCases, verdict } from "./check-uat-touch.ts";
 
 // A fixture case file in the shape of planning/uat/round-0/cases/*.ts.
 const fixture = {
@@ -116,6 +119,72 @@ describe("touchedCases", () => {
 
   it("finds nothing when no case uses a changed message", () => {
     expect(touchedCases(changedMessages("en", '{"z":"Nobody uses this"}', '{"z":"Nobody uses that"}'), [fixture])).toEqual([]);
+  });
+});
+
+describe("the person-run sheet, test-cases.json (RP-1234)", () => {
+  const sheet = {
+    file: "planning/uat/round-0/test-cases.json",
+    text: JSON.stringify([
+      { id: "SUB-01", jira: "RP-685", partName: "Submittals", title: "A new MAR is saved as a Draft", steps: '1) Open New Submittal. 2) Press "Save draft".', expected: 'The Draft is listed with "No number yet" and no Step Age dots.' },
+      { id: "SUB-02", title: "Heading", steps: "Open the list.", expected: "The projectTabs.snags tab shows the open Snags." },
+      { id: "SUB-03", title: "Unrelated", steps: "Nothing about messages.", expected: "Nothing changes." },
+    ]),
+  };
+
+  it("makes each Test Case a unit named by its id", () => {
+    expect(casesOf(sheet).map((c) => c.id)).toEqual(["SUB-01", "SUB-02", "SUB-03"]);
+    expect(casesOf(sheet).every((c) => c.file === sheet.file)).toBe(true);
+  });
+
+  it("reads the words a tester looks for: title, steps and expected, not the ticket key or the part name", () => {
+    const [first] = casesOf(sheet);
+    expect(first!.source).toContain("Save draft");
+    expect(first!.source).toContain("No number yet");
+    expect(first!.source).not.toContain("RP-685");
+    expect(first!.source).not.toContain("Submittals");
+  });
+
+  it("reports a case whose quoted button label or text changes, and one that names a key", () => {
+    const messages = [
+      ...changedMessages("en", '{"b":"Save draft"}', '{"b":"Save as draft"}'),
+      ...changedMessages("en", '{"n":"No number yet"}', '{"n":"Not numbered"}'),
+      ...changedMessages("en", '{"projectTabs":{"snags":"Snags"}}', '{"projectTabs":{"snags":"Snag list"}}'),
+    ];
+    expect(touchedCases(messages, [sheet])).toEqual([
+      { id: "SUB-01", file: sheet.file, messages: ["en:b", "en:n"] },
+      { id: "SUB-02", file: sheet.file, messages: ["en:projectTabs.snags"] },
+    ]);
+  });
+
+  it("finds nothing when no Test Case uses a changed message", () => {
+    expect(touchedCases(changedMessages("en", '{"z":"Nobody uses this"}', '{"z":"Nobody uses that"}'), [sheet])).toEqual([]);
+  });
+
+  it("is quiet about a sheet that is not a list of cases, and says which file is broken JSON", () => {
+    expect(casesOf({ file: "planning/uat/round-0/test-cases.json", text: '{"cases":[]}' })).toEqual([]);
+    expect(() => casesOf({ file: "planning/uat/round-0/test-cases.json", text: "{oops" })).toThrow(/planning\/uat\/round-0\/test-cases\.json/);
+  });
+
+  it("names a case once when the sheet and a defineCase block share its id, with both files", () => {
+    const messages = changedMessages("en", '{"b":"Save draft"}', '{"b":"Save as draft"}');
+    expect(touchedCases(messages, [fixture, sheet])).toEqual([
+      { id: "FIX-01", file: fixture.file, messages: ["en:b"] },
+      { id: "SUB-01", file: sheet.file, messages: ["en:b"] },
+    ]);
+    const shared = { file: "planning/uat/round-0/cases/SUB.ts", text: 'defineCase("SUB-01", async () => { await page.getByRole("button", { name: "Save draft" }).click(); });' };
+    expect(touchedCases(messages, [shared, sheet])).toEqual([{ id: "SUB-01", file: `${shared.file}, ${sheet.file}`, messages: ["en:b"] }]);
+  });
+
+  it("reads the sheet from the working tree beside the cases", () => {
+    const repo = mkdtempSync(join(tmpdir(), "uat-touch-"));
+    try {
+      mkdirSync(join(repo, "planning", "uat", "round-0"), { recursive: true });
+      writeFileSync(join(repo, "planning", "uat", "round-0", "test-cases.json"), sheet.text);
+      expect(caseFiles(repo)).toEqual([{ file: sheet.file, text: sheet.text }]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
 
