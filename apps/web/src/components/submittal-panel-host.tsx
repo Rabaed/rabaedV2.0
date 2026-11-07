@@ -1,10 +1,11 @@
 "use client";
 
-import { directionOf, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
+import { directionOf, formatNumber, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
 import {
   Button,
   DocNo,
   ErrorState,
+  RevisionMenu,
   Outcome,
   StagePill,
   SubmittalPanel,
@@ -21,6 +22,7 @@ import {
   readSubmittalPanelPreferences,
   stageColour,
   useSubmittalPanelIds,
+  useMediaQuery,
   useSubmittalPanelSize,
   writeSubmittalPanelPreferences,
   type SubmittalPanelSizeLabels,
@@ -28,16 +30,17 @@ import {
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { DownloadRecordButton } from "@/components/download-record-button";
-import { DownloadWorkingCopyButton } from "@/components/download-working-copy-button";
+import { useRememberedHref } from "@/components/remembered-module-queries";
+import { SubmittalPanelActionBar } from "@/components/submittal-panel-actions";
 import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
+import { SubmittalPanelForm, useSubmittalPanelReads } from "@/components/submittal-panel-form";
 import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
-import { WorkItemActions } from "@/components/work-item-actions";
-import { useCreateRevision } from "@/components/work-item-revision";
+import { phoneQuery } from "@/lib/new-submittal-panel";
+import { useRouter } from "@/i18n/navigation";
 import { submittalPanelPlace } from "@/lib/submittal-panel-place";
-import { openIdFrom, sizeFrom, submittalPanelHref } from "@/lib/submittal-panel-url";
+import { openIdFrom, sizeFrom, submittalPanelHref, withoutLinkSize } from "@/lib/submittal-panel-url";
 
 type Filters = Pick<WorkItemListData["filters"], "outcomes" | "locations">;
 
@@ -109,12 +112,17 @@ export function SubmittalPanelHost({
   const [order, setOrder] = useState<string[]>([]);
   // The viewer's kept width, read once mounted (the server has no storage, so it draws Normal),
   // unless a link sets the size: that view is the link's and never writes (README §2).
-  const linkSize = sizeFrom(useSearchParams());
+  const params = useSearchParams();
+  const linkSize = sizeFrom(params);
   const kept = useSyncExternalStore(noStorageEvents, keptWidth, () => null);
   const size = useSubmittalPanelSize({
     initial: linkSize ?? kept ?? submittalPanelNormalWidth,
     dir: directionOf(locale),
-    onKeep: linkSize === null ? (width) => writeSubmittalPanelPreferences(submittalPanelStorage(), { width }) : undefined,
+    // A link's size is the link's until the viewer picks their own: then it leaves the URL (Full collapses to a panel over the List, RP-1237 row 1).
+    onKeep: (width) => {
+      if (linkSize !== null) window.history.replaceState(null, "", withoutLinkSize(window.location.pathname, window.location.search));
+      writeSubmittalPanelPreferences(submittalPanelStorage(), { width });
+    },
   });
   const sizeLabels: SubmittalPanelSizeLabels = {
     group: t("size.group"),
@@ -134,7 +142,14 @@ export function SubmittalPanelHost({
 
   useEffect(() => setOrder(loadedOrder()), [openId, refreshKey]);
 
+  const remembered = useRememberedHref();
+  const router = useRouter();
+  // Opened from an item's own link, it landed at Full on a List with no query of its own: closing goes back to the
+  // tab with the Member's last filters (RP-1240), as the item page's way back did.
+  const landed = linkSize === "full" && [...params.keys()].every((key) => key === "open" || key === "size");
   const close = () => {
+    const list = window.location.pathname.replace(/^\/(en|ar)(?=\/)/, "");
+    if (landed && remembered(list) !== list) return router.replace(remembered(list));
     onClose();
     // Focus goes back to the row or card that was open.
     openerOf(openId)?.focus();
@@ -156,144 +171,153 @@ export function SubmittalPanelHost({
   const item = read?.item ?? null;
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
-  const { shown: place, numbered: numberPlace } = submittalPanelPlace(item?.location ?? null, filters.locations, locale);
-  // The route strip and the Workflow map (RP-1064).
-  const { route, workflow, openMap } = useSubmittalPanelRoute(item, locale, refreshKey);
+  const { shown: place, numbered: numberPlace, codes: placeCodes } = submittalPanelPlace(item?.location ?? null, filters.locations, locale);
+  // The route strip and the Workflow map (RP-1064); the map also says which Review Code each Transition issues.
+  const { route, workflow, openMap, map } = useSubmittalPanelRoute(item, locale, refreshKey);
   // The approval log, in the side rail from 880px and in-flow below, under the Workflow block (RP-1093), and Internal Communication (RP-1067).
   const log = useSubmittalPanelLog({ item, locale, refreshKey, outcomes: filters.outcomes, workflow, openMap });
+  // The whole Form, its Documents, Links and Revisions (RP-1237 rows 5, 12, 28): the reads the item page's server made.
+  const { reads, failed } = useSubmittalPanelReads(item, refreshKey);
+  // Edit (row 28): the Form's holder turns the Details into the Form; another item starts read again.
+  const [editing, setEditing] = useState<string | null>(null);
+  const itemId = item?.id ?? null;
+  const startEditing = useCallback(() => setEditing(itemId), [itemId]);
+  const typeOutcomes = item ? filters.outcomes.filter((o) => o.type === item.type.code) : [];
+  const chain = item && reads?.id === item.id ? reads.chain : null;
+  const tRevisions = useTranslations("submittalPanel.revisions");
+  const tNew = useTranslations("newSubmittal");
+  // On a phone the item is a page with a back arrow, as the create panel is (RP-1152 row 7; RP-1237 row 43).
+  const phone = useMediaQuery(phoneQuery, false);
+  const n = (value: number) => formatNumber(value, locale);
 
   return (
-    <SubmittalPanel
-      locale={locale}
-      labels={{
-        module: tabs("submittals"),
-        position: (n, total) => t("position", { n, total }),
-        previous: t("previous"),
-        next: t("next"),
-        close: t("close"),
-        hint: t("hint"),
-      }}
-      crumb={
-        !item ? null : number === null ? (
-          t("noNumber")
-        ) : number.revisionNo === null ? (
-          <DocNo value={number.number} />
-        ) : (
-          <DocNo value={number.number} rev={number.revisionNo} locale={locale} />
-        )
-      }
-      position={position}
-      onPrevious={moveTo(position.previous)}
-      onNext={moveTo(position.next)}
-      onClose={close}
-      width={size.width}
-      resizing={size.resizing}
-      edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels} />}
-      topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels} />}
-      labelledBy={item ? ids.labelledBy : undefined}
-      label={item ? undefined : loading ? t("loading") : t("unavailable")}
-      busy={loading}
-      identity={
-        item && (
-          <SubmittalPanelIdentity
-            locale={locale}
-            number={number}
-            noNumber={t("noNumber")}
-            subject={item.title}
-            numberId={ids.numberId}
-            subjectId={ids.subjectId}
-            numberInfo={<SubmittalPanelNumber item={item} locale={locale} place={numberPlace} />}
-            chips={
-              <>
-                <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
-                {/* The Issued Code only: an item is closed at it. A Recommended Code is never shown here (V5). */}
-                {item.outcome && (
-                  <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={filters.outcomes} locale={locale} cancelled={watchOutcomeNames.cancelled[locale]} />
-                )}
-                <TradeChip code={item.trade.code} name={item.trade.name[locale]} />
-              </>
-            }
-          />
-        )
-      }
-      route={route}
-      facts={
-        item && (
-          <SubmittalPanelFacts
-            locale={locale}
-            labels={{ with: t("with"), stepAge: t("stepAge"), location: t("location"), more: (n) => t("more", { n }), none: "—" }}
-            with={submittalPanelWith(item.heldBy, locale)}
-            stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
-            place={place}
-          />
-        )
-      }
-      tabs={item && <SubmittalPanelDetails item={item} locale={locale} place={place} refreshKey={refreshKey} log={log} />}
-      rail={item && log.rail}
-      actions={
-        item &&
-        !loading && (
-          <>
-            {/* Its Documental Record once closed, its Working Copy while open (V7). */}
-            {item.outcome ? <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} /> : <DownloadWorkingCopyButton workItemId={item.id} />}
-            {item.actions.createRevision && <CreateRevisionButton key={item.id} workItemId={item.id} />}
-            {/* Only what the engine offers this Member: its Transitions, Pick up and Return to pool. */}
-            <WorkItemActions key={item.id} workItemId={item.id} actions={item.actions} locale={locale} />
-          </>
-        )
-      }
-    >
-      {!item &&
-        (loading ? (
-          <p role="status" className="px-5 py-8 text-sm text-muted">
-            {t("loading")}
-          </p>
-        ) : (
-          <ErrorState
-            title={t("unavailable")}
-            className="m-5"
-            action={
-              <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
-                {t("tryAgain")}
-              </Button>
-            }
-          />
-        ))}
-    </SubmittalPanel>
-  );
-}
-
-/**
- * Create Revision (only where the API offers it: after Code C), the item page's own call
- * (`useCreateRevision`): the new Revision opens on its own page, as a Draft.
- */
-export function CreateRevisionButton({ workItemId }: { workItemId: string }) {
-  const t = useTranslations("revision");
-  const create = useCreateRevision(workItemId);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  async function run() {
-    setPending(true);
-    setError(null);
-    try {
-      const result = await create();
-      if (!result.ok) setError(t.has(`refusals.${result.reason}`) ? t(`refusals.${result.reason}`) : t("refusals.unavailable"));
-    } catch {
-      setError(t("refusals.unavailable"));
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <span className="flex flex-wrap items-center gap-2">
-      {error && (
-        <span role="alert" className="text-sm text-danger-fg">
-          {error}
-        </span>
-      )}
-      <Button variant="secondary" disabled={pending} onClick={() => void run()}>
-        {t("create")}
-      </Button>
-    </span>
+    <SubmittalPanelForm item={item} reads={reads} editing={editing !== null && editing === item?.id} locale={locale}>
+      <SubmittalPanel
+        locale={locale}
+        labels={{
+          module: tabs("submittals"),
+          position: (n, total) => t("position", { n, total }),
+          previous: t("previous"),
+          next: t("next"),
+          close: t("close"),
+          hint: t("hint"),
+          // Opened from outside the List, ↑ ↓ move nowhere (row 41).
+          hintClose: t("hintClose"),
+          back: tNew("back"),
+        }}
+        layout={phone ? "page" : "slide-over"}
+        crumb={
+          !item ? null : number === null ? (
+            t("noNumber")
+          ) : number.revisionNo === null ? (
+            <DocNo value={number.number} />
+          ) : (
+            <DocNo value={number.number} rev={number.revisionNo} locale={locale} />
+          )
+        }
+        position={position}
+        onPrevious={moveTo(position.previous)}
+        onNext={moveTo(position.next)}
+        onClose={close}
+        width={size.width}
+        resizing={size.resizing}
+        covers={phone || size.pressed === "full"}
+        edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels} />}
+        topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels} />}
+        labelledBy={item ? ids.labelledBy : undefined}
+        label={item ? undefined : loading ? t("loading") : t("unavailable")}
+        busy={loading}
+        identity={
+          item && (
+            <SubmittalPanelIdentity
+              locale={locale}
+              number={number}
+              noNumber={t("noNumber")}
+              subject={item.title}
+              numberId={ids.numberId}
+              subjectId={ids.subjectId}
+              numberInfo={
+                <span className="flex flex-wrap items-center gap-2.5">
+                  <SubmittalPanelNumber item={item} locale={locale} place={numberPlace} />
+                  {/* Switching Revisions (row 5): only the chain's Revisions the viewer may see (V1 each); one opens here, in the panel. */}
+                  {chain && chain.revisions.length > 1 && (
+                    <RevisionMenu
+                      locale={locale}
+                      labels={{
+                        title: tRevisions("title"),
+                        open: tRevisions("open"),
+                        name: (revisionNo, hasNumber) => (revisionNo > 0 ? tRevisions("revision", { n: n(revisionNo) }) : hasNumber ? tRevisions("original") : tRevisions("draft")),
+                        noNumber: (revisionNo) => (revisionNo > 0 ? tRevisions("revisionNoNumber", { n: n(revisionNo) }) : t("noNumber")),
+                      }}
+                      revisions={chain.revisions}
+                      currentId={item.id}
+                      onOpen={onOpen}
+                    />
+                  )}
+                </span>
+              }
+              chips={
+                <>
+                  <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
+                  {/* The Issued Code only: an item is closed at it. A Recommended Code is never shown here (V5). */}
+                  {item.outcome && (
+                    <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={filters.outcomes} locale={locale} cancelled={watchOutcomeNames.cancelled[locale]} />
+                  )}
+                  <TradeChip code={item.trade.code} name={item.trade.name[locale]} />
+                </>
+              }
+            />
+          )
+        }
+        route={route}
+        facts={
+          item && (
+            <SubmittalPanelFacts
+              locale={locale}
+              labels={{ with: t("with"), stepAge: t("stepAge"), location: t("location"), more: (n) => t("more", { n }), none: "—" }}
+              with={submittalPanelWith(item.heldBy, locale)}
+              stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
+              // Each level's code, "BLK-A · TWR-A · A06" (row 10); the Location section names the path.
+              place={placeCodes.length > 0 ? [placeCodes.join(" · ")] : place}
+            />
+          )
+        }
+        tabs={item && <SubmittalPanelDetails item={item} locale={locale} place={place} refreshKey={refreshKey} log={log} reads={reads} failed={failed} onEdit={startEditing} />}
+        rail={item && log.rail}
+        actions={
+          item &&
+          !loading && (
+            <SubmittalPanelActionBar
+              key={item.id}
+              item={item}
+              locale={locale}
+              outcomes={typeOutcomes}
+              map={map}
+              me={log.me}
+              events={log.events}
+              editing={editing === item.id}
+              onEdit={startEditing}
+            />
+          )
+        }
+      >
+        {!item &&
+          (loading ? (
+            <p role="status" className="px-5 py-8 text-sm text-muted">
+              {t("loading")}
+            </p>
+          ) : (
+            <ErrorState
+              title={t("unavailable")}
+              className="m-5"
+              action={
+                <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+                  {t("tryAgain")}
+                </Button>
+              }
+            />
+          ))}
+      </SubmittalPanel>
+    </SubmittalPanelForm>
   );
 }

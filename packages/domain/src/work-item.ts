@@ -481,6 +481,8 @@ export const transitionKinds = ["send", "submit", "return", "send_back", "close"
 export type TransitionKind = (typeof transitionKinds)[number];
 /** The kinds that take an item back, within its Participant (`return`) or to the one that Submitted it (`send_back`). */
 export const backwardKinds: readonly TransitionKind[] = ["return", "send_back"];
+/** The kinds that move an item forward to its next holder: the Submittal Panel's primary Transition (RP-1237). */
+export const forwardKinds: readonly TransitionKind[] = ["send", "submit"];
 
 /**
  * The holder of the current Step takes one of its Transitions. The key makes a

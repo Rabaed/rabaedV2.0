@@ -167,7 +167,7 @@ async function choose(context: PlayContext, key: "compact" | "normal" | "wide" |
 /**
  * Normal (640px), the default: the size switch is a named group of four buttons, each named and
  * pressed or not, with a glyph only (no text below 880px). The grip is on the inline-start edge,
- * the left in English and the right in Arabic. The breadcrumb's label and the hint are shown.
+ * the left in English and the right in Arabic. The breadcrumb's label is shown; the hint only from Wide (RP-1237 row 22).
  */
 export const Normal: Story = {
   play: async (context) => {
@@ -176,7 +176,7 @@ export const Normal: Story = {
     await expect(sizeButton(context, "normal")).toHaveAttribute("aria-pressed", "true");
     await expect(panel.getBoundingClientRect().width).toBe(640);
     await expect(shown(panel.querySelector(".sdp-size-text"))).toBe(false);
-    await expect(shown(panel.querySelector(".sdp-hint"))).toBe(true);
+    await expect(shown(panel.querySelector(".sdp-hint"))).toBe(false);
     await expect(shown(panel.querySelector(".sdp-crumb-label"))).toBe(true);
     await expect(shown(panel.querySelector(".sdp-rail"))).toBe(false);
     const grip = gripOf(context).getBoundingClientRect();

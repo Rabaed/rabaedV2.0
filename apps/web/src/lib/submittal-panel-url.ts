@@ -29,6 +29,21 @@ export function submittalPanelHref(pathname: string, search: string, id: string 
   return withQuery(pathname, params);
 }
 
+/**
+ * Where a Submittal's own link (`/work-items/<id>`) lands (RP-1237 row 1): its Project's Submittals
+ * List with the item open in the panel at Full. Full is the item's page; one view everywhere.
+ */
+export function itemLanding(projectId: string, id: string): string {
+  return withQuery(`/projects/${projectId}/work-items`, new URLSearchParams({ [openParam]: id, [sizeParam]: "full" }));
+}
+
+/** The page's URL without the link's size: the viewer picked their own (RP-1237 row 1), so it is theirs now. */
+export function withoutLinkSize(pathname: string, search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete(sizeParam);
+  return withQuery(pathname, params);
+}
+
 const withQuery = (pathname: string, params: URLSearchParams) => {
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;

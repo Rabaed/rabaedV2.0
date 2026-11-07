@@ -75,3 +75,4 @@ export * from "./screen.ts";
 export * from "./company-default.ts";
 export * from "./verification.ts";
 export * from "./env.ts";
+export * from "./visitor.ts";

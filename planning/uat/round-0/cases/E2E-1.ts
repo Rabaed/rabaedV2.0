@@ -5,6 +5,15 @@ import * as H from "../harness/helpers-sub.ts";
 import { act, moduleItems } from "../harness/helpers-sng.ts";
 import { pdfPages, recordPdf, until } from "../harness/helpers-not.ts";
 
+// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+
+/** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
+async function chooseCode(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole("main").getByRole("button", { name: "Issue Review Code" }).click();
+  await page.getByRole("menuitem", { name }).first().click();
+}
+
 // The business end-to-end journeys J1 to J6 (strategy section 4). Each journey is ONE story across the
 // Companies: a screenshot at every hand-over, and at every hand-over the visibility checks beside a
 // positive control (the Company that must see it does, the others get the 404). The Test Case ids a
@@ -294,8 +303,8 @@ defineCase("J1", async (t) => {
 
   // 7. Mohammed issues Code A with Remarks.
   const mp = s.page("mohammed");
-  await mp.getByRole("main").getByRole("button", { name: /^Approve\s*·\s*A/ }).first().click();
-  const dlg = mp.getByRole("dialog");
+  await chooseCode(mp, /^Approve/);
+  const dlg = mp.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   const remarksBox = dlg.locator('[aria-labelledby="transition-section-code_remarks"]').getByRole("textbox").first();
   const remarks = "Approved as submitted. Install per drawing E-201.";
@@ -418,11 +427,11 @@ defineCase("J3", async (t) => {
   // Hafiz creates the Revision in the page.
   await page.waitForTimeout(1500);
   await page.getByRole("main").getByRole("button", { name: "Create Revision" }).first().click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator(POP_UP);
   if (await dialog.isVisible().catch(() => false)) await dialog.getByRole("button", { name: /Create Revision/ }).last().click();
-  await page.waitForURL((u) => /\/work-items\/[0-9a-f-]{36}/.test(u.pathname) && !u.pathname.includes(id), { timeout: 20000 }).catch(() => undefined);
+  await page.waitForURL((u) => { const open = u.searchParams.get("open"); return open !== null && open !== id; }, { timeout: 20000 }).catch(() => undefined);
   await settle(page, 800);
-  const revId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  const revId = new URL(page.url()).searchParams.get("open") ?? undefined;
   if (!revId || revId === id) {
     await t.shot(page, "create-revision-stuck");
     throw new Error(`Create Revision did not open the Revision page (${page.url()}): ${flat(await page.locator("body").innerText()).slice(0, 200)}`);
@@ -454,7 +463,7 @@ defineCase("J3", async (t) => {
   // The Revision drop-down switches Revisions.
   await go(page, `/work-items/${revId}`);
   await settle(page, 600);
-  const trigger = page.getByRole("main").getByLabel("Revision").first();
+  const trigger = page.getByRole("main").getByRole("button", { name: /^(Original|Revision \d+|Draft)$/ }).first();
   s.ck("SUB-15", "The Revision drop-down is on the Revision page", (await trigger.count()) > 0);
   if ((await trigger.count()) > 0) {
     await trigger.click();
@@ -463,7 +472,7 @@ defineCase("J3", async (t) => {
     await t.shot(page, "revision-dropdown-open");
     s.ck("SUB-15", "The drop-down lists the original and Rev 1, each whole", options.some((o) => o.includes(number) && !/Rev 1/.test(o)) && options.some((o) => o.includes(`${number} Rev 1`)), options.join(" | "));
     await page.getByRole("option").filter({ hasText: number }).filter({ hasNotText: "Rev 1" }).first().click();
-    await page.waitForURL((u) => u.pathname.includes(id), { timeout: 15000 }).catch(() => undefined);
+    await page.waitForURL((u) => u.search.includes(id), { timeout: 15000 }).catch(() => undefined);
     await settle(page, 800);
     const orig = flat(await page.locator("main").innerText());
     await t.shot(page, "hafiz-original-via-dropdown");
@@ -491,11 +500,11 @@ defineCase("J4", async (t) => {
   await s.open("hafiz", id, "hafiz-sees-code-d");
   await s.tmcClean("VIS-04", "Hand-over 5, after Code D", id, ["ali", "hafiz", "faisal"], [w.enote, REC, /internal_answers/], "", { signer: "Mohammed Al Shamsi", texts: [w.vnote] });
   await page.getByRole("main").getByRole("button", { name: "Create replacement" }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator(POP_UP);
   if (await dialog.isVisible().catch(() => false)) await dialog.getByRole("button", { name: /Create replacement/ }).last().click();
-  await page.waitForURL((u) => /\/work-items\/[0-9a-f-]{36}/.test(u.pathname) && !u.pathname.includes(id), { timeout: 20000 }).catch(() => undefined);
+  await page.waitForURL((u) => { const open = u.searchParams.get("open"); return open !== null && open !== id; }, { timeout: 20000 }).catch(() => undefined);
   await settle(page, 800);
-  const newId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  const newId = new URL(page.url()).searchParams.get("open") ?? undefined;
   if (!newId || newId === id) throw new Error(`Create replacement did not open the new Draft (${page.url()})`);
   const n = await H.detail(hafiz, newId);
   s.ck("SUB-14", "Hand-over 6, the replacement is a new Draft: same Subject, no number", n.title === subject && n.stage.key === "draft" && n.documentNumber === null, `${n.title}/${n.stage.key}`);
