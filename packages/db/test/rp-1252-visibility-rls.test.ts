@@ -85,7 +85,7 @@ describe("scenario RP-1252-1: the Visibility Gap counts no discarded Draft as a 
     }
     const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
     const rows = await gap(t.c1.ap);
-    expect(rows.map((v) => v.id)).not.toContain(discarded);
+    expect(rows.map((v) => v.id)).not.toContain(discarded); // not hidden-from: the Admin's own gap, which the Zone left (state); the test above read it there first
     expect(rows.sort(byId)).toEqual(
       [
         { id: live, status: "deactivated" },
