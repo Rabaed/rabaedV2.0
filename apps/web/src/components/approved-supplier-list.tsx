@@ -25,12 +25,13 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { listedTrades, tradeOptions, type SettingsTrade } from "@/lib/settings-trades";
 import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 // A choice can't have an empty value, so "no Scope" has its own.
 const NO_SCOPE = "none";
 
-export type SupplierTrade = { id: string; code: string; name: BilingualText };
+export type SupplierTrade = SettingsTrade;
 
 type ScopeChoice = Scope & { level: number };
 
@@ -61,13 +62,19 @@ export function ApprovedSupplierList({
   suppliers: ApprovedSupplier[];
 }) {
   const t = useTranslations("projectSettings.approvedSuppliers");
+  const tl = useTranslations("tradesLocations");
   const locale = useLocale() as Locale;
   const scopeName = new Map(scopes.map((s) => [s.id, s.name[locale]]));
+  // An archived Trade keeps its card while it lists a supplier, marked archived (RP-1251).
+  const cards = listedTrades(
+    trades,
+    suppliers.map((s) => s.tradeId),
+  );
 
   return (
     <>
-      {trades.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
-      {trades.map((trade) => {
+      {cards.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
+      {cards.map((trade) => {
         // Approved first, each group in the API's order (by name).
         const listed = [...suppliers.filter((s) => s.tradeId === trade.id)].sort((a, b) => Number(a.status === "withdrawn") - Number(b.status === "withdrawn"));
         const approved = listed.filter((s) => s.status === "approved").length;
@@ -81,6 +88,12 @@ export function ApprovedSupplierList({
                 <bdi dir="ltr" translate="no" className="text-caption font-normal text-muted">
                   {trade.code}
                 </bdi>
+                {!trade.active && (
+                  <>
+                    {" "}
+                    <Badge tone="neutral">{tl("archived")}</Badge>
+                  </>
+                )}
               </>
             }
             actions={<span className="text-caption text-muted">{t("approvedCount", { count: approved, n: formatNumber(approved, locale) })}</span>}
@@ -185,9 +198,11 @@ export function AddSupplierButton({ projectId, trades, scopes }: { projectId: st
   const router = useRouter();
   const toast = useToast();
   const refusal = useRefusal();
+  // Only active Trades take a new supplier (RP-1251).
+  const options = tradeOptions(trades, locale);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState<BilingualText>({ en: "", ar: "" });
-  const [tradeId, setTradeId] = useState(trades[0]?.id ?? "");
+  const [tradeId, setTradeId] = useState(options[0]?.value ?? "");
   const [scopeId, setScopeId] = useState(NO_SCOPE);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -203,7 +218,7 @@ export function AddSupplierButton({ projectId, trades, scopes }: { projectId: st
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" disabled={trades.length === 0}>
+        <Button size="sm" disabled={options.length === 0}>
           <Icon name="plus" size={15} />
           {t("add")}
         </Button>
@@ -243,7 +258,7 @@ export function AddSupplierButton({ projectId, trades, scopes }: { projectId: st
                 setTradeId(v);
                 setScopeId(NO_SCOPE);
               }}
-              options={trades.map((trade) => ({ value: trade.id, label: trade.name[locale] }))}
+              options={options}
             />
           </Field>
           <Field label={t("scope")} help={t("scopeHelp")}>

@@ -27,7 +27,7 @@ export default async function ApprovedSuppliersPage({ params }: { params: Promis
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !dimensions || !scopes || !list) notFound();
 
-  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name }));
+  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name, active: v.active }));
   const scopeChoices = treeOrder(scopes.scopes);
   return (
     <>
