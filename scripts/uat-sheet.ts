@@ -49,6 +49,8 @@ export interface SheetCase {
   needs: Need[];
   /** The UAT Project whose section the case is in (RP-1248): a UatRole's n, such as "01". None: its Part's section. */
   role?: string;
+  /** Why a case is in its Part's section, not a role's (RP-1250): the owner decides where it goes. */
+  leftover?: string;
   url: string;
 }
 
@@ -138,7 +140,35 @@ export interface ScenarioRow {
   needs?: string[];
   /** The UAT Project whose section the case is in (RP-1248), as UAT_ROLES numbers them. */
   role?: string;
+  /** Why the case is in no role's section yet (RP-1250): it needs two people, or a fixture, for the owner to decide. */
+  leftover?: string;
 }
+
+/**
+ * The whole-sheet check (RP-1250): every case is in exactly one section, a UAT role's (its `role`), the UAT owner's (the
+ * owner need) or, while the owner decides, its Part's as a listed leftover with its reason. A case with none is refused,
+ * so a new case can't join the sheet without a section.
+ */
+/* eslint-disable rabaed/no-avoid-terms -- the test sheet's own sections and its UAT roles (UAT_ROLES), not product terms. */
+export function sectionProblems(rows: ScenarioRow[]): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.id)) {
+      problems.push(`${r.id} is in the sheet twice`);
+      continue;
+    }
+    seen.add(r.id);
+    const leftover = Boolean(r.leftover?.trim());
+    const owner = r.needs?.includes("owner") ?? false;
+    if (r.role && !UAT_ROLES.some((x) => x.n === r.role)) problems.push(`${r.id} names UAT role ${r.role}, which has no UAT Project`);
+    else if (r.role && leftover) problems.push(`${r.id} has a role and a leftover reason: one section only`);
+    else if (owner && leftover) problems.push(`${r.id} is the owner's and has a leftover reason: one section only`);
+    else if (!r.role && !owner && !leftover) problems.push(`${r.id} is in no role's section: give it a role, the owner need, or a leftover reason`);
+  }
+  return problems;
+}
+/* eslint-enable rabaed/no-avoid-terms */
 
 const unknownNeeds = (needs: readonly string[] = []) => needs.filter((n) => !(NEEDS as readonly string[]).includes(n));
 
@@ -203,6 +233,7 @@ export function casesFromScenarios(text: string, uatUrl: string): SheetCase[] {
       expected: words(plain(p.expected ?? "")),
       needs,
       ...(p.role ? { role: p.role } : {}),
+      ...(p.leftover?.trim() ? { leftover: p.leftover.trim() } : {}),
       url: startUrl(p.part, uatUrl),
     };
   });
@@ -474,6 +505,7 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
     for (const c of s.cases) {
       out.push(`### ${c.id} ${c.title}`, "", `- **Key:** \`${c.key}\` · **Part:** ${c.part}${c.round ? ` · **Round:** ${c.round}` : ""}${c.needs.length ? ` · **Needs:** ${c.needs.join(", ")}` : ""}`);
       if (c.who) out.push(`- **Sign in as:** ${c.who}`);
+      if (c.leftover) out.push(`- **Left for the owner:** ${c.leftover}`);
       out.push(`- **Start at:** ${c.url}`);
       if (c.steps.length) out.push("- **Steps:**", ...c.steps.map((st, i) => `  ${i + 1}. ${st}`));
       if (c.expected) out.push(`- **Expected result:** ${c.expected}`);
