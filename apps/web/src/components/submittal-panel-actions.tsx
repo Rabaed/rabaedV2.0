@@ -22,6 +22,7 @@ import {
   SubmittalPanelWaiting,
   sameName,
   submittalPanelBar,
+  actionSheetEffects,
   transitionCodes,
   type SubmittalPanelBarTransition,
   type SubmittalPanelCodeMenuItem,
@@ -34,6 +35,9 @@ import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
+
+/** An outcome whose rows open Comments in the Snag List (Code B: `create_items`, workflow-engine.md). */
+const opensComments = (outcome: Outcome | undefined) => outcome?.actions.some((a) => a.kind === "create_items") ?? false;
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -72,6 +76,7 @@ export function SubmittalPanelActionBar({
   const tActions = useTranslations("workItems.actions");
   const tPopup = useTranslations("workItems.actions.popup");
   const tForm = useTranslations("workItems.form");
+  const tSheet = useTranslations("submittalPanel.sheet");
   const form = useWorkItemForm();
   const saveDraft = useSaveDraft(locale);
 
@@ -95,6 +100,27 @@ export function SubmittalPanelActionBar({
     return { outcome, goes, to, named: goes !== null && !own(to) };
   };
 
+  /** What a choice does, in one line (rows 24, 25): who is told, whether a Revision follows, where its Comments go. */
+  const lineOf = (tr: SubmittalPanelBarTransition): string | undefined => {
+    const { outcome, goes, to, named } = where(tr);
+    if (tr.kind === "send_back") return named ? t("sendBack", { company: to[locale] }) : undefined;
+    if (goes === "back") return named ? t("back", { company: to[locale] }) : t("backOwn");
+    if (goes !== "closes") return undefined;
+    const comments = opensComments(outcome) ? ` ${t("comments")}` : "";
+    return `${named ? t("closes", { company: to[locale] }) : t("closesOwn")}${comments}`;
+  };
+
+  /**
+   * The Position the viewer's Step is narrowed to, as the Workflow map words it; null without one. The signer
+   * line then names the Step itself ("Consultant Manager"), and nothing without one (row 39).
+   */
+  const positionOf = (): string | null => {
+    const step = map?.definition.steps.find((x) => x.key === item.step?.key);
+    const actor = step?.actor;
+    if (!actor || !("role" in actor) || !actor.positions?.[0]) return null;
+    const position = actor.positions[0];
+    return map?.positions.find((p) => p.role === actor.role && p.key === position)?.name[locale] ?? null;
+  };
   const opener = useTransitionOpener(item.id, item.actions, locale, (tr) => {
     const code = codes[tr.key] ?? null;
     const { goes, to, named } = where(tr);
@@ -106,18 +132,35 @@ export function SubmittalPanelActionBar({
       // Only a code's Remarks reach the raiser with the signer's name (V14); a move inside a Company promises nothing.
       remarksReader: tr.kind === "close" && code !== null && !own(raiser) ? raiser[locale] : null,
       ownCompany: mine?.[locale] ?? "",
+      // The panel's sheet (RP-1237 rows 29, 30, 39): what it does, what happens on confirm, and who signs.
+      sheet: {
+        line: lineOf(tr),
+        effects: (answers) => {
+          const { outcome } = where(tr);
+          return actionSheetEffects({
+            transitionKey: tr.key,
+            definition: map?.definition ?? null,
+            stages: map?.stages ?? [],
+            goesTo: named ? to : null,
+            code,
+            offersRevision: outcome ? offersRevision(outcome) : false,
+            // Code B's rows become its Comments (workflow-engine.md, the Screen's `items_to_create`).
+            comments: opensComments(outcome) ? (Array.isArray(answers.items_to_create) ? answers.items_to_create.length : 0) : null,
+          });
+        },
+        effectsLabels: {
+          title: tSheet("title"),
+          stage: (stage) => tSheet("stage", { stage }),
+          told: (company) => tSheet("told", { company }),
+          comments: (count, company) => (company ? tSheet("comments", { count, n: formatNumber(count, locale), company }) : tSheet("commentsOwn", { count, n: formatNumber(count, locale) })),
+          revision: (company) => (company ? tSheet("revision", { company }) : tSheet("revisionOwn")),
+          record: (recorded) => tSheet("record", { code: recorded }),
+        },
+        signer: me ? { name: me.member.fullName, position: positionOf() ?? item.step?.name[locale] ?? null, signsAs: tSheet("signsAs") } : null,
+      },
     };
   });
 
-  /** What a choice does, in one line (rows 24, 25): who is told, whether a Revision follows, where its Comments go. */
-  const lineOf = (tr: SubmittalPanelBarTransition): string | undefined => {
-    const { outcome, goes, to, named } = where(tr);
-    if (tr.kind === "send_back") return named ? t("sendBack", { company: to[locale] }) : undefined;
-    if (goes === "back") return named ? t("back", { company: to[locale] }) : t("backOwn");
-    if (goes !== "closes") return undefined;
-    const comments = outcome?.actions.some((a) => a.kind === "create_items") ? ` ${t("comments")}` : "";
-    return `${named ? t("closes", { company: to[locale] }) : t("closesOwn")}${comments}`;
-  };
   const menuItem = (tr: SubmittalPanelBarTransition): SubmittalPanelCodeMenuItem => ({
     key: tr.key,
     ...(codes[tr.key] ? { code: codes[tr.key]!, look: lookOf(codes[tr.key]) } : {}),

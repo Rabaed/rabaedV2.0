@@ -3429,6 +3429,17 @@
       "revision": "Revision {n}",
       "revisionNoNumber": "Revision {n}: no number yet"
     },
+    "sheet": {
+      "title": "What happens when you confirm",
+      "stage": "Stage becomes {stage}",
+      "told": "{company} is told",
+      "comments": "{count, plural, one {{n} Comment opens} other {{n} Comments open}} in the Snag List for {company}",
+      "commentsOwn": "{count, plural, one {{n} Comment opens} other {{n} Comments open}} in the Snag List",
+      "revision": "Back to {company} for a new Revision",
+      "revisionOwn": "Back for a new Revision",
+      "record": "Code {code} is printed on the Documental Record",
+      "signsAs": "Signs as"
+    },
     "with": "With",
     "stepAge": "Step Age",
     "location": "Location",
