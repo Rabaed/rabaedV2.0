@@ -4,7 +4,7 @@ import { revisionPicker } from "./revision-picker-model.ts";
 
 type Revision = RevisionChain["revisions"][number];
 
-const stage = (key: string, category: Revision["stage"]["category"]): Revision["stage"] => ({ key, category, name: { en: key, ar: key } });
+const stage = (key: string, category: Revision["stage"]["category"]): Revision["stage"] => ({ key, category, name: Object.fromEntries([["en", key], ["ar", key]]) as Revision["stage"]["name"] });
 const closedAtC = stage("revise_resubmit", "closed_negative");
 const original: Revision = {
   id: "00000000-0000-4000-8000-000000000000",

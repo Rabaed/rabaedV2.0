@@ -304,6 +304,13 @@ export type SubmittalPanelIdentityProps = {
   numberInfo?: ReactNode;
   /** The Subject's heading level: `h1` on the Work Item page, where it heads the page (RP-1151); `h2` in the panel. */
   subjectAs?: "h1" | "h2";
+  /**
+   * The Revision picker right after the number (RP-1253, gap row 1), in place of the number's revision word;
+   * left out, the number shows its " Rev n" as before (while the chain is read).
+   */
+  revision?: ReactNode;
+  /** Above the number: the amber banner while an earlier Revision is open (RP-1253, gap row 21). */
+  banner?: ReactNode;
 };
 
 /**
@@ -311,13 +318,31 @@ export type SubmittalPanelIdentityProps = {
  * in Arabic too, with a Revision's revision word inline after it in brand orange (`DocNo`'s
  * wording: "Rev 1", «مراجعة 1»; Rev 0 shows nothing), then the Subject and the chips.
  */
-export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chips, numberId, subjectId, numberInfo, subjectAs: Subject = "h2" }: SubmittalPanelIdentityProps) {
+export function SubmittalPanelIdentity({
+  locale,
+  number,
+  noNumber,
+  subject,
+  chips,
+  numberId,
+  subjectId,
+  numberInfo,
+  subjectAs: Subject = "h2",
+  revision,
+  banner,
+}: SubmittalPanelIdentityProps) {
   return (
     <div className="sdp-identity px-5 pt-[18px] pb-4">
+      {banner && <div className="sdp-revision-banner mb-4">{banner}</div>}
       <div className="relative flex items-center gap-1">
         <p id={numberId} className="sdp-number min-w-0 text-[26px] leading-[1.1] font-extrabold break-all text-text tabular-nums">
           {number ? (
-            number.revisionNo === null ? (
+            revision !== undefined ? (
+              <>
+                <DocNo value={number.number} className="font-extrabold whitespace-normal" />
+                {revision}
+              </>
+            ) : number.revisionNo === null ? (
               <DocNo value={number.number} className="font-extrabold whitespace-normal" />
             ) : (
               <DocNo
@@ -329,7 +354,10 @@ export function SubmittalPanelIdentity({ locale, number, noNumber, subject, chip
               />
             )
           ) : (
-            <span className="text-[21px] text-muted">{noNumber}</span>
+            <>
+              <span className="text-[21px] text-muted">{noNumber}</span>
+              {revision}
+            </>
           )}
         </p>
         {numberInfo}

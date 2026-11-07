@@ -58,6 +58,7 @@ export function SubmittalPanelActionBar({
   events,
   editing,
   onEdit,
+  pastRevision = null,
 }: {
   item: WorkItemDetail;
   locale: Locale;
@@ -71,12 +72,15 @@ export function SubmittalPanelActionBar({
   events: WorkItemHistory["events"];
   editing: boolean;
   onEdit: () => void;
+  /** The open Revision's number when it is earlier than the latest the viewer sees (RP-1253): "Rev 1 · read only" and Download PDF only. */
+  pastRevision?: number | null;
 }) {
   const t = useTranslations("submittalPanel.bar");
   const tActions = useTranslations("workItems.actions");
   const tPopup = useTranslations("workItems.actions.popup");
   const tForm = useTranslations("workItems.form");
   const tSheet = useTranslations("submittalPanel.sheet");
+  const tPicker = useTranslations("revision.picker");
   const form = useWorkItemForm();
   const saveDraft = useSaveDraft(locale);
 
@@ -169,8 +173,10 @@ export function SubmittalPanelActionBar({
     proposed: tr.proposed ? tActions("proposed") : undefined,
   });
 
-  const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly") };
-  const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks });
+  const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly"),
+    pastRevision: (revisionNo: number) => tPicker("readOnly", { revision: revisionNo > 0 ? tPicker("rev", { n: formatNumber(revisionNo, locale) }) : tPicker("original") }),
+  };
+  const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks, pastRevision });
   const busy = opener.calls.pending || opener.waiting;
   const proposing = item.actions.transitions.some((tr) => tr.proposed);
   // Only a move forward is the primary (Send for review, Sign & submit); a Return, a Send Back or a Cancel never is.

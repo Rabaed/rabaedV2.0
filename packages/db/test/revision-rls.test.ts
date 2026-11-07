@@ -447,6 +447,84 @@ describe("the Links between the items of a chain, for a reader who sees only som
   });
 });
 
+// The Revision picker (RP-1253) reads the chain with each Revision's Submission Date, close and Outcome
+// from its own row through RLS. The original and Rev 1 close at Code C in Building A; Rev 2 moves to
+// Building B and is Submitted. The Owner Representative of Building A reads the original and Rev 1 only,
+// so Rev 1 is their latest and nothing names Rev 2; the Project Admin, a C1 Member covering all, reads all three.
+describe("the chain, as the Revision picker reads it (RP-1253-1, RP-1253-2)", () => {
+  let original = "";
+  let rev1 = "";
+  let rev2 = "";
+  const picker = (as: string, id: string) =>
+    call<{ id: string; revision_no: number; submitted: boolean; closed: boolean; outcome: string | null }>(
+      as,
+      sql`select c.work_item_id as id, c.revision_no, w.submitted_at is not null as submitted, w.closed_at is not null as closed, w.outcome
+        from app.revision_chain(${id}::uuid) c join work_item w on w.id = c.work_item_id order by c.revision_no`,
+    );
+  const submitAndCodeC = async (id: string) => {
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
+    expect(await take(k1.member, id, "revise_c")).toBe("applied");
+  };
+
+  beforeAll(async () => {
+    // The Project Admin role grants no sight of items: the creator reads them as a C1 Member covering all.
+    const own = (await migrator.query("select id from participant where project_id = $1 and company_id = $2", [projectId, c1.id])).rows[0].id as string;
+    await call(c1.ap, sql`select app.add_project_member(${own}::uuid, ${c1.ap}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      expect(await outcome(c1.ap, sql`select app.set_member_visibility(${own}::uuid, ${c1.ap}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    }
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Cable trays', app.latest_form_version(${TYPE}), '{"model": "CT-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    original = draft!.work_item_id;
+    await submitAndCodeC(original);
+    rev1 = (await createRevision(c1.member, original)).work_item_id!;
+    await submitAndCodeC(rev1);
+    rev2 = (await createRevision(c1.member, rev1)).work_item_id!;
+    expect(
+      await outcome(
+        c1.member,
+        sql`select app.save_work_item_answers(${rev2}::uuid, '{"model": "CT-3"}'::jsonb, ${electrical}::uuid, ${buildingB}::uuid, '{}'::uuid[], now()) as outcome`,
+      ),
+    ).toBe("saved");
+    expect(await take(c1.member, rev2, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, rev2)).toBe("picked_up");
+    expect(await take(c1Pm, rev2, "submit")).toBe("applied");
+  });
+
+  it("gives the Building A reader the original and Rev 1, each closed at Code C, and nothing of Rev 2 (RP-1253-1)", async () => {
+    const expected = [
+      { id: original, revision_no: 0, submitted: true, closed: true, outcome: "C" },
+      { id: rev1, revision_no: 1, submitted: true, closed: true, outcome: "C" },
+    ];
+    expect(await picker(orA.member, rev1)).toEqual(expected);
+    expect(await picker(orA.member, original)).toEqual(expected);
+    for (const from of [original, rev1]) {
+      await expectHiddenFrom({
+        read: (as) => picker(as, from),
+        target: rev2,
+        seenBy: [c1.ap, c1.member, k1.member],
+        hiddenFrom: orA.member,
+        label: `the picker's chain from ${from === original ? "the original" : "Rev 1"}`,
+      });
+    }
+  });
+
+  it("gives the Project Admin the whole chain, Rev 2 Submitted and open (RP-1253-2)", async () => {
+    expect(await picker(c1.ap, rev1)).toEqual([
+      { id: original, revision_no: 0, submitted: true, closed: true, outcome: "C" },
+      { id: rev1, revision_no: 1, submitted: true, closed: true, outcome: "C" },
+      { id: rev2, revision_no: 2, submitted: true, closed: false, outcome: null },
+    ]);
+  });
+});
+
 // Only Code C opens a Revision: Inspection Revisions (`failed`) are out of scope (RP-311 review).
 describe("an item closed otherwise than with Code C", () => {
   it("can't be revised, with the one refusal", async () => {

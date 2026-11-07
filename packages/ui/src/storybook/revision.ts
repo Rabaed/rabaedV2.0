@@ -1,7 +1,7 @@
-import type { Locale } from "@rabaed/domain";
+import { formatDate, type Locale } from "@rabaed/domain";
 import type { ReplacementActionsLabels } from "../components/revision/replacement-actions.tsx";
 import type { RevisionActionsLabels } from "../components/revision/revision-actions.tsx";
-import type { RevisionPickerLabels } from "../components/revision/revision-picker.tsx";
+import type { RevisionBannerLabels, RevisionPickerLabels } from "../components/revision/revision-picker.tsx";
 
 // Story copy for the Revision components: the labels the app passes from its
 // messages (apps/web/messages), in English and Arabic.
@@ -72,7 +72,39 @@ export const replacementActionsLabels: Record<Locale, ReplacementActionsLabels> 
   },
 };
 
+const revisionName = (locale: Locale) => (revisionNo: number) => (revisionNo > 0 ? `Rev ${revisionNo}` : { en: "Original", ar: "الأصلي" }[locale]);
+const eventDate = (locale: Locale, at: string) => formatDate(new Date(at), locale);
+
 export const revisionPickerLabels: Record<Locale, RevisionPickerLabels> = {
-  en: { label: "Revision" },
-  ar: { label: "المراجعة" },
+  en: {
+    name: revisionName("en"),
+    tooltip: "Open an earlier revision",
+    title: "Revisions · each one came from a Code C",
+    current: "Current",
+    submitted: (at) => `Submitted ${eventDate("en", at)}`,
+    returned: (at) => `Returned ${eventDate("en", at)}`,
+  },
+  ar: {
+    name: revisionName("ar"),
+    tooltip: "فتح مراجعة سابقة",
+    title: "المراجعات · كل منها نتج عن الرمز C",
+    current: "الحالية",
+    submitted: (at) => `قُدّمت ${eventDate("ar", at)}`,
+    returned: (at) => `أُعيدت ${eventDate("ar", at)}`,
+  },
+};
+
+export const revisionBannerLabels: Record<Locale, RevisionBannerLabels> = {
+  en: {
+    name: revisionName("en"),
+    viewing: (revision, code) => (code ? `You are viewing ${revision} · Code ${code}` : `You are viewing ${revision}`),
+    replaced: (latest) => `Replaced by ${latest}. Read only — the form, attachments, chat and log exactly as they were.`,
+    goTo: (latest) => `Go to ${latest}`,
+  },
+  ar: {
+    name: revisionName("ar"),
+    viewing: (revision, code) => (code ? `أنت تعرض ${revision} · الرمز ${code}` : `أنت تعرض ${revision}`),
+    replaced: (latest) => `استُبدلت بـ ${latest}. للقراءة فقط — النموذج والمرفقات والمحادثة والسجل كما كانت.`,
+    goTo: (latest) => `الانتقال إلى ${latest}`,
+  },
 };
