@@ -95,6 +95,6 @@ describe("RP-1230: two visitors behind one egress address", () => {
 
   it("never puts the key in the api's log", () => {
     expect(log.join("")).toContain("/v1/verification/code");
-    expect(log.join("")).not.toContain(SECRET);
+    expect(log.join("")).not.toContain(SECRET); // not hidden-from: the api's log holds no key, a leak check, not a row hidden from a Member
   });
 });
