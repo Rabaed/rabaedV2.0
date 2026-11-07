@@ -20,8 +20,10 @@ import { fileVersionsVia } from "./git-files.ts";
 // - a match before a case file's first `defineCase` (a helper in the case file) names `<FILE>-helpers`.
 // - `planning/uat/*/harness/*.ts` is scanned too (helpers look for UI text themselves) and reports as `harness/<file>`;
 //   a role query's `name` string or regex is searched like any other text (a test id has none).
-// Not looked at: `planning/uat/*/test-cases.json` (the person-run sheet's words; a follow-up), and text assembled
-// from several keys.
+// - `planning/uat/*/test-cases.json` (RP-1234, the person-run sheet) is scanned too: each Test Case is one unit named by
+//   its id, and only its `title`, `steps` and `expected` are searched (the words a tester looks for), with the same rules.
+//   A Test Case and a `defineCase` block with the same id (SUB-01 is in both) are one hit naming both files.
+// Not looked at: text assembled from several keys.
 //
 // Checked by `scripts/check-uat-touch.test.ts`, in the unit project.
 
@@ -109,8 +111,31 @@ export function keyUsed(key: string, source: string): boolean {
 
 const defineCase = /defineCase\(\s*["'`]([^"'`]+)["'`]/g;
 
+// The fields of a Test Case in `test-cases.json` that hold the words a tester looks for (RP-1234). The rest
+// (jira, part, partName, who, priority, mode, waits, covers, needs) is bookkeeping; partName is a bare tab name
+// that would match its message by accident.
+const sheetFields = ["title", "steps", "expected"];
+
+/** The person-run sheet, `test-cases.json`: a list of Test Cases, each one unit named by its id like a `defineCase` block. */
+function sheetCases(file: CaseFile): { id: string; file: string; source: string }[] {
+  let list: unknown;
+  try {
+    list = JSON.parse(file.text);
+  } catch (error) {
+    throw new Error(`${file.file} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((entry: unknown) => {
+    const testCase = (entry ?? {}) as Record<string, unknown>;
+    if (typeof testCase.id !== "string") return [];
+    const source = sheetFields.flatMap((field) => (typeof testCase[field] === "string" ? [testCase[field] as string] : [])).join("\n");
+    return [{ id: testCase.id, file: file.file, source }];
+  });
+}
+
 /** A case file split into its cases: the text before the first one belongs to `<FILE>-helpers`. */
 export function casesOf(file: CaseFile): { id: string; file: string; source: string }[] {
+  if (/(?:^|[\\/])test-cases\.json$/.test(file.file)) return sheetCases(file);
   const stem = file.file.replace(/^.*[\\/]/, "").replace(/\.ts$/, "");
   const starts = [...file.text.matchAll(defineCase)].map((m) => ({ id: m[1]!, at: m.index }));
   const head = { id: /[\\/]harness[\\/]/.test(file.file) ? `harness/${stem}` : `${stem}-helpers`, at: 0 };
@@ -120,15 +145,23 @@ export function casesOf(file: CaseFile): { id: string; file: string; source: str
 
 /** The cases that use any changed message, with the messages (`locale:key`) that made each one a hit; in case-id order. */
 export function touchedCases(messages: Message[], files: CaseFile[]): CaseHit[] {
-  const hits: CaseHit[] = [];
+  const byId = new Map<string, CaseHit>();
   for (const c of files.flatMap(casesOf)) {
     const used = messages.filter(
       (m) => keyUsed(m.key, c.source) || [m.before, m.after].some((value) => value !== undefined && textUsed(value, c.source)) ||
         textBroken(m.before, m.after, c.source),
     );
-    if (used.length > 0) hits.push({ id: c.id, file: c.file, messages: [...new Set(used.map((m) => `${m.locale}:${m.key}`))] });
+    if (used.length === 0) continue;
+    // The person-run sheet and the automated case share an id (SUB-01 is in both): one hit, with both files.
+    const seen = byId.get(c.id);
+    const names = used.map((m) => `${m.locale}:${m.key}`);
+    if (!seen) byId.set(c.id, { id: c.id, file: c.file, messages: [...new Set(names)] });
+    else {
+      if (!seen.file.split(", ").includes(c.file)) seen.file += `, ${c.file}`;
+      seen.messages = [...new Set([...seen.messages, ...names])];
+    }
   }
-  return hits.sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
 }
 
 /** The case ids the body's "UAT cases touched:" line leaves out, or undefined when the body has no such line. */
@@ -167,22 +200,25 @@ export function branchMessages(repo: string, commit = "HEAD", spawn: typeof spaw
     });
 }
 
-/** The case files and the harness helpers they share, `planning/uat/<round>/{cases,harness}/*.ts`, as the working tree has them. */
+/** The case files and the harness helpers they share, `planning/uat/<round>/{cases,harness}/*.ts`, and each round's person-run sheet, `test-cases.json`, as the working tree has them. */
 export function caseFiles(repo: string): CaseFile[] {
   const root = join(repo, "planning", "uat");
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
     .filter((round) => round.isDirectory())
-    .flatMap((round) =>
-      ["cases", "harness"].flatMap((folder) => {
+    .flatMap((round) => {
+      const sheet = join(root, round.name, "test-cases.json");
+      const sheets = existsSync(sheet) ? [{ file: `planning/uat/${round.name}/test-cases.json`, text: readFileSync(sheet, "utf8") }] : [];
+      const scripts = ["cases", "harness"].flatMap((folder) => {
         const dir = join(root, round.name, folder);
         if (!existsSync(dir)) return [];
         return readdirSync(dir)
           .filter((f) => f.endsWith(".ts"))
           .sort()
           .map((f) => ({ file: `planning/uat/${round.name}/${folder}/${f}`, text: readFileSync(join(dir, f), "utf8") }));
-      }),
-    );
+      });
+      return [...scripts, ...sheets];
+    });
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
