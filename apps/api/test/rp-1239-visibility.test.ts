@@ -131,6 +131,18 @@ describe("scenario RP-1239-3: a deactivated value is never picked anew", () => {
     expect([res.statusCode, res.json().error], res.body).toEqual([422, "value_not_found"]);
   });
 
+  it("matches no archived Location in a register import, so the preview refuses the row instead of the confirm failing", async () => {
+    const zone = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/locations`, { code: "ZF", name: bilingual("Zone F"), parentId: null }), 201)).json().id;
+    await ok(patch(c1.caller, "locations", zone, { active: false }));
+    await ok(c1.caller.post(`/v1/projects/${at.projectId}/locations`, { code: "ZG", name: bilingual("Zone G"), parentId: null }), 201);
+    const rows = ["Pumps,MAR,EL,ZG", "Fans,MAR,EL,ZF"];
+    const file = { fileName: "Archived.csv", content: Buffer.from(["Subject,Type,Trade,Location", ...rows].join("\r\n")).toString("base64") };
+    const mapping = { subject: { column: 0 }, type: { column: 1 }, trade: { column: 2 }, location: { column: 3 } };
+    const res = await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/register-imports`, { file, sheet: "Archived", headerRow: 1, mapping }), 201);
+    const previewed = res.json() as { rows: { rowNo: number; reasons: string[] }[] };
+    expect(Object.fromEntries(previewed.rows.map((r) => [r.rowNo, r.reasons]))).toEqual({ 2: [], 3: ["location_unknown"] });
+  });
+
   it("refuses a grant that newly lists it, and keeps one that already covers it", async () => {
     const put = (body: unknown) => c1.caller.request("PUT", `/v1/participants/${at.k1ParticipantId}/visibility`, body);
     await ok(put({ trade: only(at.electrical), location: only(at.buildingA) }));

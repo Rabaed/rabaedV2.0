@@ -31,7 +31,7 @@ export function coveredBy(values: DimensionValue[], grant: Grant): Set<string> {
   return new Set([...grant.selected, ...impliedBySelection(values, grant.selected)]);
 }
 
-const icons: Record<DimensionKind, IconName> ={ trade: "category", location: "map-pin" };
+const icons: Record<DimensionKind, IconName> = { trade: "category", location: "map-pin" };
 
 /**
  * A Project Member's Visibility (gap rows 26 to 33): two cards, Trades and Locations, each with

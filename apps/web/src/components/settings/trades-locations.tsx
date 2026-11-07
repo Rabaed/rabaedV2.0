@@ -278,6 +278,8 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
 
   const list = rows(null, 0);
   const isTrades = tab === "trades";
+  // The places the Archive dialog says go with the Location.
+  const archivedPlaces = archiving?.kind === "location" ? placesIn(archiving.id) : 0;
 
   return (
     <section className="rounded-[14px] border border-border bg-surface" aria-label={t("title")} data-testid="trades-locations">
@@ -369,8 +371,8 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
             {archiving.kind === "scope" && subCount(archiving.id) > 0 && (
               <p className="text-sm text-muted">{t("archiveSubScopes", { count: subCount(archiving.id), n: formatNumber(subCount(archiving.id), locale) })}</p>
             )}
-            {archiving.kind === "location" && placesIn(archiving.id) > 0 && (
-              <p className="text-sm text-muted">{t("archivePlaces", { count: placesIn(archiving.id), n: formatNumber(placesIn(archiving.id), locale) })}</p>
+            {archivedPlaces > 0 && (
+              <p className="text-sm text-muted">{t("archivePlaces", { count: archivedPlaces, n: formatNumber(archivedPlaces, locale) })}</p>
             )}
             {rowError?.id === archiving.id && (
               <p role="alert" className="text-sm text-danger-fg">
