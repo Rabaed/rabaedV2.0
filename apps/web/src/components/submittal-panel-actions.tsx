@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  backwardKinds,
   offersRevision,
   outcomeLook,
   type BilingualText,
@@ -33,6 +32,9 @@ import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
+
+/** The kinds that move an item forward to its next holder. */
+const forwardKinds: readonly string[] = ["submit", "send"];
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -128,6 +130,8 @@ export function SubmittalPanelActionBar({
   const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks });
   const busy = opener.calls.pending || opener.waiting;
   const proposing = item.actions.transitions.some((tr) => tr.proposed);
+  // Only a move forward is the primary (Send for review, Sign & submit); a Return, a Send Back or a Cancel never is.
+  const primary = (tr: SubmittalPanelBarTransition) => forwardKinds.includes(tr.kind) && (!proposing || tr.proposed === true);
   const byKey = new Map(item.actions.transitions.map((tr) => [tr.key, tr]));
   const save = editing && form?.editable && saveDraft ? saveDraft : null;
 
@@ -135,9 +139,21 @@ export function SubmittalPanelActionBar({
     <>
       <OpenerAlert opener={opener} className="basis-full" />
       {save && form && <SaveStatus locale={locale} savedAt={form.savedAt} changedByOthers={save.changedByOthers} />}
+      {/* Where it waits when the viewer has nothing to press: before Download PDF (V3 frame 19); the pool's chip after it, beside Pick up (frame 18). */}
+      {bar.chip && bar.chip.kind !== "pool" && (
+        <SubmittalPanelWaiting
+          chip={bar.chip}
+          locale={locale}
+          labels={{
+            pool: (count) => t("pool", { count, n: String(count) }),
+            pickedUp: (name, weeks) => (weeks === null ? t("pickedUpNoAge", { name }) : t("pickedUp", { name, weeks, n: String(Math.max(1, Math.floor(weeks))) })),
+            viewOnly: t("viewOnly"),
+          }}
+        />
+      )}
       {/* Its Documental Record once closed, its Working Copy while open (V7): always there, for everyone. */}
       {item.outcome ? <DownloadRecordButton workItemId={item.id} status={item.documentalRecord} /> : <DownloadWorkingCopyButton workItemId={item.id} />}
-      {bar.chip && (
+      {bar.chip?.kind === "pool" && (
         <SubmittalPanelWaiting
           chip={bar.chip}
           locale={locale}
@@ -163,10 +179,11 @@ export function SubmittalPanelActionBar({
       {bar.discardRevision && <WorkItemRevision workItemId={item.id} projectId={item.projectId} canCreate={false} canDiscard look="page" />}
       {bar.createRevision && <CreateRevisionButton key={item.id} workItemId={item.id} />}
       {bar.createReplacement && <CreateReplacementButton key={item.id} workItemId={item.id} />}
-      {bar.buttons.map((tr) => (
+      {/* The other moves first (a Return, a Cancel), then Return to pool, then the forward one, the primary, last. */}
+      {bar.buttons.filter((tr) => !primary(tr)).map((tr) => (
         <Button
           key={tr.key}
-          variant={backwardKinds.includes(tr.kind) || (proposing && !tr.proposed) ? "secondary" : "primary"}
+          variant={primary(tr) ? "primary" : "secondary"}
           disabled={busy}
           aria-busy={opener.waiting || undefined}
           onClick={() => opener.open(tr)}
@@ -182,6 +199,19 @@ export function SubmittalPanelActionBar({
           {tActions("returnToPool")}
         </Button>
       )}
+      {bar.buttons.filter(primary).map((tr) => (
+        <Button
+          key={tr.key}
+          variant={primary(tr) ? "primary" : "secondary"}
+          disabled={busy}
+          aria-busy={opener.waiting || undefined}
+          onClick={() => opener.open(tr)}
+          className="gap-2"
+        >
+          {tr.label[locale]}
+          {tr.proposed && <Badge tone="neutral">{tActions("proposed")}</Badge>}
+        </Button>
+      ))}
       {bar.pickUp && (
         <Button disabled={opener.calls.pending} onClick={() => void opener.calls.send("pick-up")} className="gap-2">
           <Icon name="hand-grab" size={17} />

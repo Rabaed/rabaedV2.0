@@ -73,6 +73,11 @@ export type SubmittalPanelProps = {
   width?: number;
   /** Its width is being dragged (or first painted): no width transition (RP-1063). */
   resizing?: boolean;
+  /**
+   * It covers the page beside the sidebar (Full: the item's page, RP-1237 row 1). What it covers (`.sdp-behind`)
+   * is then hidden, so nobody reads or tabs into a List they can't see.
+   */
+  covers?: boolean;
   /** On its inline-start edge: the drag edge (`SubmittalPanelGrip`, RP-1063). */
   edge?: ReactNode;
   /** The ids of what names the panel for screen readers: the identity's number and Subject. */
@@ -125,6 +130,7 @@ export function SubmittalPanel({
   onClose,
   width = submittalPanelNormalWidth,
   resizing = false,
+  covers = false,
   edge,
   labelledBy,
   label,
@@ -201,6 +207,7 @@ export function SubmittalPanel({
       data-mode={mode}
       data-layout={layout}
       data-resizing={resizing || undefined}
+      data-covers={covers || undefined}
       // The tablet's and phone's layouts span the screen edge to edge (a scrollbar beside them stays outside).
       style={fullWidth ? undefined : { width: `min(${width}px, 100vw)` }}
       className={cn(

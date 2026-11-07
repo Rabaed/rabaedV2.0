@@ -202,6 +202,7 @@ export function SubmittalPanelHost({
         onClose={close}
         width={size.width}
         resizing={size.resizing}
+        covers={size.pressed === "full"}
         edge={<SubmittalPanelGrip size={size} locale={locale} labels={sizeLabels} />}
         topBarEnd={<SubmittalPanelSizeSwitch size={size} labels={sizeLabels} />}
         labelledBy={item ? ids.labelledBy : undefined}
