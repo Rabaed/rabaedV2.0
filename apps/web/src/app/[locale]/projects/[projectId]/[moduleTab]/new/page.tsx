@@ -56,8 +56,9 @@ export default async function ModuleTabNewPage({
       photosField={photosField.key}
       askDescription={!!description}
       photosMissing={missing !== undefined}
-      trades={covered.trade}
-      locations={covered.location}
+      // No archived Trade or Location is picked anew; a Draft keeps its own (RP-1239).
+      trades={covered.trade.filter((v) => v.active || v.id === draft?.trade.id)}
+      locations={covered.location.filter((v) => v.active || v.id === draft?.location?.id)}
       draft={
         draft && documents
           ? {

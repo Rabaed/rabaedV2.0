@@ -1,12 +1,12 @@
 import type { BilingualText, DimensionValues, Locale, Scope, WorkItemDetail } from "@rabaed/domain";
 import type { BuiltInChoices } from "@rabaed/ui";
-import { treeOrder } from "@/lib/dimension-tree";
+import { treeOrder } from "./dimension-tree.ts";
 
 // What a Form's Built-in Fields offer (RP-270): the Trades and Locations the
 // filler's own Visibility covers, so they can always see what they raise, and
-// the Project's active Scopes. An item's own values are always among them, so
-// the Form shows them even when no longer offered (a deactivated Scope stays on
-// the items that use it).
+// the Project's active Scopes, none of them archived. An item's own values are
+// always among them, so the Form shows them even when no longer offered (a
+// deactivated Trade, Location or Scope stays on the items that use it).
 
 // Unicode left-to-right isolate and its closing pop, for codes inside labels.
 const LRI = String.fromCodePoint(0x2066);
@@ -21,8 +21,9 @@ export function fillingChoices(
   locale: Locale,
   item?: Pick<WorkItemDetail, "trade" | "location" | "scopes">,
 ): BuiltInChoices {
-  const trades = covered.trade.map((v) => ({ id: v.id, label: labelled(v.name, v.code, locale), code: v.code }));
-  const locations = treeOrder(covered.location).map((v) => ({
+  // An archived Trade or Location is never picked anew (RP-1239); the item's own is added back below.
+  const trades = covered.trade.filter((v) => v.active).map((v) => ({ id: v.id, label: labelled(v.name, v.code, locale), code: v.code }));
+  const locations = treeOrder(covered.location.filter((v) => v.active)).map((v) => ({
     id: v.id,
     label: `${"— ".repeat(v.level)}${labelled(v.name, v.code, locale)}`,
   }));

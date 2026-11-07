@@ -7,7 +7,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { useHandover, type HandoverOutcome } from "@/components/handover";
 import { useRouter } from "@/i18n/navigation";
-import { impliedBySelection, treeOrder } from "@/lib/dimension-tree";
+import { impliedBySelection, pickable, treeOrder } from "@/lib/dimension-tree";
 import { PathLabel } from "./participants-parts";
 
 export type Grant = { isAll: boolean; selected: ReadonlySet<string> };
@@ -25,7 +25,13 @@ export function stored(values: DimensionValue[], grant: Grant) {
   return { isAll: false, valueIds: [...grant.selected].filter((id) => !implied.has(id)).sort() };
 }
 
-const icons: Record<DimensionKind, IconName> = { trade: "category", location: "map-pin" };
+/** What a saved grant covers of `values`: all of them, or the chosen ones with everything beneath. */
+export function coveredBy(values: DimensionValue[], grant: Grant): Set<string> {
+  if (grant.isAll) return new Set(values.map((v) => v.id));
+  return new Set([...grant.selected, ...impliedBySelection(values, grant.selected)]);
+}
+
+const icons: Record<DimensionKind, IconName> ={ trade: "category", location: "map-pin" };
 
 /**
  * A Project Member's Visibility (gap rows 26 to 33): two cards, Trades and Locations, each with
@@ -102,7 +108,7 @@ export function MemberVisibilityEditor({
             allLabel={t(kind === "trade" ? "allOfCompanyTrades" : "allOfCompanyLocations")}
             caption={t("memberCaption")}
             emptyText={t("noValues")}
-            values={options[kind]}
+            values={pickable(options[kind], coveredBy(options[kind], saved[kind]))}
             grant={draft[kind]}
             readOnly={readOnly}
             locale={locale}

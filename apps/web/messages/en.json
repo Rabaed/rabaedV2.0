@@ -940,6 +940,9 @@
     "tooDeep": "Floors are the lowest level.",
     "notFound": "This is no longer available. Refresh the page.",
     "parentArchived": "Restore its Scope first.",
+    "parentLocationArchived": "Restore the Location it is in first.",
+    "generalTrade": "The General Trade can't be archived.",
+    "archivePlaces": "{count, plural, one {The place inside it is archived with it.} other {The {n} places inside it are archived with it.}} Restoring it brings back this Location only.",
     "unavailable": "Something went wrong. Try again."
   },
   "projectVisibility": {

@@ -25,7 +25,8 @@ import { useRouter } from "@/i18n/navigation";
 // Project Settings → Trades & Locations to the owner's reference (RP-1156, gap rows 3 to 19): one card
 // with a Trades and a Locations tab, a search, Expand all / Collapse all and a tree. Every Project Member
 // reads it; a Project Admin adds Trades, Scopes, Sub-scopes and Locations, and renames, archives and
-// restores Scopes and Sub-scopes (row 11: Trades and Locations have no rename or archive yet).
+// restores each of them (row 11; RP-1239). The General Trade is renamed but never archived, and
+// archiving a Location archives every place inside it (the API does that).
 
 type Kind = "trade" | "scope" | "location";
 
@@ -37,7 +38,7 @@ type Node = {
   name: BilingualText;
   /** Trades and Locations; Scopes have none (row 8). */
   code: string | null;
-  /** Scopes only: an archived one shows with "Show archived" (row 11). */
+  /** An archived one shows with "Show archived" (row 11). */
   active: boolean;
   /** Locations: 1 Zone, 2 Building, 3 Floor. Trades 1, Scopes 2, Sub-scopes 3. */
   depth: number;
@@ -53,7 +54,7 @@ const plain = (s: string) => s.toLocaleLowerCase();
 /** Trades with their Scopes and Sub-scopes beneath them, as one tree. */
 function tradeNodes(trades: DimensionValue[], scopes: Scope[]): Node[] {
   return [
-    ...trades.map((t) => ({ id: t.id, parentId: null, kind: "trade" as const, name: t.name, code: t.code, active: true, depth: 1 })),
+    ...trades.map((t) => ({ id: t.id, parentId: null, kind: "trade" as const, name: t.name, code: t.code, active: t.active, depth: 1 })),
     ...scopes.map((s) => ({
       id: s.id,
       parentId: s.parentId ?? s.tradeId,
@@ -67,7 +68,13 @@ function tradeNodes(trades: DimensionValue[], scopes: Scope[]): Node[] {
 }
 
 const locationNodes = (locations: DimensionValue[]): Node[] =>
-  locations.map((l) => ({ id: l.id, parentId: l.parentId, kind: "location" as const, name: l.name, code: l.code, active: true, depth: l.depth }));
+  locations.map((l) => ({ id: l.id, parentId: l.parentId, kind: "location" as const, name: l.name, code: l.code, active: l.active, depth: l.depth }));
+
+/** The General Trade every Project has: renamed, never archived (RP-1239, decision 1). */
+const GENERAL_TRADE = "GEN";
+
+/** Where a row's rename and archive go. */
+const pathOf = (n: Node) => `/${n.kind === "scope" ? "scopes" : n.kind === "trade" ? "trades" : "locations"}/${n.id}`;
 
 /** The text with each match of `query` marked (row 5). */
 function Marked({ text, query }: { text: string; query: string }) {
@@ -105,10 +112,14 @@ function useCommand() {
     trade_not_found: t("notFound"),
     parent_not_found: t("notFound"),
     parent_deactivated: t("parentArchived"),
+    general_trade: t("generalTrade"),
   };
 
-  /** The refusal's message, or null when it went through. `done` is the toast; null shows none. */
-  async function send(path: string, method: "POST" | "PATCH", body: unknown, done: string | null): Promise<string | null> {
+  /**
+   * The refusal's message, or null when it went through. `done` is the toast; null shows none.
+   * `own` names a refusal's message for this command where it differs (a Location's parent).
+   */
+  async function send(path: string, method: "POST" | "PATCH", body: unknown, done: string | null, own: Record<string, string> = {}): Promise<string | null> {
     setPending(true);
     try {
       const res = await fetch(`/api/v1${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -118,7 +129,7 @@ function useCommand() {
         return null;
       }
       const { error: code } = (await res.json().catch(() => ({}))) as { error?: string };
-      return errors[code ?? ""] ?? t("unavailable");
+      return own[code ?? ""] ?? errors[code ?? ""] ?? t("unavailable");
     } catch {
       return t("unavailable");
     } finally {
@@ -151,14 +162,21 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
 
   const all = useMemo(() => (tab === "trades" ? tradeNodes(trades, scopes) : locationNodes(locations)), [tab, trades, scopes, locations]);
-  const archivedCount = scopes.filter((s) => !s.active).length;
-  // Row 4: every Trade, Scope and Sub-scope not archived (a Sub-scope under an archived Scope is hidden with it).
+  // Row 4: every Trade, Scope and Sub-scope (or every Location) not archived; anything under an
+  // archived row is hidden with it.
+  const activeTrade = new Set(trades.filter((v) => v.active).map((v) => v.id));
   const activeScope = new Set(scopes.filter((s) => s.active).map((s) => s.id));
-  const shownScopes = scopes.filter((s) => activeScope.has(s.id) && (s.parentId === null || activeScope.has(s.parentId)));
-  const counts = { trades: trades.length + shownScopes.length, locations: locations.length };
+  const shownScopes = scopes.filter((s) => activeTrade.has(s.tradeId) && activeScope.has(s.id) && (s.parentId === null || activeScope.has(s.parentId)));
+  const counts = { trades: activeTrade.size + shownScopes.length, locations: locations.filter((l) => l.active).length };
+  const archivedCount = tab === "trades" ? trades.filter((v) => !v.active).length + scopes.filter((s) => !s.active).length : locations.filter((l) => !l.active).length;
   const subCount = (id: string) => scopes.filter((s) => s.parentId === id && s.active).length;
+  /** The active places inside a Location, at every level: archived with it. */
+  const placesIn = (id: string): number => {
+    const kids = locations.filter((l) => l.parentId === id && l.active);
+    return kids.reduce((n, l) => n + 1 + placesIn(l.id), 0);
+  };
 
-  // A Scope that is archived (or under one) is shown only with "Show archived".
+  // A row that is archived (or under one) is shown only with "Show archived".
   const nodes = useMemo(() => {
     const byId = new Map(all.map((n) => [n.id, n]));
     const archived = (n: Node): boolean => !n.active || (n.parentId !== null && !!byId.get(n.parentId) && archived(byId.get(n.parentId)!));
@@ -205,13 +223,15 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
 
   async function setActive(node: Node, active: boolean) {
     // A Sub-scope is offered on its own flag, so archiving a Scope archives its active Sub-scopes first.
-    if (!active) {
+    // A Location's places are archived with it by the API.
+    if (!active && node.kind === "scope") {
       for (const sub of scopes.filter((s) => s.parentId === node.id && s.active)) {
         const refused = await send(`/scopes/${sub.id}`, "PATCH", { active: false }, null);
         if (refused) return setRowError({ id: node.id, message: refused });
       }
     }
-    const message = await send(`/scopes/${node.id}`, "PATCH", { active }, t(active ? "restoredToast" : "archivedToast", { name: node.name[locale] }));
+    const own: Record<string, string> = node.kind === "location" ? { parent_deactivated: t("parentLocationArchived") } : {};
+    const message = await send(pathOf(node), "PATCH", { active }, t(active ? "restoredToast" : "archivedToast", { name: node.name[locale] }), own);
     setRowError(message ? { id: node.id, message } : null);
     if (!message) setArchiving(null);
   }
@@ -243,7 +263,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
               }}
               onRenameDone={async (name) => {
                 if (name === null) return setRenaming(null);
-                const message = await send(`/scopes/${n.id}`, "PATCH", { name }, t("renamedToast"));
+                const message = await send(pathOf(n), "PATCH", { name }, t("renamedToast"));
                 setRowError(message ? { id: n.id, message } : null);
                 if (!message) setRenaming(null);
               }}
@@ -269,6 +289,8 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
               setTab(v as Tab);
               setQuery("");
               setRenaming(null);
+              // Each tab counts its own archived rows.
+              setShowArchived(false);
             }}
           >
             <TabsList aria-label={t("title")}>
@@ -302,9 +324,9 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
             </Button>
           </div>
         </div>
-        {(isTrades && archivedCount > 0) || canEdit ? (
+        {archivedCount > 0 || canEdit ? (
           <div className="flex flex-wrap items-center gap-4">
-            {isTrades && archivedCount > 0 && (
+            {archivedCount > 0 && (
               <Field label={t("showArchived", { n: formatNumber(archivedCount, locale) })} layout="inline">
                 <Checkbox checked={showArchived} onCheckedChange={(c) => setShowArchived(c === true)} />
               </Field>
@@ -339,9 +361,16 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
       {adding && <AddDialog projectId={projectId} adding={adding} tradeOf={(n) => tradeIdOf(n, all)} onClose={() => setAdding(null)} />}
       {archiving && (
         <Dialog open onOpenChange={(open) => !open && setArchiving(null)}>
-          <DialogContent closeLabel={t("close")} title={t("archiveTitle", { name: archiving.name[locale] })} description={t("archiveBody")}>
-            {scopes.some((s) => s.parentId === archiving.id && s.active) && (
+          <DialogContent
+            closeLabel={t("close")}
+            title={t("archiveTitle", { name: archiving.code && archiving.kind === "trade" ? `${archiving.name[locale]} (${archiving.code})` : archiving.name[locale] })}
+            description={t("archiveBody")}
+          >
+            {archiving.kind === "scope" && subCount(archiving.id) > 0 && (
               <p className="text-sm text-muted">{t("archiveSubScopes", { count: subCount(archiving.id), n: formatNumber(subCount(archiving.id), locale) })}</p>
+            )}
+            {archiving.kind === "location" && placesIn(archiving.id) > 0 && (
+              <p className="text-sm text-muted">{t("archivePlaces", { count: placesIn(archiving.id), n: formatNumber(placesIn(archiving.id), locale) })}</p>
             )}
             {rowError?.id === archiving.id && (
               <p role="alert" className="text-sm text-danger-fg">
@@ -413,7 +442,8 @@ function TreeRow({
   // A Floor holds nothing; a Sub-scope has no Sub-scopes; an archived Scope takes no new ones.
   const canAdd = canEdit && node.active && node.depth < 3;
   const addLabel = node.kind === "trade" ? t("addScope") : node.kind === "scope" ? t("addSubScope") : t("addPlace");
-  const isScope = node.kind === "scope";
+  // The General Trade is renamed but never archived (RP-1239, decision 1).
+  const isGeneral = node.kind === "trade" && node.code === GENERAL_TRADE;
 
   return (
     <li
@@ -466,17 +496,19 @@ function TreeRow({
                     {addLabel}
                   </RowAction>
                 )}
-                {isScope && node.active && (
+                {node.active && (
                   <>
                     <RowAction icon="pencil" onClick={onRename} disabled={pending} name={name}>
                       {t("rename")}
                     </RowAction>
-                    <RowAction icon="eye-off" onClick={onArchive} disabled={pending} name={name}>
-                      {t("archive")}
-                    </RowAction>
+                    {!isGeneral && (
+                      <RowAction icon="eye-off" onClick={onArchive} disabled={pending} name={name}>
+                        {t("archive")}
+                      </RowAction>
+                    )}
                   </>
                 )}
-                {isScope && !node.active && (
+                {!node.active && (
                   <RowAction icon="refresh" onClick={onRestore} disabled={pending} name={name}>
                     {t("restore")}
                   </RowAction>
