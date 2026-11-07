@@ -156,7 +156,8 @@ export const notificationSettingsView = z.object({
   preferredLanguage: z.enum(locales),
   /** Whether the Weekly Step Age report row applies to them (they hold Assign on a Project). */
   receivesWeeklyReport: z.boolean(),
-  projects: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText, muted: z.boolean() })),
+  /** Their Projects, each with their mute and their own Positions on it (RP-1154: "Positions on my Projects"). */
+  projects: z.array(z.object({ id: z.uuid(), code: z.string(), name: bilingualText, muted: z.boolean(), positions: z.array(bilingualText) })),
 });
 export type NotificationSettingsView = z.infer<typeof notificationSettingsView>;
 

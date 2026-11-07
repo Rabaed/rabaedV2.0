@@ -38,8 +38,16 @@ export function getNotificationSettings(db: Db, memberId: string): Promise<Notif
       left join member_notification_preference p on p.member_id = m.id
       where m.id = app.current_member_id()
     `.execute(trx);
-    const { rows: projects } = await sql<{ id: string; code: string; name: BilingualText; muted: boolean }>`
-      select p.id, p.code, p.name, exists (select 1 from project_mute m where m.project_id = p.id) as muted
+    // Their own Positions on each Project, in the Positions' order ("Positions on my Projects", RP-1154).
+    const { rows: projects } = await sql<{ id: string; code: string; name: BilingualText; muted: boolean; positions: BilingualText[] }>`
+      select p.id, p.code, p.name, exists (select 1 from project_mute m where m.project_id = p.id) as muted,
+        coalesce((
+          select jsonb_agg(pos.name order by pos.sort, pos.key)
+          from project_member pm
+          join project_member_position pmp on pmp.project_member_id = pm.id and pmp.project_id = pm.project_id
+          join position pos on pos.id = pmp.position_id
+          where pm.project_id = p.id and pm.member_id = app.current_member_id() and pm.status = 'active'
+        ), '[]'::jsonb) as positions
       from project p
       where p.id in (select app.current_project_ids())
       order by p.code, p.id

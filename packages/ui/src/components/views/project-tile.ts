@@ -1,6 +1,13 @@
 /** The letter tile's classes, one per colour: tomato, blue, green, purple, orange (the design kit's Projects page). Static so Tailwind finds them. */
 export const projectTileClasses = ["bg-project-tile-1", "bg-project-tile-2", "bg-project-tile-3", "bg-project-tile-4", "bg-project-tile-5"] as const;
 
+/**
+ * Small text on each tile colour, for a tile too small for large text (a Project code at 10–11px,
+ * RP-1154): white (`text-on-avatar`) only where it reaches 4.5:1 (blue, purple); dark navy on tomato, green and orange.
+ * The tile colours are the same in every theme, and so is the navy.
+ */
+export const projectTileSmallTextClasses = ["text-sidebar", "text-on-avatar", "text-sidebar", "text-on-avatar", "text-sidebar"] as const;
+
 /** A Project's own colour, from its id alone: the same on every page and for every Member. */
 export function projectTileIndex(projectId: string): number {
   let sum = 0;
