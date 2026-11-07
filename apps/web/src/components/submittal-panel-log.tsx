@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, workItemListHref, type Locale, type Outcome, type ProjectSummary, type SignedInMember, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
+import { formatNumber, type Locale, type Outcome, type ProjectSummary, type SignedInMember, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
 import {
   SubmittalApprovalLog,
   SubmittalInternalCommunication,
@@ -17,6 +17,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import { historyMoveLabel } from "@/lib/history-move-label";
+import { raisedFromHref } from "@/lib/raised-from-href";
 
 /** One read for one url: what came back, or null when it couldn't be read. */
 type Read<T> = { url: string; value: T | null };
@@ -105,7 +106,7 @@ export function useSubmittalPanelLog({
     outcomes: typeOutcomes,
     raisedItems: item.raisedItems,
   });
-  const documentNumber = item.documentNumber;
+  const commentsHref = (typeCode: string) => raisedFromHref(item.projectId, typeCode, item.documentNumber) ?? undefined;
   const log = !history.value ? (
     <p role="alert" className="text-[12.5px] text-muted">
       {t("unavailable")}
@@ -116,7 +117,7 @@ export function useSubmittalPanelLog({
       labels={labels}
       entries={entries}
       // The Snag List filtered to the Comments raised from this item, where the viewer again sees only their own.
-      commentsHref={documentNumber ? (typeCode) => workItemListHref(item.projectId, { module: "snag_list", type: [typeCode], raisedFrom: [documentNumber] }) : undefined}
+      commentsHref={commentsHref}
       linkAs={Link}
     />
   );

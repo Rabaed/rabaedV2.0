@@ -135,9 +135,11 @@ export const ownerFilterValue = z
  * What an item was raised from, as the Snag List's "Raised from" filter has it (RP-94):
  * `manual` for one raised by hand, else the Document Number its `raised_from` Link names.
  * A number, never an id: the Link gives the viewer no more than that of an item they can't see (E1).
+ * A Revision's number is its first item's with " Rev n" (n from 1), so that suffix is taken too:
+ * "Open in Snag List" filters by it at every Revision (RP-1119).
  */
 export const raisedFromManual = "manual";
-export const raisedFromFilterValue = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/);
+export const raisedFromFilterValue = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}(?: Rev [1-9][0-9]{0,3})?$/);
 
 /** The Created date filter (RP-410): items whose date the viewer sees is in the last this many days. */
 export const createdWithinDays = [7, 30, 90] as const;

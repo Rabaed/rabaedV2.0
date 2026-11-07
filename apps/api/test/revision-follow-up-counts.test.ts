@@ -192,7 +192,7 @@ describe("a Revision lists each follow-up its previous item left (seam 1)", () =
     await take(mohammed.caller, chain.revision, "revise_c", { answers: { ...VERIFIED, remarks: "Still open" } });
     const listed = (await rows(hafiz.caller, chain.revision)).map((r) => r.id).sort();
     expect(listed).toEqual([chain.closed, chain.open].sort());
-    // The Snag List by Rev 0's number finds exactly these. Rev 1's own two (its number, " Rev 1", is no filter value) are not listed.
+    // The Snag List by Rev 0's number finds exactly these. Rev 1's own two, raised from "<number> Rev 1", are not listed.
     const rev0 = (await detail(hafiz.caller, chain.wir)).documentNumber!;
     expect((await snagsFrom(hafiz.caller, rev0)).map((s) => s.id).sort()).toEqual(listed);
     const own = (await snagList(hafiz.caller)).filter((s) => s.raisedFrom?.workItemId === chain.revision).map((s) => s.id);

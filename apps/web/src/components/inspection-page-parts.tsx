@@ -1,11 +1,12 @@
 "use client";
 
-import { formatNumber, workItemListHref, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import { Badge, cn, DocNo, focusRing, Icon, type IconName } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import { plainDateTime, type HistoryText } from "@/lib/inspection";
+import { raisedFromHref } from "@/lib/raised-from-href";
 
 // A WIR's page parts that read only what the item read and its history give (RP-655, from the
 // owner's Inspections (WIR) Screen Board): the line under its Subject, who issued its code, the
@@ -106,7 +107,7 @@ export function InspectionCounts({ item, locale }: { item: WorkItemDetail; local
         {raisedTypes.map(({ code, icon }) => {
           const raised = item.raisedItems.find((r) => r.type.code === code);
           const title = t(`fields.raisedItemTypes.${code}`);
-          const href = item.documentNumber ? workItemListHref(item.projectId, { module: "snag_list", type: [code], raisedFrom: [item.documentNumber] }) : null;
+          const href = raisedFromHref(item.projectId, code, item.documentNumber);
           return (
             <div key={code} data-testid={`raised-item-counts-${code}`}>
               <CountCard icon={icon} title={title} counts={counts(raised?.open ?? 0, raised?.closed ?? 0)} href={href} />
@@ -162,7 +163,9 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
           </Link>
         </p>
       )}
-      {counts?.items.map((f) => (
+      {counts?.items.map((f) => {
+        const href = raisedFromHref(item.projectId, f.type.code, counts.documentNumber);
+        return (
           <section key={f.type.code} aria-labelledby={`inspection-previous-${f.type.code}`} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
             <div>
               <h2 id={`inspection-previous-${f.type.code}`} className="font-semibold">
@@ -197,10 +200,10 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
                 {tInspection("revision.neverBlocks")}
               </p>
             )}
-            {/* The Snag List filters by Rev 0's number only: a Revision's (" Rev 1") is no filter value, so it would open unfiltered. */}
-            {counts.documentNumber && counts.revisionNo === 0 && (
+            {/* The Snag List filtered to the previous Revision's number, " Rev n" included (RP-1119). */}
+            {href && (
               <Link
-                href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [counts.documentNumber] })}
+                href={href}
                 className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-surface-subtle px-3 text-sm font-semibold hover:bg-hover md:min-h-9"
               >
                 <Icon name="filter" size={16} />
@@ -208,7 +211,8 @@ export function InspectionRevision({ item, previous, locale }: { item: WorkItemD
               </Link>
             )}
           </section>
-        ))}
+        );
+      })}
     </div>
   );
 }
