@@ -450,12 +450,27 @@ class Runner {
     };
   }
 
-  /** `side`'s raiser creates the item as a Draft with its Datasheet (or company profile) and any Sample photo. */
+  /**
+   * `side`'s raiser creates the item as a Draft with its Datasheet (or company profile) and any Sample photo; a `bare`
+   * one with its Manufacturer, supplier, Trade and Location only. Its `links` go under Related submittals and as free Links.
+   */
   private async draft(item: SampleSubmittal | SampleDraft, side: Side): Promise<string> {
     const raiser = this.as[SIDES[side].raiser];
     const type = "type" in item ? item.type : "MAR";
-    const answers = this.answers(item);
+    const bare = "bare" in item && item.bare;
+    const links: string[] = [];
+    for (const title of ("links" in item && item.links) || []) {
+      const [target] = await this.titled(title);
+      if (!target) throw new Error("Sample project: a linked submittal is not on the Project");
+      links.push(target);
+    }
+    const full = this.answers(item);
+    const answers = bare
+      ? { manufacturer: full.manufacturer, supplier: full.supplier, trade: full.trade, location: full.location }
+      : { ...full, ...(links.length ? { related_submittals: links } : {}) };
     const { id } = await raiser<{ id: string }>("POST", `/v1/projects/${this.projectId}/work-items`, { type, title: item.title, answers });
+    for (const target of links) await raiser("POST", `/v1/work-items/${id}/links`, { workItemId: target });
+    if (bare) return id;
     const lines = [item.title, item.product.description, "Demo document: made up for the Rabaed demo."];
     if (type === "SAR") await this.upload(raiser, id, "company_profile", "company-profile.pdf", "application/pdf", demoPdf(lines));
     else await this.upload(raiser, id, "datasheet", `${item.product.model.replaceAll(/[^A-Za-z0-9]+/g, "-")}-datasheet.pdf`, "application/pdf", demoPdf(lines));
@@ -464,15 +479,20 @@ class Runner {
   }
 
   async submittal(item: SampleSubmittal) {
-    const { hafiz, ali } = this.as;
-    const id = await this.draft(item, "tmc");
-    await this.act(hafiz, id, "send_for_review");
+    const side = item.owner ?? "tmc";
+    const raiser = this.as[SIDES[side].raiser];
+    const pm = this.as[SIDES[side].pm];
+    const id = await this.draft(item, side);
+    if (item.end === "draft") return;
+    await this.act(raiser, id, "send_for_review");
     if (item.end === "with_pm") return;
+    // The PM's Internal Review Step names its Cancel cancel_review (the Contractor Engineer's is cancel).
+    if (item.end === "cancelled") return this.act(pm, id, "cancel_review");
     if (item.end === "returned") {
-      return this.act(ali, id, "return", { answers: { reason: "Add the model's test certificate and resend. / أضف شهادة اختبار الطراز وأعد الإرسال." } });
+      return this.act(pm, id, "return", { answers: { reason: "Add the model's test certificate and resend. / أضف شهادة اختبار الطراز وأعد الإرسال." } });
     }
-    await this.act(ali, id, "submit", { answers: { cover_note: `${item.product.name} for ${item.location}, as specified in ${item.product.specificationSection}.` } });
-    await this.reviewed(id, item, "tmc");
+    await this.act(pm, id, "submit", { answers: { cover_note: `${item.product.name} for ${item.location}, as specified in ${item.product.specificationSection}.` } });
+    await this.reviewed(id, item, side);
   }
 
   /**
@@ -662,5 +682,6 @@ class Runner {
     if (item.end === "on_hold") return this.act(hafiz, id, "put_on_hold");
     await this.act(hafiz, id, "resolve", { answers: resolution("Done and checked on site. / تم التنفيذ والتحقق في الموقع.") });
     if (item.end === "closed") await this.act(raiser, id, "close");
+    if (item.end === "returned_to_open") await this.act(raiser, id, "return_to_open", { answers: { reason: "Two breakers are still unlabelled. / قاطعان ما زالا بلا ملصقات." } });
   }
 }

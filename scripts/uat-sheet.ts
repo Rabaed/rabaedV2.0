@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { UAT_ROLES, type UatRole } from "../apps/api/src/demo/uat-projects-plan.ts";
 import { credentialsFrom, type Credentials } from "./jira-upload.ts";
 
 // The UAT test sheet (RP-1163): one self-contained HTML file a tester opens with no server or
@@ -46,6 +47,8 @@ export interface SheetCase {
   expected: string;
   /** What the case needs beyond the demo: see NEEDS. Empty for a case read from Jira. */
   needs: Need[];
+  /** The UAT Project whose section the case is in (RP-1248): a UatRole's n, such as "01". None: its Part's section. */
+  role?: string;
   url: string;
 }
 
@@ -133,6 +136,8 @@ export interface ScenarioRow {
   round?: string;
   waits?: string;
   needs?: string[];
+  /** The UAT Project whose section the case is in (RP-1248), as UAT_ROLES numbers them. */
+  role?: string;
 }
 
 const unknownNeeds = (needs: readonly string[] = []) => needs.filter((n) => !(NEEDS as readonly string[]).includes(n));
@@ -197,6 +202,7 @@ export function casesFromScenarios(text: string, uatUrl: string): SheetCase[] {
       steps: numberedSteps(p.steps ?? "").map(words),
       expected: words(plain(p.expected ?? "")),
       needs,
+      ...(p.role ? { role: p.role } : {}),
       url: startUrl(p.part, uatUrl),
     };
   });
@@ -360,19 +366,37 @@ export const PEOPLE_MAP = {
 export interface Section {
   /** 1, 2, 3… for the tester's sections; 0 for the last one, the cases the UAT owner runs. */
   n: number;
+  /** The Part's code, a role section's Project code (UAT01), or OWNER. */
   part: string;
   name: Bilingual;
+  /** A role section's UAT Project, which its cases are all run in. */
+  project?: Bilingual;
   cases: SheetCase[];
 }
 
+/** A role section's title (RP-1248): who to sign in as, and the UAT Project to open. */
+const roleTitle = (role: UatRole): Bilingual => ({
+  en: `Sign in as ${role.personName.en} · open ${role.name.en}`,
+  ar: `سجّل الدخول باسم ${role.personName.ar} · افتح ${role.name.ar}`,
+});
+
 /**
- * The sheet's sections (RP-1204): the tester's cases by Part, in the order the Parts first appear, numbered 1, 2,
- * 3…, then one last section with every case the UAT owner runs (needs: owner). So the tester opens one section at a
- * time instead of facing every case at once.
+ * The sheet's sections: first one per UAT Project (RP-1248), in UAT_ROLES' order, each with every case of its role,
+ * run as one person without switching user; then the other cases by Part (RP-1204), in the order the Parts first
+ * appear; all numbered 1, 2, 3…; then one last section with every case the UAT owner runs (needs: owner). So the
+ * tester opens one section at a time instead of facing every case at once.
  */
 export function sectionsOf(cases: SheetCase[]): Section[] {
+  for (const c of cases.filter((x) => x.role)) {
+    if (!UAT_ROLES.some((r) => r.n === c.role)) throw new Error(`${c.id} names UAT role ${c.role}, which has no UAT Project`);
+    if (c.needs.includes("owner")) throw new Error(`${c.id} is in a role's section but needs the UAT owner`);
+  }
   const sections: Section[] = [];
-  for (const c of cases.filter((x) => !x.needs.includes("owner"))) {
+  for (const role of UAT_ROLES) {
+    const mine = cases.filter((c) => c.role === role.n);
+    if (mine.length) sections.push({ n: sections.length + 1, part: role.code, name: roleTitle(role), project: role.name, cases: mine });
+  }
+  for (const c of cases.filter((x) => !x.role && !x.needs.includes("owner"))) {
     let s = sections.find((x) => x.part === c.part);
     if (!s) {
       s = { n: sections.length + 1, part: c.part, name: PART_NAMES[c.part] ?? { en: c.partName, ar: c.partName }, cases: [] };
@@ -385,7 +409,17 @@ export function sectionsOf(cases: SheetCase[]): Section[] {
   return sections;
 }
 
+/** The sections as the page gets them: each case by its key, so the page draws exactly these sections. */
+const pageSections = (cases: SheetCase[]) =>
+  sectionsOf(cases).map((s) => ({ id: `s-${s.part}`, n: s.n, part: s.part, name: s.name, ...(s.project ? { project: s.project } : {}), keys: s.cases.map((c) => c.key) }));
+
 /* eslint-disable rabaed/no-avoid-terms -- the tester's own instructions about this file (its sections, a case's name, ID, status and expected result, the JSON file to hand back), not product terms. */
+/** The tester's line on the UAT Projects, in the Markdown and the page's How to start (RP-1248). */
+export const PROJECTS_NOT_HOME: Bilingual = {
+  en: "A section named Sign in as … · open UAT nn is one person's: sign in as that person and open that Project. Every UAT Project has the same people, so Home and Notifications mix them all: open it from Projects, not from Home, and stay in it for the whole section.",
+  ar: "القسم المسمّى سجّل الدخول باسم … · افتح UAT nn خاص بشخص واحد: سجّل الدخول باسمه وافتح ذلك المشروع. في كل مشاريع UAT الأشخاص أنفسهم، فتختلط كلها في الرئيسية والإشعارات: افتحه من المشاريع لا من الرئيسية، وابقَ فيه طوال القسم.",
+};
+
 /** The JSON a tester (or an AI helping them) hands back: the sheet's own work file, which Load work (.json) reads. */
 export const RESULT_EXAMPLE = {
   sheet: "rabaed-uat-sheet",
@@ -393,8 +427,8 @@ export const RESULT_EXAMPLE = {
   tester: "<your name>",
   at: "<ISO date and time, e.g. 2026-11-02T10:30:00Z>",
   entries: {
-    "RP-685": { status: "pass", comment: "Saved as a Draft, listed with No number yet.", shots: [] },
-    "RP-686": { status: "fail", comment: "What you saw, against the expected result.", shots: ["RP-686:1"] },
+    "RP-685": { status: "pass", comment: "Saved as a Draft, listed with No number yet.", shots: [], tester: "<your name>" },
+    "RP-686": { status: "fail", comment: "What you saw, against the expected result.", shots: ["RP-686:1"], tester: "<your name>" },
   },
   shots: [{ id: "RP-686:1", key: "RP-686", name: "SUB-02-1.png", type: "image/png", w: 1366, h: 768, data: "<the PNG's bytes in base64, or leave shots empty>" }],
 };
@@ -415,6 +449,7 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
     "## How to use this file",
     "",
     "1. Open the UAT and sign in as the person each case names under **Sign in as** (see Who's who). The owner gives you each sign-in; this file holds no passwords. Use one private browser window per person, so each sees only their own Company's work.",
+    `   ${PROJECTS_NOT_HOME.en}`,
     "2. Work section by section, case by case. Do the **Steps**, compare with the **Expected result**, and decide: `pass`, `fail`, `blocked` (could not test it) or `notrun`.",
     "3. On `fail` or `blocked`, write what you saw in the comment, in English or Arabic, and keep a screenshot.",
     "4. Skip the last section, the cases the UAT owner runs, unless the owner asks you to run them.",
@@ -435,6 +470,7 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
   for (const s of sectionsOf(cases)) {
     out.push(`## ${s.n ? `${s.n}. ` : ""}${s.name.en} (${s.cases.length} cases)`, "");
     if (!s.n) out.push("The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailbox you can't read.", "");
+    if (s.project) out.push(`Every case here is run in **${s.project.en}**, as the one person named above: open it from Projects, not from Home.`, "");
     for (const c of s.cases) {
       out.push(`### ${c.id} ${c.title}`, "", `- **Key:** \`${c.key}\` · **Part:** ${c.part}${c.round ? ` · **Round:** ${c.round}` : ""}${c.needs.length ? ` · **Needs:** ${c.needs.join(", ")}` : ""}`);
       if (c.who) out.push(`- **Sign in as:** ${c.who}`);
@@ -452,6 +488,7 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
     "- `status`: `pass`, `fail`, `blocked` or `notrun`.",
     "- `comment`: what you saw.",
     "- `shots`: the ids of its screenshots in the `shots` list, or `[]`.",
+    "- `tester`: the name of who ran it (the file's `tester` when left out).",
     "",
     "Each screenshot in `shots` gives its `data` as base64 PNG or JPEG bytes. Leave `shots` empty if you send the pictures separately, named `<case ID>-<n>.png`.",
     "",
@@ -476,10 +513,12 @@ export function orderCases(cases: SheetCase[], keepOrder: boolean): SheetCase[] 
 export function renderSheet({ round, cases, built, uatUrl = DEFAULT_UAT_URL }: { round: string; cases: SheetCase[]; built: string; uatUrl?: string }): string {
   const template = readFileSync(join(here, "uat-sheet", "template.html"), "utf8");
   const writer = readFileSync(join(here, "uat-sheet", "xlsx.mjs"), "utf8").replace(/^export /gm, "");
+  const work = readFileSync(join(here, "uat-sheet", "work.mjs"), "utf8").replace(/^export /gm, "");
   return template
     .replace("/*__FFLATE__*/", () => findFflate())
     .replace("/*__XLSX__*/", () => writer)
-    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), people: DEMO_PEOPLE, peopleMap: PEOPLE_MAP, parts: PART_NAMES, markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
+    .replace("/*__WORK__*/", () => work)
+    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), people: DEMO_PEOPLE, peopleMap: PEOPLE_MAP, parts: PART_NAMES, projectsNotHome: PROJECTS_NOT_HOME, sections: pageSections(cases), markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
     .replaceAll("__ROUND__", round.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!));
 }
 

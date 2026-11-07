@@ -11,6 +11,7 @@ import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
 import { demoSignaturePng } from "./demo-signature.ts";
 import { jpegWithExif } from "./exif-jpeg.ts";
 import { addSampleProject } from "./sample-project.ts";
+import { addUatProjects } from "./uat-projects.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
 // their Members, Positions and Visibility, and a second Project no other demo
@@ -678,6 +679,9 @@ export async function seedDemo(
     // with over a hundred Submittals and a full Snag List. Its Submittals leave Draft with their
     // Datasheets, so it comes only with the file store, as the MARs above do.
     await addSampleProject(app, databases.migrator, password);
+    // The UAT Projects (RP-1248): one per role, with the same Companies and people, each holding what
+    // its role's cases in the hand-run sheet act on. Riyadh Gate Tower stays the automated harness's.
+    await addUatProjects(app, databases.migrator, password);
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it

@@ -13,6 +13,7 @@ import { apiConfigFromEnv } from "../config.ts";
 import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "../documents/file-store.ts";
 import { demoMailbox, seedingConfig } from "../demo/mailbox.ts";
 import { seedDemo } from "../demo/seed.ts";
+import { UAT_ROLES } from "../demo/uat-projects-plan.ts";
 
 const passwordFile = fileURLToPath(new URL("../../../../.env.demo", import.meta.url));
 
@@ -51,7 +52,7 @@ const mailbox = demoMailbox();
 const app = await buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, files: createFileStore(fileStoreSettings), mailer: mailbox.mailer });
 try {
   const seed = await seedDemo(app, mailbox, { migrator, admin: adminDb }, password, { files: true });
-  console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2", "Al Nakheel District – Block A" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
+  console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2", "Al Nakheel District – Block A" and "Jeddah Corniche Villas" seeded, with the UAT Projects (${UAT_ROLES.map((r) => r.name.en).join(", ")}). Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   for (const r of rows) console.log(`  ${r.slice(0, 3).map((c, i) => c!.padEnd(widths[i]!)).join("  ")}  ${r[3]}`);
