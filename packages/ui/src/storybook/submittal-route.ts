@@ -64,9 +64,23 @@ export const submittalOwnerWorkflow: WorkflowDefinition = {
   layout: {},
 };
 
+/** Story people on each role's own Steps (RP-1189): the API gives the viewer their own Company's only. */
+const storyPeople: Partial<Record<NonNullable<WorkItemWorkflowMap["viewerRole"]>, WorkItemWorkflowMap["stepPeople"]>> = {
+  contractor: [
+    { stepKey: "draft", names: [t("Ali Sonour", "علي سنور"), t("Khalid Bakr", "خالد بكر")] },
+    { stepKey: "internal_review", names: [t("Faisal Al-Harbi", "فيصل الحربي")] },
+    { stepKey: "contractor_engineer", names: [t("Ali Sonour", "علي سنور"), t("Khalid Bakr", "خالد بكر")] },
+  ],
+  consultant: [
+    { stepKey: "consultant_engineer", names: [t("Nadia Saleh", "نادية صالح")] },
+    { stepKey: "consultant_manager", names: [t("Omar Haddad", "عمر حداد")] },
+  ],
+};
+
 /** The item's map as `GET /v1/work-items/:id/workflow` gives it, where the item is as `position` says. */
 export function submittalOwnerMap(position: WorkItemMapPosition | null, viewerRole: WorkItemWorkflowMap["viewerRole"] = "contractor"): WorkItemWorkflowMap {
   return {
+    stepPeople: (viewerRole && storyPeople[viewerRole]) ?? [],
     name: t("Document Approval Request, 2→2 with Owner review", "طلب اعتماد مستند، 2←2 مع مراجعة المالك"),
     versionNo: 3,
     latestVersionNo: 3,

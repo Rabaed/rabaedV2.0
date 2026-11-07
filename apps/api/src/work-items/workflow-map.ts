@@ -71,6 +71,10 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       .where("p.project_id", "=", item.project_id)
       .where("p.id", "in", sql<string>`(select app.current_participant_ids())`)
       .executeTakeFirst();
+    // The people on the viewer's own Steps only (RP-1189): the function gives no other Company's Steps.
+    const { rows: people } = await sql<{ step_key: string; names: BilingualText[] }>`
+      select step_key, names from app.work_item_step_people(${workItemId}::uuid) order by step_key
+    `.execute(trx);
 
     return {
       name: item.name,
@@ -81,6 +85,7 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       positions: await readPositions(trx, [...new Set(definition.steps.flatMap((s) => s.actor?.positions ?? []))]),
       viewerRole: (viewer?.base_role as BaseRole | undefined) ?? null,
       position: position(item, definition),
+      stepPeople: people.map((p) => ({ stepKey: p.step_key, names: p.names })),
     };
   });
 }
