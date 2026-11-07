@@ -60,7 +60,7 @@ export default async function ImportRegisterPage({
         types={raisable.types}
         fields={fields}
         me={{ id: me.member.id, name: me.member.fullName }}
-        trades={mine.trade.map((v) => ({ id: v.id, code: v.code, name: v.name }))}
+        trades={mine.trade.filter((v) => v.active).map((v) => ({ id: v.id, code: v.code, name: v.name }))}
         initialPreview={preview && preview.projectId === project.id ? preview : null}
       />
     </div>

@@ -25,6 +25,7 @@ import { useHandover, type HandoverOutcome } from "@/components/handover";
 import { DimensionCard, draftOf, stored, type Draft, type Grant } from "@/components/participants/member-visibility-editor";
 import { sheetOnPhone, valuePath } from "@/components/participants/participants-parts";
 import { useRouter } from "@/i18n/navigation";
+import { pickable } from "@/lib/dimension-tree";
 
 // Project Settings → Visibility to the owner's reference (RP-1156, gap rows 20 to 34): the Project's
 // Visibility Gap, each Participant's Visibility as chips with an Edit panel, and the pending
@@ -387,7 +388,8 @@ function EditSheet({ participant, grant, dimensions, onClose }: { participant: P
               title={t(kind === "trade" ? "trades" : "locations")}
               allLabel={t(kind === "trade" ? "allTrades" : "allLocations")}
               emptyText={t("noValues")}
-              values={dimensions[kind]}
+              // An archived value only while the Participant already covers it (RP-1239).
+              values={pickable(dimensions[kind], new Set(grant.covered[kind].map((v) => v.id)))}
               grant={draft[kind]}
               readOnly={false}
               locale={locale}

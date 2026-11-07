@@ -183,4 +183,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271207 | RP-1157 | 32 | activity_feed_viewer_flags (moved from 20271204, then 20271206: main's RP-1156 and RP-1238 took them) |
 | 20271206 | RP-1238 | 24 | mute_email_only |
 | 20271205 | RP-1156 | 31 | project_visibility_gap (20271204 is RP-1157's, lane 32) |
+| 20271209 | RP-1239 | 31 | dimension_value_status (20271208 is RP-1189's #689) |
 | 20271208 | RP-1189 | 12 | step_people |

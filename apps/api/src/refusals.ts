@@ -22,6 +22,8 @@ const answers = {
   code_in_use: () => new HttpError(409, "code_in_use"),
   parent_not_found: () => new HttpError(422, "parent_not_found"),
   parent_deactivated: () => new HttpError(409, "parent_deactivated"),
+  // The General Trade (GEN) is renamed but never deactivated (RP-1239).
+  general_trade: () => new HttpError(409, "general_trade"),
   trade_not_found: () => new HttpError(422, "trade_not_found"),
   // The Approved Supplier List (RP-592): not an active Scope of the supplier's Trade; a supplier the Trade already lists.
   scope_not_found: () => new HttpError(422, "scope_not_found"),

@@ -113,6 +113,8 @@ export async function registerContext(trx: Trx, projectId: string): Promise<Regi
     select v.id, d.kind, v.parent_id, v.code, v.name
     from dimension_value v join visibility_dimension d on d.id = v.dimension_id
     where d.project_id = ${projectId}::uuid and d.kind in ('trade', 'location')
+      -- An archived Trade or Location is never picked for a new item (RP-1239): it matches nothing.
+      and v.status = 'active'
     order by v.sort, v.code
   `.execute(trx);
   const { rows: scopes } = await sql<{ id: string; trade_value_id: string; parent_id: string | null; name: BilingualText }>`
