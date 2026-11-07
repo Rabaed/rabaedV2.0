@@ -153,7 +153,7 @@ export function PackageView({ pkg, locale }: Pick<PackagePageProps, "pkg" | "loc
       pkg={pkg}
       locale={locale}
       labels={labels}
-      // "Back" (RP-1241): its fixed parent is the Project's Packages, a view whose filters are not remembered (RP-1240).
+      // "Back" (RP-1241): its fixed parent is the Packages in the Project's Submittals tab, whose filters are not remembered (RP-1240).
       backHref={getPathname({ href: `${back}?view=packages`, locale })}
       itemHref={(id) => getPathname({ href: `/work-items/${id}`, locale })}
       // The hrefs already carry their locale (getPathname): next/link keeps navigation client-side without adding it again.

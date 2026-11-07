@@ -16,8 +16,11 @@ export function settingsBackParent(path: string): string | null {
   // Project Settings itself is a top-level page.
   if (parts.length === 0) return null;
   if (parts.length === 1) return settings;
-  // The Workflow builder's own bar has its way back.
-  if (parts[0] === "workflows" && parts.length === 2) return null;
-  // A Workflow's Version leads to that Workflow; any other page inside a settings page to that page.
-  return parts[0] === "workflows" && parts[2] === "versions" ? `${settings}/workflows/${parts[1]}` : `${settings}/${parts[0]}`;
+  if (parts[0] === "workflows") {
+    // The Workflow builder's own bar has its way back; a Workflow's Version leads to that Workflow.
+    if (parts.length === 2) return null;
+    if (parts[2] === "versions") return `${settings}/workflows/${parts[1]}`;
+  }
+  // Any other page inside a settings page leads to that page.
+  return `${settings}/${parts[0]}`;
 }

@@ -2,7 +2,8 @@ import type { Locale } from "@rabaed/domain";
 import { buttonVariants, DocNo, Icon } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { Link, redirect } from "@/i18n/navigation";
+import { PageBackLink } from "@/components/page-back-link";
+import { redirect } from "@/i18n/navigation";
 import { getMe, getWorkItemLink, hasLinkedRecord, linkedRecordPath } from "@/lib/session";
 
 /**
@@ -27,9 +28,8 @@ export default async function WorkItemLinkPage({ params }: { params: Promise<{ l
 
   return (
     <div className="max-w-3xl space-y-6" data-testid="hidden-link">
-      <Link href={`/work-items/${workItemId}`} className="text-sm text-brand-fg underline underline-offset-4">
-        {t("linkPage.back")}
-      </Link>
+      {/* Back (RP-1241), else to the item it is linked from. */}
+      <PageBackLink parent={`/work-items/${workItemId}`} />
       <h1 className="text-h4 font-semibold">{t("linkPage.title")}</h1>
       <div className="flex flex-col gap-2 rounded-md border border-border p-4">
         <DocNo value={link.documentNumber} className="text-sm text-text" />
