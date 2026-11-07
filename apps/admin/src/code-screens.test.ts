@@ -1,4 +1,4 @@
-import { formFields, screenProblems } from "@rabaed/domain";
+import { formFields, formSchema, screenProblems } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { rabaedScreenFile } from "./rabaed-defaults.ts";
 
@@ -10,7 +10,7 @@ describe("the Review Code Screens' reply files", () => {
   for (const key of ["code_a", "code_b", "code_c", "code_d"]) {
     it(`${key} offers an optional photo field and an optional file field, and passes the Screen checks`, () => {
       const screen = rabaedScreenFile(key);
-      const files = formFields(screen.schema).filter((f) => f.type === "photos" || f.type === "attachments");
+      const files = formFields(formSchema.parse(screen.schema)).filter((f) => f.type === "photos" || f.type === "attachments");
       expect(files.map((f) => f.type).sort()).toEqual(["attachments", "photos"]);
       for (const field of files) expect(field.required).toBe(false);
       expect(screenProblems(screen.schema, screen.internalFields, { optionListIds: new Set() })).toEqual([]);
