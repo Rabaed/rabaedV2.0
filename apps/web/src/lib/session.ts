@@ -193,6 +193,11 @@ export function getParticipantVisibility(participantId: string): Promise<Partici
   return apiGet<ParticipantVisibility>(`/v1/participants/${encodeURIComponent(participantId)}/visibility`);
 }
 
+/** The Project's Visibility Gap, the values no active Participant covers, for its Project Admins only (V16); null otherwise. */
+export function getProjectVisibilityGap(projectId: string): Promise<DimensionValues | null> {
+  return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/visibility-gap`);
+}
+
 /** A Project Member's Visibility, for their Participant's own Company; null otherwise. */
 export function getMemberVisibility(participantId: string, memberId: string): Promise<MemberVisibility | null> {
   return apiGet<MemberVisibility>(

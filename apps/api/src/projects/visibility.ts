@@ -15,6 +15,7 @@ import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { handedOver, type HandoverChange, type HandoverRefusal } from "../identity/handover.ts";
 import { checkedOutcome } from "../outcomes.ts";
+import { isProjectAdmin } from "./project-admin.ts";
 
 // Trades, Locations and Visibility grants. Writes go through the app.* functions
 // of the visibility migration; reads go through RLS or those functions.
@@ -117,6 +118,18 @@ export function myVisibility(db: Db, memberId: string, projectId: string): Promi
       join dimension_value v on v.id = mv.value_id
       order by v.depth, v.sort, v.id
     `.execute(trx);
+    return toValues(rows);
+  });
+}
+
+/**
+ * The Project's Visibility Gap: its Trades and Locations no active Participant covers, worked out
+ * from Participant grants alone (V16), for its Project Admins; null for anyone else.
+ */
+export function projectVisibilityGap(db: Db, memberId: string, projectId: string): Promise<DimensionValues | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await isProjectAdmin(trx, projectId))) return null;
+    const { rows } = await sql<ValueRow>`select * from app.project_visibility_gap(${projectId}::uuid)`.execute(trx);
     return toValues(rows);
   });
 }
