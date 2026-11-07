@@ -2,7 +2,8 @@
 // visibility.md the Notifications row). A Send Back tells the Members of the
 // Participant it is sent back to who still see the item, routed by their "Sent
 // Back" settings, with the Company that sent it named only by its name (V14). It
-// follows the bell's switch and a Project mute, and a closed Project hears nothing.
+// follows the email setting and a Project mute (the bell, no email; RP-1238), and a
+// closed Project hears nothing.
 // (RP-356's Vacancy notification went with the member-level Vacancy: a Member's
 // Steps are handed over before they leave, RP-108, handover.test.ts.)
 import { randomUUID } from "node:crypto";
@@ -172,7 +173,7 @@ describe("a Send Back", () => {
 });
 
 describe("email off, a mute and a closed Project", () => {
-  it("a Send Back: email off still shows in the bell; a mute sends nothing", async () => {
+  it("a Send Back: email off and a mute both still show in the bell, with no email (RP-1238)", async () => {
     const off = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const muted = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     await saveSettings(off, { sent_back: { email: "off" } });
@@ -181,11 +182,11 @@ describe("email off, a mute and a closed Project", () => {
     await sendBack(at.k1Manager, id);
     await drainOutbox(worker);
 
-    expect(await about(muted, id)).toEqual([]);
+    expect((await about(muted, id)).length).toBe(1);
     expect((await about(off, id)).length).toBe(1);
     const byMember = new Map((await routed(id, "sent_back")).map((r) => [r.member_id, { in_app: r.in_app, email: r.email }]));
     expect(byMember.get(await meOf(off))).toEqual({ in_app: true, email: "none" });
-    expect(byMember.has(await meOf(muted))).toBe(false);
+    expect(byMember.get(await meOf(muted))).toEqual({ in_app: true, email: "none" });
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
   });
 

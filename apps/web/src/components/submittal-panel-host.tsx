@@ -30,6 +30,7 @@ import {
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useRememberedHref } from "@/components/remembered-module-queries";
 import { SubmittalPanelActionBar } from "@/components/submittal-panel-actions";
 import { SubmittalPanelDetails } from "@/components/submittal-panel-details";
 import { SubmittalPanelForm, useSubmittalPanelReads } from "@/components/submittal-panel-form";
@@ -37,6 +38,7 @@ import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { phoneQuery } from "@/lib/new-submittal-panel";
+import { useRouter } from "@/i18n/navigation";
 import { submittalPanelPlace } from "@/lib/submittal-panel-place";
 import { openIdFrom, sizeFrom, submittalPanelHref, withoutLinkSize } from "@/lib/submittal-panel-url";
 
@@ -110,7 +112,8 @@ export function SubmittalPanelHost({
   const [order, setOrder] = useState<string[]>([]);
   // The viewer's kept width, read once mounted (the server has no storage, so it draws Normal),
   // unless a link sets the size: that view is the link's and never writes (README §2).
-  const linkSize = sizeFrom(useSearchParams());
+  const params = useSearchParams();
+  const linkSize = sizeFrom(params);
   const kept = useSyncExternalStore(noStorageEvents, keptWidth, () => null);
   const size = useSubmittalPanelSize({
     initial: linkSize ?? kept ?? submittalPanelNormalWidth,
@@ -139,7 +142,14 @@ export function SubmittalPanelHost({
 
   useEffect(() => setOrder(loadedOrder()), [openId, refreshKey]);
 
+  const remembered = useRememberedHref();
+  const router = useRouter();
+  // Opened from an item's own link, it landed at Full on a List with no query of its own: closing goes back to the
+  // tab with the Member's last filters (RP-1240), as the item page's way back did.
+  const landed = linkSize === "full" && [...params.keys()].every((key) => key === "open" || key === "size");
   const close = () => {
+    const list = window.location.pathname.replace(/^\/(en|ar)(?=\/)/, "");
+    if (landed && remembered(list) !== list) return router.replace(remembered(list));
     onClose();
     // Focus goes back to the row or card that was open.
     openerOf(openId)?.focus();

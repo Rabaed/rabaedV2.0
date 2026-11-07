@@ -285,24 +285,28 @@ describe("scenarios RP-155-1 and RP-155-2: a record that passes its checks", { t
   });
 
   it("tells every Member who sees the item that the record is ready, once, in the bell, with no Company or person named (RP-155-1)", async () => {
-    for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer]) {
+    // K1's engineer muted the Project: a mute stops the email only (RP-1238), so it reaches their bell too.
+    for (const by of [c1Pm, c1Engineer, k1Pm, orEngineer, k1Engineer]) {
       const got = await bell(by, id);
       expect(got, "a record ready notification").toHaveLength(1);
       expect(got[0]).toMatchObject({ kind: "record_ready", workItemId: id, step: null, event: null, readAt: null });
       expect(JSON.stringify(got[0])).not.toContain("Checks Consultants");
     }
-    // Routed by each Member's "Items I watch" email choice (RP-950), none of them changed here: the daily digest.
-    // Read from the table: no read exposes a notification's email route.
-    const routes = await sql<{ in_app: boolean; email: string }>`select in_app, email from notification where work_item_id = ${id} and kind = 'record_ready'`.execute(migrator);
-    expect(routes.rows.length).toBeGreaterThanOrEqual(4);
-    expect(routes.rows.filter((r) => !(r.in_app && r.email === "digest"))).toEqual([]);
+    // Routed by each Member's "Items I watch" email choice (RP-950), none of them changed here: the daily digest,
+    // except the muted Member's: no email. Read from the table: no read exposes a notification's email route.
+    const routes = await sql<{ member_id: string; in_app: boolean; email: string }>`
+      select member_id, in_app, email from notification where work_item_id = ${id} and kind = 'record_ready'`.execute(migrator);
+    const k1EngineerId = (await ok(k1Engineer.get("/v1/me"), 200)).json().member.id as string;
+    expect(routes.rows.length).toBeGreaterThanOrEqual(5);
+    expect(routes.rows.filter((r) => r.member_id === k1EngineerId).map((r) => ({ in_app: r.in_app, email: r.email }))).toEqual([{ in_app: true, email: "none" }]);
+    expect(routes.rows.filter((r) => r.member_id !== k1EngineerId && !(r.in_app && r.email === "digest"))).toEqual([]); // not hidden-from: every route is the digest; the rows are counted above
     // Delivered once: another pass delivers nothing more.
     await drainOutbox(worker, quick);
     expect(await bell(c1Pm, id)).toHaveLength(1);
   });
 
-  it("tells nobody who can't see the item, and nobody who muted the Project (RP-155-1)", async () => {
-    await expectHiddenFrom({ read: (by: Caller) => bell(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer], hiddenFrom: [c2Engineer, k1Engineer], name: who });
+  it("tells nobody who can't see the item (RP-155-1)", async () => {
+    await expectHiddenFrom({ read: (by: Caller) => bell(by, id), target: id, idOf: (n) => n.workItemId!, seenBy: [c1Pm, c1Engineer, k1Pm, orEngineer, k1Engineer], hiddenFrom: c2Engineer, name: who });
   });
 });
 

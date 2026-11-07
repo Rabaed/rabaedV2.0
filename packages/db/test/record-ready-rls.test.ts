@@ -4,8 +4,8 @@
 // closed item and publishes it once its checks pass (app.save_documental_record,
 // app.finish_documental_record, as the app role with no Member set), which queues one `record_ready`
 // job; app.deliver_record_ready then gives each active Member of the Project who sees the item at
-// delivery one notification, routed by their "Items I watch" setting, unless they muted the
-// Project, and nothing at all once the Project is closed. Seam 1: record-checks.test.ts.
+// delivery one notification, routed by their "Items I watch" setting (a muted Project: the bell,
+// no email; RP-1238), and nothing at all once the Project is closed. Seam 1: record-checks.test.ts.
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
@@ -166,22 +166,24 @@ describe("scenarios RP-155-1 and RP-950-1: record ready reaches each Member who 
     await watched(c1.members.engineer, "immediate");
     await watched(ow.members.representative, "off");
     await watched(c2.members.engineer, "immediate");
-    // K1's Engineer muted the Project.
+    // K1's Engineer chose immediately, then muted the Project: the bell only (RP-1238).
+    await watched(k1.members.engineer, "immediate");
     expect(await tower.outcome(k1.members.engineer, sql`select app.set_project_mute(${tower.projectId}::uuid, true) as outcome`)).toBe("set");
     outbox = await job("record_ready", "work_item_id", passed);
     delivered = await deliver(outbox);
   });
 
-  it("RP-155-1: reaches, once, each Member who sees the item; C2's Engineer and the Member who muted the Project get nothing", async () => {
+  it("RP-155-1: reaches, once, each Member who sees the item, in the bell; C2's Engineer gets nothing; the Member who muted the Project gets no email", async () => {
     const { c1, k1, ow, c2 } = tower;
     const got = await notified(outbox);
     expect(delivered).toBe(got.size);
-    for (const seer of [c1.members.project_manager, c1.members.engineer, k1.members.manager, ow.members.representative]) {
+    for (const seer of [c1.members.project_manager, c1.members.engineer, k1.members.manager, ow.members.representative, k1.members.engineer]) {
       expect(got.get(seer)?.inApp, seer).toBe(true);
     }
     expect(got.has(c2.members.engineer)).toBe(false);
     expect(got.has(c2.ap)).toBe(false);
-    expect(got.has(k1.members.engineer)).toBe(false);
+    // A mute stops the email only (owner's decision 2026-11-06, RP-1238).
+    expect(got.get(k1.members.engineer)).toEqual({ inApp: true, email: "none" });
     // Every Member it reached sees the item; nobody is told twice.
     for (const member of got.keys()) {
       const sees = await withMember(app, member, (trx) => sql<{ sees: boolean }>`select app.sees_work_item(${passed}::uuid) as sees`.execute(trx));
@@ -213,8 +215,8 @@ describe("scenarios RP-155-1 and RP-950-1: record ready reaches each Member who 
     expect(rows.map((r) => r.column_name).filter((c) => /name|text|body|subject|company|storage|file|payload/.test(c))).toEqual([]);
   });
 
-  it("RP-155-1: reaches the Member who muted the Project once they unmute it, and still never C2", async () => {
-    // Positive control beside the muted Member's silence: K1's Engineer sees the item, so the mute alone kept it away.
+  it("RP-155-1: emails the Member who muted the Project once they unmute it, and still never reaches C2", async () => {
+    // Positive control beside the muted Member's missing email: the mute alone held it back.
     const { k1, c2 } = tower;
     expect(await tower.outcome(k1.members.engineer, sql`select app.set_project_mute(${tower.projectId}::uuid, false) as outcome`)).toBe("set");
     const again = await one("insert into outbox (kind, project_id, payload) values ('record_ready', $1, $2) returning id", [
@@ -223,7 +225,7 @@ describe("scenarios RP-155-1 and RP-950-1: record ready reaches each Member who 
     ]);
     expect(await deliver(again!)).toBeGreaterThan(0);
     const got = await notified(again!);
-    expect(got.get(k1.members.engineer)?.inApp).toBe(true);
+    expect(got.get(k1.members.engineer)).toEqual({ inApp: true, email: "immediate" });
     expect(got.has(c2.members.engineer)).toBe(false);
   });
 

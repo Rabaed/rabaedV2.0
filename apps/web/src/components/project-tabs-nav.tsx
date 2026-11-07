@@ -4,6 +4,7 @@ import { type ModuleKey } from "@rabaed/domain";
 import { ProjectTabs, projectTabKeys, type ProjectTabKey } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
+import { useRememberedHref } from "@/components/remembered-module-queries";
 import { Link, usePathname } from "@/i18n/navigation";
 import { projectTabHref, projectTabOf } from "@/lib/new-item-route";
 
@@ -16,12 +17,14 @@ export function ProjectTabsNav({ projectId, modules }: { projectId: string; modu
   const t = useTranslations("projectTabs");
   const pathname = usePathname();
   const current = projectTabOf(projectId, pathname, useSearchParams().get("module"), modules);
+  // A Module's tab reopens with the Member's last filters, sort and view there (RP-1240).
+  const remembered = useRememberedHref();
   return (
     <ProjectTabs
       label={t("label")}
       labels={Object.fromEntries(projectTabKeys.map((key) => [key, t(key)])) as Record<ProjectTabKey, string>}
       modules={modules}
-      href={(key) => projectTabHref(projectId, key)}
+      href={(key) => remembered(projectTabHref(projectId, key))}
       current={current}
       linkAs={Link}
     />
