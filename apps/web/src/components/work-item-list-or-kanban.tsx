@@ -294,7 +294,9 @@ export function WorkItemListOrKanban(
     switch (action) {
       case "open":
       case "edit":
-        router.push(itemHref(row.id));
+        // A Submittal opens in its panel, in place: the panel is its page (RP-1237 row 1).
+        if (submittal) submittal.open(row.id);
+        else router.push(itemHref(row.id));
         return null;
       case "download": {
         // Its Documental Record once closed, else its Working Copy (RP-621): the same PDF for every viewer.
@@ -322,6 +324,8 @@ export function WorkItemListOrKanban(
   };
   return (
     <>
+    {/* Hidden while the Submittal Panel is at Full, which covers it (RP-1237 row 1). */}
+    <div className="sdp-behind">
     <WorkItemList
       list={props.view === "list" ? props.list : { ...props.board, items: [], nextCursor: null }}
       onOpen={props.view === "list" ? onOpen : undefined}
@@ -423,6 +427,7 @@ export function WorkItemListOrKanban(
         ) : undefined
       }
     />
+    </div>
     {submittal?.openId && (
       <SubmittalPanelHost
         openId={submittal.openId}

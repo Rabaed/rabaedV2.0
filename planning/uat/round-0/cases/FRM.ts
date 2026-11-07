@@ -1,7 +1,17 @@
+import type { Page } from "playwright";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
 import { go, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
+
+// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+
+/** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
+async function chooseCode(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole("main").getByRole("button", { name: "Issue Review Code" }).click();
+  await page.getByRole("menuitem", { name }).first().click();
+}
 
 // Part FRM (Forms and Screens). Forms are the raiser's, Screens are the reply (ADR 0019).
 
@@ -88,7 +98,7 @@ defineCase("FRM-02", async (t) => {
   await go(page, `/work-items/${id}`);
   await settle(page);
   await page.getByRole("main").getByRole("button", { name: "Send for Review" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Send for Review" }).click();
+  await page.locator(POP_UP).getByRole("button", { name: "Send for Review" }).click();
   await settle(page, 1000);
   const text = (await page.getByRole("main").innerText()).replace(/\s+/g, " ");
   t.check("The page names the missing field and marks it", /1 field needs your attention:?\s*Manufacturer/.test(text) && (await page.getByRole("main").locator('[aria-invalid="true"]').count()) > 0, text.match(/\d+ fields? need[^.]{0,80}/)?.[0]);
@@ -256,7 +266,7 @@ defineCase("FRM-08", async (t) => {
   await go(page, `/work-items/${id}`);
   await settle(page);
   await page.getByRole("main").getByRole("button", { name: "Send to Manager" }).first().click();
-  const dlg = page.getByRole("dialog");
+  const dlg = page.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   const popup = (await dlg.innerText()).replace(/\s+/g, " ");
   await t.shot(page, "ahmed-send-to-manager-popup");
@@ -268,8 +278,8 @@ defineCase("FRM-08", async (t) => {
   const { page: mp } = await pageAs("mohammed");
   await go(mp, `/work-items/${id}`);
   await settle(mp);
-  await mp.getByRole("main").getByRole("button", { name: /Approve with Comments|Approve/ }).first().click();
-  const md = mp.getByRole("dialog");
+  await chooseCode(mp, /^Approve with Comments|^Approve/);
+  const md = mp.locator(POP_UP);
   await md.waitFor({ state: "visible" });
   const code = (await md.innerText()).replace(/\s+/g, " ");
   await t.shot(mp, "mohammed-code-popup");

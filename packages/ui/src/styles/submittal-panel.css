@@ -191,6 +191,18 @@
   }
 }
 
+/* At Full the panel is the item's page and covers what is beside the sidebar: that is hidden, to the eye and to a screen reader (RP-1237 row 1). */
+body:has([data-submittal-panel][data-covers]) .sdp-behind {
+  visibility: hidden;
+}
+
+/* Below Wide: no keyboard hint, so the action bar keeps its row (RP-1237 row 22: the hint only at Wide and Full). */
+@container sdp (max-width: 879px) {
+  .sdp-hint {
+    display: none;
+  }
+}
+
 /* Normal (560–879): fields in 2 columns. */
 @container sdp (min-width: 560px) {
   .sdp-fields {

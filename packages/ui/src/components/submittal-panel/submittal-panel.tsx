@@ -33,6 +33,8 @@ export type SubmittalPanelLabels = {
   close: string;
   /** The action bar's keyboard hint, e.g. "Esc to close · ↑ ↓ to move through the list". */
   hint: string;
+  /** The hint when ↑ ↓ have nothing to move to (an item opened from outside the List, RP-1237 row 41): "Esc to close"; the full hint without it. */
+  hintClose?: string;
   /** The phone page's back arrow (`layout="page"`), e.g. "Back to Submittals"; Close's name without it. */
   back?: string;
 };
@@ -71,6 +73,11 @@ export type SubmittalPanelProps = {
   width?: number;
   /** Its width is being dragged (or first painted): no width transition (RP-1063). */
   resizing?: boolean;
+  /**
+   * It covers the page beside the sidebar (Full: the item's page, RP-1237 row 1). What it covers (`.sdp-behind`)
+   * is then hidden, so nobody reads or tabs into a List they can't see.
+   */
+  covers?: boolean;
   /** On its inline-start edge: the drag edge (`SubmittalPanelGrip`, RP-1063). */
   edge?: ReactNode;
   /** The ids of what names the panel for screen readers: the identity's number and Subject. */
@@ -123,6 +130,7 @@ export function SubmittalPanel({
   onClose,
   width = submittalPanelNormalWidth,
   resizing = false,
+  covers = false,
   edge,
   labelledBy,
   label,
@@ -199,6 +207,7 @@ export function SubmittalPanel({
       data-mode={mode}
       data-layout={layout}
       data-resizing={resizing || undefined}
+      data-covers={covers || undefined}
       // The tablet's and phone's layouts span the screen edge to edge (a scrollbar beside them stays outside).
       style={fullWidth ? undefined : { width: `min(${width}px, 100vw)` }}
       className={cn(
@@ -270,9 +279,9 @@ export function SubmittalPanel({
           {rail !== false && <div className="sdp-rail">{rail}</div>}
         </div>
       </div>
-      <div className="sdp-actions flex shrink-0 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface px-4 py-3">
+      <div className="sdp-actions flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border-subtle bg-surface px-4 py-3">
         {/* No keyboard hint in create mode or on the phone's page: the footer's save status leads there (`NewItemFooter`). */}
-        {!page && !creating && <span className="sdp-hint me-auto text-caption text-muted">{labels.hint}</span>}
+        {!page && !creating && <span className="sdp-hint me-auto text-caption text-muted">{onPrevious || onNext ? labels.hint : (labels.hintClose ?? labels.hint)}</span>}
         {actions}
       </div>
     </div>

@@ -44,6 +44,9 @@ export type SubmittalPanelLog = {
   section: SubmittalPanelSectionItem | null;
   /** The Internal Communication tab: only for a Member of a Participant with internal history on the item (V5). */
   internal: { count: number; content: ReactNode } | null;
+  /** The viewer (`/me`) and the history as they may read it, for the action bar (RP-1237); null and empty until read. */
+  me: SignedInMember | null;
+  events: WorkItemHistory["events"];
 };
 
 /**
@@ -80,7 +83,7 @@ export function useSubmittalPanelLog({
 
   const railLabels: SubmittalPanelRailLabels = { workflow: t("workflow"), map: t("map"), log: t("log") };
   // The log waits for `/me` too, so the viewer's own turns are never drawn as another Company's meanwhile.
-  if (!item || !history || !me) return { rail: <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={null} />, section: null, internal: null };
+  if (!item || !history || !me) return { rail: <SubmittalPanelRail labels={railLabels} workflow={workflow} onOpenMap={openMap} log={null} />, section: null, internal: null, me: me?.value ?? null, events: [] };
 
   const labels: SubmittalTimelineLabels = {
     created: t("created"),
@@ -151,5 +154,7 @@ export function useSubmittalPanelLog({
       inflowOnly: true,
     },
     internal,
+    me: me.value,
+    events: history.value?.events ?? [],
   };
 }

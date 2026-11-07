@@ -7,7 +7,9 @@ import {
   newSubmittalPanelHref,
   openIdFrom,
   sizeFrom,
+  itemLanding,
   submittalPanelHref,
+  withoutLinkSize,
 } from "./submittal-panel-url.ts";
 
 // RP-1061: the Submittal Panel's state is `?open=<id>` on the List and the Kanban, so a reload
@@ -47,6 +49,16 @@ describe("the Submittal Panel's URL", () => {
     expect(sizeFrom(new URLSearchParams(`open=${id}&size=full`))).toBe("full");
     expect(sizeFrom(new URLSearchParams(`open=${id}&size=9999`))).toBeNull();
     expect(sizeFrom(new URLSearchParams(`open=${id}`))).toBeNull();
+  });
+
+  // RP-1237 row 1: one Submittal view. A Submittal's own link lands on its List with its panel at Full.
+  it("lands an item's link on its Project's Submittals List with the item open at Full", () => {
+    expect(itemLanding("p1", id)).toBe(`/projects/p1/work-items?open=${id}&size=full`);
+  });
+
+  it("drops the link's size once the viewer picks another, keeping the open item and the List's query", () => {
+    expect(withoutLinkSize("/en/projects/p/work-items", `?page=2&open=${id}&size=full`)).toBe(`/en/projects/p/work-items?page=2&open=${id}`);
+    expect(withoutLinkSize("/en/projects/p/work-items", `?open=${id}`)).toBe(`/en/projects/p/work-items?open=${id}`);
   });
 
   it("reads only an id that can be an item's (a uuid), so an edited link asks the api nothing odd", () => {
