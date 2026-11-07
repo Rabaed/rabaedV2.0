@@ -11,6 +11,7 @@ describe("the Package page's Arabic word for Submittals (RP-1164, UX-23)", () =>
   it("is the Project tab's word, never a second one", () => {
     expect(ar.packages.back).toBe(ar.projectTabs.submittals);
     expect(ar.packages.submittals).toBe(ar.projectTabs.submittals);
-    expect(strings(ar.packages).filter((s) => s.includes("الاعتماد"))).toEqual([]);
+    // The stem, so the forms without "ال" are caught too: اعتمادات, كل اعتماد, اعتماداتها, اعتمادين.
+    expect(strings(ar.packages).filter((s) => s.includes("اعتماد"))).toEqual([]);
   });
 });
