@@ -21,7 +21,7 @@ export function actionSheetEffects({
   transitionKey,
   definition,
   stages,
-  told,
+  goesTo,
   code,
   offersRevision,
   comments,
@@ -30,11 +30,11 @@ export function actionSheetEffects({
   definition: WorkflowDefinition | null;
   stages: readonly { key: string; name: BilingualText }[];
   /** The Company the Transition goes to, when it is another than the viewer's own; null otherwise. */
-  told: BilingualText | null;
+  goesTo: BilingualText | null;
   /** The Review Code it issues; null for a Transition that issues none. */
   code: string | null;
   offersRevision: boolean;
-  /** The Comments its rows will open (Code B); null when its outcome opens none. */
+  /** The Comments its rows will open (Code B), as typed so far; null when its outcome opens none. Before a row is typed, it names who is told. */
   comments: number | null;
 }): ActionSheetEffect[] {
   const effects: ActionSheetEffect[] = [];
@@ -42,9 +42,9 @@ export function actionSheetEffects({
   const step = transition ? definition?.steps.find((s) => s.key === transition.to) : undefined;
   const stage = step ? stages.find((s) => s.key === step.stage) : undefined;
   if (stage) effects.push({ kind: "stage", name: stage.name });
-  if (comments !== null) effects.push({ kind: "comments", count: comments, company: told });
-  else if (offersRevision) effects.push({ kind: "revision", company: told });
-  else if (told) effects.push({ kind: "told", company: told });
+  if (comments !== null && comments > 0) effects.push({ kind: "comments", count: comments, company: goesTo });
+  else if (offersRevision) effects.push({ kind: "revision", company: goesTo });
+  else if (goesTo) effects.push({ kind: "told", company: goesTo });
   if (code !== null) effects.push({ kind: "record", code });
   return effects;
 }

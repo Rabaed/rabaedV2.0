@@ -3438,8 +3438,7 @@
       "revision": "Back to {company} for a new Revision",
       "revisionOwn": "Back for a new Revision",
       "record": "Code {code} is printed on the Documental Record",
-      "signsAs": "Signs as",
-      "issue": "Issue Code {code}"
+      "signsAs": "Signs as"
     },
     "with": "With",
     "stepAge": "Step Age",

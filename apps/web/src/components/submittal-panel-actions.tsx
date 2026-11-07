@@ -35,6 +35,9 @@ import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
+
+/** An outcome whose rows open Comments in the Snag List (Code B: `create_items`, workflow-engine.md). */
+const opensComments = (outcome: Outcome | undefined) => outcome?.actions.some((a) => a.kind === "create_items") ?? false;
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -103,15 +106,15 @@ export function SubmittalPanelActionBar({
     if (tr.kind === "send_back") return named ? t("sendBack", { company: to[locale] }) : undefined;
     if (goes === "back") return named ? t("back", { company: to[locale] }) : t("backOwn");
     if (goes !== "closes") return undefined;
-    const comments = outcome?.actions.some((a) => a.kind === "create_items") ? ` ${t("comments")}` : "";
+    const comments = opensComments(outcome) ? ` ${t("comments")}` : "";
     return `${named ? t("closes", { company: to[locale] }) : t("closesOwn")}${comments}`;
   };
 
   /**
    * The Position the viewer's Step is narrowed to, as the Workflow map words it; null without one. The signer
-   * line then names the Step itself ("Consultant Manager"), else the Company (row 39).
+   * line then names the Step itself ("Consultant Manager"), and nothing without one (row 39).
    */
-  const roleOf = (): string | null => {
+  const positionOf = (): string | null => {
     const step = map?.definition.steps.find((x) => x.key === item.step?.key);
     const actor = step?.actor;
     if (!actor || !("role" in actor) || !actor.positions?.[0]) return null;
@@ -134,16 +137,15 @@ export function SubmittalPanelActionBar({
         line: lineOf(tr),
         effects: (answers) => {
           const { outcome } = where(tr);
-          const opens = outcome?.actions.some((a) => a.kind === "create_items") ?? false;
           return actionSheetEffects({
             transitionKey: tr.key,
             definition: map?.definition ?? null,
             stages: map?.stages ?? [],
-            told: named ? to : null,
+            goesTo: named ? to : null,
             code,
             offersRevision: outcome ? offersRevision(outcome) : false,
             // Code B's rows become its Comments (workflow-engine.md, the Screen's `items_to_create`).
-            comments: opens ? (Array.isArray(answers.items_to_create) ? answers.items_to_create.length : 0) : null,
+            comments: opensComments(outcome) ? (Array.isArray(answers.items_to_create) ? answers.items_to_create.length : 0) : null,
           });
         },
         effectsLabels: {
@@ -154,8 +156,7 @@ export function SubmittalPanelActionBar({
           revision: (company) => (company ? tSheet("revision", { company }) : tSheet("revisionOwn")),
           record: (recorded) => tSheet("record", { code: recorded }),
         },
-        signer: me ? { name: me.member.fullName, role: roleOf() ?? item.step?.name[locale] ?? me.company.legalName[locale], signsAs: tSheet("signsAs") } : null,
-        confirm: code ? tSheet("issue", { code }) : undefined,
+        signer: me ? { name: me.member.fullName, position: positionOf() ?? item.step?.name[locale] ?? null, signsAs: tSheet("signsAs") } : null,
       },
     };
   });

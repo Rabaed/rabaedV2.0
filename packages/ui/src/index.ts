@@ -346,7 +346,7 @@ export {
 } from "./components/submittal-panel/panel-resize.tsx";
 export { SubmittalPanelNumberCard, type SubmittalPanelNumberCardLabels, type SubmittalPanelNumberCardProps } from "./components/submittal-panel/number-card.tsx";
 export { submittalNumberCard, submittalNumberPlace, type SubmittalNumberSegment } from "./components/submittal-panel/number-card-model.ts";
-export { submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
+export { submittalPanelBandOf, submittalPanelSizes, type SubmittalPanelSize, type SubmittalPanelWidth } from "./components/submittal-panel/panel-size.ts";
 export { actionSheetEffects, type ActionSheetEffect } from "./components/submittal-panel/action-sheet-model.ts";
 export { ActionSheetEffects, ActionSheetSigner, type ActionSheetEffectsLabels } from "./components/submittal-panel/action-sheet.tsx";
 export { submittalPanelBar, type SubmittalPanelBar, type SubmittalPanelBarChip, type SubmittalPanelBarTransition } from "./components/submittal-panel/action-bar-model.ts";

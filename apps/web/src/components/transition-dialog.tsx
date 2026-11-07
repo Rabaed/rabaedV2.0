@@ -31,6 +31,7 @@ import {
   IconButton,
   reviewCodes,
   Select,
+  submittalPanelBandOf,
   type ActionSheetEffect,
   type ActionSheetEffectsLabels,
   type FormFiles,
@@ -92,9 +93,7 @@ export type TransitionHeading = {
     line: string | undefined;
     effects: (answers: Readonly<Record<string, unknown>>) => ActionSheetEffect[];
     effectsLabels: ActionSheetEffectsLabels;
-    signer: { name: BilingualText; role: string | null; signsAs: string } | null;
-    /** The primary button's words, e.g. "Issue Code A"; the Transition's label without one. */
-    confirm: string | undefined;
+    signer: { name: BilingualText; position: string | null; signsAs: string } | null;
   };
 };
 
@@ -337,7 +336,7 @@ export function TransitionDialog({
   const sheet = heading?.sheet && !inspection ? heading.sheet : null;
   const [box] = useState(() => (sheet ? submittalPanelBox() : null));
   // Narrower than the Normal band (Compact): the buttons take the whole width (row 29).
-  const narrow = box !== null && box.width < 560;
+  const narrow = box !== null && submittalPanelBandOf(box.width) === "compact";
 
   useEffect(() => {
     setError(null);
@@ -580,14 +579,14 @@ export function TransitionDialog({
             sheet && "flex-wrap items-center",
           )}
         >
-          {sheet?.signer && <ActionSheetSigner name={sheet.signer.name} role={sheet.signer.role} signsAs={sheet.signer.signsAs} locale={locale} />}
+          {sheet?.signer && <ActionSheetSigner name={sheet.signer.name} position={sheet.signer.position} signsAs={sheet.signer.signsAs} locale={locale} />}
           {narrow && <span className="basis-full" />}
           <Button type="button" variant={inspection || sheet ? "secondary" : "ghost"} className={cn(inspection && "min-h-11 max-md:flex-1", narrow && "flex-1")} onClick={() => dialog.current?.close()}>
             {t("cancel")}
           </Button>
           <Button type="submit" disabled={pending} className={cn(inspection && "min-h-11 max-md:flex-[2]", sheet && "gap-2", narrow && "flex-[2]")}>
             {sheet && heading?.code && <Icon name="gavel" size={17} />}
-            {coding ? tInspection("issueCodeAs", { code: transition.label[locale] }) : (sheet?.confirm ?? transition.label[locale])}
+            {coding ? tInspection("issueCodeAs", { code: transition.label[locale] }) : transition.label[locale]}
           </Button>
         </div>
       </form>

@@ -39,7 +39,7 @@ const labels = (locale: Locale): ActionSheetEffectsLabels =>
   locale === "ar"
     ? {
         title: copy.title.ar,
-        stage: (s) => `المرحلة تصبح ${s}`,
+        stage: (s) => `تصبح المرحلة ${s}`,
         told: (c) => `يُبلَّغ ${c}`,
         comments: (n, c) => `${n} ملاحظات مفتوحة في قائمة الملاحظات${c ? ` لـ ${c}` : ""}`,
         revision: (c) => `يعود${c ? ` إلى ${c}` : ""} لمراجعة جديدة`,
@@ -56,7 +56,7 @@ const labels = (locale: Locale): ActionSheetEffectsLabels =>
 
 function SheetDemo({ context, width }: { context: StoryContext; width: number }) {
   const locale = storyLocale(context);
-  const effects = actionSheetEffects({ transitionKey: "approve_b", definition, stages, told: tmc, code: "B", offersRevision: false, comments: 2 });
+  const effects = actionSheetEffects({ transitionKey: "approve_b", definition, stages, goesTo: tmc, code: "B", offersRevision: false, comments: 2 });
   return (
     <SubmittalPanel
       locale={locale}
@@ -75,7 +75,7 @@ function SheetDemo({ context, width }: { context: StoryContext; width: number })
           <ActionSheetEffects effects={effects} labels={labels(locale)} locale={locale} />
         </div>
         <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle px-5 py-3">
-          <ActionSheetSigner name={bi("Mohammed Al Shamsi", "محمد الشامسي")} role={locale === "ar" ? "مدير الاستشاري" : "Consultant Manager"} signsAs={copy.signsAs[locale]} locale={locale} />
+          <ActionSheetSigner name={bi("Mohammed Al Shamsi", "محمد الشامسي")} position={locale === "ar" ? "مدير الاستشاري" : "Consultant Manager"} signsAs={copy.signsAs[locale]} locale={locale} />
           <Button variant="secondary">{copy.cancel[locale]}</Button>
           <Button>{copy.issue[locale]}</Button>
         </div>

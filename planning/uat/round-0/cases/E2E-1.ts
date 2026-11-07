@@ -310,8 +310,7 @@ defineCase("J1", async (t) => {
   const remarks = "Approved as submitted. Install per drawing E-201.";
   await remarksBox.fill(remarks);
   await t.shot(mp, "mohammed-code-a-popup");
-  // The sheet confirms a code as "Issue Code A" (RP-1237 row 29).
-  await dlg.getByRole("button", { name: /^Issue Code A$/ }).click();
+  await dlg.getByRole("button", { name: /^Approve/ }).last().click();
   await dlg.waitFor({ state: "hidden" });
   await settle(mp, 1000);
   const closed = await H.detail(ali, id);

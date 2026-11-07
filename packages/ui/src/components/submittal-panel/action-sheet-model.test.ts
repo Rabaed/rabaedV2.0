@@ -35,7 +35,7 @@ const tmc = bi("TMC Constructions");
 
 describe("what happens when the viewer confirms a Transition", () => {
   it("Code A: the Stage it moves to, who is told, and the Code printed on the Documental Record", () => {
-    expect(actionSheetEffects({ transitionKey: "approve_a", definition, stages, told: tmc, code: "A", offersRevision: false, comments: null })).toEqual([
+    expect(actionSheetEffects({ transitionKey: "approve_a", definition, stages, goesTo: tmc, code: "A", offersRevision: false, comments: null })).toEqual([
       { kind: "stage", name: bi("Approved") },
       { kind: "told", company: tmc },
       { kind: "record", code: "A" },
@@ -43,15 +43,23 @@ describe("what happens when the viewer confirms a Transition", () => {
   });
 
   it("Code B: how many Comments open, counted from the rows typed, for whom", () => {
-    expect(actionSheetEffects({ transitionKey: "approve_b", definition, stages, told: tmc, code: "B", offersRevision: false, comments: 2 })).toEqual([
+    expect(actionSheetEffects({ transitionKey: "approve_b", definition, stages, goesTo: tmc, code: "B", offersRevision: false, comments: 2 })).toEqual([
       { kind: "stage", name: bi("Approved as Noted") },
       { kind: "comments", count: 2, company: tmc },
       { kind: "record", code: "B" },
     ]);
   });
 
+  it("Code B before any row is typed: who is told, not \"0 Comments\"", () => {
+    expect(actionSheetEffects({ transitionKey: "approve_b", definition, stages, goesTo: tmc, code: "B", offersRevision: false, comments: 0 })).toEqual([
+      { kind: "stage", name: bi("Approved as Noted") },
+      { kind: "told", company: tmc },
+      { kind: "record", code: "B" },
+    ]);
+  });
+
   it("Code C: back to the raiser for a new Revision", () => {
-    expect(actionSheetEffects({ transitionKey: "revise_c", definition, stages, told: tmc, code: "C", offersRevision: true, comments: null })).toEqual([
+    expect(actionSheetEffects({ transitionKey: "revise_c", definition, stages, goesTo: tmc, code: "C", offersRevision: true, comments: null })).toEqual([
       { kind: "stage", name: bi("Revise & Resubmit") },
       { kind: "revision", company: tmc },
       { kind: "record", code: "C" },
@@ -59,14 +67,14 @@ describe("what happens when the viewer confirms a Transition", () => {
   });
 
   it("a Send Back: its Stage and who it goes back to, with no code", () => {
-    expect(actionSheetEffects({ transitionKey: "send_back", definition, stages, told: tmc, code: null, offersRevision: false, comments: null })).toEqual([
+    expect(actionSheetEffects({ transitionKey: "send_back", definition, stages, goesTo: tmc, code: null, offersRevision: false, comments: null })).toEqual([
       { kind: "stage", name: bi("Draft") },
       { kind: "told", company: tmc },
     ]);
   });
 
   it("names nobody when it stays inside the viewer's own Company, and leaves out a Stage it can't find", () => {
-    expect(actionSheetEffects({ transitionKey: "unknown", definition, stages, told: null, code: null, offersRevision: false, comments: null })).toEqual([]);
-    expect(actionSheetEffects({ transitionKey: "approve_a", definition: null, stages: [], told: null, code: "A", offersRevision: false, comments: null })).toEqual([{ kind: "record", code: "A" }]);
+    expect(actionSheetEffects({ transitionKey: "unknown", definition, stages, goesTo: null, code: null, offersRevision: false, comments: null })).toEqual([]);
+    expect(actionSheetEffects({ transitionKey: "approve_a", definition: null, stages: [], goesTo: null, code: "A", offersRevision: false, comments: null })).toEqual([{ kind: "record", code: "A" }]);
   });
 });

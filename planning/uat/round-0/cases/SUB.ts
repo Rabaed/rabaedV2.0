@@ -290,8 +290,7 @@ defineCase("SUB-11", async (t) => {
   const dlg = pg.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await t.shot(pg, "code-a-popup");
-  // The sheet confirms a code as "Issue Code A" (RP-1237 row 29).
-  await dlg.getByRole("button", { name: /^Issue Code A$/ }).click();
+  await dlg.getByRole("button", { name: /^Approve/ }).last().click();
   await dlg.waitFor({ state: "hidden" });
   await settle(pg, 1000);
   const d = await H.detail(m, id);

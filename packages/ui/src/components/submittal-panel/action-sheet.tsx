@@ -62,16 +62,16 @@ export function ActionSheetEffects({ effects, labels, locale }: { effects: reado
 }
 
 /**
- * "Signs as ‹name› · ‹role›" (row 39): who the Transition is signed as, beside the sheet's buttons. The role
- * is the Position the Step names, or the signer's Company without one.
+ * "Signs as ‹name› · ‹Position›" (row 39): who the Transition is signed as, beside the sheet's buttons: the
+ * Position the Step is narrowed to, else the Step's own name; none without either.
  */
-export function ActionSheetSigner({ name, role, signsAs, locale }: { name: BilingualText; role: string | null; signsAs: string; locale: Locale }) {
+export function ActionSheetSigner({ name, position, signsAs, locale }: { name: BilingualText; position: string | null; signsAs: string; locale: Locale }) {
   return (
     <p data-sheet-signer="" className="me-auto flex min-w-0 items-center gap-2 text-[13px] text-text-secondary">
       <Avatar name={name[locale]} size="sm" decorative />
       <span className="min-w-0">
         {signsAs} <span className="font-semibold text-text">{name[locale]}</span>
-        {role && <span className="text-muted"> · {role}</span>}
+        {position && <span className="text-muted"> · {position}</span>}
       </span>
     </p>
   );
