@@ -5,6 +5,7 @@ Built 2026-11-07. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en 
 ## How to use this file
 
 1. Open the UAT and sign in as the person each case names under **Sign in as** (see Who's who). The owner gives you each sign-in; this file holds no passwords. Use one private browser window per person, so each sees only their own Company's work.
+   A section named Sign in as … · open UAT nn is one person's: sign in as that person and open that Project. Every UAT Project has the same people, so Home and Notifications mix them all: open it from Projects, not from Home, and stay in it for the whole section.
 2. Work section by section, case by case. Do the **Steps**, compare with the **Expected result**, and decide: `pass`, `fail`, `blocked` (could not test it) or `notrun`.
 3. On `fail` or `blocked`, write what you saw in the comment, in English or Arabic, and keep a screenshot.
 4. Skip the last section, the cases the UAT owner runs, unless the owner asks you to run them.
@@ -34,7 +35,9 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 | Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Company profile | Al Waha's Company Profile and Members |
 | Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin, UAT owner only | Rabaed Admin cases (ADM): the UAT owner runs these |
 
-## 1. Submittals (28 cases)
+## 1. Sign in as Hafiz · open UAT 01 · Contractor Engineer (Hafiz) (58 cases)
+
+Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one person named above: open it from Projects, not from Home.
 
 ### SUB-01 A new MAR is saved as a Draft
 
@@ -42,10 +45,10 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > Riyadh Gate Tower - Phase 2 > Submittals > New Submittal > Material Approval Request.
-  2. Subject "UAT SUB-01 Lighting Fixtures", Trade Electrical Works, Location Tower 1 Floor 02, Manufacturer Philips, Approved supplier Najd Electrical Supplies, Description empty.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > Material Approval Request.
+  2. Subject "UAT SUB-01 Lighting Fixtures", Trade Electrical Works, Location Tower A Level 02, Manufacturer Philips, Approved supplier Qassim Electrical Trading, Description empty.
   3. Save Draft.
-- **Expected result:** The Draft is listed in the Drafts Stage with "No number yet" and no Step Age dots. It is Hafiz's to edit. What other Companies see: VIS-01.
+- **Expected result:** The Draft is listed in the Drafts Stage with "No number yet" and no Step Age dots. It is Hafiz's to edit.
 
 ### SUB-02 Send for Review is refused while the Form is incomplete
 
@@ -53,7 +56,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Open the Draft from SUB-01.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-02 Lighting fixtures – incomplete".
   2. Send for Review with Description and Datasheet (PDF) empty.
 - **Expected result:** Refused: the Form lists what is missing ("2 fields need your attention: Description, Datasheet (PDF)") and marks each field. Nothing moves; the item stays a Draft with no number.
 
@@ -63,7 +66,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Fill Description, Model "CoreLine Panel", Specification section "26 51 00".
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-03 Panel lights – to fill in". Fill Description, Model "CoreLine Panel", Specification section "26 51 00".
   2. Under Items, Add row twice: "Recessed panel" 200 Pieces and "Surface panel" 40 Pieces.
   3. Save and close, then open the Draft again from the list.
   4. Add a PDF under Datasheet (PDF) and a JPEG with EXIF under Sample photo.
@@ -72,33 +75,559 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 ### SUB-04 Send for Review numbers the item and Ali holds it at once
 
 - **Key:** `RP-694` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer); Ali (TMC PM)
+- **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Hafiz: Send for Review on the complete Draft.
-  2. Ali: open it from the bell.
-- **Expected result:** The item gets the next Document Number in its sequence (for example TWR-MAR-01-0004), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour - TMC Constructions", no Pick up button. Ali's bell shows "Step reached" within seconds. Nothing outside TMC.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-04 Lighting control panel – ready to send" (complete, with its Datasheet).
+  2. Send for Review.
+- **Expected result:** The item gets the next number in TMC's MAR sequence (UAT01-MAR-01-0013 if no other case has sent one yet), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour - TMC Constructions", no Pick up button. Nothing outside TMC.
 
 ### SUB-05 A Return stays in Internal Review
 
 - **Key:** `RP-697` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Ali (TMC PM); Hafiz (TMC engineer)
+- **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Ali: Return with the reason "Add emergency duration".
-  2. Hafiz opens the item.
-- **Expected result:** The item stays in the Internal Review Stage, now at the Contractor Engineer Step, keeps its Document Number and goes back to Hafiz ("With Hafiz Hamdan - TMC Constructions"); it is never a Draft again. The reason is in TMC's history marked internal. Step Age counts from the Return.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0001 "SUB-05 Emergency luminaires – returned by Ali". Ali Returned it with the reason "Add the model's test certificate and resend."
+- **Expected result:** The item is in the Internal Review Stage at the Contractor Engineer Step, keeps its Document Number UAT01-MAR-01-0001 and is with Hafiz ("With Hafiz Hamdan - TMC Constructions"); it is never a Draft again. Ali's reason is in TMC's history, marked internal. Step Age counts from the Return.
 
 ### SUB-06 Documents change until the Submit
 
 - **Key:** `RP-700` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer); Ali (TMC PM)
+- **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Hafiz: remove the Datasheet and add a corrected PDF.
-  2. Send for Review again.
-  3. Ali opens the item and its Documents.
-- **Expected result:** Hafiz can swap Documents while the item is in TMC. Ali sees the corrected PDF. Documents freeze at the Submit, not before.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0002, returned to Hafiz.
+  2. Remove the Datasheet and add a corrected PDF.
+  3. Send for Review again.
+- **Expected result:** Hafiz can swap Documents while the item is in TMC: the corrected PDF replaces the old one. After the send the item keeps UAT01-MAR-01-0002 and is with Ali ("With Ali Sonour - TMC Constructions"). Documents freeze at the Submit, not before.
+
+### SUB-14 Code D offers a replacement, not a Revision
+
+- **Key:** `RP-723` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0004, which Mohammed closed at Code D (Rejected) with Remarks.
+  2. Choose Create replacement.
+- **Expected result:** The item is closed at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to UAT01-MAR-01-0004, and gets a new Document Number with no Rev suffix at its first send.
+
+### SUB-15 Create a Revision of a Code C item
+
+- **Key:** `RP-727` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0005, closed at Code C, and Create Revision.
+  2. The Draft reads Revision 1, No number yet; change the Model, Save and close.
+  3. Open the Revision drop-down.
+  4. Send for Review.
+- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. The drop-down lists the original and Revision 1 (no number yet); after the send Revision 1 reads UAT01-MAR-01-0005 Rev 1, whole and left to right, and is with Ali. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
+
+### SUB-16 Delete discards a Draft only
+
+- **Key:** `RP-730` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on the Draft "SUB-16 Draft to delete", which never left Draft, row menu > Delete, confirm.
+  2. On UAT01-MAR-01-0001, a numbered item, look at its row menu.
+- **Expected result:** The confirm says nobody will see the Draft again, Hafiz included, and no number is lost; it leaves the list. A numbered item has no Delete (an issued item is never deleted).
+
+### SUB-17 Duplicate copies only TMC's own work
+
+- **Key:** `RP-732` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate.
+  2. Open the new Draft.
+- **Expected result:** A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. "Duplicated from" shows UAT01-MAR-01-0009 to TMC only.
+
+### SUB-19 Related submittals and free Links open the other item
+
+- **Key:** `RP-737` · **Part:** SUB · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0012 "Emergency lighting control panel – Tower A Level 02".
+  2. Links: open UAT01-MAR-01-0009 from Related submittals and from the free Link.
+  3. On UAT01-MAR-01-0009 scroll to Linked from.
+- **Expected result:** Each Link shows the Document Number (left to right) and Subject and opens the item; a Submitted item cannot be changed. Linked from on UAT01-MAR-01-0009 lists the control panel. Linking notifies nobody.
+
+### WF-16 Cancel from the raiser's Steps, only until the first Submit
+
+- **Key:** `RP-810` · **Part:** WF · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "WF-16 Draft to cancel" and Cancel; confirm.
+  2. Open UAT01-MAR-01-0003, back with Hafiz at the Contractor Engineer Step, and Cancel; confirm.
+  3. Open UAT01-MAR-01-0011, Submitted to Design Consultants, and look for Cancel.
+- **Expected result:** Cancel is offered at the Draft and at the Contractor Engineer Step and asks for confirmation; each item goes to the Cancelled Stage with no outcome. Once Submitted (UAT01-MAR-01-0011), Cancel is no longer offered. A Revision never offers Cancel. Carried over from RP-463 B-09 (RP-490).
+
+### FRM-01 The three submittal Forms carry the documented fields
+
+- **Key:** `RP-814` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR, then SAR, then DAR.
+  2. Read each Form top to bottom in EN.
+- **Expected result:** MAR: Manufacturer, Approved supplier (required), Model, Specification section, Description, Items table with total, Datasheet (PDF), Test certificate, Sample photo, Related submittals, Trade, Location, Scopes. SAR and DAR have Forms of their own. Subject and Document Number sit above, Attachments and Links below.
+
+### FRM-02 Required fields to leave Draft
+
+- **Key:** `RP-817` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: save a new MAR Draft with each of Manufacturer, Description, Datasheet, Trade, Location empty in turn.
+  2. Send for Review.
+- **Expected result:** Manufacturer, Description, the Datasheet, Trade and Location are required to leave Draft; a Draft saves with any missing. Each missing field is named and marked.
+
+### FRM-03 Approved supplier offers the Trade's list only
+
+- **Key:** `RP-820` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR: choose Trade Civil Works and open Approved supplier.
+  2. Change Trade to Electrical Works.
+- **Expected result:** Civil offers Eastern Province Building Materials; Electrical offers Qassim Electrical Trading (and any supplier added since by a SAR or the Project Admin). Changing Trade clears the supplier.
+
+### FRM-04 Trade, Location and Scopes are Built-in Fields
+
+- **Key:** `RP-823` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR: pick Location Block A, then Tower A, then Tower A Level 02.
+  2. Open Scopes.
+  3. Try to remove Trade from the Form view.
+- **Expected result:** Locations nest Zone > Building > Floor (Block A > Tower A > Tower A Level 02); Scopes belong to the Trade, and UAT 01 has none, so Scopes offers nothing. Trade, Location and Scopes cannot be removed or made optional.
+
+### FRM-05 Related submittals offers only Submitted items Hafiz sees
+
+- **Key:** `RP-826` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the Draft "Lighting control panel – Hafiz's own Draft" type "control panel" under Related submittals.
+  2. Also search for "Lighting control panel", Hafiz's own Drafts, and for "Beta Build".
+- **Expected result:** Only Submitted items Hafiz sees in this Project appear, such as UAT01-MAR-01-0012 Emergency lighting control panel. No Drafts (not "Lighting control panel – Hafiz's own Draft"), nothing in internal review, nothing of Beta Build (Beta Build's UAT01-MAR-02-0002 is Submitted, but it is Beta Build's). A saved id that could not be offered is refused like a made-up one.
+
+### FRM-06 Photos keep time and place; Take photo on a phone
+
+- **Key:** `RP-829` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 px open Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals and the Draft "FRM-06 Draft for a photo from the phone"; under Sample photo choose Take photo / التقاط صورة (or Upload a JPEG with EXIF).
+  2. Save.
+  3. Open the photo.
+- **Expected result:** On a phone Take photo / التقاط صورة is offered beside Upload. The thumbnail shows, and opening the photo shows the time and place from its EXIF.
+
+### FRM-07 Documents freeze at the first Submit
+
+- **Key:** `RP-831` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the Draft "FRM-07 Draft whose Documents change" add a Document, then remove it.
+  2. Open UAT01-MAR-01-0011, Submitted to Design Consultants, and its Documents.
+- **Expected result:** Before the Submit Documents can change. After it they are frozen for everyone: on UAT01-MAR-01-0011 Hafiz opens its Documents but cannot add or remove one.
+
+### FRM-10 Draft autosave shows Saved and survives a failed save
+
+- **Key:** `RP-839` · **Part:** FRM · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: edit the Draft "FRM-10 Draft for autosave"; watch the Saved time.
+  2. Go offline in the browser, edit, go online.
+- **Expected result:** The Saved time moves with each save. A failed save is shown clearly with a retry; no edit is lost.
+
+### FRM-11 Member and Participant fields offer only what the filler may see
+
+- **Key:** `RP-842` · **Part:** FRM
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz), on an item with a member or participant field (if the Form offers one) open the choices.
+- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
+
+### SIG-05 A Code C, a Code D and a Cancelled item also close with a record
+
+- **Key:** `RP-714` · **Part:** SIG · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0006 (closed at Code C), UAT01-MAR-01-0007 (closed at Code D) and UAT01-MAR-01-0008 (Cancelled).
+  2. Download each one's Documental Record (PDF).
+- **Expected result:** Each closed with its record whatever the outcome; the outcome in each PDF matches the item: Code C, Code D, Cancelled.
+
+### SIG-07 Add Signature in the profile (draw, type, upload)
+
+- **Key:** `RP-717` · **Part:** SIG · **Round:** 2
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Profile > Signature: Hafiz has one, so choose Replace: Draw with finger at 375 px, then Type, then Upload.
+  2. Save.
+  3. Replace it again.
+- **Expected result:** Pen styles and colours, Clear and Undo; a preview as on a record; once saved the profile shows it with Replace and the note that records already made keep the Signature used then.
+
+### SNG-03 Contractor moves the Snag through its Steps
+
+- **Key:** `RP-754` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List: open UAT01-SNG-03-0001 "SNG-03 Loose cable tray cover", Open with TMC (Design Consultants raised it).
+  2. Start work, Put on hold, Resume work, back to Open where offered.
+- **Expected result:** Moves are TMC's internal events: inside TMC the Stage shows In Progress or On Hold. A send leaves it in TMC's Step Pool.
+
+### SNG-04 Resolve with a note, Verify, Close or Return to Open
+
+- **Key:** `RP-756` · **Part:** SNG · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List: open UAT01-SNG-03-0002 "SNG-04 Missing socket cover", Open with TMC, and Resolve with a resolution note (required).
+  2. Open UAT01-SNG-03-0003 "SNG-04 Unlabelled circuit breakers – back to Open": Hafiz resolved it and Ahmed, who raised it, Returned it to Open with the reason "Two breakers are still unlabelled." Read the reason, then Resolve again.
+- **Expected result:** Resolve asks for the resolution note; after it the Snag is Design Consultants', who raised it, to Verify, and Hafiz can no longer move it. Return to Open came back to TMC, who resolved it, with Ahmed's reason, and Resolve is offered again. Each side reads only the other's shared Transitions.
+
+### SNG-08 Resolve with after photos
+
+- **Key:** `RP-765` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List: open UAT01-SNG-03-0004 "SNG-08 Cracked light diffuser", Open with TMC; add after photos before Resolve; Resolve.
+- **Expected result:** After photos sit with TMC until Resolve, then freeze and show beside the before photos in the record; a Send Back discards them.
+
+### SNG-13 Snag List on a phone
+
+- **Key:** `RP-784` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 px open Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List and raise a Snag with the camera.
+- **Expected result:** Photo-first cards, filters in a sheet, large New button, the camera opens from Take a photo / التقاط صورة; saved as you go.
+
+### INS-03 Raise a WIR with a Checklist Template
+
+- **Key:** `RP-802` · **Part:** INS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Inspections > New > Work Inspection Request: Description, Trade Civil Works, Location, Checklist Template.
+  2. Look at the preview of items.
+  3. Change the Trade.
+- **Expected result:** Templates offered are the Trade's active ones, labelled As picked if later retired; changing the Trade clears the pick; before a Trade it says Choose a Trade first. The items are copied onto the WIR.
+
+### INS-04 Approved submittals offers only Code A or B items
+
+- **Key:** `RP-803` · **Part:** INS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Inspections > New > Work Inspection Request: open Approved submittals.
+  2. Search UAT01-MAR-01-0010, closed at Code C, and UAT01-MAR-01-0011, still open.
+- **Expected result:** Only items closed at Code A or B that Hafiz sees and that were Submitted are offered, such as UAT01-MAR-01-0009; UAT01-MAR-01-0010 and UAT01-MAR-01-0011 are not. A saved id outside that is refused like an unknown option.
+
+### INS-05 The pick is fixed once the WIR is Submitted
+
+- **Key:** `RP-806` · **Part:** INS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Inspections: open the WIR Draft "INS-05 Cable containment Level 04 – Draft", change its Trade to Civil Works and pick Concrete pour.
+  2. Open UAT01-WIR-01-0001, which Ali Submitted, and try to change its Checklist Template.
+- **Expected result:** Before the first Submit a new pick replaces the copy: the Draft now holds Concrete pour's items. After it, on UAT01-WIR-01-0001, the pick and the copy are fixed.
+
+### INS-06 Annotate a photo; the original is kept
+
+- **Key:** `RP-809` · **Part:** INS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "INS-06 Draft with a photo to annotate"; open its Sample photo and annotate it (arrow, text label); Save.
+  2. Switch Annotated and Original.
+- **Expected result:** The annotated copy is saved beside the original, marked annotated; the original's bytes are unchanged; both download.
+
+### IMP-01 Upload accepts .xlsx and .csv only
+
+- **Key:** `RP-835` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > Import register.
+  2. Upload a .pdf, a non-UTF-8 .csv, a .csv over 2,000 rows, then a good .xlsx.
+- **Expected result:** Each bad file gets its own message (only .xlsx and .csv; save as CSV UTF-8; split into smaller registers). The good file moves to the next step. Cells are read as stored, so 0012 stays 0012 when typed as text.
+
+### IMP-02 Pick the worksheet and the header row
+
+- **Key:** `RP-838` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > Import register upload a workbook with two sheets and 3 title rows above the headings.
+  2. Choose the sheet and the header row.
+- **Expected result:** The preview shows the first rows; rows above the header are skipped; rows below are read as submittals; an empty or missing header row gets its message.
+
+### IMP-03 Map columns to Rabaed fields
+
+- **Key:** `RP-841` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register map Description to Subject, Type to Type, Discipline to Trade.
+  2. Try Validate with Trade unmapped.
+  3. Use one value for every row instead.
+- **Expected result:** Subject, Type and Trade are required; unmapped columns are ignored; a fixed value for every row is allowed and shown as such on the import's page.
+
+### IMP-04 Preview lists every reason per bad row
+
+- **Key:** `RP-844` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register validate a register with: empty Subject, Subject over 200 characters, unknown Type, Trade not in the Project.
+- **Expected result:** Counts show rows checked, ready and left out; each bad row lists all its reasons (Subject empty, Type unknown, Trade not in this Project). Nothing is created yet. (Hafiz covers every Trade of UAT 01, so no row is outside his Visibility here.)
+
+### IMP-05 Confirm creates Drafts, all good rows or none
+
+- **Key:** `RP-847` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register confirm a preview with 8 good rows and 2 bad.
+  2. Open the Submittals List.
+- **Expected result:** Eight Drafts are created, raised by Hafiz, each No number yet; the two bad rows are left out and never created. A change in the Project after the preview gives Something in the Project changed, validate again.
+
+### IMP-06 The result page and the Imports page
+
+- **Key:** `RP-850` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. After confirming an import in Projects > UAT 01 · Contractor Engineer (Hafiz) read the result: Drafts created, Left out, Open the Drafts.
+  2. Imports page.
+  3. Open the import.
+- **Expected result:** Imports are listed by file name only, with no time anywhere. The import page lists every row with its result; a created row links to its Draft.
+
+### IMP-07 Imported Drafts follow the Draft rules
+
+- **Key:** `RP-852` · **Part:** IMP · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a Draft an import made.
+  2. Read its history.
+- **Expected result:** It is an ordinary Draft: Hafiz edits it, sends it, and it gets its number at the first send. Its created event, internal to TMC, names the import.
+
+### IMP-08 Download the rows left out and import again
+
+- **Key:** `RP-857` · **Part:** IMP · **Round:** 5
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. On the result of an import in Projects > UAT 01 · Contractor Engineer (Hafiz) press Download rejected rows.
+  2. Fix and import again.
+- **Expected result:** The file holds the left-out rows with a reason column; the second import is a new import.
+
+### IMP-09 Unknown values are matched once per distinct value
+
+- **Key:** `RP-860` · **Part:** IMP · **Round:** 5
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register map a Trade column holding Elec. on 30 rows.
+  2. Match Elec. to Electrical Works once.
+- **Expected result:** The match applies to all 30 rows; the preview recounts.
+
+### IMP-11 Packages from an import and saved mappings
+
+- **Key:** `RP-866` · **Part:** IMP · **Round:** 5
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register group rows into one new Package, then one per column value, then an existing Open Package; try an In Progress Package.
+  2. Save the mapping and reuse it.
+- **Expected result:** New Packages take the next PKG number; an In Progress or Done Package makes its rows bad; the mapping is kept for the Company only.
+
+### I18N-01 Switch language keeps the page and mirrors the layout
+
+- **Key:** `RP-902` · **Part:** I18N · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. On Home, and in Projects > UAT 01 · Contractor Engineer (Hafiz) on the List, Kanban and an item, switch EN to AR with the language button, and open /ar URLs directly.
+  2. Switch back.
+- **Expected result:** The same page reloads in Arabic with RTL: sidebar, tables, filter panel, Kanban column order, arrows and breadcrumbs mirror. Nothing is cut off.
+
+### I18N-04 Form labels and validation messages in Arabic
+
+- **Key:** `RP-906` · **Part:** I18N · **Round:** 0
+- **Sign in as:** Hafiz (Arabic)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a MAR Form in /ar; leave Description empty and Send for Review.
+- **Expected result:** Field labels, section titles, Action Form words and the missing-fields message are Arabic; values typed in English are not translated.
+
+### I18N-06 Phone width 375: nothing breaks
+
+- **Key:** `RP-689` · **Part:** I18N · **Round:** 0
+- **Sign in as:** Hafiz
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 px open Home, Projects, and in Projects > UAT 01 · Contractor Engineer (Hafiz) the Submittals List, Kanban, an item, Settings, the Workflow builder.
+- **Expected result:** No page scrolls sideways; tables and the Kanban scroll inside their own area; the sidebar opens as a drawer. This is what the build guarantees until the phone designs of RP-422 exist. Note, without failing the scenario, touch targets under 44 px, filters that do not open as a sheet and any cut-off text, as UX recommendations. The same web app, no separate app.
+
+### UX-04 Submittals List matches the owner anatomy
+
+- **Key:** `RP-926` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > List at 1366 and 1920, EN and AR.
+  2. Open the filter panel, choose several values, save columns, sort, page.
+  3. Scroll a long table.
+- **Expected result:** Matches D:\Artifacts\Rabaed Submittals List.html first, then submittals-list.html with list/filter-panel.js: columns, chips, Step Age dots, Code labels ("Code A"), row menu; the table scrolls inside its own region, the page never scrolls sideways.
+
+### UX-05 Submittals Kanban matches the board and card anatomy
+
+- **Key:** `RP-927` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > Kanban, EN and AR, 1366 and 1920.
+  2. Read a card in every Stage; change the Card view layout.
+  3. Scroll across and within columns.
+- **Expected result:** Matches D:\Artifacts\Rabaed Kanban Board Anatomy.html and Rabaed Kanban Card Anatomy.html, then submittals-kanban.html: column headers and counts, card fields and order, With line, Step Age dots, closed-by line; columns scroll left and right, cards up and down.
+
+### UX-06 Work Item page, Transition pop-ups and View workflow drawer
+
+- **Key:** `RP-928` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a MAR in Draft ("Lighting control panel – Hafiz's own Draft"), in internal review (UAT01-MAR-01-0001), Submitted (UAT01-MAR-01-0011) and closed (UAT01-MAR-01-0009), EN and AR.
+  2. Open every Transition pop-up Hafiz is offered (Send for Review, Cancel) and close it without confirming.
+  3. Open View workflow (map and list).
+- **Expected result:** Laid out as design/prompts/work-item-page.md and workflow-view.html: header (Document Number left to right, Stage, With, Step Age), Form, Attachments and Links, history; each pop-up asks for confirmation and shows its Action Form; required fields and errors are clear.
+
+### UX-07 New work item and the Form while filling it
+
+- **Key:** `RP-929` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz): New Submittal for each Type, EN and AR, 1366 and 375.
+  2. Fill, leave required fields empty, add Items rows, upload files and a photo, Save Draft.
+- **Expected result:** Laid out as new-work-item.md and form-template-brief.md: sections, field help, the Items table on a phone, upload progress, "Saved" indicator, the list of fields needing attention; nothing overlaps at 375.
+
+### UX-19 Phone width for every built page
+
+- **Key:** `RP-941` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 and 820 open Home, Projects, and in Projects > UAT 01 · Contractor Engineer (Hafiz) the List, Kanban, item page, New item; then Notifications, Profile, Settings. EN and AR.
+- **Expected result:** Follows D:\Artifacts\Rabaed Responsive Anatomy.html and responsive.md: no page-level sideways scroll; tables and the Kanban scroll inside their region; the sidebar is a drawer; every action reachable.
+
+### UX-21 Feedback after every action
+
+- **Key:** `RP-943` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) save a new Draft, take each Transition Hafiz is offered on it, upload a file, change a setting.
+  2. Watch for the confirmation, the disabled reason and the page update.
+- **Expected result:** Each action gives visible feedback (toast or inline), disabled buttons say why, the page updates without a reload, nothing is done twice on a double click.
+
+### UX-22 Keyboard and screen reader basics
+
+- **Key:** `RP-944` · **Part:** UX · **Round:** 0
+- **Sign in as:** Hafiz
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) use the List, Kanban, item page, a Transition pop-up and the Form with the keyboard only.
+  2. Run an accessibility scan (the accessibility-tester agent, report only) on the same pages, EN and AR.
+- **Expected result:** Visible focus, logical focus order (mirrored in Arabic), pop-ups trap and return focus, every control has a label, text contrast at least WCAG AA. Findings reported as UI issues.
+
+### VIS-04 Recommended Code, Internal Notes and the verification note never reach TMC
+
+- **Key:** `RP-740` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0010 "VIS-04 Sub-distribution boards – Code C". Design Consultants' Engineer reviewed it and sent it to the Manager with a Recommended Code and an Internal Note; Mohammed closed it at Code C with Remarks and his final verification.
+  2. Read its header, Form, replies, history and Activity, and Export the List with it.
+- **Expected result:** Hafiz sees Code C with what the Code shares: Mohammed's Remarks ("Revise and resubmit with the specified finish.") and his final verification. He must NOT see the Recommended Code, the Internal Note ("Recommend resubmission: see the verification.") or the Engineer's own review answers (his Send to Manager reply) anywhere: not in the history, the replies, the Activity Feed, the export or a notification (V5).
+
+### VIS-11 Link search never offers what the linker cannot see
+
+- **Key:** `RP-771` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the Draft "Lighting control panel – Hafiz's own Draft", Links > add a Link and search "control panel", then "Beta Build", then "SUB-02".
+- **Expected result:** Hafiz is offered only Submitted items he sees in this Project, such as UAT01-MAR-01-0012: no Drafts ("SUB-02 Lighting fixtures – incomplete" and "Lighting control panel – Hafiz's own Draft" are his own Drafts), nothing in internal review, nothing of Beta Build (UAT01-MAR-02-0002 is Submitted, but it is Beta Build's), nothing from another Project.
+
+### VIS-19 List and Kanban counts, lanes and filters hide the other Company
+
+- **Key:** `RP-797` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: List and Kanban; note every Stage count, lane and filter value.
+  2. Search for "Beta Build", UAT01-MAR-02-0001, UAT01-MAR-02-0002 and UAT01-MAR-02-0003; in the Snag List search for "Design Consultants – Draft snag".
+  3. Open the Dashboard.
+- **Expected result:** Nothing of Beta Build's appears anywhere: not its Draft "Beta Build – standby generator, Draft", nor UAT01-MAR-02-0001 (with Beta Build's PM), UAT01-MAR-02-0002 (Submitted) or UAT01-MAR-02-0003 (closed at Code A), in no List, lane, count, filter value, search result or Dashboard figure (V1, V3). Design Consultants' own "Design Consultants – Draft snag, not raised" is in no Snag List or count (V1). Every count is of TMC's items and the items others Submitted to TMC only.
+
+### VIS-31 A Participant never sees the list of other Participants
+
+- **Key:** `RP-834` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open Company Projects and the Project's Participants page.
+  2. Open Settings > Numbering.
+- **Expected result:** Hafiz sees TMC's own Participant, its role, its Project Members and the Host Company's name, and never the list of the other Participants (V15). Numbering shows TMC's own Participant with No code yet and no order number; only the Project Admin sees all orders.
+
+### VIS-39 Document Numbers and numbering counters do not reveal a rival volume
+
+- **Key:** `RP-858` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals List: read the Document Numbers of TMC's MARs, UAT01-MAR-01-0001 to UAT01-MAR-01-0012; Beta Build numbered three of its own while the seed raised them.
+  2. Open Settings > Numbering, and a counter's page if one is offered.
+- **Expected result:** TMC's numbers run 0001 to 0012 with no gaps: nothing shows that Beta Build numbered items in between. Hafiz sees examples built from TMC's own Participant with sequence 1, and no counters: a counter's address gives the not-found page. Version history names the saver Company only to its own Members and the Project Admin; others read A Project Admin.
+
+### VIS-60 Rabaed Default Workflows are readable by all and name no Company
+
+- **Key:** `RP-915` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open the list of Rabaed Default Workflows for a submittal Type.
+- **Expected result:** Hafiz reads the eight Workflows with names and Versions, and the one the Type runs marked; they name no Project, Company or item; a Project binding reaches that Project only.
+
+### VIS-64 Another Project is invisible both ways
+
+- **Key:** `RP-919` · **Part:** VIS · **Round:** 0
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Open Projects and Home, and search for "Jeddah" and for "Pump room ventilation": Jeddah Corniche Villas is Beta Build's own Project and that is its Draft.
+  2. Open a made-up Project address, /en/projects/00000000-0000-4000-8000-000000000000.
+- **Expected result:** Jeddah Corniche Villas is not in Hafiz's Projects, Home counts, search or notifications; the made-up address gives the one not-found page (404, never 403). Carried over from RP-463 A-11 (RP-474).
+
+## 2. Submittals (17 cases)
 
 ### SUB-07 Submit with a Cover Note and an Internal Note
 
@@ -178,48 +707,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   4. Mohammed: Revise and Resubmit C with Remarks empty, then with Remarks.
 - **Expected result:** Return to Engineer gives it back to Ahmed. Code C is refused until Remarks are written, then closes at C with its Remarks and final verification. TMC is offered Create Revision (SUB-15).
 
-### SUB-14 Code D offers a replacement, not a Revision
-
-- **Key:** `RP-723` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Mohammed (DCL manager); Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Mohammed: Reject D with Remarks.
-  2. Hafiz opens the closed MAR and chooses Create replacement.
-- **Expected result:** The item closes at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to the rejected MAR, and gets a new Document Number with no Rev suffix at its first send.
-
-### SUB-15 Create a Revision of a Code C item
-
-- **Key:** `RP-727` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer); Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the MAR you took to Code C in SUB-13 (the seeded Cable tray risers item already has an open Rev 1, so it offers no new Revision) and Create Revision.
-  2. The Draft reads Revision 1, No number yet; change the Model, Save and close.
-  3. Open the Revision drop-down.
-  4. Send for Review and have Ali Submit it.
-- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. The drop-down lists the original and Revision 1 (no number yet); after the Submit it lists the number and the number Rev 1, each whole and left to right. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter.
-
-### SUB-16 Delete discards a Draft only
-
-- **Key:** `RP-730` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On a Draft that never left Draft, row menu > Delete, confirm.
-  2. On a numbered item look at its row menu.
-- **Expected result:** The confirm says nobody will see the Draft again, Hafiz included, and no number is lost; it leaves the list. A numbered item has no Delete (an issued item is never deleted).
-
-### SUB-17 Duplicate copies only TMC's own work
-
-- **Key:** `RP-732` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On a closed MAR that Mohammed answered, row menu > Duplicate.
-  2. Open the new Draft.
-- **Expected result:** A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. "Duplicated from" shows the original's number to TMC only.
-
 ### SUB-18 Download gives the item as it last arrived
 
 - **Key:** `RP-735` · **Part:** SUB · **Round:** 0
@@ -229,17 +716,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. On a Submitted MAR choose Download from the row menu as Ali, then as Mohammed.
   2. Try Download on a Draft.
 - **Expected result:** Both get the same content: shared answers, shared moves by Company only, no Step, no person, no Internal Note. A Draft offers Download of its Working Copy.
-
-### SUB-19 Related submittals and free Links open the other item
-
-- **Key:** `RP-737` · **Part:** SUB · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open "Emergency lighting control panel - Tower 2".
-  2. Links: open TWR-MAR-01-0001 from Related submittals and from the free Link.
-  3. On TWR-MAR-01-0001 scroll to Linked from.
-- **Expected result:** Each Link shows the Document Number (left to right) and Subject and opens the item; a Submitted item cannot be changed. Linked from on the exit signs lists the control panel. Linking notifies nobody.
 
 ### SUB-20 A SAR closed at Code A adds the supplier to the list
 
@@ -338,7 +814,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Project > Activity Feed after some Submits and Codes.
 - **Expected result:** Entries read as events (submitted, returned, approved) with the Project; TMC appears by Company name only; no answers_changed or Document upload entries.
 
-## 2. Workflows (16 cases)
+## 3. Workflows (15 cases)
 
 ### WF-01 Every Member reads the Project Workflows
 
@@ -492,17 +968,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Create a new Project.
 - **Expected result:** The Library copy has no link to the original; the new Project starts with a copy as its MAR Workflow, bound. A plain Member sees the Library read-only.
 
-### WF-16 Cancel from the raiser's Steps, only until the first Submit
-
-- **Key:** `RP-810` · **Part:** WF · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer); Ali (TMC PM)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz: new MAR "UAT Cancel", Save Draft, Cancel; confirm.
-  2. Make a second MAR, Send for Review; Ali opens it and Cancels.
-  3. Make a third, Submit it to DCL; look for Cancel as Ali and Hafiz.
-- **Expected result:** Cancel is offered at the Draft, the Contractor Engineer and the Internal Review Steps and asks for confirmation; the item goes to the Cancelled Stage with no outcome. Once Submitted, Cancel is no longer offered. A Revision never offers Cancel. Carried over from RP-463 B-09 (RP-490).
-
 ### WF-17 Assign to offers only your own Company's Members
 
 - **Key:** `RP-812` · **Part:** WF · **Round:** 0 · **Needs:** setup
@@ -514,80 +979,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Ali: Submit, open Assign to.
 - **Expected result:** Hafiz is offered only TMC Members who may hold the Contractor PM Step; Ali only TMC Members (never a DCL engineer by name; the Consultant is one Participant). A pick it could not have offered is refused like a made-up one. Carried over from RP-463 B-06 (RP-487).
 
-## 3. Forms and Screens (11 cases)
-
-### FRM-01 The three submittal Forms carry the documented fields
-
-- **Key:** `RP-814` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New Submittal > MAR, then SAR, then DAR.
-  2. Read each Form top to bottom in EN.
-- **Expected result:** MAR: Manufacturer, Approved supplier (required), Model, Specification section, Description, Items table with total, Datasheet (PDF), Test certificate, Sample photo, Related submittals, Trade, Location, Scopes. SAR and DAR have Forms of their own. Subject and Document Number sit above, Attachments and Links below.
-
-### FRM-02 Required fields to leave Draft
-
-- **Key:** `RP-817` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Save a MAR Draft with each of Manufacturer, Description, Datasheet, Trade, Location empty in turn.
-  2. Send for Review.
-- **Expected result:** Manufacturer, Description, the Datasheet, Trade and Location are required to leave Draft; a Draft saves with any missing. Each missing field is named and marked.
-
-### FRM-03 Approved supplier offers the Trade's list only
-
-- **Key:** `RP-820` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In a MAR choose Trade Civil Works: open Approved supplier.
-  2. Change Trade to Electrical Works.
-- **Expected result:** Civil offers Al-Rimal Building Materials; Electrical offers Najd Electrical Supplies and Tabuk Cable Industries (and any supplier added since by a SAR or the Project Admin). Changing Trade clears the supplier.
-
-### FRM-04 Trade, Location and Scopes are Built-in Fields
-
-- **Key:** `RP-823` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Pick Location Tower 1, then Floor.
-  2. Pick Scopes Lighting and Emergency lighting.
-  3. Try to remove Trade from the Form view.
-- **Expected result:** Locations nest Zone > Tower > Floor; Scopes belong to the Trade. Trade, Location and Scopes cannot be removed or made optional.
-
-### FRM-05 Related submittals offers only Submitted items Hafiz sees
-
-- **Key:** `RP-826` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In a Draft MAR type "control panel" under Related submittals.
-  2. Also search for a Draft of Hafiz's own and for Beta Build's item.
-- **Expected result:** Only Submitted items Hafiz sees in this Project appear; no Drafts, nothing in internal review, nothing of Beta Build. A saved id that could not be offered is refused like a made-up one.
-
-### FRM-06 Photos keep time and place; Take photo on a phone
-
-- **Key:** `RP-829` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 px open a Draft MAR; under Sample photo choose Take photo / التقاط صورة (or Upload a JPEG with EXIF).
-  2. Save.
-  3. Open the photo.
-- **Expected result:** On a phone Take photo / التقاط صورة is offered beside Upload. The thumbnail shows, and opening the photo shows the time and place from its EXIF.
-
-### FRM-07 Documents freeze at the first Submit
-
-- **Key:** `RP-831` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz; Ali; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz adds and removes a Document in a Draft.
-  2. After Ali Submits, Hafiz opens the item.
-  3. Ahmed opens the Documents.
-- **Expected result:** Before the Submit Documents can change; after it they are frozen for everyone and cannot be removed. Ahmed opens them with a short-lived link.
+## 4. Forms and Screens (2 cases)
 
 ### FRM-08 The Form belongs to the raiser; replies are Screens
 
@@ -611,26 +1003,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Start a MAR and take it to the Code; compare the pop-up.
 - **Expected result:** Every Member reads Screens; only Project Admins change them. An item already running keeps the Screen Version its Workflow Version pinned; new Workflow Versions pick the new one.
 
-### FRM-10 Draft autosave shows Saved and survives a failed save
-
-- **Key:** `RP-839` · **Part:** FRM · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Edit a Draft; watch the Saved time.
-  2. Go offline in the browser, edit, go online.
-- **Expected result:** The Saved time moves with each save. A failed save is shown clearly with a retry; no edit is lost.
-
-### FRM-11 Member and Participant fields offer only what the filler may see
-
-- **Key:** `RP-842` · **Part:** FRM
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On an item with a member or participant field (if the Form offers one) open the choices.
-- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
-
-## 4. Participants and Visibility setup (14 cases)
+## 5. Participants and Visibility setup (14 cases)
 
 ### PAR-03 An email that belongs to another Company is refused without naming it
 
@@ -773,7 +1146,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Reem accepts, grants Electrical and Mechanical, all Locations, and adds a PM Member (Sami UAT) with Position Project Manager.
 - **Expected result:** UAT Owner Co is a Participant with oversight over Submitted items it covers. Later Owner scenarios use it.
 
-## 5. Packages (11 cases)
+## 6. Packages (11 cases)
 
 ### PKG-01 Packages is a third view beside List and Kanban
 
@@ -891,7 +1264,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. After the Submit look again as Sara (Mechanical-only) and Ahmed.
 - **Expected result:** Another Company's Open Package is never shown (not its name, Drafts or count). After the Submit Ahmed sees all submittals of his Trades; Sara sees only the Mechanical ones and their counts; status shows as one word. Yousef sees nothing.
 
-## 6. Signing and Documental Record (15 cases)
+## 7. Signing and Documental Record (13 cases)
 
 ### SIG-01 Every Transition is confirmed in its pop-up
 
@@ -933,27 +1306,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Take a MAR through Send for Review, a Return, a second send, Submit with Internal Note, Ahmed Send to Manager with Recommended Code C, Mohammed Code A.
   2. Read the PDF.
 - **Expected result:** It names every Member who took a Transition on the path, TMC's and DCL's alike, with the first entry dated at the raiser's last send out of Draft (a Returned send is off the path). It holds no Return, Internal Note, Recommended Code, Chat or in-progress answer.
-
-### SIG-05 A Code C, a Code D and a Cancelled item also close with a record
-
-- **Key:** `RP-714` · **Part:** SIG · **Round:** 0
-- **Sign in as:** Hafiz; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Close one MAR at C, one at D.
-  2. Download both PDFs.
-- **Expected result:** Each closes with its record whatever the outcome; the outcome in the PDF matches the item.
-
-### SIG-07 Add Signature in the profile (draw, type, upload)
-
-- **Key:** `RP-717` · **Part:** SIG · **Round:** 2
-- **Sign in as:** Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Profile > Add Signature: Draw with finger at 375 px, then Type, then Upload.
-  2. Save.
-  3. Replace it.
-- **Expected result:** Pen styles and colours, Clear and Undo; a preview as on a record; once saved the profile shows it with Replace and the note that records already made keep the Signature used then.
 
 ### SIG-08 Record page 1 and Form body
 
@@ -1046,7 +1398,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Withdraw a Participant and open its Authorized Person records.
 - **Expected result:** The record reaches people only through ordinary notifications inside Rabaed. A removed Member keeps the Project name and the records they signed; the Company keeps those its Members signed through its Authorized Person; open items of a withdrawn Participant are Cancelled.
 
-## 7. Snag List (15 cases)
+## 8. Snag List (11 cases)
 
 ### SNG-01 The Snag List tab: List, Kanban and empty state
 
@@ -1069,28 +1421,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Mohammed: Snag List > New Snag: Subject "UAT SNG-02 Cable tray not bonded", Description, Trade Electrical Works, Location Tower 1 Floor 02, a before photo.
   3. Raise.
 - **Expected result:** The Snag is Open with TMC (the one Contractor covering Tower 1). With two Contractors covering the Location, Raise is refused with the plain This can not be handed over yet answer (RP-658 adds the pick).
-
-### SNG-03 Contractor moves the Snag through its Steps
-
-- **Key:** `RP-754` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Ali; Hafiz (TMC)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open the Snag.
-  2. Start work, Put on hold, Resume work, back to Open where offered.
-  3. Read the Stage and Step Age as Mohammed.
-- **Expected result:** Moves are TMC's internal events: Stage shows In Progress or On Hold inside TMC; Design Consultants sees it Open with Step Age counted from when it reached TMC. A send leaves it in TMC's Step Pool.
-
-### SNG-04 Resolve with a note, Verify, Close or Return to Open
-
-- **Key:** `RP-756` · **Part:** SNG · **Round:** 0
-- **Sign in as:** Hafiz (TMC); Mohammed (DCL)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz: Resolve with a resolution note (required).
-  2. Mohammed: Return to Open with a reason.
-  3. Hafiz resolves again; Mohammed: Close.
-- **Expected result:** Mohammed holds Verify (the raiser). Return to Open goes back to TMC, who resolved it. Closed ends the Snag. Each side reads only the other's shared Transitions.
 
 ### SNG-05 A Contractor raises a Snag on itself
 
@@ -1121,15 +1451,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Steps:**
   1. Snag List > New.
 - **Expected result:** The menu offers Snag (and later Site Observation and Question) and not Comment; Comments only come from a Code B.
-
-### SNG-08 Resolve with after photos
-
-- **Key:** `RP-765` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Hafiz (TMC)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open an Open Snag; add after photos before Resolve; Resolve.
-- **Expected result:** After photos sit with TMC until Resolve, then freeze and show beside the before photos in the record; a Send Back discards them.
 
 ### SNG-09 Informed Participants
 
@@ -1167,15 +1488,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Select several Snags; reassign within TMC; Export Excel.
 - **Expected result:** Bulk applies within TMC only; the export holds exactly the visible rows.
 
-### SNG-13 Snag List on a phone
-
-- **Key:** `RP-784` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 px open the Snag List and raise a Snag with the camera.
-- **Expected result:** Photo-first cards, filters in a sheet, large New button, the camera opens from Take a photo / التقاط صورة; saved as you go.
-
 ### SNG-14 Pick the Contractor when two cover a Location
 
 - **Key:** `RP-787` · **Part:** SNG · **Round:** 3 · **Needs:** setup
@@ -1195,7 +1507,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Snag List > Export PDF report.
 - **Expected result:** A PDF of the visible Snags with photos; no Snag the viewer cannot see.
 
-## 8. Inspections (WIR) (14 cases)
+## 9. Inspections (WIR) (10 cases)
 
 ### INS-01 Checklist Templates: create, edit into Version 2, retire
 
@@ -1218,48 +1530,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Settings > Required links: turn on Approved submittals required.
   2. Hafiz tries to send a WIR without one.
 - **Expected result:** Every Member reads the setting; only a Project Admin changes it. With it on a WIR cannot leave Draft without an Approved submittal and the form names the field.
-
-### INS-03 Raise a WIR with a Checklist Template
-
-- **Key:** `RP-802` · **Part:** INS · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New Submittal or Inspections > New > Work Inspection Request: Description, Trade Civil Works, Location, Checklist Template.
-  2. Look at the preview of items.
-  3. Change the Trade.
-- **Expected result:** Templates offered are the Trade's active ones, labelled As picked if later retired; changing the Trade clears the pick; before a Trade it says Choose a Trade first. The items are copied onto the WIR.
-
-### INS-04 Approved submittals offers only Code A or B items
-
-- **Key:** `RP-803` · **Part:** INS · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In the WIR open Approved submittals.
-  2. Search an item closed at C and one still open.
-- **Expected result:** Only items closed at Code A or B that Hafiz sees and that were Submitted are offered; a saved id outside that is refused like an unknown option.
-
-### INS-05 The pick is fixed once the WIR is Submitted
-
-- **Key:** `RP-806` · **Part:** INS · **Round:** 0
-- **Sign in as:** Hafiz; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Change the Checklist Template before the Submit.
-  2. After Ali Submits try to change it.
-- **Expected result:** Before the first Submit a new pick replaces the copy. After it, the pick and the copy are fixed.
-
-### INS-06 Annotate a photo; the original is kept
-
-- **Key:** `RP-809` · **Part:** INS · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Add a photo to a Draft; open it and annotate (arrow, text label); Save.
-  2. Switch Annotated and Original.
-  3. Submit; Ahmed opens it.
-- **Expected result:** The annotated copy is saved beside the original, marked annotated; the original's bytes are unchanged; both download. After the Submit Ahmed reads both; a frozen original takes no new copy.
 
 ### INS-07 Inspections tab and the in-Submittals setting
 
@@ -1339,99 +1609,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. With the WIR in Pending Approval open the Kanban.
 - **Expected result:** A WIR sits in the same column as a submittal at the same Stage.
 
-## 9. Submittal Register Import (11 cases)
-
-### IMP-01 Upload accepts .xlsx and .csv only
-
-- **Key:** `RP-835` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Submittals > Import register.
-  2. Upload a .pdf, a non-UTF-8 .csv, a .csv over 2,000 rows, then a good .xlsx.
-- **Expected result:** Each bad file gets its own message (only .xlsx and .csv; save as CSV UTF-8; split into smaller registers). The good file moves to the next step. Cells are read as stored, so 0012 stays 0012 when typed as text.
-
-### IMP-02 Pick the worksheet and the header row
-
-- **Key:** `RP-838` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Upload a workbook with two sheets and 3 title rows above the headings.
-  2. Choose the sheet and the header row.
-- **Expected result:** The preview shows the first rows; rows above the header are skipped; rows below are read as submittals; an empty or missing header row gets its message.
-
-### IMP-03 Map columns to Rabaed fields
-
-- **Key:** `RP-841` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Map Description to Subject, Type to Type, Discipline to Trade.
-  2. Try Validate with Trade unmapped.
-  3. Use one value for every row instead.
-- **Expected result:** Subject, Type and Trade are required; unmapped columns are ignored; a fixed value for every row is allowed and shown as such on the import's page.
-
-### IMP-04 Preview lists every reason per bad row
-
-- **Key:** `RP-844` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Validate a register with: empty Subject, Subject over 200 characters, unknown Type, Trade not in the Project, a Trade outside Hafiz's Visibility.
-- **Expected result:** Counts show rows checked, ready and left out; each bad row lists all its reasons (Subject empty, Type unknown, Trade not in this Project, Trade is outside your Visibility). Nothing is created yet.
-
-### IMP-05 Confirm creates Drafts, all good rows or none
-
-- **Key:** `RP-847` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Confirm a preview with 8 good rows and 2 bad.
-  2. Open the Submittals List.
-- **Expected result:** Eight Drafts are created, raised by Hafiz, each No number yet; the two bad rows are left out and never created. A change in the Project after the preview gives Something in the Project changed, validate again.
-
-### IMP-06 The result page and the Imports page
-
-- **Key:** `RP-850` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. After confirming read the result: Drafts created, Left out, Open the Drafts.
-  2. Imports page.
-  3. Open the import.
-  4. Ali opens the same page.
-- **Expected result:** Imports are listed by file name only, with no time anywhere. The import page lists every row with its result; a created row links to its Draft only where the viewer sees that Draft. Ali, a colleague, reads the import after confirm (a preview before confirm is its importer's alone).
-
-### IMP-07 Imported Drafts follow the Draft rules
-
-- **Key:** `RP-852` · **Part:** IMP · **Round:** 0
-- **Sign in as:** Hafiz; Omar; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open an imported Draft.
-  2. Read its history as Hafiz.
-- **Expected result:** It is an ordinary Draft: Hafiz edits it, sends it, and it gets its number at the first send. Its created event, internal to TMC, names the import. Under author-only Drafts (WF-10) Omar and Ali cannot see it.
-
-### IMP-08 Download the rows left out and import again
-
-- **Key:** `RP-857` · **Part:** IMP · **Round:** 5
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On the result press Download rejected rows.
-  2. Fix and import again.
-- **Expected result:** The file holds the left-out rows with a reason column; the second import is a new import.
-
-### IMP-09 Unknown values are matched once per distinct value
-
-- **Key:** `RP-860` · **Part:** IMP · **Round:** 5
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Map a Trade column holding Elec. on 30 rows.
-  2. Match Elec. to Electrical Works once.
-- **Expected result:** The match applies to all 30 rows; the preview recounts.
+## 10. Submittal Register Import (1 cases)
 
 ### IMP-10 Assign to for imported Drafts
 
@@ -1443,17 +1621,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Include a person who cannot create the Type.
 - **Expected result:** Drafts are raised by the importer by default; an assignee who cannot create the Type or does not cover the Trade makes that row bad.
 
-### IMP-11 Packages from an import and saved mappings
-
-- **Key:** `RP-866` · **Part:** IMP · **Round:** 5
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Group rows into one new Package, then one per column value, then an existing Open Package; try an In Progress Package.
-  2. Save the mapping and reuse it.
-- **Expected result:** New Packages take the next PKG number; an In Progress or Done Package makes its rows bad; the mapping is kept for the Company only.
-
-## 10. Notifications (4 cases)
+## 11. Notifications (4 cases)
 
 ### NOT-01 The bell, the Notifications page and Mark all as read
 
@@ -1497,17 +1665,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Mohammed Sends Back a Submitted item.
 - **Expected result:** Hafiz and TMC Members who see it are told, with DCL named as a Company; Faisal is not told of internal moves.
 
-## 11. Arabic, RTL and phone width (7 cases)
-
-### I18N-01 Switch language keeps the page and mirrors the layout
-
-- **Key:** `RP-902` · **Part:** I18N · **Round:** 0
-- **Sign in as:** Faisal; Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. On Home, List, Kanban and an item switch EN to AR with the language button, and open /ar URLs directly.
-  2. Switch back.
-- **Expected result:** The same page reloads in Arabic with RTL: sidebar, tables, filter panel, Kanban column order, arrows and breadcrumbs mirror. Nothing is cut off.
+## 12. Arabic, RTL and phone width (4 cases)
 
 ### I18N-03 Document Numbers stay left to right
 
@@ -1517,15 +1675,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Steps:**
   1. In /ar open the List, an item, a Link, the Revision drop-down, a notification and the PDF.
 - **Expected result:** TWR-MAR-01-0003 Rev 1 reads left to right whole in every place, also inside Arabic text.
-
-### I18N-04 Form labels and validation messages in Arabic
-
-- **Key:** `RP-906` · **Part:** I18N · **Round:** 0
-- **Sign in as:** Hafiz (Arabic)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open a MAR Form in /ar; leave Description empty and Send for Review.
-- **Expected result:** Field labels, section titles, Action Form words and the missing-fields message are Arabic; values typed in English are not translated.
 
 ### I18N-05 Rabaed opens in Arabic; a switch to English is remembered
 
@@ -1537,15 +1686,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Switch to English.
   3. Sign out and sign in again.
 - **Expected result:** Opens in Arabic; after switching to English, opens in English next time; the browser's language doesn't matter.
-
-### I18N-06 Phone width 375: nothing breaks
-
-- **Key:** `RP-689` · **Part:** I18N · **Round:** 0
-- **Sign in as:** Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 px open Home, Projects, Submittals List, Kanban, an item, Settings, the Workflow builder.
-- **Expected result:** No page scrolls sideways; tables and the Kanban scroll inside their own area; the sidebar opens as a drawer. This is what the build guarantees until the phone designs of RP-422 exist. Note, without failing the scenario, touch targets under 44 px, filters that do not open as a sheet and any cut-off text, as UX recommendations. The same web app, no separate app.
 
 ### I18N-07 Desktop 1366 and 1920
 
@@ -1567,7 +1707,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Repeat in /ar.
 - **Expected result:** Both show the same page: We can not find this page, it may not exist, or you may not have access, with a Projects button; identical in both languages; never a 403 or a hint which case it is.
 
-## 12. UI and UX against the design (25 cases)
+## 13. UI and UX against the design (18 cases)
 
 ### UX-01 App shell, sidebar and top bar match the design
 
@@ -1599,49 +1739,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. Open Projects, then a Project Dashboard, EN and AR, 1366 and 1920.
   2. Click each card figure.
 - **Expected result:** Cards match the kit; the Dashboard Type cards, Revision line and Activity Feed are laid out as designed; no squashed card (the RP-405 audit fault); each figure opens the List with the same filter.
-
-### UX-04 Submittals List matches the owner anatomy
-
-- **Key:** `RP-926` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Submittals > List at 1366 and 1920, EN and AR.
-  2. Open the filter panel, choose several values, save columns, sort, page.
-  3. Scroll a long table.
-- **Expected result:** Matches D:\Artifacts\Rabaed Submittals List.html first, then submittals-list.html with list/filter-panel.js: columns, chips, Step Age dots, Code labels ("Code A"), row menu; the table scrolls inside its own region, the page never scrolls sideways.
-
-### UX-05 Submittals Kanban matches the board and card anatomy
-
-- **Key:** `RP-927` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open Submittals > Kanban, EN and AR, 1366 and 1920.
-  2. Read a card in every Stage; change the Card view layout.
-  3. Scroll across and within columns.
-- **Expected result:** Matches D:\Artifacts\Rabaed Kanban Board Anatomy.html and Rabaed Kanban Card Anatomy.html, then submittals-kanban.html: column headers and counts, card fields and order, With line, Step Age dots, closed-by line; columns scroll left and right, cards up and down.
-
-### UX-06 Work Item page, Transition pop-ups and View workflow drawer
-
-- **Key:** `RP-928` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Ali; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open a MAR in Draft, in internal review, Submitted and closed, EN and AR.
-  2. Open every Transition pop-up (Send for Review, Submit with Cover Note, Return, Code A to D).
-  3. Open View workflow (map and list).
-- **Expected result:** Laid out as design/prompts/work-item-page.md and workflow-view.html: header (Document Number left to right, Stage, With, Step Age), Form, Attachments and Links, history; each pop-up asks for confirmation and shows its Action Form; required fields and errors are clear.
-
-### UX-07 New work item and the Form while filling it
-
-- **Key:** `RP-929` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. New Submittal for each Type, EN and AR, 1366 and 375.
-  2. Fill, leave required fields empty, add Items rows, upload files and a photo, Save Draft.
-- **Expected result:** Laid out as new-work-item.md and form-template-brief.md: sections, field help, the Items table on a phone, upload progress, "Saved" indicator, the list of fields needing attention; nothing overlaps at 375.
 
 ### UX-08 Activity page
 
@@ -1742,15 +1839,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. At 375 (phone), raise a WIR and open it on site as Ahmed: checklist, photos, annotate, EN and AR.
 - **Expected result:** Laid out as inspection-on-phone.md: phone-first, large touch targets, camera first, annotate tools reachable with a thumb, nothing cut off.
 
-### UX-19 Phone width for every built page
-
-- **Key:** `RP-941` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Ali
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 and 820 open Home, Projects, List, Kanban, item page, New item, Notifications, Profile, Settings. EN and AR.
-- **Expected result:** Follows D:\Artifacts\Rabaed Responsive Anatomy.html and responsive.md: no page-level sideways scroll; tables and the Kanban scroll inside their region; the sidebar is a drawer; every action reachable.
-
 ### UX-20 Empty, loading and error states
 
 - **Key:** `RP-942` · **Part:** UX · **Round:** 0
@@ -1759,26 +1847,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 - **Steps:**
   1. Visit each built page with no data, while loading (slow network), and with the api stopped for a moment.
 - **Expected result:** Every page has a designed empty state with a next step, a loading state with no layout jump, and an error that says what to do; the not-found page says nothing about the request.
-
-### UX-21 Feedback after every action
-
-- **Key:** `RP-943` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz; Ali; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Save a Draft, take each Transition, upload, change a setting.
-  2. Watch for the confirmation, the disabled reason and the page update.
-- **Expected result:** Each action gives visible feedback (toast or inline), disabled buttons say why, the page updates without a reload, nothing is done twice on a double click.
-
-### UX-22 Keyboard and screen reader basics
-
-- **Key:** `RP-944` · **Part:** UX · **Round:** 0
-- **Sign in as:** Hafiz
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Use the List, Kanban, item page, a Transition pop-up and the Form with the keyboard only.
-  2. Run an accessibility scan (the accessibility-tester agent, report only) on the same pages, EN and AR.
-- **Expected result:** Visible focus, logical focus order (mirrored in Arabic), pop-ups trap and return focus, every control has a label, text contrast at least WCAG AA. Findings reported as UI issues.
 
 ### UX-23 Packages view and Package page
 
@@ -1819,7 +1887,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Compare with the owner samples of RP-151.
 - **Expected result:** Page 1, the Form body, Signature cards and appendix follow the samples where they agree with visibility.md and GLOSSARY.md; Latin digits; Document Numbers left to right; readable when printed.
 
-## 13. Visibility (59 cases)
+## 14. Visibility (52 cases)
 
 ### VIS-01 A new Draft and a MAR in internal review are TMC's alone
 
@@ -1852,19 +1920,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Sara opens the List.
   3. Layla removes Electrical again.
 - **Expected result:** Sara sees the Electrical items from then on, including earlier ones; after removal she stops seeing them (E2 aside). Layla needs no Handover for a Step Sara does not hold.
-
-### VIS-04 Recommended Code, Internal Notes and the verification note never reach TMC
-
-- **Key:** `RP-740` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Ahmed, Mohammed (DCL). Must NOT see: Hafiz, Ali (TMC), Faisal, Noura (Al Waha)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Ali Submits with an Internal Note.
-  2. Ahmed Sends to Manager with a verification note, Recommended Code A and an Internal Note.
-  3. Before the Code, read the item history, Activity Feed, bell and List as Hafiz, Ali and Faisal.
-  4. Mohammed issues Code C with Remarks, a verification note and an Internal Note.
-  5. Read again.
-- **Expected result:** Before the Code TMC and Al Waha see no change at all: no reply, Recommended Code or Return. After it they read the Code, Remarks and final verification and that Mohammed issued it, never Ahmed's reply, a Recommended Code, an internal_answers entry or any Internal Note; the history numbering has no gap. K1 sees the Submit but never TMC's Internal Note. DCL reads all of its own.
 
 ### VIS-05 Code B Comments reach the reviewed item's raiser only
 
@@ -1933,17 +1988,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   4. Needs FX-C2: Mohammed raises a Snag that links MAR-1; Hafiz reads MAR-1's Linked from.
 - **Expected result:** MAR-2 is not listed while it is a Draft or in internal review, then appears. Hafiz sees Mohammed's item as number and Subject; opening it says he may not see its details; its answers, history and Documents stay hidden and its URL is 404.
 
-### VIS-11 Link search never offers what the linker cannot see
-
-- **Key:** `RP-771` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz; Yousef
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. As Hafiz search for an item to link.
-  2. As Yousef search for the same Subjects.
-  3. Via the API save a Link to a Beta Build item id from TMC.
-- **Expected result:** Hafiz is offered only Submitted items he sees in this Project: no Drafts, nothing in internal review, nothing of Beta Build, nothing from another Project. Yousef is never offered TMC's item. The saved Link is refused like a made-up id.
-
 ### VIS-12 A Revision Draft is hidden; the drop-down lists only what the viewer sees
 
 - **Key:** `RP-772` · **Part:** VIS · **Round:** 0
@@ -2003,16 +2047,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   3. Mohammed Codes C one Submitted MAR; Hafiz creates Rev 1 and keeps it Draft; compare the Revision line.
   4. Compare again.
 - **Expected result:** Fresh seed: Ali Pending 2 (0002 and 0003 Rev 1, one per chain) and In preparation 1 (the seeded Draft); Ahmed Pending 2 and no In preparation figure; Yousef 0 of everything. After step 2 Ali In preparation 3 and Pending unchanged; Ahmed and Yousef unchanged. DCL card shows awaiting revision while TMC card shows Revision in progress; each chain counts once; Yousef Revision line holds nothing of TMC.
-
-### VIS-19 List and Kanban counts, lanes and filters hide the other Company
-
-- **Key:** `RP-797` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Actors: Ali (TMC); Ahmed, Mohammed (DCL); Yousef (Beta Build)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. With a TMC item picked up by Mohammed and another in TMC internal review, Ali and Ahmed open the filter panel (Owner, Role, Created date) and the Kanban.
-  2. Yousef opens Kanban and List.
-- **Expected result:** Owner offers each viewer their own Company people and the other Company by name only; filtering by the other Company person finds nothing. Role offers only the viewer own Steps. The TMC Internal Review column names its Steps with counts; DCL sees none of them. Created date is the Creation Date for TMC and the Submission Date for DCL. Yousef counts cover only Beta Build items.
 
 ### VIS-20 Search finds nothing inside answers or replies
 
@@ -2113,17 +2147,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Saeed (Project Admin) does the same.
 - **Expected result:** Ali, Layla and Nasser get the plain 404 for every change and for the numbering counters; the Scope is unchanged. Saeed can do them. Every Project Member reads Tower Trades, Scopes, Locations and published Workflows.
 
-### VIS-31 A Participant never sees the list of other Participants
-
-- **Key:** `RP-834` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz (TMC, not Project Admin); Ahmed (DCL); Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz and Ahmed open Company Projects and the Project Participants page.
-  2. Saeed opens the Participants.
-  3. Open Settings > Numbering as Hafiz and as Ahmed.
-- **Expected result:** Hafiz sees TMC own Participant, its role, its Project Members and the Host Company name; Ahmed sees DCL own Participant with Host Company TMC; neither lists the others. Saeed sees every Participant. Numbering shows each their own Participant with No code yet and no order number; Project Admin sees all orders.
-
 ### VIS-32 Pending invitations: one answer whatever the CR number
 
 - **Key:** `RP-837` · **Part:** VIS · **Round:** 0
@@ -2199,18 +2222,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   1. With the MAR at Consultant review, Hafiz and Ali try to save an answer, add a Document and edit a Link.
   2. Ahmed tries to change an answer.
 - **Expected result:** All refused: after the Submit the Form is the raiser own and read-only to everyone but the raiser at a Step that lets it edit; the Consultant answers only in its reply Screen.
-
-### VIS-39 Document Numbers and numbering counters do not reveal a rival volume
-
-- **Key:** `RP-858` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz (TMC); Yousef (Beta Build); Ahmed (DCL); Saeed (Project Admin)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Hafiz and Yousef each raise and number three MARs.
-  2. Compare their numbers.
-  3. Saeed saves a pattern without the Participant Code.
-  4. Hafiz, Yousef and Ahmed open Settings > Numbering and the counter URLs.
-- **Expected result:** TMC numbers run 0001, 0002, 0003 with no gaps from Beta Build. The shared-counter pattern is refused until Saeed accepts the warning; then both share one count. Hafiz, Yousef and Ahmed see examples built from their own Participant with sequence 1 and a 404 for counters. Version history names the saver Company only to its own Members and the Project Admin; others read A Project Admin.
 
 ### VIS-40 A Code D replacement is invisible while it is a Draft
 
@@ -2432,15 +2443,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Read every error text and API body.
 - **Expected result:** All refusals are the plain, uniform answer; no title, number or Company of another item appears in an error, toast or log shown to the Member.
 
-### VIS-60 Rabaed Default Workflows are readable by all and name no Company
-
-- **Key:** `RP-915` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz; Nasser
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Both open the list of Rabaed Default Workflows for a submittal Type.
-- **Expected result:** Both read the same eight Workflows with names and Versions and the one the Type runs marked; they name no Project, Company or item; a Project binding reaches that Project only.
-
 ### VIS-62 Files Module and Pins on shared Drawings
 
 - **Key:** `RP-917` · **Part:** VIS
@@ -2460,16 +2462,6 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
   2. Withdraw DCL.
   3. Close the Project.
 - **Expected result:** E2: the removed Member keeps the Project name and the records they signed; DCL Authorized Person sees only the records DCL Members signed; open items of a withdrawn Participant are Cancelled; a closed Project is read-only with E2 records available.
-
-### VIS-64 Another Project is invisible both ways
-
-- **Key:** `RP-919` · **Part:** VIS · **Round:** 0
-- **Sign in as:** Hafiz (TMC); a Member of another seeded Project
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. As Hafiz note an item id of Riyadh Gate Tower.
-  2. Sign in as a Member who is not on that Project (or Hafiz on a Project he is not on): open Projects, Home, search, the item URL and the Project URL.
-- **Expected result:** Neither sees the other Project in Projects, Home counts, search or notifications; both URLs give the one not-found page (404, never 403). Carried over from RP-463 A-11 (RP-474).
 
 ## Cases the UAT owner runs (32 cases)
 
@@ -2813,6 +2805,7 @@ One file. `entries` has one entry per case you ran, keyed by the case's key (`RP
 - `status`: `pass`, `fail`, `blocked` or `notrun`.
 - `comment`: what you saw.
 - `shots`: the ids of its screenshots in the `shots` list, or `[]`.
+- `tester`: the name of who ran it (the file's `tester` when left out).
 
 Each screenshot in `shots` gives its `data` as base64 PNG or JPEG bytes. Leave `shots` empty if you send the pictures separately, named `<case ID>-<n>.png`.
 
@@ -2826,14 +2819,16 @@ Each screenshot in `shots` gives its `data` as base64 PNG or JPEG bytes. Leave `
     "RP-685": {
       "status": "pass",
       "comment": "Saved as a Draft, listed with No number yet.",
-      "shots": []
+      "shots": [],
+      "tester": "<your name>"
     },
     "RP-686": {
       "status": "fail",
       "comment": "What you saw, against the expected result.",
       "shots": [
         "RP-686:1"
-      ]
+      ],
+      "tester": "<your name>"
     }
   },
   "shots": [
