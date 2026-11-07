@@ -48,7 +48,9 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
     getProjectDimensions(projectId),
   ]);
   const code = (value: string) => ` (${LRI}${value}${PDI})`;
-  const trades = dimensions?.trade ?? [];
+  // Deactivated Trades and Locations are neither examples nor a counter's new choice (RP-1251).
+  const trades = (dimensions?.trade ?? []).filter((v) => v.active);
+  const locations = (dimensions?.location ?? []).filter((v) => v.active);
   const own = participants?.participants.find((p) => p.isOwnCompany);
   const ownName = own?.company.legalName[locale] ?? "";
 
@@ -114,8 +116,8 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
             const printed = ordinal === null ? participantCode : participantSegment({ code: participantCode, ordinal });
             return { value: id, label: `${company.legalName[locale]}${printed === null ? "" : code(printed)}` };
           })}
-          trades={dimensions.trade.map((v) => ({ value: v.id, label: `${v.name[locale]}${code(v.code)}` }))}
-          locations={treeOrder(dimensions.location).map((v) => ({
+          trades={trades.map((v) => ({ value: v.id, label: `${v.name[locale]}${code(v.code)}` }))}
+          locations={treeOrder(locations).map((v) => ({
             value: v.id,
             label: `${"— ".repeat(v.level)}${v.name[locale]}${code(v.code)}`,
           }))}

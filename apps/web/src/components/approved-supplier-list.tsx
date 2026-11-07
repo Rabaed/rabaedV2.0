@@ -25,12 +25,12 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { TradeCardTitle } from "@/components/settings/trade-card-title";
+import { listedTrades, tradeOptions, type SettingsTrade } from "@/lib/settings-trades";
 import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 // A choice can't have an empty value, so "no Scope" has its own.
 const NO_SCOPE = "none";
-
-export type SupplierTrade = { id: string; code: string; name: BilingualText };
 
 type ScopeChoice = Scope & { level: number };
 
@@ -55,7 +55,7 @@ export function ApprovedSupplierList({
   suppliers,
 }: {
   canEdit: boolean;
-  trades: SupplierTrade[];
+  trades: SettingsTrade[];
   /** The Project's Scopes and Sub-scopes in tree order, with their level. */
   scopes: ScopeChoice[];
   suppliers: ApprovedSupplier[];
@@ -63,11 +63,16 @@ export function ApprovedSupplierList({
   const t = useTranslations("projectSettings.approvedSuppliers");
   const locale = useLocale() as Locale;
   const scopeName = new Map(scopes.map((s) => [s.id, s.name[locale]]));
+  // A deactivated Trade keeps its card while it lists a supplier, marked "Archived" (RP-1251).
+  const cards = listedTrades(
+    trades,
+    suppliers.map((s) => s.tradeId),
+  );
 
   return (
     <>
-      {trades.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
-      {trades.map((trade) => {
+      {cards.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
+      {cards.map((trade) => {
         // Approved first, each group in the API's order (by name).
         const listed = [...suppliers.filter((s) => s.tradeId === trade.id)].sort((a, b) => Number(a.status === "withdrawn") - Number(b.status === "withdrawn"));
         const approved = listed.filter((s) => s.status === "approved").length;
@@ -75,14 +80,7 @@ export function ApprovedSupplierList({
         return (
           <SettingsSection
             key={trade.id}
-            title={
-              <>
-                {title}{" "}
-                <bdi dir="ltr" translate="no" className="text-caption font-normal text-muted">
-                  {trade.code}
-                </bdi>
-              </>
-            }
+            title={<TradeCardTitle trade={trade} />}
             actions={<span className="text-caption text-muted">{t("approvedCount", { count: approved, n: formatNumber(approved, locale) })}</span>}
             bodyClassName="px-5 pt-3 pb-5"
             data-testid={`suppliers-${trade.code}`}
@@ -179,15 +177,18 @@ function Withdraw({ supplier }: { supplier: ApprovedSupplier }) {
  * "Add supplier", for a Project Admin, in the page header: its names in English and Arabic,
  * its Trade and, optionally, one of that Trade's active Scopes or Sub-scopes.
  */
-export function AddSupplierButton({ projectId, trades, scopes }: { projectId: string; trades: SupplierTrade[]; scopes: ScopeChoice[] }) {
+export function AddSupplierButton({ projectId, trades, scopes }: { projectId: string; trades: SettingsTrade[]; scopes: ScopeChoice[] }) {
   const t = useTranslations("projectSettings.approvedSuppliers");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const toast = useToast();
   const refusal = useRefusal();
+  const tl = useTranslations("tradesLocations");
+  // Only active Trades take a new supplier (RP-1251).
+  const options = tradeOptions(trades, locale, tl("archived"));
   const [open, setOpen] = useState(false);
   const [name, setName] = useState<BilingualText>({ en: "", ar: "" });
-  const [tradeId, setTradeId] = useState(trades[0]?.id ?? "");
+  const [tradeId, setTradeId] = useState(options[0]?.value ?? "");
   const [scopeId, setScopeId] = useState(NO_SCOPE);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -203,7 +204,7 @@ export function AddSupplierButton({ projectId, trades, scopes }: { projectId: st
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" disabled={trades.length === 0}>
+        <Button size="sm" disabled={options.length === 0}>
           <Icon name="plus" size={15} />
           {t("add")}
         </Button>
@@ -243,7 +244,7 @@ export function AddSupplierButton({ projectId, trades, scopes }: { projectId: st
                 setTradeId(v);
                 setScopeId(NO_SCOPE);
               }}
-              options={trades.map((trade) => ({ value: trade.id, label: trade.name[locale] }))}
+              options={options}
             />
           </Field>
           <Field label={t("scope")} help={t("scopeHelp")}>

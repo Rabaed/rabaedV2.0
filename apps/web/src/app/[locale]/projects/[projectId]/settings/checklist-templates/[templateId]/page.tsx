@@ -27,7 +27,7 @@ export default async function ChecklistTemplatePage({ params }: { params: Promis
   // Only a Project Admin starts a new one; a template is the Project's own.
   if (template === undefined || (creating && !list.canEdit)) notFound();
 
-  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name }));
+  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name, active: v.active }));
   const readOnly = !list.canEdit || template?.status === "retired";
   return (
     <>
