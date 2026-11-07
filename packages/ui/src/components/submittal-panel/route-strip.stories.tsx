@@ -1,4 +1,4 @@
-import type { Locale, WorkItemMapPosition } from "@rabaed/domain";
+import type { Locale, WorkItemMapPosition, WorkItemWorkflowMap } from "@rabaed/domain";
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -39,6 +39,7 @@ const copy = {
   stepsTab: { en: "Steps", ar: "الخطوات" },
   mapTab: { en: "Map", ar: "الخريطة" },
   hereNow: { en: "Here now", ar: "هنا الآن" },
+  people: { en: "Members on this Step", ar: "الأعضاء في هذه الخطوة" },
   privateSteps: { en: "Who works on these Steps, and which one has it, stays with them.", ar: "من يعمل على هذه الخطوات، وأيها لديه، يبقى لديهم." },
 };
 
@@ -62,6 +63,7 @@ const labels = (locale: Locale): SubmittalWorkflowMapLabels => ({
   mapTab: copy.mapTab[locale],
   hereNow: copy.hereNow[locale],
   privateSteps: copy.privateSteps[locale],
+  people: copy.people[locale],
 });
 
 /** The holder of the Contractor's own Step: a Member of the viewer's own Company (V14). Story data only. */
@@ -75,14 +77,14 @@ const ownStep: WorkItemMapPosition = { kind: "own", stepKey: "internal_review" }
 /** At an Owner review the Contractor isn't part of, the API names "Owner review" (ADR 0022). */
 const ownerReview: WorkItemMapPosition = { kind: "company", role: "owner", companyName: bi("Owner review", "مراجعة المالك") };
 
-type DemoArgs = { position: WorkItemMapPosition | null; settingsHref?: string; startOpen?: boolean };
+type DemoArgs = { position: WorkItemMapPosition | null; settingsHref?: string; startOpen?: boolean; stepPeople?: WorkItemWorkflowMap["stepPeople"] };
 
-function Demo({ context, position, settingsHref, startOpen = false }: DemoArgs & { context: StoryContext }) {
+function Demo({ context, position, settingsHref, startOpen = false, stepPeople }: DemoArgs & { context: StoryContext }) {
   const locale = storyLocale(context);
   const ids = useSubmittalPanelIds();
   const [panelOpen, setPanelOpen] = useState(true);
   const [mapOpen, setMapOpen] = useState(startOpen);
-  const map = submittalOwnerMap(position);
+  const map = { ...submittalOwnerMap(position), ...(stepPeople ? { stepPeople } : {}) };
   const route = submittalRoute({ definition: map.definition, stages: map.stages, position });
   if (!panelOpen) return <p className="p-4">—</p>;
   return (
@@ -206,6 +208,38 @@ export const OwnStep: Story = {
     // In the Map tab, the same Step is "You are here".
     await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
     await waitFor(() => expect(map.querySelector("[data-map-step='internal_review']")).toHaveTextContent(storyText(context, copy.youAreHere)));
+  },
+};
+
+/**
+ * Scenario RP-1189-1 (gap table v3 row 21): each of the viewer's own Step cards lists the Members on it, its
+ * Step Pool as the API gives it. Another Company's block lists none, even if a name were given for one of
+ * its Steps (V14, V15): the API gives none, and the modal draws people on own cards only.
+ */
+export const MembersOnOwnSteps: Story = {
+  args: {
+    position: ownStep,
+    startOpen: true,
+    stepPeople: [
+      ...submittalOwnerMap(ownStep).stepPeople,
+      // Never given by the API (V14); here only to show the modal draws no one on another Company's block.
+      { stepKey: "consultant_engineer", names: [bi("Nadia Saleh", "نادية صالح")] },
+    ],
+  },
+  parameters: overlay,
+  play: async (context) => {
+    const map = await waitFor(mapOf);
+    const card = (key: string) => map.querySelector<HTMLElement>(`[data-step='${key}']`)!;
+    const people = (key: string) => within(card(key)).queryByRole("list", { name: storyText(context, copy.people) });
+    await expect(people("internal_review")).toHaveTextContent(storyText(context, bi("Faisal Al-Harbi", "فيصل الحربي")));
+    await expect(people("draft")).toHaveTextContent(storyText(context, bi("Ali Sonour", "علي سنور")));
+    await expect(people("draft")).toHaveTextContent(storyText(context, bi("Khalid Bakr", "خالد بكر")));
+    // The Consultant's and the Owner's blocks: their Steps by name, nobody on them.
+    for (const block of map.querySelectorAll<HTMLElement>("li[data-stop]")) {
+      await expect(within(block).queryByRole("list", { name: storyText(context, copy.people) })).toBeNull();
+      await expect(block).not.toHaveTextContent(storyText(context, bi("Nadia Saleh", "نادية صالح")));
+    }
+    await noTimesOrCounts(map);
   },
 };
 

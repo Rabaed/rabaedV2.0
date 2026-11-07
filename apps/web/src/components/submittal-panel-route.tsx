@@ -73,6 +73,7 @@ export function useSubmittalPanelRoute(
       mapTab: t("mapTab"),
       hereNow: t("hereNow"),
       privateSteps: t("privateSteps"),
+      people: t("people"),
     }),
     [t, tMap, tRoles],
   );

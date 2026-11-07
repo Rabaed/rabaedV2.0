@@ -42,7 +42,7 @@ export function useSubmittalPanelAttachments({ item, locale, refreshKey }: { ite
         setRead({
           id,
           ok: true,
-          files: submittalPanelAttachmentDocuments(list.documents).map((d) => ({ id: d.id, name: d.fileName, kind: attachmentKind(d.contentType), size: size(d.sizeBytes) })),
+          files: submittalPanelAttachmentDocuments(list.documents).map((d) => ({ id: d.id, name: d.fileName, kind: attachmentKind(d.contentType), size: size(d.sizeBytes), pages: d.pageCount })),
         });
       })
       .catch(() => {

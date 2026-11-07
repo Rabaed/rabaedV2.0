@@ -12,6 +12,7 @@ import { sql } from "kysely";
 import type { ApiConfig } from "../config.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import type { FileStore } from "./file-store.ts";
+import { countPdfPages, MAX_PDF_BYTES } from "./pdf-pages.ts";
 import { readPhotoMetadata } from "./photo-metadata.ts";
 
 // Documents: the Attachments System Field (RP-269). Rows are read through RLS,
@@ -44,10 +45,11 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       taken_longitude: number | null;
       reply: boolean;
       reply_event_id: string | null;
+      page_count: number | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
         m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key, d.annotated_from_id,
-        d.taken_at, d.taken_latitude, d.taken_longitude, d.reply, d.reply_event_id
+        d.taken_at, d.taken_latitude, d.taken_longitude, d.reply, d.reply_event_id, d.page_count
       from document d
       -- The upload time, never earlier than the Creation Date once numbered (RP-399), and the
       -- order they were uploaded in: ids are random and say nothing of it (ADR 0015).
@@ -77,6 +79,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         takenWhere:
           r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
         ...(r.reply ? { reply: { taken: r.reply_event_id !== null } } : {}),
+        pageCount: r.page_count,
       })),
       canChange: can[0]!.can,
       canChangeReplies: can[0]!.replies,
@@ -152,7 +155,7 @@ export type ConfirmUploadResult = { ok: true } | { ok: false; reason: (typeof co
  * Step 3: the uploader confirms; the file must be in the store, exactly as
  * declared. The SHA-256 of its bytes is kept as the Document's fingerprint, which
  * every later Transition's content hash covers (RP-618). An image's EXIF time and
- * place are read from the stored file and kept with it (RP-284).
+ * place are read from the stored file and kept with it (RP-284), and a PDF's page count (RP-1189).
  */
 export function confirmUpload(
   db: Db,
@@ -170,6 +173,7 @@ export function confirmUpload(
     let stored: { sizeBytes: number; contentType: string } | null = null;
     let fingerprint: Buffer | null = null;
     let photo: PhotoMetadata = { takenAt: null, takenWhere: null };
+    let pageCount: number | null = null;
     if (pendingKey) {
       stored = await files.stat(pendingKey);
       if (!stored) return { ok: false, reason: "not_uploaded" };
@@ -181,13 +185,19 @@ export function confirmUpload(
         const bytes = await files.read(pendingKey);
         if (bytes) photo = await readPhotoMetadata(bytes);
       }
+      // A PDF's pages, counted in the stored file itself, for its card (RP-1189).
+      // Never over the cap, and never failing the upload over a count: the card then shows none.
+      if (stored.contentType === "application/pdf" && stored.sizeBytes <= MAX_PDF_BYTES) {
+        const bytes = await files.read(pendingKey).catch(() => null);
+        if (bytes) pageCount = await countPdfPages(bytes);
+      }
     }
     // No pending upload of theirs: the function answers for a confirmed one, or not_found.
     const { rows: confirmed } = await sql<{ outcome: string }>`
       select app.confirm_document_upload(${workItemId}::uuid, ${documentId}::uuid,
         ${stored?.sizeBytes ?? null}::bigint, ${stored?.contentType ?? null}, ${fingerprint}::bytea, ${now},
         ${photo.takenAt}::timestamptz, ${photo.takenWhere?.latitude ?? null}::double precision,
-        ${photo.takenWhere?.longitude ?? null}::double precision) as outcome
+        ${photo.takenWhere?.longitude ?? null}::double precision, ${pageCount}::integer) as outcome
     `.execute(trx);
     return commandResult(confirmed[0]!.outcome, "confirmed", confirmRefusals);
   });
