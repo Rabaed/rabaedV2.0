@@ -289,13 +289,15 @@ describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
     const uat06 = await projectOf("UAT06");
     const { participants } = (await as.layla.get("/v1/participants")).json() as { participants: { id: string; project: { id: string } }[] };
     const dcl = participants.find((p) => p.project.id === uat06)!.id; // not hidden-from: Design Consultants' own Participant on UAT 06
+    const { trade } = (await as.saeed.get(`/v1/projects/${uat06}/dimensions`)).json() as { trade: { id: string; code: string }[] };
+    const tradeId = (code: string) => trade.find((t) => t.code === code)!.id; // not hidden-from: the Project Admin reads his own Project's Trades
     const own = ((await as.layla.get(`/v1/participants/${dcl}/visibility`)).json() as { visibility: { trade: { isAll: boolean; valueIds: string[] } } }).visibility;
     expect(own.trade.isAll).toBe(false);
-    expect(own.trade.valueIds).toHaveLength(2);
+    expect([...own.trade.valueIds].sort()).toEqual([tradeId("EL"), tradeId("ME")].sort());
     const { members } = (await as.layla.get(`/v1/participants/${dcl}/members`)).json() as { members: { id: string; email?: string; name?: { en: string } }[] };
     expect(members).toHaveLength(1); // not hidden-from: Design Consultants' own Members on UAT 06, read by its Authorized Person
     const ahmed = ((await as.layla.get(`/v1/participants/${dcl}/members/${members[0]!.id}/visibility`)).json() as { visibility: { trade: { isAll: boolean; valueIds: string[] } } }).visibility;
-    expect(ahmed.trade).toEqual({ isAll: false, valueIds: [expect.any(String)] });
+    expect(ahmed.trade).toEqual({ isAll: false, valueIds: [tradeId("EL")] });
   });
 
   it("puts Omar on every UAT Project, TMC's, where he reads a Podium item and not a Tower A one (V4)", async () => {
