@@ -5,10 +5,11 @@
 -- act there. Another Company's Steps give nothing, neither a name nor an id (visibility.md V14,
 -- V15), and so does an item the caller doesn't see.
 --
--- Which Participant works a Step follows app.next_step_holder: a Step of the raiser's role (or one
--- held by the raiser, RP-622) is the raiser's, never another Participant of its role (V3); any
--- other Step is the caller's when it is of their role, they cover the item, and no other
--- Participant has held it on this item. Terminal Steps have no actor and no people.
+-- Which Participant works a Step: one the caller's own Participant has held on this item is theirs
+-- (an Owner Representative holding the Owner's review); otherwise as app.next_step_holder would
+-- send it: a Step of the raiser's role (or one held by the raiser, RP-622) is the raiser's, never
+-- another Participant of its role (V3); any other Step is the caller's when it is of their role,
+-- they cover the item, and no other Participant has held it. Terminal Steps have no people.
 
 create function app.work_item_step_people(p_work_item_id uuid)
   returns table (step_key text, names jsonb)
@@ -25,6 +26,7 @@ create function app.work_item_step_people(p_work_item_id uuid)
       from work_item w
       join participant raiser on raiser.id = w.raised_by_participant_id
       join project_role raiser_role on raiser_role.id = raiser.project_role_id
+      -- One row at most: a Member is of one Company, and a Company has one Participant per Project (participant_project_company_key).
       join participant me on me.project_id = w.project_id and me.status = 'active' and me.id in (select app.current_participant_ids())
       join project_role my_role on my_role.id = me.project_role_id
       where w.id = p_work_item_id and app.sees_work_item(w.id);
@@ -40,6 +42,11 @@ create function app.work_item_step_people(p_work_item_id uuid)
         where s.workflow_version_id = v_item.workflow_version_id
           and r.role is not null
           and case
+            -- A Step their own Participant has held on this item is theirs, whatever its role: an Owner
+            -- Representative holding the Owner's review (ADR 0022), say.
+            when exists (
+              select 1 from step_assignment a
+              where a.work_item_id = v_item.id and a.step_id = s.id and a.participant_id = v_item.participant_id) then true
             when r.role = v_item.raiser_role then v_item.participant_id = v_item.raiser_id
             else r.role = v_item.my_role
               and app.participant_covers_item(v_item.participant_id, v_item.id)

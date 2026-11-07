@@ -255,14 +255,15 @@ function OwnStepCard({
       <Happens labels={step.happens} name={labels.happens} locale={locale} />
       {people.length > 0 && (
         <ul aria-label={labels.people} className="flex flex-col gap-1.5 pt-1">
-          {people.map((name) => (
+          {people.map((name, i) => (
             <li
-              key={name.en}
+              // Names only (V14): two Members may share one, so the place in the list keys it.
+              key={i}
               // The one holding it, marked as the holder's chip is (RP-1188).
               data-holder={holder === name[locale] ? "" : undefined}
               className={cn("flex items-center gap-2 text-[12.5px] font-semibold", holder === name[locale] && "-mx-1.5 self-start rounded-full bg-surface-subtle px-1.5 py-0.5")}
             >
-              <Avatar name={name[locale]} initialsFrom={name.en} size="sm" decorative />
+              <Avatar name={name[locale]} size="sm" decorative />
               <bdi>{name[locale]}</bdi>
             </li>
           ))}

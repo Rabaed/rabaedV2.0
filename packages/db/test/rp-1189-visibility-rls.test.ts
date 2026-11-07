@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addOwnerReviewWorkflow, bilingual, buildSeamTwoTower, expectHiddenFrom, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
+import { addOwnerReviewWorkflow, bilingual, buildSeamTwoTower, digits, expectHiddenFrom, joinProject, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const letters = (n: number) => Array.from({ length: n }, () => String.fromCharCode(65 + randomInt(26))).join("");
@@ -150,6 +150,65 @@ describe("scenario RP-1189-2: outsiders read no other Company's Member", () => {
       hiddenFrom: [...kOne, ow.members.representative, c2.members.engineer],
       name: named,
       label: "C1's PM on the Contractor review",
+    });
+  });
+
+  it("RP-1189-3: an Owner Representative holding the Owner's review reads its own people there; C1, K1 and the Owner none of them", async () => {
+    const { c1, k1, ow } = tower;
+    // OR joins the Project covering everything: from now on it holds the Owner's review (ADR 0022).
+    const engineer = (await migrator.query<{ id: string }>("select id from rabaed_engineer limit 1")).rows[0]!.id;
+    const cr = digits(10);
+    const orCompany = (
+      await migrator.query<{ id: string }>("insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id", [
+        JSON.stringify(bilingual("OR")),
+        cr,
+        `3${digits(13)}3`,
+        engineer,
+      ])
+    ).rows[0]!.id;
+    const newMember = async (who: string, creator: boolean) =>
+      (
+        await migrator.query<{ id: string }>(
+          "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id",
+          [orCompany, `${who}.${digits(8)}@or.test`, JSON.stringify(bilingual(`${who} ${digits(4)}`)), creator],
+        )
+      ).rows[0]!.id;
+    const orAp = await newMember("or-ap", true);
+    await migrator.query("update company set authorized_person_id = $1 where id = $2", [orAp, orCompany]);
+    const orParticipant = await joinProject(app, tower.projectId, { adminId: c1.ap, crNumber: cr, role: "owner_representative" }, orAp);
+    for (const kind of ["trade", "location"])
+      expect(await tower.outcome(c1.ap, sql`select app.set_participant_visibility(${orParticipant}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    const orPm = await newMember("or-pm", false);
+    await tower.call(orAp, sql<{ outcome: string }>`select app.add_project_member(${orParticipant}::uuid, ${orPm}::uuid, now())`);
+    for (const kind of ["trade", "location"])
+      expect(await tower.outcome(orAp, sql`select app.set_member_visibility(${orParticipant}::uuid, ${orPm}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+    expect(await tower.outcome(orAp, sql`select app.set_project_member_positions(${orParticipant}::uuid, ${orPm}::uuid, ${["project_manager"]}::text[]) as outcome`)).toBe("set");
+    names.set(orPm, "OR PM");
+
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      c1.members.engineer,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${tower.projectId}::uuid, ${TYPE}, 'Cable risers', app.latest_form_version(${TYPE}), ${JSON.stringify({ model: "CR-1" })}::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    const held = created!.work_item_id;
+    expect(await tower.take(c1.members.engineer, held, "send_for_review")).toBe("applied");
+    expect(await tower.pickUp(c1.members.project_manager, held)).toBe("picked_up");
+    expect(await tower.take(c1.members.project_manager, held, "submit")).toBe("applied");
+    expect(await tower.pickUp(k1.members.manager, held)).toBe("picked_up");
+    expect(await tower.take(k1.members.manager, held, "recommend_a")).toBe("applied");
+
+    const peopleOn = async (as: string) =>
+      (await tower.call<StepPeople>(as, sql`select * from app.work_item_step_people(${held}::uuid) order by step_key`)).flatMap((r) => r.names.map((n) => ({ id: n.en, step: r.step_key })));
+    const orName = await fullName(orPm);
+    expect(await peopleOn(orPm)).toEqual([{ id: orName, step: "owner_review" }]);
+    await expectHiddenFrom({
+      read: peopleOn,
+      target: orName,
+      seenBy: orPm,
+      hiddenFrom: [c1.members.engineer, c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative],
+      name: named,
+      label: "the OR's Member on the Owner review",
     });
   });
 

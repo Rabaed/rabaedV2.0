@@ -129,3 +129,55 @@ describe("scenario RP-1189-2: outsiders read no other Company's Member", () => {
     expect((await c2Engineer.caller.get(`/v1/work-items/${id}/workflow`)).statusCode).toBe(404);
   });
 });
+
+describe("scenario RP-1189-3: an Owner Representative holds the Owner's review", () => {
+  let other: Tower;
+  let held = "";
+  let orPm: Person;
+  let c3Engineer: Person;
+  const namesOn = (item: string) => async (by: Caller) => {
+    const res = await by.get(`/v1/work-items/${item}/workflow`);
+    return res.statusCode === 200 ? (res.json() as WorkItemWorkflowMap).stepPeople.flatMap((s) => s.names.map((n) => ({ id: n.en }))) : [];
+  };
+
+  beforeAll(async () => {
+    const c1 = await api.projectCreator();
+    const k1 = await api.authorizedPerson();
+    const or = await api.authorizedPerson();
+    const c3 = await api.authorizedPerson();
+    other = await buildTower(api, { c1, k1 }, "RPR");
+    // The Project's Owner Representative covers the item: it holds the Owner's review (ADR 0022).
+    const orParticipant = await api.addParticipant(c1.caller, other.projectId, or.company, "owner_representative");
+    await ok(c1.caller.request("PUT", `/v1/participants/${orParticipant}/visibility`, { trade: all, location: all }));
+    // C3, a second Contractor covering the whole Project, C1's item's Trade and Location too.
+    const c3Participant = await api.addParticipant(c1.caller, other.projectId, c3.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c3Participant}/visibility`, { trade: all, location: all }));
+    const m = await memberOnProject(api, or, orParticipant, ["project_manager"], { name: "Layla Representative OR" });
+    orPm = { id: m.id, caller: m.caller, name: "Layla Representative OR" };
+    const c = await memberOnProject(api, c3, c3Participant, ["engineer", "project_manager"], { name: "Tariq Engineer C3" });
+    c3Engineer = { id: c.id, caller: c.caller, name: "Tariq Engineer C3" };
+    people.push(orPm, c3Engineer);
+
+    const answers = { model: "Risers", trade: other.electrical, location: other.buildingA };
+    held = (await ok(other.c1Engineer.post(`/v1/projects/${other.projectId}/work-items`, { type: OWNER_TYPE, title: "Cable risers", answers }), 201)).json().id as string;
+    await take(other.c1Engineer, held, "send_for_review");
+    await ok(other.c1Pm.post(`/v1/work-items/${held}/pick-up`));
+    await take(other.c1Pm, held, "submit");
+    await ok(other.k1Manager.post(`/v1/work-items/${held}/pick-up`));
+    await take(other.k1Manager, held, "recommend_a");
+  });
+
+  it("the Owner Representative reads its own people on the Owner review it holds; nobody else reads them, by name or id", async () => {
+    const own = (await ok(orPm.caller.get(`/v1/work-items/${held}/workflow`), 200)).json() as WorkItemWorkflowMap;
+    expect(own.stepPeople).toEqual([{ stepKey: "owner_review", names: [bilingual(orPm.name)] }]);
+    const others = [other.c1Engineer, other.c1Pm, other.k1Manager, c3Engineer.caller];
+    await expectHiddenFrom({ read: namesOn(held), target: orPm.name, seenBy: orPm.caller, hiddenFrom: others, name: named, label: "the OR's Member" });
+    for (const by of others) expect((await by.get(`/v1/work-items/${held}/workflow`)).body.includes(orPm.id), named(by)).toBe(false); // not hidden-from: the names assert above has the positive control
+  });
+
+  it("C3, a second Contractor covering the item, reads no Step's people of C1's, K1's or the OR's", async () => {
+    // C1's Steps are the raiser's (V3), K1's and the OR's another role's: none is C3's.
+    expect(await namesOn(held)(c3Engineer.caller)).toEqual([]); // not hidden-from: the assert above reads the OR's names with the OR first
+    expect((await namesOn(held)(other.c1Pm)).length).toBeGreaterThan(0);
+  });
+});
