@@ -27,6 +27,7 @@ import { ensureDemo } from "../demo/ensure.ts";
 import { demoMailbox, seedingConfig } from "../demo/mailbox.ts";
 import { restoreDemoImages } from "../demo/restore-images.ts";
 import { addSampleProject, publicFailure, sampleProjectStatus } from "../demo/sample-project.ts";
+import { UAT_ROLES } from "../demo/uat-projects-plan.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../documents/file-store.ts";
 
 const parsed = z
@@ -54,9 +55,10 @@ if (action === "reset") {
 const files = process.env.PROJECT_FILES_BUCKET ? createFileStore(fileStoreSettingsFromEnv()) : undefined;
 
 const migrator = createDb(urls.migrator, { max: 2 });
-// The sample Project (RP-1217) moves four items at once, and the UAT Projects (RP-1254) are built four at a
-// time: with four connections they waited on the pool (with 20 ms per query, 476 s against 210 s with eight).
-const db = createDb(urls.app, { max: 8 });
+// The sample Project (RP-1217) moves four items at once, and the UAT Projects (RP-1254) are built six at a
+// time: with 20 ms per query they took 476 s on four connections, 145 s on twelve
+// (ten at a time on sixteen was no faster). With the migrator's 2 and admin's 1, 15 through the session pooler.
+const db = createDb(urls.app, { max: 12 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
   if (action === "sample-project-status" || action === "add-sample-project") {
@@ -101,7 +103,7 @@ async function demo() {
     { files: files !== undefined, log: (line) => console.log(`demo: ${line}`) },
   );
   // With the file store a new seed includes the sample Project (RP-1217); an existing one gets it from add-sample-project.
-  console.log(result === "seeded" ? `demo: seeded Riyadh Gate Tower – Phase 2${files ? ", Al Nakheel District – Block A" : ""} and Jeddah Corniche Villas` : "demo: already seeded");
+  console.log(result === "seeded" ? `demo: seeded Riyadh Gate Tower – Phase 2${files ? `, Al Nakheel District – Block A, ${UAT_ROLES.map((r) => `UAT ${r.n}`).join(", ")}` : ""} and Jeddah Corniche Villas` : "demo: already seeded");
   if (!files) {
     console.log("demo: no file store, so the demo's images are recorded but not stored");
   } else if (result === "present") {

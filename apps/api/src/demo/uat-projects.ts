@@ -23,7 +23,7 @@ export async function addUatProjects(
   app: FastifyInstance,
   migrator: Db,
   password: string,
-  { log = () => {}, roles = UAT_ROLES, concurrency = 4 }: { log?: SampleLog; roles?: UatRole[]; concurrency?: number } = {},
+  { log = () => {}, roles = UAT_ROLES, concurrency = 6 }: { log?: SampleLog; roles?: UatRole[]; concurrency?: number } = {},
 ): Promise<Record<string, SampleProjectResult>> {
   const start = performance.now();
   const results: Record<string, SampleProjectResult> = {};

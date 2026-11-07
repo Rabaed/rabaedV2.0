@@ -461,6 +461,15 @@ class Runner {
    * TMC where the next Step could go to more than one Participant (a Snag's Contractor).
    */
   private async act(by: Call, id: string, transition: string, body: Record<string, unknown> = {}) {
+    // Taken straight away when `by` already holds the Step and no Participant is to be picked: the item's page costs
+    // some 28 queries, a third of the seed's (RP-1254). Anything else is refused before it writes anything (not_holder,
+    // participant_not_picked, …), and then it goes as it always did: read, pick up, read, take.
+    try {
+      await by("POST", `/v1/work-items/${id}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID(), ...body });
+      return;
+    } catch (error) {
+      if (!/ answered 4\d\d /.test(String(error))) throw error;
+    }
     let detail = await by<WorkItemDetail>("GET", `/v1/work-items/${id}`);
     if (detail.actions.pickUp) {
       await by("POST", `/v1/work-items/${id}/pick-up`);
