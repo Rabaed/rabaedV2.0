@@ -8,7 +8,7 @@
 // before the new Version and closed after it (it stays pinned to Version 1).
 import { publishFormVersion, rabaedFormFile } from "@rabaed/admin/services";
 import { createDb, type OutboxHandler } from "@rabaed/db";
-import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, testDatabaseUrls, type OwnProjects } from "@rabaed/db/test-support";
 import type { SignedUrl } from "@rabaed/domain";
 import {
   attachedFiles,
@@ -89,6 +89,8 @@ async function download(by: Caller, id: string): Promise<Made> {
 }
 
 let at: Tower;
+/** This file's Project: its drains make only its own records, never another file's or the seed's (RP-1236). */
+const own = (): OwnProjects => ({ projects: [at.projectId], migrator });
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Engineer: Caller;
@@ -141,7 +143,7 @@ beforeAll(async () => {
   // Before the new Version: one item closed and its record made, one raised and left open.
   const before = await raise("Disclaimer before");
   await close(before);
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   const pinned = await raise("Disclaimer pinned");
 
   // The publish step: the real Rabaed Default MAR's `pdf` block becomes this Form's Version 2.
@@ -152,7 +154,7 @@ beforeAll(async () => {
   const after = await raise("Disclaimer after");
   await close(after);
   await close(pinned);
-  await drainOutbox(worker, { documental_record: handler });
+  await drainOutbox(worker, { documental_record: handler }, own());
   made.before = await download(c1Pm, before);
   made.pinned = await download(c1Pm, pinned);
   made.after = await download(c1Pm, after);
