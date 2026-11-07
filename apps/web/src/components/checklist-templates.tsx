@@ -39,9 +39,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { checklistTemplateLabels } from "@/lib/form-labels";
+import { TradeCardTitle } from "@/components/settings/trade-card-title";
+import { listedTrades, tradeOptions, type SettingsTrade } from "@/lib/settings-trades";
 import { createdId, refusalMessage, setupCall } from "@/lib/setup-call";
-
-export type TemplateTrade = { id: string; code: string; name: BilingualText };
 
 /** What a refused command says, in the page's words. */
 function useRefusal() {
@@ -63,15 +63,20 @@ export function ChecklistTemplateList({
 }: {
   projectId: string;
   canEdit: boolean;
-  trades: TemplateTrade[];
+  trades: SettingsTrade[];
   templates: ChecklistTemplate[];
 }) {
   const t = useTranslations("projectSettings.checklistTemplates");
   const locale = useLocale() as Locale;
+  // A deactivated Trade keeps its card while it has a template, marked "Archived" (RP-1251).
+  const cards = listedTrades(
+    trades,
+    templates.map((x) => x.tradeId),
+  );
   return (
     <>
-      {trades.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
-      {trades.map((trade) => {
+      {cards.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
+      {cards.map((trade) => {
         // Active first, each group in the API's order (by name).
         const listed = templates.filter((x) => x.tradeId === trade.id).sort((a, b) => Number(a.status === "retired") - Number(b.status === "retired"));
         const active = listed.filter((x) => x.status === "active").length;
@@ -79,14 +84,7 @@ export function ChecklistTemplateList({
         return (
           <SettingsSection
             key={trade.id}
-            title={
-              <>
-                {title}{" "}
-                <bdi dir="ltr" translate="no" className="text-caption font-normal text-muted">
-                  {trade.code}
-                </bdi>
-              </>
-            }
+            title={<TradeCardTitle trade={trade} />}
             actions={<span className="text-caption text-muted">{t("activeCount", { count: active, n: formatNumber(active, locale) })}</span>}
             bodyClassName="px-5 pt-3 pb-5"
             data-testid={`templates-${trade.code}`}
@@ -167,18 +165,21 @@ export function ChecklistTemplateEditor({
   projectId: string;
   template: ChecklistTemplate | null;
   canEdit: boolean;
-  trades: TemplateTrade[];
+  trades: SettingsTrade[];
 }) {
   const t = useTranslations("projectSettings.checklistTemplates");
   // The preview speaks the WIR's own words for its checks.
   const previewLabels = checklistTemplateLabels(useTranslations("workItems.form"));
+  const tl = useTranslations("tradesLocations");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const toast = useToast();
   const refusal = useRefusal();
   const editable = canEdit && template?.status !== "retired";
+  // Active Trades, and the template's own even once deactivated, so saving keeps it (RP-1251).
+  const options = tradeOptions(trades, locale, tl("archived"), template?.tradeId);
   const [name, setName] = useState<BilingualText>(template?.name ?? { en: "", ar: "" });
-  const [tradeId, setTradeId] = useState(template?.tradeId ?? trades[0]?.id ?? "");
+  const [tradeId, setTradeId] = useState(template?.tradeId ?? options[0]?.value ?? "");
   const [items, setItems] = useState<ChecklistTemplateItem[]>(() => (template ? template.items : [newItem([])]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -223,7 +224,7 @@ export function ChecklistTemplateEditor({
                 value={tradeId}
                 disabled={!editable}
                 onValueChange={setTradeId}
-                options={trades.map((trade) => ({ value: trade.id, label: trade.name[locale] }))}
+                options={options}
               />
             </Field>
           </div>

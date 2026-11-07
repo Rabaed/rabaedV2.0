@@ -21,7 +21,7 @@ export default async function ChecklistTemplatesPage({ params }: { params: Promi
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !dimensions || !list) notFound();
 
-  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name }));
+  const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name, active: v.active }));
   return (
     <>
       <SettingsHeader
@@ -29,7 +29,8 @@ export default async function ChecklistTemplatesPage({ params }: { params: Promi
         description={t("intro")}
         readOnlyLabel={list.canEdit ? undefined : ts("readOnly")}
         actions={
-          list.canEdit && trades.length > 0 ? (
+          // A new template needs an active Trade (RP-1251).
+          list.canEdit && trades.some((v) => v.active) ? (
             <Link href={`/projects/${project.id}/settings/checklist-templates/new`} className={buttonVariants({ size: "sm" })}>
               <Icon name="plus" size={15} />
               {t("new")}
