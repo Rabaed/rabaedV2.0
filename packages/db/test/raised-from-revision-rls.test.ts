@@ -71,6 +71,8 @@ async function revise(id: string): Promise<string> {
   const [revision] = await call<{ outcome: string; work_item_id: string | null }>(c1.members.engineer, sql`select outcome, work_item_id from app.create_revision(${id}::uuid, gen_random_uuid(), now())`);
   expect(revision!.outcome).toBe("created");
   const next = revision!.work_item_id!;
+  // As wirAtConsultant does for Rev 0: the reply checklist is copied from the Checklist Template.
+  expect(await tower.outcome(c1.members.engineer, sql`select app.sync_work_item_checklists(${next}::uuid, now()) as outcome`)).toBe("synced");
   expect(await take(c1.members.engineer, next, "send_for_review")).toBe("applied");
   expect(await pickUp(c1.members.project_manager, next)).toBe("picked_up");
   expect(await take(c1.members.project_manager, next, "submit")).toBe("applied");
