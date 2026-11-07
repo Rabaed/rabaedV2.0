@@ -143,6 +143,12 @@ describe("RP-1119-1: the Snag List filters by a Revision's Document Number, at e
         ...(list.typeCounts ?? []).map((t) => ({ id: `type:${t.code}` })),
       ];
     };
+    // C2 reads through the same filter what is its own: a Snag Yousef raises by hand.
+    const own = (
+      await ok(yousef.caller.post(`/v1/projects/${projectId}/work-items`, { type: "SNG", title: "Cable tray cover missing", answers: { description: "Level 2 riser", trade: electrical, location: buildingA } }), 201)
+    ).json().id as string;
+    await take(yousef.caller, own, "raise");
+    expect(ids(await snagList(yousef.caller, "manual"))).toContain(own);
     for (const r of chain) {
       const stages = (await snagList(hafiz.caller, r.number)).stages.filter((s) => s.count > 0).map((s) => `stage:${s.key}`);
       for (const target of [...r.snags, ...stages, "type:SNG"])

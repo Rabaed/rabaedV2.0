@@ -3,14 +3,15 @@
 // keeps the items whose `raised_from` Link, as app.work_item_links gives it to the reader, names the number.
 // A Revision's number is its first item's with " Rev n". C1 raises an Inspection that gets Code C twice:
 // Rev 0, Rev 1 and Rev 2 each raise two Snags. Each Revision's number finds exactly its own two Snags, for
-// C1 and K1; C2 (the same Trade, not covering the Location) and another Project's Member find none.
+// C1 and K1; C2 (the same Trade, every Location: only V3 keeps C1's items from it) and another Project's
+// Member find none, while C2 finds its own Draft through the same filter.
 import { randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, buildSeamTwoTower, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, buildSeamTwoTower, c2Draft, expectHiddenFrom, testDatabaseUrls, wirAtConsultant, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -34,7 +35,7 @@ const codeScreen = {
   ],
 };
 const templateItems = [item("formwork", "Formwork tight"), item("cover", "Rebar cover")];
-const towerOptions = { projectCode: "RVK", tradeCode: "CV", otherProject: true, k1Manager: true } as const;
+const towerOptions = { projectCode: "RVK", tradeCode: "CV", otherProject: true, k1Manager: true, c2OtherLocation: false } as const;
 type Tower = SeamTwoTower<typeof towerOptions>;
 
 let migrator: pg.Client;
@@ -54,6 +55,15 @@ const raisedFrom = async (as: string, number: string) =>
           and exists (select 1 from app.work_item_links(w.id) l where l.kind = 'raised_from' and l.document_number = ${number}) order by w.id`,
     )
   ).map((r) => ({ id: r.id }));
+/** The items `as` reads that were raised by hand: the same filter's other value, `manual`. */
+const raisedByHand = async (as: string) =>
+  (
+    await tower.call<{ id: string }>(
+      as,
+      sql`select w.id from work_item w where w.project_id = ${tower.projectId}::uuid
+          and not exists (select 1 from app.work_item_links(w.id) l where l.kind = 'raised_from') order by w.id`,
+    )
+  ).map((r) => r.id);
 
 /** K1's Engineer fails both items of `id` and Sends it to the Manager, who issues Code C; returns the two Snags raised. */
 async function codeC(id: string): Promise<string[]> {
@@ -128,6 +138,11 @@ describe("RP-1119-1: the Raised from filter finds a Revision's Snags by its Docu
     for (const reader of [tower.c1.members.engineer, tower.c1.members.project_manager, tower.k1.members.engineer]) {
       for (const r of chain) expect((await raisedFrom(reader, r.number)).map((x) => x.id), `${reader} ${r.number}`).toEqual([...r.snags].sort());
     }
+  });
+
+  it("C2 reads through the filter what is its own: its Draft, raised by hand", async () => {
+    const draft = await c2Draft(tower, { type: TYPE, title: "C2's own inspection" });
+    expect(await raisedByHand(tower.c2.members.engineer)).toContain(draft);
   });
 
   it("C2 and another Project's Member find none of them by any of the chain's numbers", async () => {
