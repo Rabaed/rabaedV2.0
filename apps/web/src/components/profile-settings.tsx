@@ -33,6 +33,7 @@ export function ProfileSettings({
     title: page("title"),
     subtitle: t("subtitle"),
     saveIdle: t("saveIdle"),
+    allSaved: (values) => t("allSaved", values),
     saved: t("saved"),
     profile: t("profile"),
     email: t("email"),

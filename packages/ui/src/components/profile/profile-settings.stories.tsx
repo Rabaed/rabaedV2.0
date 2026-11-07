@@ -1,6 +1,6 @@
 import { defaultNotificationSettings, type NotificationSettingsView } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { profileSettingsLabels } from "../../storybook/profile.ts";
@@ -12,6 +12,7 @@ const copy = {
   title: { en: "Profile & notifications", ar: "الملف الشخصي والإشعارات" },
   saveIdle: { en: "Changes save as you make them", ar: "تُحفظ التغييرات فور إجرائها" },
   saved: { en: "Saved", ar: "تم الحفظ" },
+  allSaved: { en: "All changes saved", ar: "كل التغييرات محفوظة" },
   positions: { en: "Positions on my Projects", ar: "مناصبي في المشاريع" },
   inAppLine: { en: "In-app notifications are always sent. These settings control email only.", ar: "تُرسل الإشعارات داخل التطبيق دائمًا. هذه الإعدادات تخص البريد فقط." },
   notifications: { en: "Notification settings", ar: "إعدادات الإشعارات" },
@@ -63,6 +64,12 @@ const member = {
 
 const ok = async () => ({ ok: true as const });
 
+/** The save line after "Saved" settles (the pinned time): stories that save end here, so their screenshots are stable. */
+async function savedSettles(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const status = context.canvas.getByRole("status");
+  await waitFor(() => expect(status).toHaveTextContent(`${storyText(context, copy.allSaved)} · 14:02`), { timeout: 4000 });
+}
+
 const meta = {
   title: "Profile/ProfileSettings",
   component: ProfileSettings,
@@ -74,6 +81,8 @@ const meta = {
     signature: <p>Signature card</p>,
     onSave: fn<ProfileSettingsProps["onSave"]>(ok),
     onMute: fn<ProfileSettingsProps["onMute"]>(ok),
+    // 14:02 in Riyadh, so "All changes saved · 14:02" reads the same on every run.
+    now: () => new Date("2026-11-07T11:02:00Z"),
   },
   render: (args, context) => <ProfileSettings {...args} locale={storyLocale(context)} labels={profileSettingsLabels[storyLocale(context)]} />,
   decorators: [(Story) => <main className="p-4">{Story()}</main>],
@@ -99,7 +108,7 @@ export const Defaults: Story = {
   },
 };
 
-/** A change saves at once, and the save line turns into "Saved". */
+/** A change saves at once: the save line shows "Saved", then settles to "All changes saved · time". */
 export const SavesAtOnce: Story = {
   play: async (context) => {
     const { canvas, args } = context;
@@ -109,6 +118,7 @@ export const SavesAtOnce: Story = {
       expect.objectContaining({ settings: expect.objectContaining({ step_reached: { email: "digest" } }) }),
     );
     await expect(await canvas.findByRole("status")).toHaveTextContent(storyText(context, copy.saved));
+    await savedSettles(context);
   },
 };
 
@@ -127,6 +137,7 @@ export const Paused: Story = {
     await expect(card.getByRole("switch", { name: storyText(context, copy.pauseAll) }).closest("[inert]")).toBeNull();
     // The email language, in the Profile card, stays usable.
     await expect(canvas.getByRole("radio", { name: "العربية" }).closest("[inert]")).toBeNull();
+    await savedSettles(context);
   },
 };
 
@@ -139,6 +150,7 @@ export const Mute: Story = {
     await expect(args.onMute).toHaveBeenCalledWith(value.projects[0]!.id, true);
     await expect(mutes[0]).toBeChecked();
     await expect(canvas.getByText(storyText(context, copy.muted))).toBeVisible();
+    await savedSettles(context);
   },
 };
 
@@ -162,6 +174,7 @@ export const OutcomeTicks: Story = {
       }),
     );
     await expect(open).toHaveTextContent(storyText(context, copy.ticked9));
+    await savedSettles(context);
   },
 };
 
@@ -173,6 +186,7 @@ export const WeeklyReport: Story = {
     await expect(weekly).toBeChecked();
     await userEvent.click(weekly);
     await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ settings: expect.objectContaining({ weekly_report: { email: "off" } }) }));
+    await savedSettles(context);
   },
 };
 
@@ -203,6 +217,7 @@ export const EmailLanguage: Story = {
     const { canvas, args } = context;
     await userEvent.click(canvas.getByRole("radio", { name: "العربية" }));
     await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ preferredLanguage: "ar" }));
+    await savedSettles(context);
   },
 };
 

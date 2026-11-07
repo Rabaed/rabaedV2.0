@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatDate,
   formatNumber,
   locales,
   watchOutcomeNames,
@@ -13,7 +14,7 @@ import {
   type UpdateNotificationSettingsRequest,
   type WatchOutcome,
 } from "@rabaed/domain";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
@@ -37,6 +38,8 @@ export type ProfileSettingsLabels = {
   title: string;
   subtitle: string;
   saveIdle: string;
+  /** "All changes saved · {time}", given the time already formatted (Riyadh, 24-hour). */
+  allSaved: (values: { time: string }) => string;
   saved: string;
   profile: string;
   email: string;
@@ -84,6 +87,8 @@ export type ProfileSettingsProps = {
   onSave: (settings: UpdateNotificationSettingsRequest) => ReturnType<SettingsCall>;
   /** Mutes (`true`) or unmutes a Project. */
   onMute: (projectId: string, muted: boolean) => ReturnType<SettingsCall>;
+  /** The time a save is stamped with; stories pin it so their screenshots stay the same. */
+  now?: () => Date;
 };
 
 // Each language named in itself, as language pickers do.
@@ -133,7 +138,11 @@ const groupRow: Record<NotificationGroup, { icon: IconName; tile: string; contro
 };
 
 type Refusal = keyof ProfileSettingsLabels["refusals"];
-type SaveState = { kind: "idle" } | { kind: "saved" } | { kind: "refused"; message: string };
+/** Nothing saved yet; saved (`flash` while the green "Saved" shows, then "All changes saved · time"); or refused. */
+type SaveState = { kind: "idle" } | { kind: "saved"; at: Date; flash: boolean } | { kind: "refused"; message: string };
+
+/** How long the green "Saved" shows before the line settles to "All changes saved · time", as the reference. */
+export const savedFlashMs = 1600;
 
 /**
  * One of the two cards: a 14px-round surface with an icon title and no divider under it, as the
@@ -150,6 +159,16 @@ function Card({ icon, title, titleId, children }: { icon: IconName; title: strin
     </section>
   );
 }
+
+/**
+ * The reference's segmented control (`.pseg`): a 10px track with a thin inset border, 8px
+ * segments in 12.5px semibold, and a chosen "Off" kept grey.
+ */
+const segmented = cn(
+  "rounded-[10px] border-0 bg-surface-subtle p-0.5 shadow-[inset_0_0_0_1px_var(--color-border)]",
+  "[&>*]:rounded-[8px] [&>*]:text-[12.5px] [&>*]:font-semibold [&>*]:whitespace-nowrap",
+  "[&>[data-state=checked][value=off]]:text-muted",
+);
 
 /** A section's small uppercase heading inside the Notification settings card. */
 function SectionHeading({ id, children }: { id?: string; children: ReactNode }) {
@@ -168,7 +187,7 @@ function ProjectCodeTile({ code, colour, size }: { code: string; colour: string;
       dir="ltr"
       className={cn(
         "flex shrink-0 items-center justify-center font-bold",
-        size === "sm" ? "size-6 rounded-[6px] text-[10px]" : "size-[30px] rounded-lg text-[11px]",
+        size === "sm" ? "size-6 rounded-[6px] text-[10px]" : "size-[30px] rounded-[8px] text-[11px]",
         colour,
       )}
     >
@@ -186,7 +205,7 @@ function FieldLabel({ id, children }: { id?: string; children: ReactNode }) {
   );
 }
 
-export function ProfileSettings({ locale, labels, member, value, signature, onSave, onMute }: ProfileSettingsProps) {
+export function ProfileSettings({ locale, labels, member, value, signature, onSave, onMute, now = () => new Date() }: ProfileSettingsProps) {
   const id = useId();
   const [saved, setSaved] = useState<UpdateNotificationSettingsRequest>({
     settings: value.settings,
@@ -197,13 +216,19 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
   const [state, setState] = useState<SaveState>({ kind: "idle" });
   const [watchedOpen, setWatchedOpen] = useState(false);
   const refused = (reason: string) => setState({ kind: "refused", message: labels.refusals[reason as Refusal] ?? labels.refusals.unavailable });
+  // The green "Saved" settles after a moment; a newer save restarts it.
+  useEffect(() => {
+    if (state.kind !== "saved" || !state.flash) return;
+    const timer = setTimeout(() => setState({ ...state, flash: false }), savedFlashMs);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   /** Applies a change at once, then undoes it if the API refuses. */
   async function attempt(apply: () => void, undo: () => void, call: () => ReturnType<SettingsCall>) {
     apply();
     try {
       const result = await call();
-      if (result.ok) return setState({ kind: "saved" });
+      if (result.ok) return setState({ kind: "saved", at: now(), flash: true });
       undo();
       refused(result.reason);
     } catch {
@@ -238,6 +263,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
   };
   const paused = saved.emailPaused;
 
+  const flashing = state.kind === "saved" && state.flash;
   const saveLine =
     state.kind === "refused" ? (
       <p role="alert" className="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-danger-tint px-[11px] text-[12.5px] font-semibold text-danger-fg">
@@ -249,11 +275,15 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
         role="status"
         className={cn(
           "inline-flex h-[30px] items-center gap-1.5 rounded-full px-[11px] text-[12.5px]",
-          state.kind === "saved" ? "bg-success-tint font-semibold text-success-fg" : "font-medium text-muted",
+          flashing ? "bg-success-tint font-semibold text-success-fg" : "font-medium text-muted",
         )}
       >
-        <Icon name="circle-check" size={16} className={state.kind === "saved" ? undefined : "text-success"} />
-        {state.kind === "saved" ? labels.saved : labels.saveIdle}
+        <Icon name="circle-check" size={16} className={flashing ? undefined : "text-success"} />
+        {flashing
+          ? labels.saved
+          : state.kind === "saved"
+            ? labels.allSaved({ time: formatDate(state.at, locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) })
+            : labels.saveIdle}
       </p>
     );
 
@@ -317,6 +347,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
               <FieldLabel id={`${id}-language`}>{labels.language}</FieldLabel>
               <SegmentedControl
                 aria-labelledby={`${id}-language`}
+                className={segmented}
                 value={saved.preferredLanguage}
                 onValueChange={(language) => void change({ ...saved, preferredLanguage: language as Locale })}
                 options={locales.map((l) => ({ value: l, label: <span lang={l}>{languageNames[l]}</span> }))}
@@ -335,7 +366,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
           <p className="mx-[18px] mt-1 text-[12.5px] leading-[1.45] text-muted">{labels.inAppLine}</p>
           <div
             className={cn(
-              "mx-[18px] mt-[14px] flex items-center gap-3 rounded-xl px-[14px] py-3",
+              "mx-[18px] mt-[14px] flex items-center gap-3 rounded-[12px] px-[14px] py-3",
               paused ? "bg-warning-tint" : "bg-surface-subtle shadow-[inset_0_0_0_1px_var(--color-border-subtle)]",
             )}
           >
@@ -354,7 +385,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
               aria-labelledby={`${id}-pause`}
               aria-describedby={`${id}-pause-help`}
               checked={paused}
-              className="data-[state=checked]:bg-warning-fg data-[state=checked]:hover:bg-warning-fg"
+              className="data-[state=checked]:bg-segment-location-solid data-[state=checked]:hover:bg-segment-location-solid"
               onCheckedChange={(emailPaused) => void change({ ...saved, emailPaused })}
             />
           </div>
@@ -388,7 +419,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
 
             <div className="px-[18px] pt-4">
               <SectionHeading>{labels.whatToEmail}</SectionHeading>
-              <div className="overflow-hidden rounded-xl shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
+              <div className="overflow-hidden rounded-[12px] shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
                 <div aria-hidden className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-[14px] py-[9px] text-[11.5px] font-semibold text-muted sm:grid">
                   <span>{labels.groupColumn}</span>
                   <span>{labels.emailColumn}</span>
@@ -439,7 +470,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       ) : (
                         <SegmentedControl
                           aria-labelledby={titleId}
-                          className="w-full sm:w-fit [&>*]:flex-1 [&>*]:whitespace-nowrap"
+                          className={cn(segmented, "w-full sm:w-fit [&>*]:flex-1")}
                           value={saved.settings[group].email}
                           onValueChange={(email) => void setGroup(group, { email: email as NotificationEmailChoice })}
                           options={emailOptions}

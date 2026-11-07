@@ -1990,6 +1990,7 @@
   "notificationSettings": {
     "subtitle": "Only you can see and change these settings.",
     "saveIdle": "Changes save as you make them",
+    "allSaved": "All changes saved · {time}",
     "saved": "Saved",
     "profile": "Profile",
     "email": "Email",
