@@ -282,7 +282,8 @@ defineCase("SIG-07", async (t) => {
   const undoButton = page.getByRole("button", { name: "Undo" });
   c.check("Undo is offered beside Clear once something is drawn", (await undoButton.count()) > 0 && (await undoButton.isEnabled()));
   const card = page.getByRole("group", { name: "How it looks on a record" });
-  c.check("the Signature card shows the Member's Company and the drawing", (await card.getByRole("img", { name: "Signature" }).count()) > 0 && (await card.innerText()).includes("Signature"));
+  const company = ((await hafiz.get("/me")).body as { company: { legalName: { en: string } } }).company.legalName.en;
+  c.check("the Signature card shows the Member's Company and the drawing", (await card.getByRole("img", { name: "Signature" }).count()) > 0 && (await card.innerText()).includes(company), company);
   await undoButton.click();
   c.check("Undo removed the only stroke: nothing left to save or preview", (await undoButton.isDisabled()) && (await card.getByRole("img", { name: "Signature" }).count()) === 0);
   await page.mouse.move(box.x + 20, box.y + box.height * 0.6);
