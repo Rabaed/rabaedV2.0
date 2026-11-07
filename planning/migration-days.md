@@ -185,4 +185,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271205 | RP-1156 | 31 | project_visibility_gap (20271204 is RP-1157's, lane 32) |
 | 20271209 | RP-1239 | 31 | dimension_value_status (20271208 is RP-1189's #689) |
 | 20271208 | RP-1189 | 12 | step_people |
-| 20271211 | RP-1251 | 31 | settings_refuse_archived_values (20271210 is RP-1252's, lane 32) |
+| 20271211 | RP-1251 | 31 | settings_refuse_deactivated_values (20271210 is RP-1252's, lane 32) |

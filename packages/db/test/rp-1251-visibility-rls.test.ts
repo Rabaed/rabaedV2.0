@@ -1,6 +1,6 @@
 // Seam 2 for the settings that pick a Trade or Location (RP-1251, a follow-up to RP-1239; visibility.md
 // V15; scenarios RP-1251-1 to RP-1251-3), as the app role. The Approved Supplier List, the Checklist
-// Templates and the numbering counters' starting numbers never take a deactivated ("archived") Trade or
+// Templates and the numbering counters' starting numbers never take a deactivated ("deactivated") Trade or
 // Location as a new choice; a supplier or template that already has one keeps it, read as before by the
 // Project's Members only. Everyone but the Project Admin still gets `not_found`. Seam 1:
 // apps/api/test/rp-1251-visibility.test.ts.
@@ -16,7 +16,7 @@ const towerOptions = { projectCode: "RAS", otherProject: true } as const;
 let migrator: pg.Client;
 let app: Db;
 let tower: SeamTwoTower<typeof towerOptions>;
-// Two Trades of the Tower's: one archived after a supplier and a template took it, one archived first.
+// Two Trades of the Tower's: one deactivated after a supplier and a template took it, one deactivated first.
 let kept = "";
 let archived = "";
 
@@ -76,7 +76,7 @@ afterAll(async () => {
 
 const everyoneElse = () => [tower.c1.members.engineer, tower.k1.ap, tower.ow.ap, tower.c2.ap, tower.other.ap];
 
-describe("scenario RP-1251-1: the Approved Supplier List never takes an archived Trade anew; a supplier on one keeps it", () => {
+describe("scenario RP-1251-1: the Approved Supplier List never takes a deactivated Trade anew; a supplier on one keeps it", () => {
   let supplier = "";
 
   beforeAll(async () => {
@@ -86,7 +86,7 @@ describe("scenario RP-1251-1: the Approved Supplier List never takes an archived
     await archive("trade", kept);
   });
 
-  it("refuses the Project Admin a supplier on an archived Trade, as for a Trade that isn't the Project's", async () => {
+  it("refuses the Project Admin a supplier on a deactivated Trade, as for a Trade that isn't the Project's", async () => {
     expect((await addSupplier(tower.c1.ap, archived, "Red Sea Cement")).outcome).toBe("trade_not_found");
     expect((await addSupplier(tower.c1.ap, kept, "Najd Rebar")).outcome).toBe("trade_not_found");
     expect((await addSupplier(tower.c1.ap, tower.tradeId, "Najd Rebar")).outcome).toBe("added");
@@ -96,20 +96,20 @@ describe("scenario RP-1251-1: the Approved Supplier List never takes an archived
     for (const as of everyoneElse()) expect((await addSupplier(as, tower.tradeId, "Hidden Supplies")).outcome).toBe("not_found");
   });
 
-  it("keeps the supplier on its archived Trade, read by the Project's Members and no one else", async () => {
+  it("keeps the supplier on its deactivated Trade, read by the Project's Members and no one else", async () => {
     await expectHiddenFrom({
       read: (as: string) => tower.call<{ id: string }>(as, sql`select id from approved_supplier where id = ${supplier}::uuid and trade_value_id = ${kept}::uuid`),
       target: supplier,
       seenBy: [tower.c1.ap, tower.k1.members.engineer],
       hiddenFrom: [tower.other.ap],
-      label: "a supplier on an archived Trade",
+      label: "a supplier on a deactivated Trade",
     });
   });
 });
 
-describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade anew; one on it keeps it", () => {
+describe("scenario RP-1251-2: a Checklist Template never takes a deactivated Trade anew; one on it keeps it", () => {
   let template = "";
-  // The template's own Trade, archived after the template took it.
+  // The template's own Trade, deactivated after the template took it.
   let ownTrade = "";
 
   beforeAll(async () => {
@@ -120,16 +120,16 @@ describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade
     await archive("trade", ownTrade);
   });
 
-  it("refuses a new template on an archived Trade, and accepts one on an active Trade", async () => {
+  it("refuses a new template on a deactivated Trade, and accepts one on an active Trade", async () => {
     expect((await createTemplate(tower.c1.ap, archived, "Column checks")).outcome).toBe("trade_not_found");
     expect((await createTemplate(tower.c1.ap, tower.tradeId, "Column checks")).outcome).toBe("created");
   });
 
-  it("lets the template keep its own archived Trade on an edit, but never move to another archived one", async () => {
+  it("lets the template keep its own deactivated Trade on an edit, but never move to another deactivated one", async () => {
     expect(await editTemplate(tower.c1.ap, template, ownTrade, "Slab checks v2")).toBe("edited");
     expect(await editTemplate(tower.c1.ap, template, archived, "Slab checks v3")).toBe("trade_not_found");
     expect(await editTemplate(tower.c1.ap, template, tower.tradeId, "Slab checks v3")).toBe("edited");
-    // Once off it, the archived Trade is a new choice again, so it is refused.
+    // Once off it, the deactivated Trade is a new choice again, so it is refused.
     expect(await editTemplate(tower.c1.ap, template, ownTrade, "Slab checks v4")).toBe("trade_not_found");
   });
 
@@ -141,7 +141,7 @@ describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade
   });
 });
 
-describe("scenario RP-1251-3: a numbering counter's starting number is never set on an archived Trade or Location", () => {
+describe("scenario RP-1251-3: a numbering counter's starting number is never set on a deactivated Trade or Location", () => {
   let zone = "";
 
   beforeAll(async () => {
@@ -149,7 +149,7 @@ describe("scenario RP-1251-3: a numbering counter's starting number is never set
     await archive("location", zone);
   });
 
-  it("refuses the Project Admin an archived Trade or Location, as for a value that isn't the Project's", async () => {
+  it("refuses the Project Admin a deactivated Trade or Location, as for a value that isn't the Project's", async () => {
     expect(await startCounter(tower.c1.ap, archived, null)).toBe("value_not_found");
     expect(await startCounter(tower.c1.ap, null, zone)).toBe("value_not_found");
     expect(await startCounter(tower.c1.ap, tower.tradeId, tower.buildingA)).toBe("set");

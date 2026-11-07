@@ -1,5 +1,8 @@
 -- RP-1251 (follow-up to RP-1239): the Project Settings that pick a Trade or Location never take a
--- deactivated one ("Archive" on screen) as a new choice. Scenarios RP-1251-1 to RP-1251-3.
+-- deactivated one ("Archive" on screen) as a new choice.
+-- Owner's calls left open (in the PR): a counter on a deactivated value can't have its starting number
+-- set (reactivate the value first), and app.sar_adds_supplier still adds a supplier approved on a
+-- Work Item whose own Trade is deactivated (the item keeps its value). Scenarios RP-1251-1 to RP-1251-3.
 --
 -- * app.add_approved_supplier: a supplier on a deactivated Trade is 'trade_not_found', as for a Trade
 --   that isn't the Project's. A supplier already on it stays listed.
@@ -8,9 +11,21 @@
 --   onto another deactivated Trade.
 -- * app.set_numbering_counter_start: a deactivated Trade or Location is 'value_not_found'.
 --
--- Each function is rebuilt from its newest body; only the Trade or Location check changes. Anyone but
--- the Project Admin still gets 'not_found' first, so nothing new is named to anyone. `create or
--- replace` keeps each function's grants.
+-- Each function is rebuilt from its newest body; only the Trade or Location check changes, through
+-- one new helper, app.is_deactivated_value. Anyone but the Project Admin still gets 'not_found'
+-- first, so nothing new is named to anyone. `create or replace` keeps each function's grants.
+
+-- Whether p_value_id is a deactivated Trade or Location of Project p_project_id (false for null, or
+-- for a value that isn't the Project's: the callers' own checks refuse that).
+create function app.is_deactivated_value(p_project_id uuid, p_value_id uuid) returns boolean
+  language sql stable
+  set search_path = pg_catalog, public
+  as $$
+    select exists (select 1 from dimension_value v where v.id = p_value_id and v.project_id = p_project_id and v.status = 'deactivated')
+  $$;
+
+-- A helper of the writes below, not for the app role.
+revoke all on function app.is_deactivated_value(uuid, uuid) from public;
 
 -- From 20270402000000_approved_supplier_list.sql.
 create or replace function app.add_approved_supplier(p_project_id uuid, p_trade_id uuid, p_scope_id uuid, p_name jsonb, p_now timestamptz)
@@ -29,11 +44,11 @@ create or replace function app.add_approved_supplier(p_project_id uuid, p_trade_
         return query select 'project_closed'::text, null::uuid;
         return;
       end if;
-      -- An active Trade of the Project: a deactivated one is never picked anew (RP-1251).
+      -- A Trade of the Project, and not a deactivated one: that is never picked anew (RP-1251).
       if not exists (
         select 1 from dimension_value v join visibility_dimension d on d.id = v.dimension_id
-        where v.id = p_trade_id and v.project_id = p_project_id and d.kind = 'trade' and v.status = 'active'
-      ) then
+        where v.id = p_trade_id and v.project_id = p_project_id and d.kind = 'trade'
+      ) or app.is_deactivated_value(p_project_id, p_trade_id) then
         return query select 'trade_not_found'::text, null::uuid;
         return;
       end if;
@@ -81,9 +96,8 @@ create or replace function app.create_checklist_template(p_project_id uuid, p_na
         return query select 'project_closed'::text, null::uuid;
         return;
       end if;
-      -- An active Trade of the Project (RP-1251).
-      if not app.is_project_trade(p_project_id, p_trade_id)
-        or exists (select 1 from dimension_value where id = p_trade_id and status = 'deactivated') then
+      -- A Trade of the Project, and not a deactivated one (RP-1251).
+      if not app.is_project_trade(p_project_id, p_trade_id) or app.is_deactivated_value(p_project_id, p_trade_id) then
         return query select 'trade_not_found'::text, null::uuid;
         return;
       end if;
@@ -126,10 +140,10 @@ create or replace function app.edit_checklist_template(p_template_id uuid, p_nam
         return query select 'template_retired'::text, null::uuid;
         return;
       end if;
-      -- An active Trade of the Project, or the template's own, kept even once deactivated (RP-1251).
+      -- A Trade of the Project, not a deactivated one unless it is the template's own (RP-1251).
       if not app.is_project_trade(v_template.project_id, p_trade_id)
         or (
-          exists (select 1 from dimension_value where id = p_trade_id and status = 'deactivated')
+          app.is_deactivated_value(v_template.project_id, p_trade_id)
           and not exists (
             select 1 from checklist_template_version
             where checklist_template_id = p_template_id and version_no = v_template.version_no and trade_value_id = p_trade_id)
@@ -163,10 +177,7 @@ create or replace function app.set_numbering_counter_start(
         return;
       end if;
       -- A deactivated Trade or Location of the Project is never picked anew (RP-1251).
-      if exists (
-        select 1 from dimension_value v
-        where v.id in (p_trade_id, p_location_id) and v.project_id = p_project_id and v.status = 'deactivated'
-      ) then
+      if app.is_deactivated_value(p_project_id, p_trade_id) or app.is_deactivated_value(p_project_id, p_location_id) then
         return query select 'value_not_found'::text, null::text, null::text;
         return;
       end if;

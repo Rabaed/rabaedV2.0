@@ -25,13 +25,12 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { TradeCardTitle } from "@/components/settings/trade-card-title";
 import { listedTrades, tradeOptions, type SettingsTrade } from "@/lib/settings-trades";
 import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 // A choice can't have an empty value, so "no Scope" has its own.
 const NO_SCOPE = "none";
-
-export type SupplierTrade = SettingsTrade;
 
 type ScopeChoice = Scope & { level: number };
 
@@ -56,16 +55,15 @@ export function ApprovedSupplierList({
   suppliers,
 }: {
   canEdit: boolean;
-  trades: SupplierTrade[];
+  trades: SettingsTrade[];
   /** The Project's Scopes and Sub-scopes in tree order, with their level. */
   scopes: ScopeChoice[];
   suppliers: ApprovedSupplier[];
 }) {
   const t = useTranslations("projectSettings.approvedSuppliers");
-  const tl = useTranslations("tradesLocations");
   const locale = useLocale() as Locale;
   const scopeName = new Map(scopes.map((s) => [s.id, s.name[locale]]));
-  // An archived Trade keeps its card while it lists a supplier, marked archived (RP-1251).
+  // A deactivated Trade keeps its card while it lists a supplier, marked "Archived" (RP-1251).
   const cards = listedTrades(
     trades,
     suppliers.map((s) => s.tradeId),
@@ -82,20 +80,7 @@ export function ApprovedSupplierList({
         return (
           <SettingsSection
             key={trade.id}
-            title={
-              <>
-                {title}{" "}
-                <bdi dir="ltr" translate="no" className="text-caption font-normal text-muted">
-                  {trade.code}
-                </bdi>
-                {!trade.active && (
-                  <>
-                    {" "}
-                    <Badge tone="neutral">{tl("archived")}</Badge>
-                  </>
-                )}
-              </>
-            }
+            title={<TradeCardTitle trade={trade} />}
             actions={<span className="text-caption text-muted">{t("approvedCount", { count: approved, n: formatNumber(approved, locale) })}</span>}
             bodyClassName="px-5 pt-3 pb-5"
             data-testid={`suppliers-${trade.code}`}
@@ -192,14 +177,15 @@ function Withdraw({ supplier }: { supplier: ApprovedSupplier }) {
  * "Add supplier", for a Project Admin, in the page header: its names in English and Arabic,
  * its Trade and, optionally, one of that Trade's active Scopes or Sub-scopes.
  */
-export function AddSupplierButton({ projectId, trades, scopes }: { projectId: string; trades: SupplierTrade[]; scopes: ScopeChoice[] }) {
+export function AddSupplierButton({ projectId, trades, scopes }: { projectId: string; trades: SettingsTrade[]; scopes: ScopeChoice[] }) {
   const t = useTranslations("projectSettings.approvedSuppliers");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const toast = useToast();
   const refusal = useRefusal();
+  const tl = useTranslations("tradesLocations");
   // Only active Trades take a new supplier (RP-1251).
-  const options = tradeOptions(trades, locale);
+  const options = tradeOptions(trades, locale, tl("archived"));
   const [open, setOpen] = useState(false);
   const [name, setName] = useState<BilingualText>({ en: "", ar: "" });
   const [tradeId, setTradeId] = useState(options[0]?.value ?? "");

@@ -48,7 +48,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
     getProjectDimensions(projectId),
   ]);
   const code = (value: string) => ` (${LRI}${value}${PDI})`;
-  // Archived Trades and Locations are neither examples nor a counter's new choice (RP-1251).
+  // Deactivated Trades and Locations are neither examples nor a counter's new choice (RP-1251).
   const trades = (dimensions?.trade ?? []).filter((v) => v.active);
   const locations = (dimensions?.location ?? []).filter((v) => v.active);
   const own = participants?.participants.find((p) => p.isOwnCompany);

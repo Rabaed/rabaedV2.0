@@ -1,7 +1,7 @@
 // Seam 1 for the settings that pick a Trade or Location (RP-1251, a follow-up to RP-1239; visibility.md
 // V15; scenarios RP-1251-1 to RP-1251-3): `POST /v1/projects/:projectId/approved-suppliers`, `POST
 // /v1/projects/:projectId/checklist-templates`, `PUT /v1/checklist-templates/:templateId` and `PUT
-// /v1/projects/:projectId/numbering/counters/start` never take an archived ("deactivated") Trade or
+// /v1/projects/:projectId/numbering/counters/start` never take a deactivated ("deactivated") Trade or
 // Location as a new choice; what already has one keeps it and is read as before, by the Project's
 // Members only. Everyone but the Project Admin still gets the 404 that names nothing. Seam 2:
 // packages/db/test/rp-1251-visibility-rls.test.ts.
@@ -19,7 +19,7 @@ let c1: Company;
 let k1: Company;
 let c3: Company;
 let c3Project = "";
-// Trades of the Tower's: one archived after a supplier and a template took it, one archived first.
+// Trades of the Tower's: one deactivated after a supplier and a template took it, one deactivated first.
 let kept = "";
 let archived = "";
 let zone = "";
@@ -77,7 +77,7 @@ const everyoneElse = () => [
   viewer(c3.caller, "another Project's Authorized Person and Admin"),
 ];
 
-describe("scenario RP-1251-1: the Approved Supplier List never takes an archived Trade anew; a supplier on one keeps it", () => {
+describe("scenario RP-1251-1: the Approved Supplier List never takes a deactivated Trade anew; a supplier on one keeps it", () => {
   let supplier = "";
 
   beforeAll(async () => {
@@ -85,7 +85,7 @@ describe("scenario RP-1251-1: the Approved Supplier List never takes an archived
     await archive("trades", kept);
   });
 
-  it("refuses the Project Admin a supplier on an archived Trade, and takes one on an active Trade", async () => {
+  it("refuses the Project Admin a supplier on a deactivated Trade, and takes one on an active Trade", async () => {
     await refusedAs(addSupplier(c1.caller, archived, "Red Sea Cement"), "trade_not_found");
     await refusedAs(addSupplier(c1.caller, kept, "Najd Rebar"), "trade_not_found");
     await ok(addSupplier(c1.caller, at.electrical, "Najd Rebar"), 201);
@@ -95,19 +95,19 @@ describe("scenario RP-1251-1: the Approved Supplier List never takes an archived
     for (const v of everyoneElse()) await expectHidden(addSupplier(v.by, at.electrical, "Hidden Supplies"), v.name); // not hidden-from: a write refused, the 404's shape
   });
 
-  it("keeps the supplier on its archived Trade, listed for the Project's Members and no one else", async () => {
+  it("keeps the supplier on its deactivated Trade, listed for the Project's Members and no one else", async () => {
     await expectHiddenFrom({
       read: async (v: Viewer) => (await suppliers(v.by)).filter((s) => s.tradeId === kept),
       target: supplier,
       seenBy: [viewer(c1.caller, "C1's Authorized Person, the Project Admin"), viewer(at.k1Manager, "K1's manager")],
       hiddenFrom: [viewer(c3.caller, "another Project's Authorized Person and Admin")],
       name: (v: Viewer) => v.name,
-      label: "a supplier on an archived Trade",
+      label: "a supplier on a deactivated Trade",
     });
   });
 });
 
-describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade anew; one on it keeps it", () => {
+describe("scenario RP-1251-2: a Checklist Template never takes a deactivated Trade anew; one on it keeps it", () => {
   let template = "";
   let ownTrade = "";
 
@@ -117,12 +117,12 @@ describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade
     await archive("trades", ownTrade);
   });
 
-  it("refuses a new template on an archived Trade, and takes one on an active Trade", async () => {
+  it("refuses a new template on a deactivated Trade, and takes one on an active Trade", async () => {
     await refusedAs(createTemplate(c1.caller, archived, "Column checks"), "trade_not_found");
     await ok(createTemplate(c1.caller, at.electrical, "Column checks"), 201);
   });
 
-  it("lets the template keep its own archived Trade on an edit, but never move to another archived one", async () => {
+  it("lets the template keep its own deactivated Trade on an edit, but never move to another deactivated one", async () => {
     await ok(editTemplate(c1.caller, template, ownTrade, "Slab checks v2"));
     await refusedAs(editTemplate(c1.caller, template, archived, "Slab checks v3"), "trade_not_found");
     const listed = (await ok(c1.caller.get(`/v1/projects/${at.projectId}/checklist-templates`), 200)).json().templates as ChecklistTemplate[];
@@ -137,8 +137,8 @@ describe("scenario RP-1251-2: a Checklist Template never takes an archived Trade
   });
 });
 
-describe("scenario RP-1251-3: a numbering counter's starting number is never set on an archived Trade or Location", () => {
-  it("refuses the Project Admin an archived Trade or Location, and takes active ones", async () => {
+describe("scenario RP-1251-3: a numbering counter's starting number is never set on a deactivated Trade or Location", () => {
+  it("refuses the Project Admin a deactivated Trade or Location, and takes active ones", async () => {
     await refusedAs(startCounter(c1.caller, at.projectId, archived, null), "value_not_found");
     await refusedAs(startCounter(c1.caller, at.projectId, null, zone), "value_not_found");
     await ok(startCounter(c1.caller, at.projectId, at.electrical, at.buildingA), 200);
