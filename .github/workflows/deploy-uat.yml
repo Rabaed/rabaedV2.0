@@ -221,9 +221,13 @@ jobs:
       # the runner and a production deployment that is not yet live (--skip-domain).
       # VERCEL_ORG_ID and VERCEL_PROJECT_ID pick the project; stdout is the
       # deployment's own address.
+      # VISITOR_FORWARD_SECRET goes to web's and the api's variables steps alone, the same on both
+      # (RP-1230, RP-1247): web names each visitor to the api with it, so each visitor has their own
+      # limit. Unset in uat, the script sends none and Vercel keeps what it has.
       - name: "api: settings and variables"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VISITOR_FORWARD_SECRET: ${{ secrets.VISITOR_FORWARD_SECRET }}
           DATABASE_SUPERUSER_URL: ${{ secrets.DATABASE_SUPERUSER_URL }}
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
           FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
@@ -324,6 +328,7 @@ jobs:
       - name: "web: settings and variables"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VISITOR_FORWARD_SECRET: ${{ secrets.VISITOR_FORWARD_SECRET }}
         run: node scripts/uat-deploy.ts project web
       - name: "web: build and deploy, not yet live"
         id: web
