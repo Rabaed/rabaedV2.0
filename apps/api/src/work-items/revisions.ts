@@ -93,7 +93,8 @@ export function discardRevision(db: Db, memberId: string, workItemId: string, no
  * The Revision drop-down (RP-318): the Revisions of the item's chain the Member
  * sees, the original first, each by V1 on its own (app.revision_chain); null when
  * the Member can't see the item. Each with its Stage as its own page shows the
- * Member (app.step_as_seen, as the item's read does; RP-1188): never its Step.
+ * Member (app.step_as_seen, as the item's read does; RP-1188): never its Step;
+ * and its Submission Date, close and Outcome for the Revision picker (RP-1253).
  */
 export function getRevisionChain(db: Db, memberId: string, workItemId: string): Promise<RevisionChain | null> {
   return withMember(db, memberId, async (trx) => {
@@ -104,9 +105,14 @@ export function getRevisionChain(db: Db, memberId: string, workItemId: string): 
       stage_key: string;
       stage_name: BilingualText;
       stage_category: RevisionChain["revisions"][number]["stage"]["category"];
+      submitted_at: Date | null;
+      closed_at: Date | null;
+      outcome: RevisionChain["revisions"][number]["outcome"];
     }>`
       select c.work_item_id, c.document_number, c.revision_no,
-        st.key as stage_key, st.name as stage_name, st.category as stage_category
+        st.key as stage_key, st.name as stage_name, st.category as stage_category,
+        -- Read through RLS from each Revision's own row, as its own read gives them (RP-1253): the Submission Date, never the Creation Date.
+        w.submitted_at, w.closed_at, w.outcome
       from app.revision_chain(${workItemId}::uuid) c
       join work_item w on w.id = c.work_item_id
       cross join lateral app.step_as_seen(w.id) seen
@@ -122,6 +128,9 @@ export function getRevisionChain(db: Db, memberId: string, workItemId: string): 
         documentNumber: r.document_number,
         revisionNo: r.revision_no,
         stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
+        submissionDate: r.submitted_at?.toISOString() ?? null,
+        closedAt: r.closed_at?.toISOString() ?? null,
+        outcome: r.outcome,
       })),
     };
   });

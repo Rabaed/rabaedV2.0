@@ -670,11 +670,11 @@ describe("the README walkthrough", () => {
     const rev1 = created.json().id as string;
     const chain = async (who: Caller, id: string) => ((await who.get(`/v1/work-items/${id}/revisions`)).json() as RevisionChain).revisions;
     expect(await chain(hafiz, rev1)).toEqual([
-      { id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }) },
-      { id: rev1, documentNumber: null, revisionNo: 1, stage: expect.objectContaining({ key: "draft" }) },
+      { id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }), submissionDate: expect.any(String), closedAt: expect.any(String), outcome: "C" },
+      { id: rev1, documentNumber: null, revisionNo: 1, stage: expect.objectContaining({ key: "draft" }), submissionDate: null, closedAt: null, outcome: null },
     ]);
     for (const who of [mohammed, faisal]) {
-      expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }) }]);
+      expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0, stage: expect.objectContaining({ key: "revise_resubmit" }), submissionDate: expect.any(String), closedAt: expect.any(String), outcome: "C" }]);
       expect((await links(who, original)).links).toEqual([]); // not hidden-from: the original has no Link yet for anyone; the one to Rev 1 comes at its Submit
     }
     await expectHiddenFrom({ read: readById(`/v1/work-items/${rev1}`), target: rev1, seenBy: hafiz, hiddenFrom: [mohammed, faisal], name: whoIs, label: "Rev 1, a Draft" });

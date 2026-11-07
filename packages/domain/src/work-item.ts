@@ -389,6 +389,12 @@ export const revisionChain = z.object({
       revisionNo: z.number().int().nonnegative(),
       /** Its Stage as its own page shows the viewer (app.step_as_seen; RP-1188), the menu's line under it. */
       stage: z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) }),
+      /** Its Submission Date, as its own read gives it (RP-1253, the picker's "Submitted" line); null until first Submitted. Never its Creation Date. */
+      submissionDate: z.iso.datetime().nullable(),
+      /** When it closed, the picker's "Returned" line for an earlier Revision; null while open. */
+      closedAt: z.iso.datetime().nullable(),
+      /** The code it closed at (an earlier Revision's Code C); null while open. */
+      outcome: workItemOutcome.nullable(),
     }),
   ),
 });
