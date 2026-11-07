@@ -35,7 +35,11 @@ function useRead<T>(url: string | null, refreshKey?: unknown): Read<T> | null {
  * block and the in-flow section's (the strip again, then the vertical Step list: RP-1093, README
  * §4.9); `openMap` opens the map from anywhere else in the panel (the rail's link: RP-1067).
  */
-export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Locale, refreshKey?: unknown): { route: ReactNode; workflow: ReactNode; openMap: () => void } {
+export function useSubmittalPanelRoute(
+  item: WorkItemDetail | null,
+  locale: Locale,
+  refreshKey?: unknown,
+): { route: ReactNode; workflow: ReactNode; openMap: () => void; map: WorkItemWorkflowMap | null } {
   const t = useTranslations("submittalRoute");
   const tMap = useTranslations("workflowMap");
   const tRoles = useTranslations("projects.roles");
@@ -75,12 +79,14 @@ export function useSubmittalPanelRoute(item: WorkItemDetail | null, locale: Loca
 
   // The same function every render: a map asked for before its read arrives opens once it does.
   const openMap = useCallback(() => setOpen(true), []);
-  if (!item || !map) return { route: null, workflow: null, openMap };
+  if (!item || !map) return { route: null, workflow: null, openMap, map: null };
   const project = projectRead?.value ?? null;
   const route = submittalRoute({ definition: map.definition, stages: map.stages, position: map.position });
   const { stops } = route;
   return {
     openMap,
+    // Which Review Code each offered Transition issues (the action bar's menu, RP-1237).
+    map,
     workflow: (
       <div className="flex min-w-0 flex-col gap-4">
         <SubmittalRouteStrip locale={locale} labels={labels} stops={stops} onOpen={openMap} />

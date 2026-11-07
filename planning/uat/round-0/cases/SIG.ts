@@ -23,6 +23,9 @@ import {
   type MarContext,
 } from "../harness/helpers-not.ts";
 
+// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+
 // Part SIG: signing, the Documental Record, Working Copy, Verification page, Signature and Stamp.
 // Built on main now: RP-85 (Signature), RP-617 (logo and Stamp), RP-151 (record page 1), RP-650
 // (Signature cards, Stamps). Every case makes its own items ("UAT SIG-nn ...").
@@ -68,7 +71,7 @@ defineCase("SIG-01", async (t) => {
   await settle(page);
   const main = page.getByRole("main");
   await main.getByRole("button", { name: "Submit", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator(POP_UP);
   await dialog.waitFor({ state: "visible" });
   c.check("the pop-up keeps the Transition's own label (Submit)", (await dialog.getByRole("button", { name: "Submit", exact: true }).count()) === 1 && /^Submit/.test((await dialog.innerText()).trim()));
   c.check("there is no separate Sign button or checkbox", (await dialog.getByRole("checkbox").count()) === 0 && (await dialog.getByRole("button", { name: /sign/i }).count()) === 0 && (await dialog.getByRole("switch").count()) === 0);

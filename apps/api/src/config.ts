@@ -1,4 +1,4 @@
-import { appVersion, contentType, defaultDocumentContentTypes, defaultDocumentMaxBytes } from "@rabaed/domain";
+import { appVersion, contentType, defaultDocumentContentTypes, defaultDocumentMaxBytes, visitorForwardSecret } from "@rabaed/domain";
 import { z } from "zod";
 
 export interface ApiConfig {
@@ -12,6 +12,11 @@ export interface ApiConfig {
   version: string;
   /** What a Document may be: its largest size, and its file types. */
   documents: { maxBytes: number; contentTypes: string[] };
+  /**
+   * VISITOR_FORWARD_SECRET: with it, web names the visitor a public route's limit counts (visitor.ts, RP-1230).
+   * Without it, the limit counts the direct caller.
+   */
+  visitorForwardSecret?: string;
 }
 
 const HOUR = 3_600_000;
@@ -32,6 +37,7 @@ export function apiConfigFromEnv(source: NodeJS.ProcessEnv = process.env): ApiCo
         .transform((list) => list.split(",").filter((t) => t.trim()))
         .pipe(z.array(contentType).min(1))
         .optional(),
+      VISITOR_FORWARD_SECRET: visitorForwardSecret,
     })
     .parse(source);
   return {
@@ -44,5 +50,6 @@ export function apiConfigFromEnv(source: NodeJS.ProcessEnv = process.env): ApiCo
       maxBytes: env.DOCUMENT_MAX_MB ? Math.floor(env.DOCUMENT_MAX_MB * MB) : defaultDocumentMaxBytes,
       contentTypes: env.DOCUMENT_CONTENT_TYPES ?? [...defaultDocumentContentTypes],
     },
+    ...(env.VISITOR_FORWARD_SECRET ? { visitorForwardSecret: env.VISITOR_FORWARD_SECRET } : {}),
   };
 }

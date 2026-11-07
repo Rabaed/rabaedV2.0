@@ -18,7 +18,7 @@ export const passwordResetRoutes =
       const answerAt = performance.now() + PASSWORD_RESET.answerAfterMs;
       let outcome;
       try {
-        outcome = await requestPasswordReset(ctx.db, request.body.email, visitorSha256(request), ctx.now(), PASSWORD_RESET);
+        outcome = await requestPasswordReset(ctx.db, request.body.email, visitorSha256(request, ctx.config.visitorForwardSecret), ctx.now(), PASSWORD_RESET);
       } finally {
         // Before anything is sent: a reply, once sent, has already told its time.
         await sleep(Math.max(0, answerAt - performance.now()));

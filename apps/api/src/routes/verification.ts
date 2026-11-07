@@ -64,7 +64,7 @@ export const verificationRoutes =
       const documentNumber = body.success ? body.data.documentNumber : "";
       const { rows } = await sql<{ outcome: "found" | "not_found" | "too_many_attempts"; verification: RecordVerification | null }>`
         select outcome, verification from app.verify_documental_record_by_code(
-          ${code}, ${documentNumber}, ${visitorSha256(request)}, ${ctx.now()},
+          ${code}, ${documentNumber}, ${visitorSha256(request, ctx.config.visitorForwardSecret)}, ${ctx.now()},
           ${VERIFICATION_ATTEMPTS.perVisitor}::integer, make_interval(mins => ${VERIFICATION_ATTEMPTS.windowMinutes}::integer)
         )
       `.execute(ctx.db);

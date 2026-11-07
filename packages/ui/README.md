@@ -29,12 +29,12 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
 | `signature/` | The Signature (RP-85): `SignatureEditor` (Profile → Add Signature: draw, type or upload), `SignatureRequiredDialog` (no Signature, no Transition); `CompanyImages` and `StampRequiredDialog` (the logo and Stamp, RP-617); `ImageFileButton` (their image file control, a button in the page's language) |
-| `submittal-panel/` | The Submittal Panel (spec RP-1054): `SubmittalPanel`, the slide-over a submittal opens in from the List and the Kanban, with no scrim (so not the modal `Sheet`), its classes prefixed `sdp`; its identity and key facts; its keys and loaded-row position (`panel-model.ts`); its per-viewer preferences, kept in one place (`panel-preferences.ts`) |
+| `submittal-panel/` | The Submittal Panel (spec RP-1054): `SubmittalPanel`, the slide-over a submittal opens in from the List and the Kanban, with no scrim (so not the modal `Sheet`), its classes prefixed `sdp`; its identity and key facts; its keys and loaded-row position (`panel-model.ts`); its per-viewer preferences, kept in one place (`panel-preferences.ts`); its action bar (RP-1237): what it offers (`action-bar-model.ts`, `submittalPanelBar`), the "Issue Review Code" menu (`SubmittalPanelCodeMenu`) and where it waits (`SubmittalPanelWaiting`). At Full it is the Work Item page |
 | `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `SentBackNotice`, `WithChip`, `WorkItemCard`, `stageColour` |
 | `verification/` | The public verification page of a Documental Record (RP-157): `RecordVerificationView` (genuine or replaced, its first-page facts and signers), `CopyCheck` (a dropped PDF fingerprinted in the browser), `VerificationCodeForm` |
 | `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |
 | `watch/` | `WatchButton` |
-| `work-item-page/` | The Work Item page (RP-1151), the Submittal Panel at page size: `WorkItemPageFrame` (top bar, rail, bottom bar; classes prefixed `wip`), the Transitions card, The Issued Code card, the numbered History, and their models (`history-model.ts`, `page-model.ts`) |
+| `work-item-page/` | What is left of the Work Item page (RP-1151) since the Submittal Panel at Full became it (RP-1237): `CodeTile`, `AttachmentChips`, `transitionCodes` (`page-model.ts`) |
 | `workflow/` | The Workflow builder: `WorkflowBuilder`, `WorkflowCanvas`, `WorkflowStepList`, `WorkflowCompareDialog`, rule dialog and labels |
 
 Elsewhere (the paths in the first column are checked to exist):
