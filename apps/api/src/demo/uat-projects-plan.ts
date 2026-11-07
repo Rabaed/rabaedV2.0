@@ -81,7 +81,8 @@ const mar = (title: string, location: string, end: SampleSubmittal["end"], produ
   ...extra,
 });
 
-const at = (n: number) => `UAT01-MAR-01-${String(n).padStart(4, "0")}`;
+/** TMC's and Beta Build's MAR series on UAT 01. */
+const tmc = (n: number) => `UAT01-MAR-01-${String(n).padStart(4, "0")}`;
 const beta = (n: number) => `UAT01-MAR-02-${String(n).padStart(4, "0")}`;
 
 /**
@@ -90,27 +91,28 @@ const beta = (n: number) => `UAT01-MAR-02-${String(n).padStart(4, "0")}`;
  */
 function uat01(): Staged[] {
   const s = (cases: string[], item: SampleSubmittal, number?: string): Staged => ({ kind: "submittal", cases, item, ...(number ? { number } : {}) });
-  const rival = (item: SampleSubmittal, number?: string): Staged => ({ ...s(["VIS-19"], { ...item, owner: "beta" }, number), mustNotSee: true });
+  /** Beta Build's own item, for VIS-19: Hafiz must not see it. */
+  const betaHidden = (item: SampleSubmittal, number?: string): Staged => ({ ...s(["VIS-19"], { ...item, owner: "beta" }, number), mustNotSee: true });
   return [
     // Back with Hafiz after Ali's Return, each for one case that acts on it.
-    s(["SUB-05"], mar("SUB-05 Emergency luminaires – returned by Ali", "A02", "returned", P.luminaires), at(1)),
-    s(["SUB-06"], mar("SUB-06 LED downlights – change the Datasheet", "A03", "returned", P.downlights), at(2)),
-    rival(mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator)),
-    rival(mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers), beta(1)),
-    s(["WF-16"], mar("WF-16 Wiring devices – Cancel at your Step", "A04", "returned", P.wiring), at(3)),
+    s(["SUB-05"], mar("SUB-05 Emergency luminaires – returned by Ali", "A02", "returned", P.luminaires), tmc(1)),
+    s(["SUB-06"], mar("SUB-06 LED downlights – change the Datasheet", "A03", "returned", P.downlights), tmc(2)),
+    betaHidden(mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator)),
+    betaHidden(mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers), beta(1)),
+    s(["WF-16"], mar("WF-16 Wiring devices – Cancel at your Step", "A04", "returned", P.wiring), tmc(3)),
     // Closed by Design Consultants: a Code D to replace, a Code C to revise, and records to download.
-    s(["SUB-14"], mar("SUB-14 Smoke detectors – Code D", "A02", "code_d", P.smoke, { recommendedCode: "D" }), at(4)),
-    s(["SUB-15"], mar("SUB-15 Cable trays – Code C", "A03", "code_c", P.trays, { recommendedCode: "C" }), at(5)),
-    rival(mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear), beta(2)),
-    s(["SIG-05"], mar("SIG-05 Fire alarm control unit – Code C", "A05", "code_c", P.fireAlarm, { recommendedCode: "C" }), at(6)),
-    s(["SIG-05"], mar("SIG-05 LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), at(7)),
-    s(["SIG-05"], mar("SIG-05 Earthing – Cancelled", "A06", "cancelled", P.earthing), at(8)),
+    s(["SUB-14"], mar("SUB-14 Smoke detectors – Code D", "A02", "code_d", P.smoke, { recommendedCode: "D" }), tmc(4)),
+    s(["SUB-15"], mar("SUB-15 Cable trays – Code C", "A03", "code_c", P.trays, { recommendedCode: "C" }), tmc(5)),
+    betaHidden(mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear), beta(2)),
+    s(["SIG-05"], mar("SIG-05 Fire alarm control unit – Code C", "A05", "code_c", P.fireAlarm, { recommendedCode: "C" }), tmc(6)),
+    s(["SIG-05"], mar("SIG-05 LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(7)),
+    s(["SIG-05"], mar("SIG-05 Earthing – Cancelled", "A06", "cancelled", P.earthing), tmc(8)),
     // Read only, shared: closed at Code A; the Consultant's internal notes on a Code C; Submitted and still open.
-    s(["SUB-17", "SUB-19", "INS-04"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), at(9)),
-    rival(mar("Beta Build – busbar trunking, Code A", "PGF", "code_a", P.busbar, { recommendedCode: "A" }), beta(3)),
-    s(["VIS-04", "INS-04"], mar("VIS-04 Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), at(10)),
-    s(["FRM-07", "WF-16", "INS-04", "UX-06"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), at(11)),
-    s(["SUB-19", "FRM-05", "VIS-11"], mar("Emergency lighting control panel – Tower A Level 02", "A02", "with_consultant_engineer", P.controlPanel, { links: ["Main distribution board – Code A"] }), at(12)),
+    s(["SUB-17", "SUB-19", "INS-04"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(9)),
+    betaHidden(mar("Beta Build – busbar trunking, Code A", "PGF", "code_a", P.busbar, { recommendedCode: "A" }), beta(3)),
+    s(["VIS-04", "INS-04"], mar("VIS-04 Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(10)),
+    s(["FRM-07", "WF-16", "INS-04", "UX-06"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(11)),
+    s(["SUB-19", "FRM-05", "VIS-11"], mar("Emergency lighting control panel – Tower A Level 02", "A02", "with_consultant_engineer", P.controlPanel, { links: ["Main distribution board – Code A"] }), tmc(12)),
     // Drafts of Hafiz's own, one per case that changes it; the sheet names each by its Subject.
     s(["SUB-04"], mar("SUB-04 Lighting control panel – ready to send", "P01", "draft", P.lightingPanel)),
     s(["SUB-02"], mar("SUB-02 Lighting fixtures – incomplete", "A02", "draft", P.fixtures, { bare: true })),
@@ -123,10 +125,10 @@ function uat01(): Staged[] {
     s(["INS-06"], mar("INS-06 Draft with a photo to annotate", "A06", "draft", P.luminaires, { samplePhoto: true })),
     s(["FRM-05", "VIS-11"], mar("Lighting control panel – Hafiz's own Draft", "P01", "draft", P.lightingPanel)),
     // Snags Design Consultants raised on TMC, Open with TMC (one sent back to Open by Ahmed), numbered in Design Consultants' series as raised.
-    { kind: "snag", cases: ["SNG-03"], number: "UAT01-SNG-03-0001", item: { title: "SNG-03 Loose cable tray cover", type: "SNG", trade: "EL", location: "A03", end: "open", raisedBy: "ahmed", description: "The cable tray cover is loose along the corridor. / غطاء حامل الكابلات غير مثبت على طول الممر." } },
+    { kind: "snag", cases: ["SNG-03", "SNG-11"], number: "UAT01-SNG-03-0001", item: { title: "SNG-03 Loose cable tray cover", type: "SNG", trade: "EL", location: "A03", end: "open", raisedBy: "ahmed", description: "The cable tray cover is loose along the corridor. / غطاء حامل الكابلات غير مثبت على طول الممر." } },
     { kind: "snag", cases: ["SNG-04"], number: "UAT01-SNG-03-0002", item: { title: "SNG-04 Missing socket cover", type: "SNG", trade: "EL", location: "A04", end: "open", raisedBy: "ahmed", description: "A socket outlet has no cover plate. / مقبس بلا غطاء." } },
     { kind: "snag", cases: ["SNG-04"], number: "UAT01-SNG-03-0003", item: { title: "SNG-04 Unlabelled circuit breakers – back to Open", type: "SNG", trade: "EL", location: "A05", end: "returned_to_open", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات." } },
-    { kind: "snag", cases: ["SNG-08"], number: "UAT01-SNG-03-0004", item: { title: "SNG-08 Cracked light diffuser", type: "SNG", trade: "EL", location: "A06", end: "open", raisedBy: "ahmed", description: "A downlight diffuser is cracked. / غطاء ناشر الضوء مكسور.", photos: 1 } },
+    { kind: "snag", cases: ["SNG-08", "UX-24"], number: "UAT01-SNG-03-0004", item: { title: "SNG-08 Cracked light diffuser", type: "SNG", trade: "EL", location: "A06", end: "open", raisedBy: "ahmed", description: "A downlight diffuser is cracked. / غطاء ناشر الضوء مكسور.", photos: 1 } },
     { kind: "snag", cases: ["VIS-19"], mustNotSee: true, item: { title: "Design Consultants – Draft snag, not raised", type: "SNG", trade: "EL", location: "A03", end: "draft", raisedBy: "ahmed", description: "A Draft of Design Consultants' own. / مسودة خاصة بالمصممين الاستشاريين." } },
     // Work Inspection Requests of TMC's: one still a Draft, one Submitted.
     { kind: "inspection", cases: ["INS-05"], item: { title: "INS-05 Cable containment Level 04 – Draft", owner: "tmc", trade: "EL", location: "A04", end: "draft", description: "Cable containment on Tower A Level 04, ready for inspection." } },

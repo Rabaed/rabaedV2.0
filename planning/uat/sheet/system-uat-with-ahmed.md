@@ -248,15 +248,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Go offline in the browser, edit, go online.
 - **Expected result:** The Saved time moves with each save. A failed save is shown clearly with a retry; no edit is lost.
 
-### FRM-11 Member and Participant fields offer only what the filler may see
-
-- **Key:** `RP-842` · **Part:** FRM
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In Projects > UAT 01 · Contractor Engineer (Hafiz), on an item with a member or participant field (if the Form offers one) open the choices.
-- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
-
 ### SIG-05 A Code C, a Code D and a Cancelled item also close with a record
 
 - **Key:** `RP-714` · **Part:** SIG · **Round:** 0
@@ -307,6 +298,15 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List: open UAT01-SNG-03-0004 "SNG-08 Cracked light diffuser", Open with TMC; add after photos before Resolve; Resolve.
 - **Expected result:** After photos sit with TMC until Resolve, then freeze and show beside the before photos in the record; a Send Back discards them.
 
+### SNG-11 Snag detail page
+
+- **Key:** `RP-780` · **Part:** SNG · **Round:** 3
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List: open UAT01-SNG-03-0001 "SNG-03 Loose cable tray cover" and read its page; change nothing.
+- **Expected result:** Header with number, type, Stage and age; Raised from card; description; photos; actions only for Hafiz; history. No due date.
+
 ### SNG-13 Snag List on a phone
 
 - **Key:** `RP-784` · **Part:** SNG · **Round:** 3
@@ -325,7 +325,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Inspections > New > Work Inspection Request: Description, Trade Civil Works, Location, Checklist Template.
   2. Look at the preview of items.
   3. Change the Trade.
-- **Expected result:** Templates offered are the Trade's active ones, labelled As picked if later retired; changing the Trade clears the pick; before a Trade it says Choose a Trade first. The items are copied onto the WIR.
+- **Expected result:** Templates offered are the Trade's active ones; changing the Trade clears the pick; before a Trade it says Choose a Trade first. The items are copied onto the WIR. (A retired Template, labelled As picked, needs the Project Admin to retire one: not part of UAT 01.)
 
 ### INS-04 Approved submittals offers only Code A or B items
 
@@ -448,16 +448,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Match Elec. to Electrical Works once.
 - **Expected result:** The match applies to all 30 rows; the preview recounts.
 
-### IMP-11 Packages from an import and saved mappings
-
-- **Key:** `RP-866` · **Part:** IMP · **Round:** 5
-- **Sign in as:** Hafiz (TMC engineer)
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. In Projects > UAT 01 · Contractor Engineer (Hafiz)'s Import register group rows into one new Package, then one per column value, then an existing Open Package; try an In Progress Package.
-  2. Save the mapping and reuse it.
-- **Expected result:** New Packages take the next PKG number; an In Progress or Done Package makes its rows bad; the mapping is kept for the Company only.
-
 ### I18N-01 Switch language keeps the page and mirrors the layout
 
 - **Key:** `RP-902` · **Part:** I18N · **Round:** 0
@@ -558,6 +548,15 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Run an accessibility scan (the accessibility-tester agent, report only) on the same pages, EN and AR.
 - **Expected result:** Visible focus, logical focus order (mirrored in Arabic), pop-ups trap and return focus, every control has a label, text contrast at least WCAG AA. Findings reported as UI issues.
 
+### UX-24 Snag List on a phone
+
+- **Key:** `RP-946` · **Part:** UX · **Round:** 3
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. At 375 open Projects > UAT 01 · Contractor Engineer (Hafiz) > Snag List, its filters and UAT01-SNG-03-0004; create a Snag camera first.
+- **Expected result:** Matches snag-list-mobile.html: photo-first cards, bottom-sheet filters, camera-first create.
+
 ### VIS-04 Recommended Code, Internal Notes and the verification note never reach TMC
 
 - **Key:** `RP-740` · **Part:** VIS · **Round:** 0
@@ -574,7 +573,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the Draft "Lighting control panel – Hafiz's own Draft", Links > add a Link and search "control panel", then "Beta Build", then "SUB-02".
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the Draft "Lighting control panel – Hafiz's own Draft", Links > add a Link and search "control panel", then "Beta Build", then "SUB-02"; close it without adding one.
 - **Expected result:** Hafiz is offered only Submitted items he sees in this Project, such as UAT01-MAR-01-0012: no Drafts ("SUB-02 Lighting fixtures – incomplete" and "Lighting control panel – Hafiz's own Draft" are his own Drafts), nothing in internal review, nothing of Beta Build (UAT01-MAR-02-0002 is Submitted, but it is Beta Build's), nothing from another Project.
 
 ### VIS-19 List and Kanban counts, lanes and filters hide the other Company
@@ -979,7 +978,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Ali: Submit, open Assign to.
 - **Expected result:** Hafiz is offered only TMC Members who may hold the Contractor PM Step; Ali only TMC Members (never a DCL engineer by name; the Consultant is one Participant). A pick it could not have offered is refused like a made-up one. Carried over from RP-463 B-06 (RP-487).
 
-## 4. Forms and Screens (2 cases)
+## 4. Forms and Screens (3 cases)
 
 ### FRM-08 The Form belongs to the raiser; replies are Screens
 
@@ -1002,6 +1001,15 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   2. Edit a copy, publish a new Version.
   3. Start a MAR and take it to the Code; compare the pop-up.
 - **Expected result:** Every Member reads Screens; only Project Admins change them. An item already running keeps the Screen Version its Workflow Version pinned; new Workflow Versions pick the new one.
+
+### FRM-11 Member and Participant fields offer only what the filler may see
+
+- **Key:** `RP-842` · **Part:** FRM
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. On an item with a member or participant field (if the Form offers one) open the choices.
+- **Expected result:** Only TMC's own Project Members and TMC and the Host Company are offered; other Companies' people never. After the Submit another Company reads the answer as TMC's name, no person.
 
 ## 5. Participants and Visibility setup (14 cases)
 
@@ -1398,7 +1406,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Withdraw a Participant and open its Authorized Person records.
 - **Expected result:** The record reaches people only through ordinary notifications inside Rabaed. A removed Member keeps the Project name and the records they signed; the Company keeps those its Members signed through its Authorized Person; open items of a withdrawn Participant are Cancelled.
 
-## 8. Snag List (11 cases)
+## 8. Snag List (10 cases)
 
 ### SNG-01 The Snag List tab: List, Kanban and empty state
 
@@ -1469,15 +1477,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. New > Question; New > Site Observation.
 - **Expected result:** The Type chips appear; each has its own Form and Workflow; Questions have no reviewed item behind them; Site Observation is not called Violation.
-
-### SNG-11 Snag detail page
-
-- **Key:** `RP-780` · **Part:** SNG · **Round:** 3
-- **Sign in as:** Hafiz; Mohammed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. Open a Snag.
-- **Expected result:** Header with number, type, Stage and age; Raised from card; description; photos; actions only for the viewer; history. No due date.
 
 ### SNG-12 Bulk actions and exports
 
@@ -1609,7 +1608,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. With the WIR in Pending Approval open the Kanban.
 - **Expected result:** A WIR sits in the same column as a submittal at the same Stage.
 
-## 10. Submittal Register Import (1 cases)
+## 10. Submittal Register Import (2 cases)
 
 ### IMP-10 Assign to for imported Drafts
 
@@ -1620,6 +1619,16 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Assign Electrical rows to Hafiz and other rows to Ali, or use an email column.
   2. Include a person who cannot create the Type.
 - **Expected result:** Drafts are raised by the importer by default; an assignee who cannot create the Type or does not cover the Trade makes that row bad.
+
+### IMP-11 Packages from an import and saved mappings
+
+- **Key:** `RP-866` · **Part:** IMP · **Round:** 5
+- **Sign in as:** Hafiz (TMC engineer)
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Group rows into one new Package, then one per column value, then an existing Open Package; try an In Progress Package.
+  2. Save the mapping and reuse it.
+- **Expected result:** New Packages take the next PKG number; an In Progress or Done Package makes its rows bad; the mapping is kept for the Company only.
 
 ## 11. Notifications (4 cases)
 
@@ -1707,7 +1716,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. Repeat in /ar.
 - **Expected result:** Both show the same page: We can not find this page, it may not exist, or you may not have access, with a Projects button; identical in both languages; never a 403 or a hint which case it is.
 
-## 13. UI and UX against the design (18 cases)
+## 13. UI and UX against the design (17 cases)
 
 ### UX-01 App shell, sidebar and top bar match the design
 
@@ -1856,15 +1865,6 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Open the Packages view and a Package page, EN and AR, 1366 and 1920: cards, counts, item table, bulk bar, Comments section.
 - **Expected result:** Matches packages.html where spec RP-616 does not differ (the table of known differences in design/prompts/packages.md).
-
-### UX-24 Snag List on a phone
-
-- **Key:** `RP-946` · **Part:** UX · **Round:** 3
-- **Sign in as:** Hafiz; Ahmed
-- **Start at:** https://rabaed-uat-web.vercel.app/en
-- **Steps:**
-  1. At 375 open the Snag List, filters and a Snag; create one camera first.
-- **Expected result:** Matches snag-list-mobile.html: photo-first cards, bottom-sheet filters, camera-first create.
 
 ### UX-25 Add Signature, the no-Signature and no-Stamp pop-ups, Company logo and Stamp
 

@@ -55,7 +55,6 @@ async function idOf(title: string): Promise<string> {
 /** Who raised the staged item: TMC's Hafiz, Beta Build's Yousef or Design Consultants' Ahmed. */
 const raiserOf = (s: Staged): Caller => {
   if (s.kind === "snag") return s.item.raisedBy === "ahmed" ? as.ahmed : as.hafiz;
-  if (s.kind === "inspection") return s.item.owner === "beta" ? as.yousef : as.hafiz;
   return s.item.owner === "beta" ? as.yousef : as.hafiz;
 };
 

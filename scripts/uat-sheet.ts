@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UAT_ROLES } from "../apps/api/src/demo/uat-projects-plan.ts";
+import { UAT_ROLES, type UatRole } from "../apps/api/src/demo/uat-projects-plan.ts";
 import { credentialsFrom, type Credentials } from "./jira-upload.ts";
 
 // The UAT test sheet (RP-1163): one self-contained HTML file a tester opens with no server or
@@ -375,7 +375,7 @@ export interface Section {
 }
 
 /** A role section's title (RP-1248): who to sign in as, and the UAT Project to open. */
-const roleTitle = (role: (typeof UAT_ROLES)[number]): Bilingual => ({
+const roleTitle = (role: UatRole): Bilingual => ({
   en: `Sign in as ${role.personName.en} · open ${role.name.en}`,
   ar: `سجّل الدخول باسم ${role.personName.ar} · افتح ${role.name.ar}`,
 });
@@ -412,7 +412,6 @@ export function sectionsOf(cases: SheetCase[]): Section[] {
 /** The sections as the page gets them: each case by its key, so the page draws exactly these sections. */
 const pageSections = (cases: SheetCase[]) =>
   sectionsOf(cases).map((s) => ({ id: `s-${s.part}`, n: s.n, part: s.part, name: s.name, ...(s.project ? { project: s.project } : {}), keys: s.cases.map((c) => c.key) }));
-
 
 /* eslint-disable rabaed/no-avoid-terms -- the tester's own instructions about this file (its sections, a case's name, ID, status and expected result, the JSON file to hand back), not product terms. */
 /** The tester's line on the UAT Projects, in the Markdown and the page's How to start (RP-1248). */
