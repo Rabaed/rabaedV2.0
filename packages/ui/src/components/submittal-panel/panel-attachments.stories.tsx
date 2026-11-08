@@ -5,7 +5,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { samplePdfUrl } from "../../storybook/fixtures/sample-pdf.ts";
 import sitePhoto from "../../storybook/fixtures/site-photo.svg";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { forwardIn, pointsTo } from "../../storybook/mirror.ts";
+import { backIn, pointsTo } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { attachmentKind } from "./attachments-model.ts";
@@ -427,7 +427,7 @@ export const OpenLarge: Story = {
     await expect([fill.top, fill.left - box.left - panel.clientLeft, fill.width, fill.height]).toEqual([box.top, 0, panel.clientWidth, panel.clientHeight]);
     await expect(button(large, context, copy.back)).toHaveFocus();
     // Back points back, against the reading direction (RP-1114).
-    await expect(pointsTo(button(large, context, copy.back).querySelector("svg")!)).toBe(forwardIn(storyLocale(context)) === "left" ? "right" : "left");
+    await expect(pointsTo(button(large, context, copy.back).querySelector("svg")!)).toBe(backIn(storyLocale(context)));
     await expect(large).toHaveTextContent(storyLocale(context) === "ar" ? "1 / 4 مرفقات · 2.4 م.ب" : "1 / 4 attachments · 2.4 MB");
 
     await expect(button(large, context, copy.previousPage)).toHaveAttribute("aria-disabled", "true");

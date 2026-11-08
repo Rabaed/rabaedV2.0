@@ -3,7 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { forwardIn, isMirrored, pointsTo } from "../../storybook/mirror.ts";
+import { expectAlongTheFlow, isMirrored } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { submittalOwnerMap } from "../../storybook/submittal-route.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -148,10 +148,9 @@ const currentStops = (root: HTMLElement) => [...root.querySelectorAll<HTMLElemen
 /** The chevrons between the stops point along the flow (RP-1114): flipped in Arabic, where the route runs right to left. */
 const chevronsAlongTheFlow = async (context: PlayContext, root: HTMLElement) => {
   const chevrons = [...root.querySelectorAll("li[data-state] > svg")];
-  await expect(chevrons.length).toBeGreaterThan(0);
-  const rtl = storyLocale(context) === "ar";
-  await expect(chevrons.map(isMirrored)).toEqual(chevrons.map(() => rtl));
-  await expect(chevrons.map(pointsTo)).toEqual(chevrons.map(() => forwardIn(storyLocale(context))));
+  await expectAlongTheFlow(chevrons, storyLocale(context));
+  // Icon turns them round itself, in Arabic only.
+  await expect(chevrons.map(isMirrored)).toEqual(chevrons.map(() => storyLocale(context) === "ar"));
 };
 const noTimesOrCounts = async (root: HTMLElement) => {
   // No due date, no "Time allowed", no count of items, and never "template" or "v3" (gaps A1, A10, A11).
@@ -196,7 +195,7 @@ export const InsideTheConsultant: Story = {
     await expect(map).not.toHaveTextContent(holderName);
     await noTimesOrCounts(map);
     // The Map tab: the large strip and the cards per Step, the Consultant's block marked, none of its Steps.
-    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await mapTabOf(context, map);
     await waitFor(() => expect(map.querySelector("[data-map-step='consultant_engineer']")).not.toBeNull());
     await expect(map.querySelector("[data-step]")).toBeNull();
     await chevronsAlongTheFlow(context, map);
@@ -225,7 +224,7 @@ export const OwnStep: Story = {
     await expect(map.querySelectorAll("[data-step]:not([aria-current])").length).toBeGreaterThan(0);
     for (const other of map.querySelectorAll<HTMLElement>("[data-step]:not([aria-current])")) await expect(other).not.toHaveTextContent(holderName);
     // In the Map tab, the same Step is "You are here".
-    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await mapTabOf(context, map);
     await waitFor(() => expect(map.querySelector("[data-map-step='internal_review']")).toHaveTextContent(storyText(context, copy.youAreHere)));
     await chevronsAlongTheFlow(context, map);
   },

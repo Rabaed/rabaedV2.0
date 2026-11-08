@@ -3,7 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { forwardIn, pointsTo } from "../../storybook/mirror.ts";
+import { expectAlongTheFlow } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -318,9 +318,7 @@ export const Details: Story = {
     await expect(within(panel).getByText(sectionsCount("5", storyLocale(context)))).toBeVisible();
     await expect(heads(context).map((h) => h.closest("section")!.dataset.section)).toEqual(["subject", "scope", "location", "supplier", "links"]);
     // The Location's chevrons point from each level to the next, along the reading direction (RP-1114).
-    const levelChevrons = [...panel.querySelectorAll('[data-section="location"] li > svg')];
-    await expect(levelChevrons.length).toBeGreaterThan(0);
-    await expect(levelChevrons.map(pointsTo)).toEqual(levelChevrons.map(() => forwardIn(storyLocale(context))));
+    await expectAlongTheFlow([...panel.querySelectorAll('[data-section="location"] li > svg')], storyLocale(context));
     for (const head of heads(context)) {
       await expect(head).toHaveAttribute("aria-expanded", "true");
       // The whole width is the button.
