@@ -362,7 +362,7 @@ grant execute on function app.withdrawal_notice(uuid) to rabaed_app;
 -- The outbox handler's read: where, in which language and what to email Member `p_member_id` of
 -- withdrawn Participant `p_participant_id` (its Company's Authorized Person or one of its Project
 -- Members). No row when it is not withdrawn or the Member is no longer active.
--- It is the worker's (the app role with no Member set), and refuses any Member (app.require_worker):
+-- It is the worker's (the app role with no Member set), and gives any Member nothing:
 -- the Participant's id is no secret to its Host Company's Project Admin, so the ids alone must not
 -- give a Member's email address. The api never calls it.
 create function app.participant_withdrawn_email(p_participant_id uuid, p_member_id uuid)
@@ -372,7 +372,10 @@ create function app.participant_withdrawn_email(p_participant_id uuid, p_member_
   as $$
     #variable_conflict use_column
     begin
-      perform app.require_worker();
+      -- Nothing for a Member: only the worker, with no Member set, reads it.
+      if app.current_member_id() is not null then
+        return;
+      end if;
       return query
       select m.email, coalesce(np.preferred_language, m.locale), pr.name, host.legal_name
       from participant p

@@ -453,12 +453,18 @@ describe("scenario RP-952-4: the withdrawal's notices reach K1's Authorized Pers
 
   it("gives a Member nothing from the email's read, even with the right ids: it is the worker's alone", async () => {
     const [k1Engineer] = (await migrator.query("select o.payload ->> 'memberId' as id from outbox o where o.kind = 'participant_withdrawn' and o.payload ->> 'participantId' = $1 limit 1", [participant.k1])).rows as { id: string }[];
-    for (const as of [c1.ap, k1.ap]) {
-      await expect(
-        call(as, sql<{ to_address: string }>`select to_address from app.participant_withdrawn_email(${participant.k1}::uuid, ${k1Engineer!.id}::uuid)`),
-        nameOf(as),
-      ).rejects.toThrow(/only the worker/);
-    }
+    const query = sql<{ to_address: string }>`select to_address from app.participant_withdrawn_email(${participant.k1}::uuid, ${k1Engineer!.id}::uuid)`;
+    const { rows: [email] } = await query.execute(app);
+    // The worker (the app role with no Member set) reads the address; no Member does, whatever ids they hold.
+    await expectHiddenFrom({
+      read: async (as: string) => (as === "worker" ? (await query.execute(app)).rows : await call(as, query)),
+      idOf: (row) => row.to_address,
+      target: email!.to_address,
+      seenBy: "worker",
+      hiddenFrom: [c1.ap, k1.ap, k1.member],
+      name: (as) => (as === "worker" ? "the worker" : nameOf(as)),
+      label: "the withdrawal email's read",
+    });
   });
 
   it("gives nobody else a withdrawal notice", async () => {
