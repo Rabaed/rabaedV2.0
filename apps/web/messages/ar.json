@@ -3151,7 +3151,7 @@
     "ownedBy": "المالك",
     "progress": "التقدم",
     "closedOf": "{closed} من {total} مغلقة",
-    "state": { "done": "مغلقة A/B", "replace": "Code D", "revise": "Code C", "open": "ما زالت مفتوحة" },
+    "state": { "done": "Code A/B", "replace": "Code D", "revise": "Code C", "open": "ما زالت مفتوحة" },
     "byType": "حسب النوع",
     "clearType": "مسح",
     "tabs": { "label": "عرض التقديمات", "waiting": "بانتظارك", "all": "الكل" },

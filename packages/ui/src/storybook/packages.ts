@@ -64,8 +64,8 @@ const refusalsAr = {
 
 // Each state's name (RP-1143): the page's tiles and tabs, the List's columns.
 export const packageStateLabels: Record<Locale, Record<PackageItemState, string>> = {
-  en: { done: "Closed A/B", replace: "Code D", revise: "Code C", open: "Still open" },
-  ar: { done: "مغلقة A/B", replace: "Code D", revise: "Code C", open: "ما زالت مفتوحة" },
+  en: { done: "Code A/B", replace: "Code D", revise: "Code C", open: "Still open" },
+  ar: { done: "Code A/B", replace: "Code D", revise: "Code C", open: "ما زالت مفتوحة" },
 };
 
 export const packagePageLabels: Record<Locale, PackagePageLabels> = {

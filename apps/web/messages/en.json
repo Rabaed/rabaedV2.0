@@ -3151,7 +3151,7 @@
     "ownedBy": "Owned by",
     "progress": "Progress",
     "closedOf": "{closed} of {total} closed",
-    "state": { "done": "Closed A/B", "replace": "Code D", "revise": "Code C", "open": "Still open" },
+    "state": { "done": "Code A/B", "replace": "Code D", "revise": "Code C", "open": "Still open" },
     "byType": "By Type",
     "clearType": "Clear",
     "tabs": { "label": "Show submittals", "waiting": "Waiting for you", "all": "All" },
