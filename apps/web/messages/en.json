@@ -3208,14 +3208,12 @@
       "byType": "By Type",
       "noSubmittals": "No submittals yet",
       "waiting": "{count, plural, one {1 waiting for your action} other {{n} waiting for your action}}",
-      "layout": { "label": "Show Packages as", "board": "Kanban", "list": "Table" },
+      "show": { "label": "Show Packages as", "board": "Cards", "list": "Table" },
       "list": {
         "table": "Packages list",
         "number": "Package No.",
         "name": "Package",
         "progress": "Progress",
-        "items": "Submittals",
-        "types": "By Type",
         "states": "By Review Code",
         "waiting": "Waiting for you",
         "owner": "Owning Company"

@@ -2,6 +2,7 @@
 
 import {
   formatNumber,
+  closedCount,
   intlLocaleOf,
   packageStateTotals,
   workItemSortOrders,
@@ -30,7 +31,7 @@ import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
 import { usePackageBulk, type PackageBulkProps } from "./package-bulk.tsx";
 import { DeletePackageDialog, RenamePackageDialog, type DeletePackageLabels, type RenamePackageLabels } from "./package-dialogs.tsx";
-import { issueOf, PackageStatusPill, StateMiniBar, stateEdge, stateOrder, TypeIconTile } from "./package-states.tsx";
+import { IssueDot, PackageStatusPill, StateMiniBar, stateEdge, stateOrder, stateText, TypeIconTile } from "./package-states.tsx";
 import { PackageNotReadyList, SubmitPackageDialog, type SubmitPackageCall, type SubmitPackageLabels } from "./submit-package-dialog.tsx";
 
 // The Package page (RP-659, spec RP-616; reference: the RP-633 prototype's page header, counts
@@ -146,7 +147,8 @@ export function PackagePage({
   const shownTab: Tab = tab === "waiting" && waitingCount === 0 ? "all" : tab;
   const inTab = (r: PackageDetailItem) => shownTab === "all" || (shownTab === "waiting" ? r.waiting : r.state === shownTab);
   const visible = rows.filter((r) => inTab(r) && (type === null || r.type.code === type));
-  const bulkTable = usePackageBulk({ items: visible, bulk, locale, close: labels.close, cancel: labels.cancel, itemHref, linkAs: Link });
+  // The bulk bar and its checkboxes on the Waiting for you tab only (gap table row 34, the kit's Waiting my action).
+  const bulkTable = usePackageBulk({ items: shownTab === "waiting" ? visible : [], bulk, locale, close: labels.close, cancel: labels.cancel, itemHref, linkAs: Link });
   const states = new Map(rows.map((r) => [r.id, r.state]));
   // The API says which are still to Submit, which of them stop it and why, and whether the viewer owns the Package.
   const toSubmit = rows.filter((r) => r.toSubmit);
@@ -208,6 +210,7 @@ export function PackagePage({
               refusals={labels.refusals}
               search={searchItems}
               onAdd={onAdd}
+              primary={!submittable}
             />
           )}
           {submittable && (
@@ -295,15 +298,6 @@ export function PackagePage({
                 </button>
               );
             })}
-            {type !== null && (
-              <span className="ms-auto inline-flex items-center gap-1.5 text-caption font-semibold text-text-secondary">
-                <TypeIconTile code={type} size={20} />
-                <span translate="no">{type}</span>
-                <IconButton label={labels.clearType} size="sm" onClick={() => setType(null)}>
-                  <Icon name="x" />
-                </IconButton>
-              </span>
-            )}
           </div>
           {bulkTable.bar}
           {/* The table scrolls in its own region, as the List's does, its scrollbar on screen, so the page never does and nothing is cut unseen. */}
@@ -327,7 +321,7 @@ export function PackagePage({
               selection={bulkTable.selection}
               stageShowsCode
               // The kit's state edge on each row (`.pkt tr.ok td:first-child`): green A/B, red D, orange C.
-              rowStart={(row) => stateEdge[states.get(row.id) ?? "open"]}
+              rowStartClassName={(row) => stateEdge[states.get(row.id) ?? "open"]}
               // Fits 1366 as the List's table does (RP-1177), so "Review Code or Stage" and "Step Age" show (RP-1164, UX-23).
               fit
               rowEnd={
@@ -351,13 +345,6 @@ export function PackagePage({
 type Tab = "waiting" | "all" | PackageItemState;
 const tabsOf = (waiting: number): Tab[] => [...(waiting > 0 ? (["waiting"] as const) : []), "all", ...stateOrder];
 
-const stateLine: Record<PackageItemState, string> = {
-  done: "shadow-[inset_3px_0_0_var(--color-success)] rtl:shadow-[inset_-3px_0_0_var(--color-success)]",
-  replace: "shadow-[inset_3px_0_0_var(--color-danger)] rtl:shadow-[inset_-3px_0_0_var(--color-danger)]",
-  revise: "shadow-[inset_3px_0_0_var(--color-warning-fg)] rtl:shadow-[inset_-3px_0_0_var(--color-warning-fg)]",
-  open: "shadow-[inset_3px_0_0_var(--color-info-fg)] rtl:shadow-[inset_-3px_0_0_var(--color-info-fg)]",
-};
-const stateNumber: Record<PackageItemState, string> = { done: "text-success-fg", replace: "text-danger-fg", revise: "text-warning-fg", open: "text-info-fg" };
 const boxHeading = "text-notes font-bold tracking-wide text-muted uppercase rtl:tracking-normal";
 
 /**
@@ -396,12 +383,12 @@ function Progress({ pkg, locale, labels, tab, onTab }: { pkg: PackageDetail; loc
                 onClick={() => onTab(tab === state ? "all" : state)}
                 className={cn(
                   "flex w-full flex-col items-start gap-0.5 rounded-md bg-surface-subtle px-3 py-2 text-start hover:bg-hover",
-                  stateLine[state],
+                  stateEdge[state],
                   tab === state && "bg-brand-tint",
                   focusRing,
                 )}
               >
-                <span className={cn("font-ui text-xl leading-tight font-extrabold tabular-nums", totals[state] > 0 ? stateNumber[state] : "text-faint")}>{n(totals[state])}</span>
+                <span className={cn("font-ui text-xl leading-tight font-extrabold tabular-nums", totals[state] > 0 ? stateText[state] : "text-faint")}>{n(totals[state])}</span>
                 <span className="text-caption whitespace-nowrap text-muted">{labels.state[state]}</span>
               </button>
             </li>
@@ -432,8 +419,7 @@ function ByType({ pkg, locale, labels, type, onType }: { pkg: PackageDetail; loc
       </div>
       <ul className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
         {pkg.byType.map((t) => {
-          const closed = t.done + t.replace;
-          const issue = issueOf(t);
+          const closed = closedCount(t);
           const on = type === t.code;
           return (
             <li key={t.typeId}>
@@ -456,7 +442,7 @@ function ByType({ pkg, locale, labels, type, onType }: { pkg: PackageDetail; loc
                   <span className={cn("ms-auto text-caption font-bold", closed === t.total ? "text-success-fg" : "text-text-secondary")}>{labels.closedOf(n(closed), n(t.total))}</span>
                 </span>
                 <StateMiniBar counts={t} />
-                {issue && <span aria-hidden="true" data-issue={issue} className={cn("absolute end-2 top-2 size-2 rounded-full", issue === "replace" ? "bg-danger" : "bg-warning-fg")} />}
+                <IssueDot counts={t} className="absolute end-2 top-2 size-2" />
               </button>
             </li>
           );

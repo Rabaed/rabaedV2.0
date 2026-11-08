@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  closedCount,
   filterPackages,
   formatNumber,
   packageFilterChoices,
@@ -96,8 +97,9 @@ export type PackagesBoardLabels = {
   /** "n waiting for your action": `n` written for the locale; `count` chooses the plural. */
   waiting: (n: string, count: number) => string;
   /** The Board / List switch. */
-  layout: { label: string; board: string; list: string };
-  list: PackagesListLabels;
+  show: { label: string; board: string; list: string };
+  /** The table of Packages; its status, closed and empty words are the board's own. */
+  list: Omit<PackagesListLabels, "status" | "closedOf" | "noSubmittals">;
   close: string;
   cancel: string;
   /** A refused create, by the API's error code, and `unavailable` for any other. */
@@ -118,9 +120,9 @@ export type PackagesBoardProps = {
   viewSwitch?: ReactNode;
   /** "+ New Package", for a Member whose Company can build one; none, no button. */
   onCreate?: (name: BilingualText) => Promise<{ ok: true } | { ok: false; reason: string }>;
-  /** The search, filters and layout the page keeps (its URL); none, nothing narrowed, the board. */
+  /** The search, filters and how the Packages show, as the page keeps them (its URL); none, nothing narrowed, the board. */
   filter?: PackagesFilter;
-  /** Asked for with the new search, filters or layout; none, no search box, Filter, switch or layout choice. */
+  /** Asked for with the new search, filters or show; none, no search box, Filter, switch or Cards / Table choice. */
   onFilterChange?: (filter: PackagesFilter) => void;
 };
 
@@ -143,18 +145,18 @@ export function PackagesBoard({
   const toolbar = viewSwitch !== undefined || onCreate !== undefined || onFilterChange !== undefined;
   const packages = filterPackages(all, filter);
   const narrowed = filter.q !== undefined || filter.trade.length > 0 || filter.company.length > 0 || filter.mine === true;
-  const list = filter.layout === "list";
+  const list = filter.show === "list";
   const end =
     onFilterChange || viewSwitch !== undefined ? (
       <>
         {onFilterChange && (
           <SegmentedControl
-            aria-label={labels.layout.label}
+            aria-label={labels.show.label}
             value={list ? "list" : "board"}
-            onValueChange={(v) => onFilterChange({ ...withoutLayout(filter), ...(v === "list" ? { layout: "list" as const } : {}) })}
+            onValueChange={(v) => onFilterChange({ ...withoutShow(filter), ...(v === "list" ? { show: "list" as const } : {}) })}
             options={[
-              { value: "board", label: labels.layout.board },
-              { value: "list", label: labels.layout.list },
+              { value: "board", label: labels.show.board },
+              { value: "list", label: labels.show.list },
             ]}
           />
         )}
@@ -182,7 +184,13 @@ export function PackagesBoard({
           {labels.filter.noMatchesBody}
         </EmptyState>
       ) : list ? (
-        <PackagesList packages={packages} locale={locale} labels={labels} packageHref={packageHref} linkAs={Link} />
+        <PackagesList
+          packages={packages}
+          locale={locale}
+          labels={{ ...labels.list, status: labels.status, closedOf: labels.closedOf, noSubmittals: labels.noSubmittals }}
+          packageHref={packageHref}
+          linkAs={Link}
+        />
       ) : (
         <PackageColumns packages={packages} locale={locale} labels={labels} packageHref={packageHref} linkAs={Link} n={n} onCreate={onCreate} />
       )}
@@ -190,7 +198,7 @@ export function PackagesBoard({
   );
 }
 
-const withoutLayout = ({ layout: _layout, ...rest }: PackagesFilter): PackagesFilter => rest;
+const withoutShow = ({ show: _show, ...rest }: PackagesFilter): PackagesFilter => rest;
 
 /**
  * The search box, the Filter button with its Trade and owning Company fields, a × that clears
@@ -272,8 +280,8 @@ function PackagesFilterControls({
             type="button"
             aria-label={labels.clear}
             title={labels.clear}
-            // Keeps the layout: the × clears what narrows, not how it shows.
-            onClick={() => onChange({ ...noFilter, ...(filter.layout ? { layout: filter.layout } : {}) })}
+            // The × clears what narrows, not how the Packages show.
+            onClick={() => onChange({ ...noFilter, ...(filter.show ? { show: filter.show } : {}) })}
             className={filterClearClass}
           >
             <Icon name="x" size={16} />
@@ -429,7 +437,7 @@ function TypeLedger({ pkg, locale, labels }: { pkg: PackageSummary; locale: Loca
   return (
     <ul aria-label={labels.byType} data-type-ledger="" className="flex flex-col overflow-hidden rounded-md border border-border-subtle">
       {pkg.byType.map((t) => {
-        const closed = t.done + t.replace;
+        const closed = closedCount(t);
         return (
           <li
             key={t.typeId}

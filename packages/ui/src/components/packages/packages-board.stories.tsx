@@ -337,26 +337,28 @@ export const NeedMyAction: Story = {
 /**
  * The List of Packages (RP-1143, the kit's List): a row per Package with its progress, its
  * submittals by Type and by state, what waits on the viewer and its owning Company; never a
- * Target, a creator or a receiver. The name opens its page; the layout is kept with the filters.
+ * Target, a creator or a receiver. The name opens its page; the choice is kept with the filters.
  */
 export const ListOfPackages: Story = {
   render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
   play: async (context) => {
     const l = labelsOf(context);
     const locale = storyLocale(context);
-    await userEvent.click(context.canvas.getByRole("radio", { name: l.layout.list }));
+    await userEvent.click(context.canvas.getByRole("radio", { name: l.show.list }));
     const table = within(await context.canvas.findByRole("region", { name: l.list.table }));
     const headers = table.getAllByRole("columnheader").map((h) => h.textContent);
-    await expect(headers).toEqual(expect.arrayContaining([l.list.number, l.list.name, l.list.progress, "MAR", "SAR", l.list.state.done, l.list.state.replace, l.list.state.revise, l.list.state.open, l.list.waiting, l.list.owner]));
+    await expect(headers).toEqual(expect.arrayContaining([l.list.number, l.list.name, l.list.progress, l.list.state.done, l.list.state.replace, l.list.state.revise, l.list.state.open, l.list.waiting, l.list.owner]));
     await expect(context.canvas.queryByRole("region", { name: l.board })).toBeNull();
     const row = context.canvasElement.querySelector<HTMLElement>(`[data-package-row="${lighting.id}"]`)!;
     await expect(within(row).getByRole("link", { name: lighting.name[locale] })).toHaveAttribute("href", `#${lighting.id}`);
     await expect(row.querySelector('td[data-state="revise"]')).toHaveTextContent("1");
+    // Its Types as chips in the Progress cell, each with its count (no column per Type, so the table fits 1366).
+    await expect([...row.querySelectorAll("[data-type]")].map((c) => c.getAttribute("data-type"))).toEqual(["MAR", "SAR"]);
     await expect(row.querySelector("[data-package-waiting]")).toHaveTextContent("2");
     await expect(within(row).getByText(lighting.owner.companyName[locale])).toBeVisible();
-    // Back to the board; the layout never counts as a filter.
+    // Back to the board; Cards / Table never counts as a filter.
     await expect(context.canvas.queryByRole("button", { name: filterOf(context).clear })).toBeNull();
-    await userEvent.click(context.canvas.getByRole("radio", { name: l.layout.board }));
+    await userEvent.click(context.canvas.getByRole("radio", { name: l.show.board }));
     await expect(await context.canvas.findByRole("region", { name: l.board })).toBeVisible();
   },
 };

@@ -35,9 +35,9 @@ function usePackagesBoardLabels(hints?: PackagesFilterLabels["hints"]): Packages
     byType: t("board.byType"),
     noSubmittals: t("board.noSubmittals"),
     waiting: (n, count) => t("board.waiting", { n, count }),
-    layout: keys("board.layout", ["label", "board", "list"] as const),
+    show: keys("board.show", ["label", "board", "list"] as const),
     list: {
-      ...keys("board.list", ["table", "number", "name", "progress", "items", "types", "states", "waiting", "owner"] as const),
+      ...keys("board.list", ["table", "number", "name", "progress", "states", "waiting", "owner"] as const),
       state: keys("state", packageItemStates),
     },
     close: t("close"),

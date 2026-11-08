@@ -70,11 +70,16 @@ export const packageTypeCounts = z
   .refine((t) => t.done + t.replace + t.revise + t.open === t.total, { message: "A Type's counts add up to its total." });
 export type PackageTypeCounts = z.infer<typeof packageTypeCounts>;
 
-/** A Package's states summed over its Types; `closed` is what counts towards Done (done and replace). */
+/** How many count towards Done: closed at Code A or B, or at Code D. A Code C waits for its Revision. */
+export function closedCount(counts: Pick<PackageTypeCounts, "done" | "replace">): number {
+  return counts.done + counts.replace;
+}
+
+/** A Package's states summed over its Types, with `closed` (closedCount). */
 export function packageStateTotals(byType: readonly PackageTypeCounts[]) {
   const sum = (key: "total" | PackageItemState) => byType.reduce((n, t) => n + t[key], 0);
   const totals = { total: sum("total"), done: sum("done"), replace: sum("replace"), revise: sum("revise"), open: sum("open") };
-  return { ...totals, closed: totals.done + totals.replace };
+  return { ...totals, closed: closedCount(totals) };
 }
 
 /**

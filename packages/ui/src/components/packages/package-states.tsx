@@ -37,7 +37,14 @@ export const stateFill: Record<PackageItemState, string> = {
   revise: "bg-warning-fg",
   open: "bg-info-fg",
 };
-/** The same colour as a row's starting edge (the kit's `.pkt tr.ok td:first-child`). */
+/** The same colour as a count's number. */
+export const stateText: Record<PackageItemState, string> = {
+  done: "text-success-fg",
+  replace: "text-danger-fg",
+  revise: "text-warning-fg",
+  open: "text-info-fg",
+};
+/** The same colour as a starting edge (the kit's `.pkt tr.ok td:first-child`): none while still open (gap table row 32). */
 export const stateEdge: Record<PackageItemState, string> = {
   done: "shadow-[inset_3px_0_0_var(--color-success)] rtl:shadow-[inset_-3px_0_0_var(--color-success)]",
   replace: "shadow-[inset_3px_0_0_var(--color-danger)] rtl:shadow-[inset_-3px_0_0_var(--color-danger)]",
@@ -45,8 +52,8 @@ export const stateEdge: Record<PackageItemState, string> = {
   open: "",
 };
 
-/** The order a bar shows the states in: what counts towards Done first. */
-export const stateOrder: readonly PackageItemState[] = ["done", "replace", "revise", "open"];
+/** The order the states show in, the bars' segments, the tiles, tabs and columns alike: Code A/B, C, D, then still open (gap table rows 19, 30). */
+export const stateOrder: readonly PackageItemState[] = ["done", "revise", "replace", "open"];
 
 /** One segment per item, coloured by its state (the kit's `.mbar`): `counts` says how many of each. */
 export function StateMiniBar({ counts, className }: { counts: Record<PackageItemState, number>; className?: string }) {
@@ -90,4 +97,10 @@ export function TypeIconTile({ code, size = 24, className }: { code: string; siz
 /** Whether a Type's items need attention, and how (the kit's issue dot): a Code D first, then a Code C. */
 export function issueOf(counts: Record<PackageItemState, number>): "replace" | "revise" | null {
   return counts.replace > 0 ? "replace" : counts.revise > 0 ? "revise" : null;
+}
+
+/** The kit's issue dot, in its state's colour; nothing when none of the Type's items need attention. */
+export function IssueDot({ counts, className }: { counts: Record<PackageItemState, number>; className?: string }) {
+  const issue = issueOf(counts);
+  return issue ? <span aria-hidden="true" data-issue={issue} className={cn("rounded-full", stateFill[issue], className)} /> : null;
 }

@@ -99,10 +99,10 @@ describe("Need my action and the Packages List (RP-1143)", () => {
   });
 
   it("keeps Need my action and the List in the URL, and leaves them out when off", () => {
-    const params = packagesFilterSearchParams({ ...none, mine: true, layout: "list" });
+    const params = packagesFilterSearchParams({ ...none, mine: true, show: "list" });
     expect(params.get("mine")).toBe("1");
-    expect(params.get("layout")).toBe("list");
-    expect(packagesFilterFromSearchParams(params)).toEqual({ ...none, mine: true, layout: "list" });
-    expect(packagesFilterFromSearchParams({ mine: "yes", layout: "grid" })).toEqual(none);
+    expect(params.get("show")).toBe("list");
+    expect(packagesFilterFromSearchParams(params)).toEqual({ ...none, mine: true, show: "list" });
+    expect(packagesFilterFromSearchParams({ mine: "yes", show: "grid" })).toEqual(none);
   });
 });

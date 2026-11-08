@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { packageStateTotals, packageSummary, packageTypeCounts, type PackageTypeCounts } from "./package.ts";
+import { closedCount, packageStateTotals, packageSummary, packageTypeCounts, type PackageTypeCounts } from "./package.ts";
 
 const b = (en: string, ar: string) => ({ en, ar });
 const mar: PackageTypeCounts = { typeId: "0192e0a0-0000-7000-8000-000000000301", code: "MAR", name: b("Material Approval Request", "طلب اعتماد مواد"), total: 5, done: 2, revise: 1, replace: 1, open: 1 };
@@ -15,7 +15,9 @@ describe("a Package's counts by Type (RP-1143, the kit's Type ledger)", () => {
   });
 
   it("closed is every item that counts towards Done: Code A, B and D, never a Code C waiting for its Revision", () => {
-    expect(packageStateTotals([mar]).closed).toBe(mar.done + mar.replace);
+    expect(packageStateTotals([mar]).closed).toBe(3);
+    expect(closedCount(mar)).toBe(3);
+    expect(closedCount(sar)).toBe(0);
   });
 
   it("refuses a Type whose states don't add up to its total", () => {

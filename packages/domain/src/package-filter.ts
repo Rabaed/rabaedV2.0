@@ -20,8 +20,8 @@ export type PackagesFilter = {
   company: string[];
   /** "Need my action" (RP-1143): only the Packages with a submittal waiting on the viewer. */
   mine?: boolean;
-  /** How the Packages show (RP-1143): the board, or the List of Packages. Not a filter, kept with it in the URL. */
-  layout?: "list";
+  /** How the Packages show (RP-1143): as cards on the board, or as the table of Packages. Not a filter, kept with it in the URL. */
+  show?: "list";
 };
 
 /** The owning Companies the view offers, by Participant, each with its Company name only (V14). */
@@ -65,7 +65,7 @@ export function packagesFilterFromSearchParams(params: URLSearchParams | Record<
     trade: ids(get("trade")),
     company: ids(get("company")),
     ...(get("mine") === "1" ? { mine: true } : {}),
-    ...(get("layout") === "list" ? { layout: "list" as const } : {}),
+    ...(get("show") === "list" ? { show: "list" as const } : {}),
   };
 }
 
@@ -76,6 +76,6 @@ export function packagesFilterSearchParams(filter: PackagesFilter): URLSearchPar
   if (filter.trade.length > 0) params.set("trade", filter.trade.join(","));
   if (filter.company.length > 0) params.set("company", filter.company.join(","));
   if (filter.mine) params.set("mine", "1");
-  if (filter.layout === "list") params.set("layout", "list");
+  if (filter.show === "list") params.set("show", "list");
   return params;
 }
