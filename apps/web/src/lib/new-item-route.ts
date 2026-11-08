@@ -38,7 +38,8 @@ export function projectTabHref(projectId: string, key: ProjectTabKey): string {
  */
 export function projectTabOf(projectId: string, pathname: string, moduleParam: string | null, modules: readonly ModuleKey[]): ProjectTabKey | undefined {
   if (pathname.startsWith("/packages/")) return "submittals";
-  if (pathname.startsWith(`/projects/${projectId}/activity`)) return "dashboard";
+  const activity = `/projects/${projectId}/activity`;
+  if (pathname === activity || pathname.startsWith(`${activity}/`)) return "dashboard";
   const raisesIn = moduleKeySchema.safeParse(moduleParam).data;
   if (raisesIn && pathname === newItemHref(projectId, "submittals")) return modules.includes(raisesIn) ? raisesIn : "submittals";
   return [...projectTabKeys]

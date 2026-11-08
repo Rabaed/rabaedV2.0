@@ -34,7 +34,7 @@ export const SubmittalsOnly: Story = {
   },
 };
 
-/** A Project with Types in every Module: a tab for each, in the kit's order (RP-1142): Site Reports before Snag List, Drawings after them, and no Activity tab. */
+/** A Project with Types in every Module: a tab for each, in the kit's order (RP-1142): Site Reports before Snag List, Drawings after them, and no Activity Feed tab. */
 export const EveryModule: Story = {
   render: (_args, context) => storyProjectTabs(context, "submittals", ["submittals", "inspections", "snag_list", "site_reports", "drawings"]),
   play: async (context) => {
