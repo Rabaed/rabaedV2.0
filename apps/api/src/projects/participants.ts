@@ -433,12 +433,7 @@ export function withdrawParticipant(db: Db, memberId: string, participantId: str
  */
 export function listProjectVacancies(db: Db, memberId: string, projectId: string): Promise<ProjectVacancies | null> {
   return withMember(db, memberId, async (trx) => {
-    const { rows: host } = await sql<{ is_host_admin: boolean }>`
-      select exists (
-        select 1 from project where id = ${projectId}::uuid
-          and id in (select app.current_admin_project_ids()) and host_company_id = app.current_company_id()
-      ) as is_host_admin
-    `.execute(trx);
+    const { rows: host } = await sql<{ is_host_admin: boolean }>`select app.is_host_admin(${projectId}::uuid) as is_host_admin`.execute(trx);
     if (!host[0]!.is_host_admin) return null;
     const { rows } = await sql<{
       step_assignment_id: string;

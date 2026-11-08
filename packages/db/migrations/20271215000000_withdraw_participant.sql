@@ -16,9 +16,10 @@
 --     marked done at the close (RP-955: app.held_at_close finds who held it), then the item closes with
 --     outcome `cancelled`, so the record job is queued (trigger work_item_queues_documental_record).
 --     Watchers of the item hear of it as of any cancel (app.outbox_watched_event); nobody else does.
---   - Each of its Drafts and Draft Revisions (no Document Number) is Cancelled with no Record, as
---     app.discard_revision does: an internal event of its own Participant, its Steps done, and
---     `discarded_at` set with `closed_at`, which the record trigger skips.
+--   - Each of its Drafts and Draft Revisions (no Document Number) is Cancelled with no Record: an
+--     internal event of its own Participant, its Steps done, and `discarded_at` set with `closed_at`,
+--     which the record trigger skips. Unlike app.discard_revision it keeps the item's work_item_access
+--     row (nothing it did is removed); nobody reads it, since its Participant is withdrawn.
 --   - Its open Steps on other Companies' items become Participant-level Vacancies: `vacant`, with no
 --     assignee. app.work_item_holder_unchecked no longer gives a `vacant` row as a holder, so no
 --     reader sees the old Company as the item's holder or in the "With" filter; app.work_item_vacancy
@@ -42,6 +43,8 @@
 
 -- Rabaed's own cancel has no actor --------------------------------------------------------------
 
+-- `work_item_event_check` is Postgres's name for the table's first unnamed check, the actor rule
+-- (20260929000000_work_items.sql); the new one is named.
 alter table work_item_event drop constraint work_item_event_check;
 alter table work_item_event add constraint work_item_event_actor_check
   check ((actor_member_id is null) <> (actor_engineer_id is null)
@@ -58,7 +61,7 @@ alter table notification add constraint notification_kind_check
   check (kind in ('step_reached', 'watched_event', 'sent_back', 'package_submitted', 'record_ready', 'participant_withdrawn'));
 -- A package notification is about its Package, a withdrawal notice about its Project only, every other about one item.
 alter table notification drop constraint notification_package_submitted;
-alter table notification add constraint notification_package_submitted
+alter table notification add constraint notification_about_one_thing
   check (case when kind = 'package_submitted' then package_id is not null and work_item_id is null
     when kind = 'participant_withdrawn' then package_id is null and work_item_id is null
     else package_id is null and work_item_id is not null end);
@@ -73,9 +76,26 @@ alter policy member_reads_own_notifications on notification
 
 -- Who may withdraw ---------------------------------------------------------------------------
 
+-- Whether the acting Member is a Project Admin of Project `p_project_id` and their own Company hosts it:
+-- the one who withdraws its Participants and reads its Vacancies (ADR 0028).
+create function app.is_host_admin(p_project_id uuid) returns boolean
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return exists (
+        select 1 from project pr
+        where pr.id = p_project_id and pr.id in (select app.current_admin_project_ids())
+          and pr.host_company_id = app.current_company_id()
+      );
+    end
+  $$;
+revoke all on function app.is_host_admin(uuid) from public;
+grant execute on function app.is_host_admin(uuid) to rabaed_app;
+
 -- Why the acting Member may not preview or withdraw Participant `p_participant_id`, or null when they
--- may: 'not_found' unless it is active on a Project they are a Project Admin of and their own Company
--- hosts; 'project_closed'; 'host_company' for the Host Company's own Participant.
+-- may: 'not_found' unless it is active on a Project whose Host Company's Project Admin they are;
+-- 'project_closed'; 'host_company' for the Host Company's own Participant.
 create function app.withdrawal_refusal(p_participant_id uuid) returns text
   language plpgsql stable security definer
   set search_path = pg_catalog, public
@@ -86,9 +106,7 @@ create function app.withdrawal_refusal(p_participant_id uuid) returns text
       select p.company_id, pr.host_company_id, pr.status as project_status into v_target
       from participant p
       join project pr on pr.id = p.project_id
-      where p.id = p_participant_id and p.status = 'active'
-        and pr.id in (select app.current_admin_project_ids())
-        and pr.host_company_id = app.current_company_id();
+      where p.id = p_participant_id and p.status = 'active' and app.is_host_admin(pr.id);
       if not found then
         return 'not_found';
       end if;
@@ -165,12 +183,26 @@ create function app.withdraw_participant(p_participant_id uuid, p_now timestampt
       v_member uuid;
       v_outbox uuid;
     begin
-      -- One withdrawal at a time: the row is locked before it is checked.
+      -- Nobody locks a Participant they may not withdraw: checked first, then locked, then checked
+      -- again under the lock, so one withdrawal runs at a time and the second reads 'not_found'.
+      v_refusal := app.withdrawal_refusal(p_participant_id);
+      if v_refusal is not null then
+        return v_refusal;
+      end if;
       select p.id, p.project_id, p.company_id into v_participant from participant p where p.id = p_participant_id for update;
       v_refusal := app.withdrawal_refusal(p_participant_id);
       if v_refusal is not null then
         return v_refusal;
       end if;
+      -- Every item it changes, locked first in one order (app.take_transition locks an item before its Steps
+      -- too), so two withdrawals on one Project, each touching the other's items, never deadlock.
+      perform 1 from work_item w
+      where w.id in (
+        select x.id from work_item x where x.raised_by_participant_id = p_participant_id and x.closed_at is null
+        union
+        select a.work_item_id from step_assignment a where a.participant_id = p_participant_id and a.status in ('pooled', 'picked_up'))
+      order by w.id
+      for update;
 
       -- Its items: those that left Draft Cancelled by Rabaed with a Record, its Drafts and Draft Revisions with none.
       for v_item in
@@ -291,10 +323,7 @@ create function app.project_vacancies(p_project_id uuid)
   as $$
     #variable_conflict use_column
     begin
-      if not exists (
-        select 1 from project pr
-        where pr.id = p_project_id and pr.id in (select app.current_admin_project_ids()) and pr.host_company_id = app.current_company_id()
-      ) then
+      if not app.is_host_admin(p_project_id) then
         return;
       end if;
       return query
@@ -333,9 +362,9 @@ grant execute on function app.withdrawal_notice(uuid) to rabaed_app;
 -- The outbox handler's read: where, in which language and what to email Member `p_member_id` of
 -- withdrawn Participant `p_participant_id` (its Company's Authorized Person or one of its Project
 -- Members). No row when it is not withdrawn or the Member is no longer active.
--- Like app.participant_invitation_email, it is the worker's (the app role with no Member set): it checks
--- no caller, and the api never calls it. Its ids are found only in the outbox, which no policy lets the
--- app role read.
+-- It is the worker's (the app role with no Member set), and refuses any Member (app.require_worker):
+-- the Participant's id is no secret to its Host Company's Project Admin, so the ids alone must not
+-- give a Member's email address. The api never calls it.
 create function app.participant_withdrawn_email(p_participant_id uuid, p_member_id uuid)
   returns table (to_address text, language text, project_name jsonb, host_company_name jsonb)
   language plpgsql stable security definer
@@ -343,6 +372,7 @@ create function app.participant_withdrawn_email(p_participant_id uuid, p_member_
   as $$
     #variable_conflict use_column
     begin
+      perform app.require_worker();
       return query
       select m.email, coalesce(np.preferred_language, m.locale), pr.name, host.legal_name
       from participant p
@@ -353,7 +383,7 @@ create function app.participant_withdrawn_email(p_participant_id uuid, p_member_
       left join member_notification_preference np on np.member_id = m.id
       where p.id = p_participant_id and p.status = 'withdrawn'
         and (m.id = co.authorized_person_id
-          or exists (select 1 from project_member pm where pm.participant_id = p.id and pm.member_id = m.id));
+          or exists (select 1 from project_member pm where pm.participant_id = p.id and pm.member_id = m.id and pm.status = 'active'));
     end
   $$;
 revoke all on function app.participant_withdrawn_email(uuid, uuid) from public;

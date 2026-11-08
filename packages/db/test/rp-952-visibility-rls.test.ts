@@ -18,6 +18,8 @@ const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 const TYPE = "WDPR";
+/** The same, on a Workflow with no Cancelled Step (as Comment, the Questions, Site Observation and Snag are). */
+const NO_CANCEL_TYPE = "WDPN";
 
 let migrator: pg.Client;
 let app: Db;
@@ -28,6 +30,7 @@ let k1: Company; // The Consultant: holds C1's and C2's items at review.
 let c2: Company; // A second Contractor, withdrawn first.
 let other: Company; // The Project Admin of another Project.
 let c1Pm = "";
+let c1Admin = ""; // A second Project Admin of C1, on the Project with full Visibility: the Vacancies list names the item to them.
 let c2Pm = "";
 let k1Manager = "";
 let projectId = "";
@@ -68,7 +71,8 @@ async function company(engineer: string, name: string): Promise<Company> {
 const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) => withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-async function addType() {
+/** Adds Rabaed Type `code` on a new test Workflow: with a Cancel to a Cancelled Step, or (`withCancel` false) with none. */
+async function addType(code: string, withCancel: boolean) {
   const schema = {
     sections: [
       { key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] },
@@ -82,19 +86,19 @@ async function addType() {
       },
     ],
   };
-  const workflowId = await addTestWorkflow((text) => migrator.query(text), { withCancel: true });
+  const workflowId = await addTestWorkflow((text) => migrator.query(text), { withCancel });
   await migrator.query(`
     do $$
       declare
         v_form uuid;
       begin
-        if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = '${TYPE}') then return; end if;
+        if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = '${code}') then return; end if;
         insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "Withdraw a Participant", "ar": "سحب مشارك"}')
         returning id into v_form;
         insert into form_version (form_definition_id, version_no, status, published_at, schema)
         values (v_form, 1, 'published', now(), '${JSON.stringify(schema)}'::jsonb);
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Withdraw a Participant", "ar": "سحب مشارك"}', '${workflowId}', 'review_code', v_form);
+        values ('rabaed', 'submittals', '${code}', '{"en": "Withdraw a Participant", "ar": "سحب مشارك"}', '${workflowId}', 'review_code', v_form);
       end
     $$`);
 }
@@ -106,11 +110,11 @@ const take = (as: string, id: string, transition: string) =>
   );
 const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
-async function draft(as: string, model: string): Promise<string> {
+async function draft(as: string, model: string, type = TYPE): Promise<string> {
   const [created] = await call<{ outcome: string; work_item_id: string }>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, ${TYPE}, ${model}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model })}::jsonb,
+      ${projectId}::uuid, ${type}, ${model}, app.latest_form_version(${type}), ${JSON.stringify({ model })}::jsonb,
       ${electrical}::uuid, ${buildingA}::uuid, now())`,
   );
   expect(created!.outcome).toBe("created");
@@ -118,8 +122,8 @@ async function draft(as: string, model: string): Promise<string> {
 }
 
 /** `engineer` sends the Draft for review and `pm` Submits it: it waits for K1's engineer, who picks it up. */
-async function atK1(engineer: string, pm: string, model: string): Promise<string> {
-  const id = await draft(engineer, model);
+async function atK1(engineer: string, pm: string, model: string, type = TYPE): Promise<string> {
+  const id = await draft(engineer, model, type);
   expect(await take(engineer, id, "send_for_review")).toBe("applied");
   expect(await pickUp(pm, id)).toBe("picked_up");
   expect(await take(pm, id, "submit")).toBe("applied");
@@ -136,7 +140,10 @@ const preview = (as: string, id: string) =>
 const withdraw = (as: string, id: string) => outcome(as, sql`select app.withdraw_participant(${id}::uuid, now()) as outcome`);
 const itemRows = (id: string) => (as: string) => call<{ id: string }>(as, sql`select id from work_item where id = ${id}::uuid`);
 const vacancies = (as: string) =>
-  call<{ id: string; work_item_id: string | null; base_role: string }>(as, sql`select step_assignment_id as id, work_item_id, base_role from app.project_vacancies(${projectId}::uuid)`);
+  call<{ id: string; work_item_id: string | null; document_number: string | null; title: string | null; base_role: string }>(
+    as,
+    sql`select step_assignment_id as id, work_item_id, document_number, title, base_role from app.project_vacancies(${projectId}::uuid)`,
+  );
 const withdrawalNotices = (as: string) =>
   call<{ id: string }>(as, sql`select id from notification where kind = 'participant_withdrawn' and project_id = ${projectId}::uuid`);
 const participantStatus = async (id: string) => (await migrator.query("select status from participant where id = $1", [id])).rows[0].status as string;
@@ -153,19 +160,22 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
-  await addType();
+  await addType(TYPE, true);
+  await addType(NO_CANCEL_TYPE, false);
   const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
   c1 = await company(engineer, "C1");
   k1 = await company(engineer, "K1");
   c2 = await company(engineer, "C2");
   other = await company(engineer, "D1");
   c1Pm = await member(c1.id, "pm");
+  c1Admin = await member(c1.id, "admin");
   c2Pm = await member(c2.id, "pm");
   k1Manager = await member(k1.id, "manager");
   for (const [as, name] of [
     [c1.ap, "C1's Project Admin"],
     [c1.member, "the C1 engineer"],
     [c1Pm, "the C1 PM"],
+    [c1Admin, "C1's second Project Admin"],
     [k1.ap, "K1's Authorized Person"],
     [k1.member, "the K1 engineer"],
     [k1Manager, "the K1 manager"],
@@ -198,6 +208,7 @@ beforeAll(async () => {
   const people: [Company, string, string, string[]][] = [
     [c1, participant.c1, c1.member, ["engineer"]],
     [c1, participant.c1, c1Pm, ["project_manager"]],
+    [c1, participant.c1, c1Admin, ["engineer"]],
     [k1, participant.k1, k1.member, ["engineer"]],
     [k1, participant.k1, k1Manager, ["manager"]],
     [c2, participant.c2, c2.member, ["engineer"]],
@@ -210,6 +221,8 @@ beforeAll(async () => {
     }
     expect(await outcome(co.ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${positions}::text[]) as outcome`)).toBe("set");
   }
+  // C1's second Project Admin, appointed by C1's Authorized Person.
+  await migrator.query("insert into project_admin (project_id, member_id, appointed_by_member_id) values ($1, $2, $3)", [projectId, c1Admin, c1.ap]);
 });
 
 afterAll(async () => {
@@ -242,9 +255,14 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
   let c2Draft = "";
   let original = "";
   let revision = "";
+  let noCancelStep = "";
+  let noCancelStepAt = "";
 
   beforeAll(async () => {
     submitted = await atK1(c2.member, c2Pm, "WDPR-S");
+    // One on a Workflow with no Cancelled Step.
+    noCancelStep = await atK1(c2.member, c2Pm, "WDPR-N", NO_CANCEL_TYPE);
+    noCancelStepAt = (await migrator.query("select current_step_id from work_item where id = $1", [noCancelStep])).rows[0].current_step_id as string;
     c2Draft = await draft(c2.member, "WDPR-D");
     // A C2 item K1 closed at Code C, and its Revision, still a Draft.
     original = await atK1(c2.member, c2Pm, "WDPR-R");
@@ -262,7 +280,7 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
 
   it("the preview gives the Project Admin counts only: the item that left Draft, never the Drafts", async () => {
     // Never the Drafts: no other Company ever saw them, so the Host Company doesn't learn how many there are.
-    expect(await preview(c1.ap, participant.c2)).toEqual({ outcome: "ok", items_to_cancel: 1, steps_to_vacate: 0 });
+    expect(await preview(c1.ap, participant.c2)).toEqual({ outcome: "ok", items_to_cancel: 2, steps_to_vacate: 0 });
   });
 
   it("C2's Draft and Draft Revision were never read by C1 or K1", async () => {
@@ -304,6 +322,16 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
     // At its Version's Cancelled Step, as a Member's Cancel leaves it, so every reader reads it Cancelled.
     const [seen] = await call<{ stage_key: string }>(k1.member, sql`select stage_key from app.step_as_seen(${submitted}::uuid)`);
     expect(seen!.stage_key).toBe("cancelled");
+  });
+
+  // Pinned as built, an open question for the owner (RP-952 PR 1): a Version with no Cancelled Step leaves the item
+  // Cancelled at the Step it was at, so the List reads its Stage there. Whichever fix is picked changes this test.
+  it("leaves an item whose Version has no Cancelled Step Cancelled at the Step it was at", async () => {
+    const state = await itemState(noCancelStep);
+    expect([state.outcome, state.closed_at !== null, await recordQueued(noCancelStep)]).toEqual(["cancelled", true, true]);
+    expect((await migrator.query("select current_step_id from work_item where id = $1", [noCancelStep])).rows[0].current_step_id).toBe(noCancelStepAt);
+    const [seen] = await call<{ stage_key: string }>(k1.member, sql`select stage_key from app.step_as_seen(${noCancelStep}::uuid)`);
+    expect(seen!.stage_key).not.toBe("cancelled");
   });
 
   it("cancels the Draft and the Draft Revision with no Record, and nobody reads them", async () => {
@@ -376,12 +404,25 @@ describe("scenario RP-952-3: C1's Project Admin withdraws K1 while K1 holds C1's
     expect(seen!.entered_at).toEqual(enteredAt);
   });
 
-  it("lists the Vacancy for C1's Project Admin only, by its role alone while the Admin doesn't see the item", async () => {
+  it("lists the Vacancy for C1's Project Admins only", async () => {
     const { rows: assignment } = await migrator.query("select id from step_assignment where work_item_id = $1 and status = 'vacant'", [item]);
-    const [row] = (await vacancies(c1.ap)).filter((v) => v.id === assignment[0].id);
-    // C1's Project Admin has no Visibility of the item: no id, Document Number or Subject (as RP-511's Handover list).
-    expect(row).toMatchObject({ work_item_id: null, base_role: "consultant" });
-    await expectHiddenFrom({ read: vacancies, target: row!.id, seenBy: c1.ap, hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap], name: nameOf, label: "the Vacancies list" });
+    await expectHiddenFrom({ read: vacancies, target: assignment[0].id, seenBy: [c1.ap, c1Admin], hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap], name: nameOf, label: "the Vacancies list" });
+  });
+
+  it("names the item to a Project Admin who sees it, and only its role to one who doesn't (as RP-511's Handover list)", async () => {
+    const { rows: assignment } = await migrator.query("select id from step_assignment where work_item_id = $1 and status = 'vacant'", [item]);
+    const theRow = async (as: string) => (await vacancies(as)).filter((v) => v.id === assignment[0].id);
+    // The item's id, Document Number and Subject, to the second Admin only; C1's Authorized Person has no Visibility of it.
+    await expectHiddenFrom({
+      read: async (as) => (await theRow(as)).flatMap((v) => (v.work_item_id && v.document_number && v.title ? [{ id: v.work_item_id }] : [])),
+      target: item,
+      seenBy: c1Admin,
+      hiddenFrom: c1.ap,
+      name: nameOf,
+      label: "the Vacancy's item",
+    });
+    const [roleOnly] = await theRow(c1.ap);
+    expect(roleOnly).toMatchObject({ work_item_id: null, document_number: null, title: null, base_role: "consultant" });
   });
 });
 
@@ -407,6 +448,16 @@ describe("scenario RP-952-4: the withdrawal's notices reach K1's Authorized Pers
     for (const r of rows) {
       expect(Object.keys(r).sort()).toEqual(["host_company_name", "language", "project_name", "to_address"]);
       expect(r.host_company_name).toEqual({ en: "C1", ar: "C1" });
+    }
+  });
+
+  it("gives a Member nothing from the email's read, even with the right ids: it is the worker's alone", async () => {
+    const [k1Engineer] = (await migrator.query("select o.payload ->> 'memberId' as id from outbox o where o.kind = 'participant_withdrawn' and o.payload ->> 'participantId' = $1 limit 1", [participant.k1])).rows as { id: string }[];
+    for (const as of [c1.ap, k1.ap]) {
+      await expect(
+        call(as, sql<{ to_address: string }>`select to_address from app.participant_withdrawn_email(${participant.k1}::uuid, ${k1Engineer!.id}::uuid)`),
+        nameOf(as),
+      ).rejects.toThrow(/only the worker/);
     }
   });
 
