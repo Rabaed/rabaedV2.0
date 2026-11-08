@@ -96,25 +96,35 @@ const PM = "project_manager";
  * Each Company on the Project: its Authorized Person, CR number (seed.ts's made-up ones), Role and Members with their
  * Positions. One that `joins` is on a Project only when its people name it (SamplePeople.join).
  */
-const COMPANIES: { ap: SampleCompany; crNumber: string; role: BaseRole; members: [Who, string[]][]; joins?: true }[] = [
-  { ap: "saeed", crNumber: "9999000001", role: "contractor", members: [["hafiz", ["engineer"]], ["ali", [PM]]] },
+type Company = { ap: SampleCompany; name: string; crNumber: string; role: BaseRole; members: [Who, string[]][]; joins?: true };
+const COMPANIES: Company[] = [
+  { ap: "saeed", name: "TMC Constructions", crNumber: "9999000001", role: "contractor", members: [["hafiz", ["engineer"]], ["ali", [PM]]] },
   // Yousef is Beta Build's only Member here, so he also Submits its Packages (RP-1220): Project Manager beside Engineer.
-  { ap: "nasser", crNumber: "9999000002", role: "contractor", members: [["yousef", ["engineer", PM]]] },
-  { ap: "layla", crNumber: "9999000003", role: "consultant", members: [["ahmed", ["engineer"]], ["sara", ["engineer"]], ["mohammed", ["manager"]]] },
-  { ap: "hind", crNumber: "9999000004", role: "owner_representative", members: [["faisal", ["engineer"]], ["noura", [PM]]] },
+  { ap: "nasser", name: "Beta Build", crNumber: "9999000002", role: "contractor", members: [["yousef", ["engineer", PM]]] },
+  { ap: "layla", name: "Design Consultants LLC", crNumber: "9999000003", role: "consultant", members: [["ahmed", ["engineer"]], ["sara", ["engineer"]], ["mohammed", ["manager"]]] },
+  { ap: "hind", name: "Al Waha PMC", crNumber: "9999000004", role: "owner_representative", members: [["faisal", ["engineer"]], ["noura", [PM]]] },
   // A second Consultant for PAR-17 (RP-1264): its Authorized Person is its one Member, its Consultant Engineer.
-  { ap: "tariq", crNumber: "9999000006", role: "consultant", members: [["tariq", ["engineer"]]], joins: true },
+  { ap: "tariq", name: "Gulf Review Consultants", crNumber: "9999000006", role: "consultant", members: [["tariq", ["engineer"]]], joins: true },
 ];
 
-/** The Company the Consultant Engineer of an item works for, which its Submit picks where two Consultants cover it. */
-const consultantOf = (engineer: SampleSubmittal["consultantEngineer"]) => (engineer === "tariq" ? "Gulf Review Consultants" : "Design Consultants LLC");
+/** The Company's people: its Authorized Person and its Members. */
+const peopleOf = (c: Company): Who[] => [c.ap, ...c.members.map(([who]) => who)];
+
+/** Whether the Company is on a Project of `people`: every Company is, but one that joins only where `people` names it. */
+const isOn = (c: Company, people: SamplePeople = {}) => !c.joins || (people.join?.includes(c.ap) ?? false);
+
+/**
+ * The Company whose Consultant Engineer holds an item, by name, which its Submit picks where two Consultants cover it:
+ * Design Consultants when the plan names no Engineer.
+ */
+const consultantOf = (engineer: SampleSubmittal["consultantEngineer"] = "ahmed") =>
+  COMPANIES.find((c) => c.role === "consultant" && c.members.some(([who]) => who === engineer))!.name;
 
 /** The people of the Companies that join only some Projects: signed in only when a Project being built has them. */
-const JOINING = new Set<Who>(COMPANIES.filter((c) => c.joins).flatMap((c) => [c.ap, ...c.members.map(([who]) => who)]));
+const JOINING = new Set<Who>(COMPANIES.filter((c) => c.joins).flatMap(peopleOf));
 
 /** The demo people a Project of `people` needs signed in beside everyone else: those of the Companies it joins. */
-export const joiningPeople = (people: SamplePeople = {}): Who[] =>
-  COMPANIES.filter((c) => c.joins && people.join?.includes(c.ap)).flatMap((c) => [c.ap, ...c.members.map(([who]) => who)]);
+export const joiningPeople = (people: SamplePeople = {}): Who[] => COMPANIES.filter((c) => c.joins && isOn(c, people)).flatMap(peopleOf);
 
 const all: VisibilityGrant = { isAll: true, valueIds: [] };
 
@@ -394,7 +404,7 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
     trade: g.trades ? { isAll: false, valueIds: g.trades.map((c) => trade[c]) } : all,
     location: g.locations ? { isAll: false, valueIds: g.locations.map((c) => location[c]!) } : all,
   });
-  for (const company of COMPANIES.filter((c) => !c.joins || people.join?.includes(c.ap))) {
+  for (const company of COMPANIES.filter((c) => isOn(c, people))) {
     const ap = as[company.ap];
     const participantId = await participantOf(as, ap, projectId, which, company.crNumber, company.role);
     const own = grantOf(people.participants?.[company.ap]);

@@ -144,8 +144,8 @@ export interface ScenarioRow {
   role?: string;
   /** Why the case is in no role's section yet (RP-1250): it needs two people, or a fixture, for the owner to decide. */
   leftover?: string;
-  /** It uses up what the seed staged for it, so it runs once per Reset UAT (RP-1264). */
-  once?: boolean;
+  /** What it does can't be undone, so it runs once after each Reset UAT (RP-1264): a withdrawal, a Code issued. */
+  once?: true;
 }
 
 /* eslint-disable rabaed/no-avoid-terms -- the test sheet's own sections and its UAT roles (UAT_ROLES), not product terms. */
