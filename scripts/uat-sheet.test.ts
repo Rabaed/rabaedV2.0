@@ -441,6 +441,22 @@ describe("the app's wording in a case (RP-1232)", () => {
   });
 });
 
+describe("the Activity Feed is not a tab (RP-1259)", () => {
+  const rows = JSON.parse(readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8")) as ScenarioRow[];
+
+  it("no step sends the tester to an Activity or Activity Feed tab: since RP-1142 the feed is the Dashboard's panel and its View all page", () => {
+    const tabSteps = rows.filter((r) => /(?:>|,)\s*Activity\b(?! Feed panel)/.test(r.steps ?? "")).map((r) => r.id);
+    expect(tabSteps).toEqual([]);
+  });
+
+  it("SUB-28, UX-08, VIS-01 and VIS-57 reach the feed from Dashboard › Activity Feed panel › View all", () => {
+    for (const id of ["SUB-28", "UX-08", "VIS-01", "VIS-57"]) {
+      const steps = rows.find((r) => r.id === id)!.steps!;
+      expect(steps, id).toMatch(/Dashboard(?: ›|'s) Activity Feed panel (?:›|and its) View all/);
+    }
+  });
+});
+
 describe("the sheet's colours", () => {
   // WCAG 2.x contrast of 12px text: at least 4.5:1.
   const luminance = (hex: string) => {
