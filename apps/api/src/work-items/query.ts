@@ -47,6 +47,7 @@ import {
   type WorkItemRow,
   type WorkItemSort,
   type WorkItemSummary,
+  type WorkItemVacancy,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 
@@ -133,6 +134,8 @@ type Row = {
   step_key: string | null;
   step_name: BilingualText | null;
   holder_name: BilingualText | null;
+  /** The Project Role an item whose Step is a Vacancy waits for (RP-952); null otherwise. */
+  vacancy: WorkItemVacancy["projectRole"] | null;
   holder_member_name: BilingualText | null;
   held_by_me: boolean;
   /** The raising Company's name: everyone who sees the item reads it (Search finds it too). */
@@ -208,6 +211,10 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
       -- The holder's and the raiser's Company by name, which everyone who sees the item reads (V14; the card's Contractor;
       -- db-mask: app.work_items_seen).
       case when w.owner_review is null then w.holder_company_name end as holder_name, w.raiser_company_name as raiser_name,
+      -- An open item nobody holds because its holder was withdrawn: the role it waits for, never the Company (RP-952;
+      -- db-mask: app.work_item_vacancy, which also gives nothing at the Owner's review).
+      case when w.owner_review is null and w.holder_participant_id is null and not ${closedStageCategory(sql.ref("st.category"))}
+        then (select jsonb_build_object('baseRole', v.base_role, 'name', v.role_name) from app.work_item_vacancy(w.id) v) end as vacancy,
       w.raised_by_participant_id as raiser_participant_id,
       -- One holder: a closed item has none.
       coalesce(w.holder_participant_id in (select app.current_participant_ids()), false) as held_by_own,
@@ -559,7 +566,7 @@ const columnSorts: Record<WorkItemSort, ColumnSort> = {
   owner: {
     value: (lang) =>
       named(
-        sql`(case when r.closed then coalesce(cm.full_name, ${closerCompanyName})
+        sql`(case when r.closed then coalesce(${closerName}, ${closerCompanyName})
           when r.held_by_own and r.assignee_member_id is null then r.step_name
           else coalesce(m.full_name, r.holder_name, r.owner_review_name) end)`,
         lang,
@@ -628,6 +635,8 @@ function toRow(r: Row, now: Date): WorkItemRow {
         : r.closer_company_name
           ? { kind: "company", companyName: r.closer_company_name }
           : null,
+    // Waiting for a new ‹role› (RP-952): no Company holds it, so `with` is null.
+    vacancy: open && r.vacancy ? { projectRole: r.vacancy } : null,
     with: !open
       ? null
       : r.owner_review_name
@@ -751,11 +760,20 @@ const closerCompanyName = sql`(case when r.closed then (
     select x.legal_name from app.work_item_companies(r.id) x where x.participant_id = ce.actor_participant_id
   ) end)`;
 
+/**
+ * The closer's name, for one's own Participant's close only: another's is named by its Company only (V14). The id
+ * comes from app.event_actor_members, one's own Company's Member only (RP-1139). A case in the columns, not a join,
+ * so the function is called for the rows shown that one's own Participant closed, never for every row read.
+ */
+const closerName = sql`(case when r.closed and ce.actor_participant_id in (select app.current_participant_ids()) then (
+    select cm.full_name from app.event_actor_members(array[ce.id]) a join member cm on cm.id = a.actor_member_id
+  ) end)`;
+
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14). The holder's and raiser's
 // Companies are the row's own (`visibleRows`).
-const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_name as closer_name,
+const holderColumns = sql`${closerCompanyName} as closer_company_name, ${closerName} as closer_name,
   m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
   hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
   -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
@@ -776,14 +794,13 @@ const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_n
 //   nothing here is asked of another Company's items (V5, V14).
 const holderJoins = sql`left join lateral (
     -- The Step each event reached, from app.event_steps_reached (RP-1203): a closed item's terminal Step is everyone's.
-    select e.actor_participant_id, e.actor_member_id
+    select e.id, e.actor_participant_id
     from work_item_event e
     join app.event_steps_reached(array(select x.id from work_item_event x where r.closed and x.work_item_id = r.id)) rs on rs.event_id = e.id
     where r.closed and e.work_item_id = r.id and rs.to_step_id = r.step_id
     order by e.seq desc
     limit 1
   ) ce on true
-  left join member cm on cm.id = ce.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
   left join member m on m.id = r.assignee_member_id
   left join lateral (
     select p.key, p.name, p.sort, pr.name as project_role

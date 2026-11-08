@@ -16,6 +16,8 @@ const answers = {
   authorized_person: () => new HttpError(409, "authorized_person"),
   project_closed: () => new HttpError(409, "project_closed"),
   already_participant: () => new HttpError(409, "already_participant"),
+  // Withdrawing a Participant (RP-952, ADR 0028): the Host Company itself is never withdrawn.
+  host_company: () => new HttpError(409, "host_company"),
   duplicate_code: () => new HttpError(409, "duplicate_code"),
   // Participant Codes (RP-314).
   invalid_code: () => new HttpError(422, "invalid_code"),
