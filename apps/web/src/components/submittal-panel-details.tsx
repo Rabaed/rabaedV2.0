@@ -137,7 +137,7 @@ export function SubmittalPanelDetails({
               icon: "map-pin" as const,
               title: t("location"),
               summary: place.length === 0 ? t("none") : place.join(levelSeparator[locale]),
-              children: place.length === 0 ? empty : <SubmittalPanelPath locale={locale} label={t("location")} levels={place} />,
+              children: place.length === 0 ? empty : <SubmittalPanelPath label={t("location")} levels={place} />,
             },
           ]
         : []),

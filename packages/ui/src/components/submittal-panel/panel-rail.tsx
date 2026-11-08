@@ -65,7 +65,7 @@ export function SubmittalPanelMapLink({ label, onOpen }: { label: string; onOpen
       className={cn("inline-flex min-h-8 items-center gap-1 rounded-[6px] px-1 text-[12px] font-semibold tracking-normal text-brand-fg normal-case hover:underline", focusRing)}
     >
       {label}
-      <Icon name="arrow-up-right" size={13} className="rtl:-scale-x-100" />
+      <Icon name="arrow-up-right" size={13} />
     </button>
   );
 }

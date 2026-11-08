@@ -3,6 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { expectAlongTheFlow, isMirrored } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { submittalOwnerMap } from "../../storybook/submittal-route.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -135,8 +136,22 @@ type Story = StoryObj<typeof meta>;
 type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
 const stripOf = (context: PlayContext) => within(context.canvasElement).getByRole("button", { name: new RegExp(storyText(context, copy.open)) });
+/** The panel's strip, found even while the open map hides the rest of the page from assistive tech. */
+const panelStripOf = (context: PlayContext) => context.canvasElement.querySelector<HTMLElement>(".sdp-route")!;
 const mapOf = () => within(document.body).getByRole("dialog", { name: /^(Workflow|سير العمل)$/ });
+/** The map's large strip, on its Map tab. */
+const mapTabOf = async (context: PlayContext, map: HTMLElement) => {
+  await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+  return waitFor(() => map.querySelector<HTMLElement>(".sdp-route")!);
+};
 const currentStops = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>("li[data-state='current']")];
+/** The chevrons between the stops point along the flow (RP-1114): flipped in Arabic, where the route runs right to left. */
+const chevronsAlongTheFlow = async (context: PlayContext, root: HTMLElement) => {
+  const chevrons = [...root.querySelectorAll("li[data-state] > svg")];
+  await expectAlongTheFlow(chevrons, storyLocale(context));
+  // Icon turns them round itself, in Arabic only.
+  await expect(chevrons.map(isMirrored)).toEqual(chevrons.map(() => storyLocale(context) === "ar"));
+};
 const noTimesOrCounts = async (root: HTMLElement) => {
   // No due date, no "Time allowed", no count of items, and never "template" or "v3" (gaps A1, A10, A11).
   for (const banned of [/time allowed/i, /due/i, /used by/i, /template/i, /\bv\d/i, /client/i, /المدة المسموحة/, /قالب/, /العميل/]) {
@@ -160,6 +175,7 @@ export const InsideTheConsultant: Story = {
     await expect(current[0]).toHaveTextContent(storyText(context, copy.roles.consultant));
     await expect(current[0]).toHaveTextContent(storyText(context, bi("With Design Consultants LLC", "لدى ديزاين للاستشارات")));
     await noTimesOrCounts(strip);
+    await chevronsAlongTheFlow(context, strip);
 
     await userEvent.click(strip);
     const map = await waitFor(mapOf);
@@ -179,9 +195,10 @@ export const InsideTheConsultant: Story = {
     await expect(map).not.toHaveTextContent(holderName);
     await noTimesOrCounts(map);
     // The Map tab: the large strip and the cards per Step, the Consultant's block marked, none of its Steps.
-    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await mapTabOf(context, map);
     await waitFor(() => expect(map.querySelector("[data-map-step='consultant_engineer']")).not.toBeNull());
     await expect(map.querySelector("[data-step]")).toBeNull();
+    await chevronsAlongTheFlow(context, map);
     await noTimesOrCounts(map);
     // Only a Member who may edit Workflows sees the way to its settings.
     await expect(within(map).queryByRole("link", { name: storyText(context, copy.openSettings) })).toBeNull();
@@ -202,12 +219,14 @@ export const OwnStep: Story = {
     await expect(here[0]).toHaveTextContent(storyText(context, copy.hereNow));
     await expect(here[0]).toHaveTextContent(holderName);
     await expect(currentStops(map)[0]).toHaveTextContent(storyText(context, copy.roles.contractor));
+    await chevronsAlongTheFlow(context, panelStripOf(context));
     // Only the Step holding it names who holds it.
     await expect(map.querySelectorAll("[data-step]:not([aria-current])").length).toBeGreaterThan(0);
     for (const other of map.querySelectorAll<HTMLElement>("[data-step]:not([aria-current])")) await expect(other).not.toHaveTextContent(holderName);
     // In the Map tab, the same Step is "You are here".
-    await userEvent.click(within(map).getByRole("tab", { name: storyText(context, copy.mapTab) }));
+    await mapTabOf(context, map);
     await waitFor(() => expect(map.querySelector("[data-map-step='internal_review']")).toHaveTextContent(storyText(context, copy.youAreHere)));
+    await chevronsAlongTheFlow(context, map);
   },
 };
 
@@ -240,6 +259,7 @@ export const MembersOnOwnSteps: Story = {
       await expect(block).not.toHaveTextContent(storyText(context, bi("Nadia Saleh", "نادية صالح")));
     }
     await noTimesOrCounts(map);
+    await chevronsAlongTheFlow(context, panelStripOf(context));
   },
 };
 
@@ -250,6 +270,7 @@ export const WithOwnerReview: Story = {
     const current = currentStops(stripOf(context));
     await expect(current[0]).toHaveTextContent(storyText(context, copy.roles.owner));
     await expect(current[0]).toHaveTextContent(storyText(context, bi("With Owner review", "لدى مراجعة المالك")));
+    await chevronsAlongTheFlow(context, stripOf(context));
   },
 };
 
@@ -260,6 +281,7 @@ export const Closed: Story = {
     const stops = [...stripOf(context).querySelectorAll<HTMLElement>("li[data-state]")];
     await expect(stops.map((s) => s.dataset.state)).toEqual(["done", "done", "done", "done"]);
     await expect(currentStops(stripOf(context))).toHaveLength(0);
+    await chevronsAlongTheFlow(context, stripOf(context));
   },
 };
 
@@ -270,12 +292,15 @@ export const ForAProjectAdmin: Story = {
   play: async (context) => {
     const map = await waitFor(mapOf);
     await expect(within(map).getByRole("link", { name: storyText(context, copy.openSettings) })).toHaveAttribute("href", "#settings/workflows");
+    await chevronsAlongTheFlow(context, panelStripOf(context));
+    await chevronsAlongTheFlow(context, await mapTabOf(context, map));
   },
 };
 
 /** Esc closes the innermost layer first: the map, then the panel (README §1). */
 export const EscClosesTheMapFirst: Story = {
   play: async (context) => {
+    await chevronsAlongTheFlow(context, stripOf(context));
     await userEvent.click(stripOf(context));
     await waitFor(mapOf);
     await userEvent.keyboard("{Escape}");

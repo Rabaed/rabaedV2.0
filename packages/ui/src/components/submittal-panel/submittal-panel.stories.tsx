@@ -3,6 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { forwardIn, pointsTo } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -153,6 +154,8 @@ export const Open: Story = {
     await expect(document.elementFromPoint(storyLocale(context) === "ar" ? innerWidth - 40 : 40, 30)?.closest("[data-submittal-panel]")).toBeNull();
 
     await expect(panel.querySelector(".sdp-crumb")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${rev1}`);
+    // The chevron after the Module points on to the item, along the reading direction (RP-1114).
+    await expect(pointsTo(panel.querySelector(".sdp-crumb svg.sdp-crumb-label")!)).toBe(forwardIn(storyLocale(context)));
     await expect(within(panel).getByText("2 / 3", { exact: false })).toBeVisible();
     await expect(panel.querySelector(".sdp-rev")).toHaveTextContent(rev1);
     // The number itself reads left to right, in Arabic too.
