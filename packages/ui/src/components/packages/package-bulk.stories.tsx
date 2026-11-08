@@ -64,7 +64,7 @@ const codes: BulkOffer[] = [
   { key: "revise_c", label: b("Code C", "الرمز C"), form: "screen:pm-1" },
 ];
 const otherScreen: BulkOffer[] = codes.map((c) => ({ ...c, form: "screen:pm-2" }));
-const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false, notReady: null });
+const itemOf = (r: WorkItemRow, bulkTransitions: BulkOffer[]) => ({ ...r, bulkTransitions, toSubmit: false, notReady: null, state: r.outcome ? ("done" as const) : ("open" as const), waiting: bulkTransitions.length > 0 });
 
 const pkg: PackageDetail = {
   id: pkgId,
@@ -75,6 +75,8 @@ const pkg: PackageDetail = {
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: contractor },
   trades: [],
   counts: { total: 5, open: 4, codes: { A: 1 } },
+  byType: [{ typeId: "00000000-0000-4000-8000-0000000000d1", code: "MAR", name: b("Material Approval Request", "طلب اعتماد مواد"), total: 5, done: 1, replace: 0, revise: 0, open: 4 }],
+  waiting: 4,
   items: [itemOf(tiles, codes), itemOf(ware, codes), itemOf(lights, codes), itemOf(fans, otherScreen), itemOf(basins, [])],
   owned: false,
   othersNotReady: false,
@@ -152,7 +154,7 @@ export const Selection: Story = {
     const l = labelsOf(context);
     const locale = storyLocale(context);
     const table = within(tableOf(context));
-    await expect(bulkBar(context)).toHaveTextContent(l.hint);
+    await expect(bulkBar(context)).toHaveTextContent(l.waiting("4", 4));
     await expect(table.queryByRole("checkbox", { name: l.selectRow(basins.title) })).toBeNull();
     await select(context, tiles, ware);
     const bar = within(bulkBar(context));
@@ -163,7 +165,7 @@ export const Selection: Story = {
     await expect(bulkBar(context)).toHaveTextContent(l.noneShared);
     await expect(bar.queryByRole("button", { name: codes[0]!.label[locale] })).toBeNull();
     await userEvent.click(bar.getByRole("button", { name: l.clear }));
-    await expect(bulkBar(context)).toHaveTextContent(l.hint);
+    await expect(bulkBar(context)).toHaveTextContent(l.waiting("4", 4));
     await expect(table.getByRole("checkbox", { name: l.selectRow(tiles.title) })).not.toBeChecked();
   },
 };
@@ -285,7 +287,7 @@ export const Taken: Story = {
       idempotencyKey: expect.any(String),
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await expect(bulkBar(context)).toHaveTextContent(l.hint);
+    await expect(bulkBar(context)).toHaveTextContent(l.waiting("4", 4));
   },
 };
 

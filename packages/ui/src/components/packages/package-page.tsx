@@ -3,12 +3,15 @@
 import {
   formatNumber,
   intlLocaleOf,
+  packageStateTotals,
   workItemSortOrders,
   type BilingualText,
   type ListColumnKey,
   type ListColumnLayout,
   type Locale,
   type PackageDetail,
+  type PackageDetailItem,
+  type PackageItemState,
   type PackageStatus,
   type WorkItemQuery,
   type WorkItemRow,
@@ -16,8 +19,7 @@ import {
 import { useState, type CSSProperties, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { sayRefusal } from "../../lib/refusal.ts";
-import { IconButton } from "../button/button.tsx";
-import { Badge } from "../data/badge.tsx";
+import { Button, IconButton } from "../button/button.tsx";
 import { CompanyChip } from "../data/avatar.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
@@ -28,6 +30,7 @@ import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
 import { usePackageBulk, type PackageBulkProps } from "./package-bulk.tsx";
 import { DeletePackageDialog, RenamePackageDialog, type DeletePackageLabels, type RenamePackageLabels } from "./package-dialogs.tsx";
+import { issueOf, PackageStatusPill, StateMiniBar, stateEdge, stateOrder, TypeIconTile } from "./package-states.tsx";
 import { PackageNotReadyList, SubmitPackageDialog, type SubmitPackageCall, type SubmitPackageLabels } from "./submit-package-dialog.tsx";
 
 // The Package page (RP-659, spec RP-616; reference: the RP-633 prototype's page header, counts
@@ -54,9 +57,16 @@ export type PackagePageLabels = {
   progress: string;
   /** Under the ring, e.g. "2 of 8 closed". */
   closedOf: (closed: string, total: string) => string;
-  /** A count's Review Code, e.g. "Code A". */
-  code: (code: string) => string;
-  stillOpen: string;
+  /** Each state's name (RP-1143): the Progress tiles and the table's tabs, e.g. "Closed A/B", "Code C". */
+  state: Record<PackageItemState, string>;
+  /** The "By Type" box's heading (RP-1143). */
+  byType: string;
+  /** Clears the By Type box's choice. */
+  clearType: string;
+  /** The table's tabs (RP-1143): their name, "Waiting for you" and "All". */
+  tabs: { label: string; waiting: string; all: string };
+  /** A tab or Type that leaves no row. */
+  nothingHere: string;
   /** The table section's heading. */
   submittals: string;
   /** The table of a Package with none the viewer sees yet. */
@@ -100,8 +110,6 @@ export type PackagePageProps = {
   bulk?: PackageBulkProps;
 };
 
-const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
-
 /**
  * The table's columns, as the Reference (RP-633) has them: Document Number, Rev, Subject, Type, Trade,
  * With, Review Code or Stage (one column: the Code once there is one), Step Age; never a date.
@@ -126,20 +134,28 @@ export function PackagePage({
   onSubmit,
   bulk,
 }: PackagePageProps) {
-  const bulkTable = usePackageBulk({ items: pkg.items, bulk, locale, close: labels.close, cancel: labels.cancel, itemHref, linkAs: Link });
   const [sort, setSort] = useState<Pick<WorkItemQuery, "sort" | "dir">>({ sort: "documentNumber", dir: undefined });
   const [error, setError] = useState<string | null>(null);
   const n = (value: number) => formatNumber(value, locale);
   const name = pkg.name[locale];
   const { items: rows, filters } = pkg;
+  // The table's tab and Type (RP-1143, the kit's `.dtabs` and `.tt`): it opens on what waits on the viewer, when anything does.
+  const waitingCount = rows.filter((r) => r.waiting).length;
+  const [tab, setTab] = useState<Tab>(waitingCount > 0 ? "waiting" : "all");
+  const [type, setType] = useState<string | null>(null);
+  const shownTab: Tab = tab === "waiting" && waitingCount === 0 ? "all" : tab;
+  const inTab = (r: PackageDetailItem) => shownTab === "all" || (shownTab === "waiting" ? r.waiting : r.state === shownTab);
+  const visible = rows.filter((r) => inTab(r) && (type === null || r.type.code === type));
+  const bulkTable = usePackageBulk({ items: visible, bulk, locale, close: labels.close, cancel: labels.cancel, itemHref, linkAs: Link });
+  const states = new Map(rows.map((r) => [r.id, r.state]));
   // The API says which are still to Submit, which of them stop it and why, and whether the viewer owns the Package.
   const toSubmit = rows.filter((r) => r.toSubmit);
   // Submit Package only when nothing stops it (spec RP-616 story 11, RP-974); otherwise the owner reads what does.
   const submittable = onSubmit !== undefined && pkg.actions.submit;
   const notReady = rows.flatMap((r) => (r.notReady ? [{ id: r.id, documentNumber: r.documentNumber, title: r.title, reason: r.notReady }] : []));
   const blocked = onSubmit !== undefined && pkg.owned && !pkg.actions.submit && (notReady.length > 0 || pkg.othersNotReady);
-  const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: labels.empty };
-  const sorted = sortRows(rows, sort, locale, tableLabels, filters);
+  const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: rows.length === 0 ? labels.empty : labels.nothingHere };
+  const sorted = sortRows(visible, sort, locale, tableLabels, filters);
 
   const run = async (call: () => ReturnType<PackageCall>) => {
     setError(null);
@@ -168,9 +184,7 @@ export function PackagePage({
             {/* Beside the number: two Companies' Packages can share it. The Company by its name only (V14). */}
             <span className="sr-only">{labels.ownedBy}</span>
             <CompanyChip name={pkg.owner.companyName[locale]} />
-            <Badge tone={statusTone[pkg.status]} dot data-package-status={pkg.status}>
-              {labels.status[pkg.status]}
-            </Badge>
+            <PackageStatusPill status={pkg.status} label={labels.status[pkg.status]} />
           </div>
           <h1 dir="auto" className="mt-2 font-display text-h3 leading-tight font-extrabold text-text">
             {name}
@@ -231,7 +245,12 @@ export function PackagePage({
         />
       )}
 
-      <Counts pkg={pkg} locale={locale} labels={labels} />
+      {/* The kit's `.pp-sum`: Progress and By Type side by side from 1280 (so at 1366 and 1920), stacked under it. */}
+      <div className={cn("grid min-w-0 gap-3", pkg.byType.length > 0 && "xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]")}>
+        <Progress pkg={pkg} locale={locale} labels={labels} tab={shownTab} onTab={setTab} />
+        {/* Nothing the viewer sees in it yet: the table says so, once. */}
+        {pkg.byType.length > 0 && <ByType pkg={pkg} locale={locale} labels={labels} type={type} onType={setType} />}
+      </div>
 
       {pkg.status === "done" && (
         <p role="note" className="flex items-center gap-2 rounded-md bg-success-tint px-4 py-3 text-sm font-medium text-success-fg">
@@ -241,11 +260,51 @@ export function PackagePage({
       )}
 
       <section aria-labelledby="package-submittals" className="flex min-w-0 flex-col gap-2">
-        <h2 id="package-submittals" className="flex items-center gap-2 text-lg font-bold text-text">
+        <h2 id="package-submittals" className="sr-only">
           {labels.submittals}
-          <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">{n(rows.length)}</span>
         </h2>
         <TableCard>
+          {/* The kit's tabs over the table (`.pp-th .dtabs`): what waits on the viewer, all, and each state, with their counts. */}
+          <div role="group" aria-label={labels.tabs.label} data-package-tabs="" className="flex flex-wrap items-center gap-1 border-b border-border-subtle px-3 pt-2">
+            {tabsOf(waitingCount).map((t) => {
+              const count = t === "waiting" ? waitingCount : t === "all" ? rows.length : rows.filter((r) => r.state === t).length;
+              const on = shownTab === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={on}
+                  data-tab={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-2.5 text-sm font-semibold whitespace-nowrap",
+                    on ? "border-primary text-text" : "border-transparent text-text-secondary hover:text-text",
+                    focusRing,
+                  )}
+                >
+                  {t === "waiting" && <Icon name="hand-finger" size={16} className="text-brand-fg" />}
+                  {t === "waiting" ? labels.tabs.waiting : t === "all" ? labels.tabs.all : labels.state[t]}
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 font-ui text-caption leading-5 font-semibold tabular-nums",
+                      t === "waiting" && count > 0 ? "bg-brand text-on-primary" : on ? "bg-brand-tint text-brand-fg" : "bg-neutral-tint text-neutral-fg",
+                    )}
+                  >
+                    {n(count)}
+                  </span>
+                </button>
+              );
+            })}
+            {type !== null && (
+              <span className="ms-auto inline-flex items-center gap-1.5 text-caption font-semibold text-text-secondary">
+                <TypeIconTile code={type} size={20} />
+                <span translate="no">{type}</span>
+                <IconButton label={labels.clearType} size="sm" onClick={() => setType(null)}>
+                  <Icon name="x" />
+                </IconButton>
+              </span>
+            )}
+          </div>
           {bulkTable.bar}
           {/* The table scrolls in its own region, as the List's does, its scrollbar on screen, so the page never does and nothing is cut unseen. */}
           <div
@@ -267,6 +326,8 @@ export function PackagePage({
               linkAs={Link}
               selection={bulkTable.selection}
               stageShowsCode
+              // The kit's state edge on each row (`.pkt tr.ok td:first-child`): green A/B, red D, orange C.
+              rowStart={(row) => stateEdge[states.get(row.id) ?? "open"]}
               // Fits 1366 as the List's table does (RP-1177), so "Review Code or Stage" and "Step Age" show (RP-1164, UX-23).
               fit
               rowEnd={
@@ -286,47 +347,121 @@ export function PackagePage({
   );
 }
 
-/** The counts panel: a ring of the closed of all the viewer sees, then one count per Review Code and the ones still open. */
-function Counts({ pkg, locale, labels }: { pkg: PackageDetail; locale: Locale; labels: PackagePageLabels }) {
+/** The table's tabs: "Waiting for you" only when something waits on the viewer, then All and each state. */
+type Tab = "waiting" | "all" | PackageItemState;
+const tabsOf = (waiting: number): Tab[] => [...(waiting > 0 ? (["waiting"] as const) : []), "all", ...stateOrder];
+
+const stateLine: Record<PackageItemState, string> = {
+  done: "shadow-[inset_3px_0_0_var(--color-success)] rtl:shadow-[inset_-3px_0_0_var(--color-success)]",
+  replace: "shadow-[inset_3px_0_0_var(--color-danger)] rtl:shadow-[inset_-3px_0_0_var(--color-danger)]",
+  revise: "shadow-[inset_3px_0_0_var(--color-warning-fg)] rtl:shadow-[inset_-3px_0_0_var(--color-warning-fg)]",
+  open: "shadow-[inset_3px_0_0_var(--color-info-fg)] rtl:shadow-[inset_-3px_0_0_var(--color-info-fg)]",
+};
+const stateNumber: Record<PackageItemState, string> = { done: "text-success-fg", replace: "text-danger-fg", revise: "text-warning-fg", open: "text-info-fg" };
+const boxHeading = "text-notes font-bold tracking-wide text-muted uppercase rtl:tracking-normal";
+
+/**
+ * The Progress box (the kit's `.pp-prog`): a ring of what counts towards Done (closed at Code A, B
+ * or D) of all the viewer sees, then a tile per state, each showing its rows in the table.
+ */
+function Progress({ pkg, locale, labels, tab, onTab }: { pkg: PackageDetail; locale: Locale; labels: PackagePageLabels; tab: Tab; onTab: (tab: Tab) => void }) {
   const n = (value: number) => formatNumber(value, locale);
-  const { total, open, codes } = pkg.counts;
-  const closed = total - open;
-  // The closing outcomes of its submittals' Types on the Project, in their set's order (as Done reads
-  // them, never fixed codes), then any other the counts name.
-  const types = new Set(pkg.items.map((i) => i.type.code));
-  const ofTypes = pkg.filters.outcomes.filter((o) => o.closing && types.has(o.type)).map((o) => o.code);
-  const codeKeys = [...new Set([...ofTypes, ...Object.keys(codes).sort()])];
-  const share = total === 0 ? 0 : Math.round((closed / total) * 100);
+  const totals = packageStateTotals(pkg.byType);
+  const share = totals.total === 0 ? 0 : Math.round((totals.closed / totals.total) * 100);
   const ring: CSSProperties = { background: `conic-gradient(var(--color-success) ${share}%, var(--color-neutral-tint) 0)` };
-  const tile = "flex min-w-[88px] flex-col items-start gap-0.5 rounded-md bg-surface-subtle px-3 py-2";
   return (
-    <section aria-labelledby="package-progress" className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">
-      <h2 id="package-progress" className="text-notes font-bold tracking-wide text-muted uppercase rtl:tracking-normal">
+    <section aria-labelledby="package-progress" className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">
+      <h2 id="package-progress" className={boxHeading}>
         {labels.progress}
       </h2>
       <div className="flex flex-wrap items-center gap-4">
-        <div aria-hidden="true" style={ring} className="relative flex size-[88px] shrink-0 items-center justify-center rounded-full">
+        {/* The kit's `.ring`: 104 px. */}
+        <div aria-hidden="true" style={ring} className="relative flex size-[104px] shrink-0 flex-col items-center justify-center rounded-full">
           <span className="absolute inset-2 rounded-full bg-surface" />
-          <span className="relative font-ui text-lg font-extrabold text-text tabular-nums">
-            {n(closed)}/{n(total)}
+          <span dir="ltr" className="relative font-ui text-xl font-extrabold text-text tabular-nums">
+            {n(totals.closed)}/{n(totals.total)}
           </span>
         </div>
         <p data-testid="package-closed" className="sr-only">
-          {labels.closedOf(n(closed), n(total))}
+          {labels.closedOf(n(totals.closed), n(totals.total))}
         </p>
-        <ul className="flex flex-wrap gap-1.5">
-          {codeKeys.map((code) => (
-            <li key={code} data-code={code} className={tile}>
-              <span className={cn("font-ui text-xl leading-tight font-extrabold tabular-nums", codes[code] ? "text-text" : "text-faint")}>{n(codes[code] ?? 0)}</span>
-              <span className="text-caption whitespace-nowrap text-muted">{labels.code(code)}</span>
+        <ul className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+          {stateOrder.map((state) => (
+            <li key={state}>
+              {/* The kit's `.sc`: a tile shows its rows; again, all of them. */}
+              <button
+                type="button"
+                data-state={state}
+                aria-pressed={tab === state}
+                onClick={() => onTab(tab === state ? "all" : state)}
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 rounded-md bg-surface-subtle px-3 py-2 text-start hover:bg-hover",
+                  stateLine[state],
+                  tab === state && "bg-brand-tint",
+                  focusRing,
+                )}
+              >
+                <span className={cn("font-ui text-xl leading-tight font-extrabold tabular-nums", totals[state] > 0 ? stateNumber[state] : "text-faint")}>{n(totals[state])}</span>
+                <span className="text-caption whitespace-nowrap text-muted">{labels.state[state]}</span>
+              </button>
             </li>
           ))}
-          <li data-code="open" className={tile}>
-            <span className={cn("font-ui text-xl leading-tight font-extrabold tabular-nums", open ? "text-text" : "text-faint")}>{n(open)}</span>
-            <span className="text-caption whitespace-nowrap text-muted">{labels.stillOpen}</span>
-          </li>
         </ul>
       </div>
+    </section>
+  );
+}
+
+/**
+ * The By Type box (the kit's `.pp-ty`): a tile per Type the viewer sees, with its count, closed of
+ * total, a segment per submittal by state and a dot when one needs attention; a tile shows only its rows.
+ */
+function ByType({ pkg, locale, labels, type, onType }: { pkg: PackageDetail; locale: Locale; labels: PackagePageLabels; type: string | null; onType: (type: string | null) => void }) {
+  const n = (value: number) => formatNumber(value, locale);
+  return (
+    <section aria-labelledby="package-by-type" className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">
+      <div className="flex items-center gap-2">
+        <h2 id="package-by-type" className={boxHeading}>
+          {labels.byType}
+        </h2>
+        {type !== null && (
+          <Button size="sm" variant="ghost" className="ms-auto h-6" onClick={() => onType(null)}>
+            {labels.clearType}
+          </Button>
+        )}
+      </div>
+      <ul className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
+        {pkg.byType.map((t) => {
+          const closed = t.done + t.replace;
+          const issue = issueOf(t);
+          const on = type === t.code;
+          return (
+            <li key={t.typeId}>
+              <button
+                type="button"
+                data-type={t.code}
+                aria-pressed={on}
+                onClick={() => onType(on ? null : t.code)}
+                className={cn("relative flex w-full flex-col gap-1.5 rounded-md bg-surface-subtle px-3 py-2.5 text-start hover:bg-hover", on && "bg-brand-tint ring-1 ring-primary", focusRing)}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <TypeIconTile code={t.code} />
+                  <b translate="no" className="text-sm font-bold">
+                    {t.code}
+                  </b>
+                  <span className="min-w-0 truncate text-caption text-muted">{t.name[locale]}</span>
+                </span>
+                <span className="flex items-baseline gap-2">
+                  <span className="font-ui text-xl leading-tight font-extrabold tabular-nums">{n(t.total)}</span>
+                  <span className={cn("ms-auto text-caption font-bold", closed === t.total ? "text-success-fg" : "text-text-secondary")}>{labels.closedOf(n(closed), n(t.total))}</span>
+                </span>
+                <StateMiniBar counts={t} />
+                {issue && <span aria-hidden="true" data-issue={issue} className={cn("absolute end-2 top-2 size-2 rounded-full", issue === "replace" ? "bg-danger" : "bg-warning-fg")} />}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

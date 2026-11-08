@@ -35,14 +35,22 @@ const pkg = (n: number, rest: Partial<PackageSummary>): PackageSummary => ({
   owner: alFuttaim,
   trades: [],
   counts: { total: 0, open: 0, codes: {} },
+  byType: [],
+  waiting: 0,
   ...rest,
 });
 
-const bathrooms = pkg(1, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), status: "open", trades: [mechanical], counts: { total: 3, open: 3, codes: {} } });
-const lighting = pkg(2, { name: b("Lighting – Podium", "الإنارة – المنصة"), trades: [electrical], counts: { total: 8, open: 5, codes: { A: 2, C: 1 } } });
+// A Type's submittals as the board API counts them (RP-1143): of the viewer's only.
+const ofType = (code: "MAR" | "SAR", s: { done?: number; replace?: number; revise?: number; open?: number }) => {
+  const c = { done: 0, replace: 0, revise: 0, open: 0, ...s };
+  return { typeId: code === "MAR" ? "00000000-0000-4000-8000-0000000000d1" : "00000000-0000-4000-8000-0000000000d2", code, name: code === "MAR" ? b("Material Approval Request", "طلب اعتماد مواد") : b("Supplier Approval Request", "طلب اعتماد مورّد"), total: c.done + c.replace + c.revise + c.open, ...c };
+};
+
+const bathrooms = pkg(1, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), status: "open", trades: [mechanical], counts: { total: 3, open: 3, codes: {} }, byType: [ofType("MAR", { open: 3 })] });
+const lighting = pkg(2, { name: b("Lighting – Podium", "الإنارة – المنصة"), trades: [electrical], counts: { total: 8, open: 5, codes: { A: 2, C: 1 } }, byType: [ofType("MAR", { done: 2, revise: 1, open: 3 }), ofType("SAR", { open: 2 })], waiting: 2 });
 // Another Contractor's own PKG-001: numbers count per owning Participant, so its Company shows beside it.
-const facade = pkg(3, { number: "PKG-001", name: b("Façade – Tower 2", "الواجهة – البرج 2"), owner: nesma, trades: [architectural], counts: { total: 4, open: 1, codes: { A: 1, B: 1, D: 1 } } });
-const lifts = pkg(4, { name: b("Lifts", "المصاعد"), status: "done", trades: [electrical, mechanical], counts: { total: 2, open: 0, codes: { A: 1, B: 1 } } });
+const facade = pkg(3, { number: "PKG-001", name: b("Façade – Tower 2", "الواجهة – البرج 2"), owner: nesma, trades: [architectural], counts: { total: 4, open: 1, codes: { A: 1, B: 1, D: 1 } }, byType: [ofType("SAR", { done: 2, replace: 1, open: 1 })] });
+const lifts = pkg(4, { name: b("Lifts", "المصاعد"), status: "done", trades: [electrical, mechanical], counts: { total: 2, open: 0, codes: { A: 1, B: 1 } }, byType: [ofType("MAR", { done: 2 })] });
 
 const meta = {
   title: "Packages/PackagesBoard",
@@ -86,26 +94,52 @@ export const Board: Story = {
       await expect(number).toHaveTextContent("PKG-00");
       await expect(number).toHaveAttribute("dir", "ltr");
       await expectLaidOutLeftToRight(number);
-      // The owning Company on the number's row.
-      const owner = within(card).getByText(p.owner.companyName[locale]);
-      await expect(Math.abs(owner.getBoundingClientRect().top - number.getBoundingClientRect().top)).toBeLessThan(12);
+      // The kit's card head (RP-1143): the number at the start, the status pill on its row at the end.
+      const status = card.querySelector<HTMLElement>("[data-package-status]")!;
+      await expect(status).toHaveTextContent(l.status[p.status]);
+      await expect(Math.abs(status.getBoundingClientRect().top - number.getBoundingClientRect().top)).toBeLessThan(12);
       await expect(within(card).getByText(p.name[locale])).toBeVisible();
-      await expect(card.querySelector("[data-package-status]")).toHaveTextContent(l.status[p.status]);
+      // Its owning Company on every card, in the footer (numbers repeat between Companies), by name only (V14).
+      await expect(within(card).getByText(p.owner.companyName[locale])).toBeVisible();
     }
   },
 };
 
-/** A card's counts are the API's, of the submittals the viewer sees: one per Review Code, and the ones still open. */
-export const Counts: Story = {
+/**
+ * A card's ledger by Type (RP-1143, the kit's "D type ledger"): per Type of the submittals the
+ * viewer sees, closed (Code A, B or D) of total and a segment per submittal by state; the card's
+ * closed share counts a Code C as still to close. "Waiting for your action" when any wait on them.
+ */
+export const TypeLedger: Story = {
   play: async (context) => {
     const l = labelsOf(context);
     const card = cardOf(context, lighting);
-    await expect(card.querySelector('[data-code="A"]')).toHaveTextContent("2");
-    await expect(card.querySelector('[data-code="C"]')).toHaveTextContent("1");
-    await expect(card.querySelector('[data-code="B"]')).toBeNull();
-    await expect(card.querySelector('[data-code="open"]')).toHaveTextContent("5");
-    await expect(within(card).getByText(l.closedOf("3", "8"))).toBeVisible();
-    await expect(within(card).getByRole("progressbar", { name: l.closedOf("3", "8") })).toHaveAttribute("aria-valuenow", "3");
+    const ledger = within(card).getByRole("list", { name: l.byType });
+    const rows = within(ledger).getAllByRole("listitem");
+    await expect(rows.map((r) => r.getAttribute("data-type"))).toEqual(["MAR", "SAR"]);
+    await expect(within(rows[0]!).getByText(l.closedOf("2", "6"))).toBeInTheDocument();
+    await expect(within(rows[1]!).getByText(l.closedOf("0", "2"))).toBeInTheDocument();
+    // One segment per submittal, coloured by its state.
+    const segments = [...rows[0]!.querySelectorAll("[data-state]")].map((s) => s.getAttribute("data-state"));
+    await expect(segments).toEqual(["done", "done", "revise", "open", "open", "open"]);
+    await expect(within(card).getByRole("progressbar", { name: l.closedOf("2", "8") })).toHaveAttribute("aria-valuenow", "2");
+    await expect(card.querySelector("[data-package-waiting]")).toHaveTextContent(l.waiting("2", 2));
+    // A Code D counts as closed, in red.
+    const facadeCard = cardOf(context, facade);
+    await expect(within(facadeCard).getByRole("progressbar", { name: l.closedOf("3", "4") })).toHaveAttribute("aria-valuenow", "3");
+    await expect(facadeCard.querySelectorAll('[data-state="replace"]')).toHaveLength(1);
+    // Nothing waits on the viewer there: no pill.
+    await expect(facadeCard.querySelector("[data-package-waiting]")).toBeNull();
+  },
+};
+
+/** A Package with no submittal the viewer sees says so where its ledger would be. */
+export const NoSubmittalsYet: Story = {
+  args: { packages: [pkg(8, { status: "open" })] },
+  play: async (context) => {
+    const card = context.canvasElement.querySelector<HTMLElement>("[data-package-card]")!;
+    await expect(within(card).getByText(labelsOf(context).noSubmittals)).toBeVisible();
+    await expect(card.querySelector("[data-type-ledger]")).toBeNull();
   },
 };
 
@@ -114,11 +148,11 @@ export const Counts: Story = {
  * Electrical submittals they see, never a total of eight; its status is the one word everyone reads.
  */
 export const NarrowedViewer: Story = {
-  args: { packages: [pkg(7, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), counts: { total: 6, open: 6, codes: {} } })] },
+  args: { packages: [pkg(7, { name: b("Bathrooms – Tower 1", "الحمامات – البرج 1"), counts: { total: 6, open: 6, codes: {} }, byType: [ofType("MAR", { open: 6 })] })] },
   play: async (context) => {
     const l = labelsOf(context);
     const card = context.canvasElement.querySelector<HTMLElement>("[data-package-card]")!;
-    await expect(within(card).getByText(l.closedOf("0", "6"))).toBeVisible();
+    await expect(within(card).getAllByText(l.closedOf("0", "6")).length).toBeGreaterThan(0);
     await expect(card).not.toHaveTextContent(/\b8\b/);
     await expect(card.querySelector("[data-package-status]")).toHaveTextContent(l.status.in_progress);
   },
@@ -162,7 +196,13 @@ export const WithToolbar: Story = {
     await expect(links.map((a) => a.textContent)).toEqual([viewSwitchLabels[locale].kanban, viewSwitchLabels[locale].list, viewSwitchLabels[locale].packages]);
     await expect(within(views).getByRole("link", { name: viewSwitchLabels[locale].packages })).toHaveAttribute("aria-current", "page");
     await expect(within(views).getByRole("link", { name: viewSwitchLabels[locale].packages })).toHaveAttribute("href", "?view=packages");
-    await expect(context.canvas.getByRole("button", { name: labelsOf(context).create.trigger })).toBeVisible();
+    await expect(within(context.canvas.getByRole("region", { name: labelsOf(context).toolbar })).getByRole("button", { name: labelsOf(context).create.trigger })).toBeVisible();
+    // The line under the toolbar: when a Package is Done.
+    await expect(context.canvas.getByRole("note")).toHaveTextContent(labelsOf(context).doneRule);
+    // The Open column's "+" opens the same New Package dialog.
+    const plus = columnOf(context, "open").querySelector<HTMLElement>("[data-column-new]")!;
+    await expect(plus).toHaveAccessibleName(labelsOf(context).create.trigger);
+    await expect(columnOf(context, "in_progress").querySelector("[data-column-new]")).toBeNull();
   },
 };
 
@@ -198,7 +238,7 @@ export const NewPackage: Story = {
   args: { onCreate: fn(async () => ({ ok: true as const })) },
   play: async (context) => {
     const l = labelsOf(context).create;
-    await userEvent.click(context.canvas.getByRole("button", { name: l.trigger }));
+    await userEvent.click(within(context.canvas.getByRole("region", { name: labelsOf(context).toolbar })).getByRole("button", { name: l.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.title });
     await userEvent.click(within(dialog).getByRole("button", { name: l.save }));
     await expect(within(dialog).getByRole("alert")).toHaveTextContent(l.required);
@@ -217,7 +257,7 @@ export const NewPackageRefused: Story = {
   play: async (context) => {
     const labels = labelsOf(context);
     const l = labels.create;
-    await userEvent.click(context.canvas.getByRole("button", { name: l.trigger }));
+    await userEvent.click(within(context.canvas.getByRole("region", { name: labelsOf(context).toolbar })).getByRole("button", { name: l.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.title });
     await userEvent.type(within(dialog).getByLabelText(new RegExp(escaped(l.nameEn))), "Kitchens");
     await userEvent.type(within(dialog).getByLabelText(new RegExp(escaped(l.nameAr))), "المطابخ");
@@ -278,6 +318,46 @@ export const FilterByTradeAndCompany: Story = {
     await expect(within(companies).getAllByRole("checkbox")).toHaveLength(2);
     await userEvent.click(within(companies).getByRole("checkbox", { name: nesma.companyName[locale] }));
     await waitFor(() => expect(context.canvas.getByRole("heading", { name: f.noMatchesTitle })).toBeVisible());
+  },
+};
+
+/** "Need my action" (RP-1143): only the Packages with a submittal waiting on the viewer; the × turns it off too. */
+export const NeedMyAction: Story = {
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const f = filterOf(context);
+    await userEvent.click(context.canvas.getByRole("switch", { name: f.mine }));
+    await waitFor(() => expect(shownCards(context)).toEqual([`#${lighting.id}`]));
+    await userEvent.click(context.canvas.getByRole("button", { name: f.clear }));
+    await waitFor(() => expect(shownCards(context)).toHaveLength(4));
+    await expect(context.canvas.getByRole("switch", { name: f.mine })).not.toBeChecked();
+  },
+};
+
+/**
+ * The List of Packages (RP-1143, the kit's List): a row per Package with its progress, its
+ * submittals by Type and by state, what waits on the viewer and its owning Company; never a
+ * Target, a creator or a receiver. The name opens its page; the layout is kept with the filters.
+ */
+export const ListOfPackages: Story = {
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const l = labelsOf(context);
+    const locale = storyLocale(context);
+    await userEvent.click(context.canvas.getByRole("radio", { name: l.layout.list }));
+    const table = within(await context.canvas.findByRole("region", { name: l.list.table }));
+    const headers = table.getAllByRole("columnheader").map((h) => h.textContent);
+    await expect(headers).toEqual(expect.arrayContaining([l.list.number, l.list.name, l.list.progress, "MAR", "SAR", l.list.state.done, l.list.state.replace, l.list.state.revise, l.list.state.open, l.list.waiting, l.list.owner]));
+    await expect(context.canvas.queryByRole("region", { name: l.board })).toBeNull();
+    const row = context.canvasElement.querySelector<HTMLElement>(`[data-package-row="${lighting.id}"]`)!;
+    await expect(within(row).getByRole("link", { name: lighting.name[locale] })).toHaveAttribute("href", `#${lighting.id}`);
+    await expect(row.querySelector('td[data-state="revise"]')).toHaveTextContent("1");
+    await expect(row.querySelector("[data-package-waiting]")).toHaveTextContent("2");
+    await expect(within(row).getByText(lighting.owner.companyName[locale])).toBeVisible();
+    // Back to the board; the layout never counts as a filter.
+    await expect(context.canvas.queryByRole("button", { name: filterOf(context).clear })).toBeNull();
+    await userEvent.click(context.canvas.getByRole("radio", { name: l.layout.board }));
+    await expect(await context.canvas.findByRole("region", { name: l.board })).toBeVisible();
   },
 };
 

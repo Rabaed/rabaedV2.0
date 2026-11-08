@@ -42,6 +42,42 @@ export const packageTrade = z.object({ id: z.uuid(), code: z.string(), name: bil
 export type PackageTrade = z.infer<typeof packageTrade>;
 
 /**
+ * Where a submittal of a Package stands, as its colours show it (RP-1143, the kit's segmented
+ * progress): `done` closed at an outcome that counts towards Done (Code A or B), `replace`
+ * closed at one that offers a replacement (Code D, which also counts), `revise` closed at one
+ * that offers a Revision (Code C, which waits for it), `open` not closed yet. Read from its
+ * Type's outcome set on the Project, never from fixed codes, as Done reads them.
+ */
+export const packageItemStates = ["done", "replace", "revise", "open"] as const;
+export const packageItemState = z.enum(packageItemStates);
+export type PackageItemState = z.infer<typeof packageItemState>;
+
+const count = z.number().int().nonnegative();
+
+/** One Type's submittals in a Package as the viewer sees them (RP-1143, the card's Type ledger): of those they see only (RP-641). */
+export const packageTypeCounts = z
+  .object({
+    typeId: z.uuid(),
+    /** MAR, SAR, DAR… */
+    code: z.string(),
+    name: bilingualText,
+    total: count,
+    done: count,
+    replace: count,
+    revise: count,
+    open: count,
+  })
+  .refine((t) => t.done + t.replace + t.revise + t.open === t.total, { message: "A Type's counts add up to its total." });
+export type PackageTypeCounts = z.infer<typeof packageTypeCounts>;
+
+/** A Package's states summed over its Types; `closed` is what counts towards Done (done and replace). */
+export function packageStateTotals(byType: readonly PackageTypeCounts[]) {
+  const sum = (key: "total" | PackageItemState) => byType.reduce((n, t) => n + t[key], 0);
+  const totals = { total: sum("total"), done: sum("done"), replace: sum("replace"), revise: sum("revise"), open: sum("open") };
+  return { ...totals, closed: totals.done + totals.replace };
+}
+
+/**
  * A Package as the board shows it (RP-641): what every Member who sees it reads. Its
  * status comes from all its submittals, one word for everyone (spec RP-616 "Status");
  * its counts from the ones the viewer sees.
@@ -61,6 +97,10 @@ export const packageSummary = z.object({
    */
   trades: z.array(packageTrade),
   counts: packageCounts,
+  /** The same submittals by Type (RP-1143), in order of the Type's code; a Type the viewer sees none of is absent. */
+  byType: z.array(packageTypeCounts),
+  /** How many of them wait on the viewer now (Need My Action's `waiting`): the card's "waiting for your action". */
+  waiting: count,
 });
 export type PackageSummary = z.infer<typeof packageSummary>;
 

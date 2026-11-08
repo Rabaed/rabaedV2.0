@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import type { Locale, PackageItemState } from "@rabaed/domain";
 import type { PackagePageLabels } from "../components/packages/package-page.tsx";
 import type { PackagesBoardLabels } from "../components/packages/packages-board.tsx";
 import { workItemListLabels } from "./views.ts";
@@ -62,6 +62,12 @@ const refusalsAr = {
   nothing_to_submit: "لم يبقَ ما يُقدَّم.",
 };
 
+// Each state's name (RP-1143): the page's tiles and tabs, the List's columns.
+export const packageStateLabels: Record<Locale, Record<PackageItemState, string>> = {
+  en: { done: "Closed A/B", replace: "Code D", revise: "Code C", open: "Still open" },
+  ar: { done: "مغلقة A/B", replace: "Code D", revise: "Code C", open: "ما زالت مفتوحة" },
+};
+
 export const packagePageLabels: Record<Locale, PackagePageLabels> = {
   en: {
     back: "Back",
@@ -70,8 +76,11 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     ownedBy: "Owned by",
     progress: "Progress",
     closedOf: (closed, total) => `${closed} of ${total} closed`,
-    code: (code) => `Code ${code}`,
-    stillOpen: "Still open",
+    state: packageStateLabels.en,
+    byType: "By Type",
+    clearType: "Clear",
+    tabs: { label: "Show submittals", waiting: "Waiting for you", all: "All" },
+    nothingHere: "No submittals here.",
     submittals: "Submittals",
     empty: "No submittals in this Package yet.",
     done: "Done: every latest submittal in it has closed at Code A, B or D.",
@@ -98,7 +107,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
       confirm: "Delete Package",
     },
     addItems: {
-      trigger: "Add items",
+      trigger: "Add submittals",
       title: "Add submittals",
       description: "Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.",
       search: "Search",
@@ -144,8 +153,11 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
     ownedBy: "المالك",
     progress: "التقدم",
     closedOf: (closed, total) => `${closed} من ${total} مغلقة`,
-    code: (code) => `Code ${code}`,
-    stillOpen: "ما زالت مفتوحة",
+    state: packageStateLabels.ar,
+    byType: "حسب النوع",
+    clearType: "مسح",
+    tabs: { label: "عرض التقديمات", waiting: "بانتظارك", all: "الكل" },
+    nothingHere: "لا توجد تقديمات هنا.",
     submittals: "الاعتمادات",
     empty: "لا توجد اعتمادات في هذه الحزمة بعد.",
     done: "منجزة: أُغلق كل اعتماد أخير فيها بالرمز A أو B أو D.",
@@ -172,7 +184,7 @@ export const packagePageLabels: Record<Locale, PackagePageLabels> = {
       confirm: "حذف الحزمة",
     },
     addItems: {
-      trigger: "إضافة عناصر",
+      trigger: "إضافة تقديمات",
       title: "إضافة اعتمادات",
       description: "اعتمادات شركتك: المسودات، وما في المراجعة الداخلية، وما قُدِّم. لا يمكن إضافة اعتماد موجود في حزمة أخرى.",
       search: "بحث",
@@ -221,9 +233,24 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
     status: packagePageLabels.en.status,
     noPackages: "No Packages",
     ownedBy: packagePageLabels.en.ownedBy,
-    code: packagePageLabels.en.code,
-    stillOpen: packagePageLabels.en.stillOpen,
     closedOf: packagePageLabels.en.closedOf,
+    doneRule: "A Package is Done once every latest submittal in it has closed at Code A, B or D. A Code C waits for its Revision.",
+    byType: "By Type",
+    noSubmittals: "No submittals yet",
+    waiting: (n, count) => (count === 1 ? "1 waiting for your action" : `${n} waiting for your action`),
+    layout: { label: "Show Packages as", board: "Kanban", list: "Table" },
+    list: {
+      table: "Packages list",
+      number: "Package No.",
+      name: "Package",
+      progress: "Progress",
+      items: "Submittals",
+      types: "By Type",
+      states: "By Review Code",
+      state: packageStateLabels.en,
+      waiting: "Waiting for you",
+      owner: "Owning Company",
+    },
     close: "Close",
     cancel: "Cancel",
     refusals: { ...refusalsEn, invalid_name: "Enter both names, in English and in Arabic." },
@@ -253,6 +280,7 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
       hints: { trade: "التخصص", company: "الشركة المالكة" },
       noMatchesTitle: "No Packages match",
       noMatchesBody: "Try another search, or clear the filters.",
+      mine: "Need My Action",
     },
   },
   ar: {
@@ -261,9 +289,24 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
     status: packagePageLabels.ar.status,
     noPackages: "لا توجد حزم",
     ownedBy: packagePageLabels.ar.ownedBy,
-    code: packagePageLabels.ar.code,
-    stillOpen: packagePageLabels.ar.stillOpen,
     closedOf: packagePageLabels.ar.closedOf,
+    doneRule: "تصبح الحزمة منجزة حين يُغلق كل تقديم أخير فيها بالرمز A أو B أو D. الرمز C ينتظر مراجعته التالية.",
+    byType: "حسب النوع",
+    noSubmittals: "لا توجد تقديمات بعد",
+    waiting: (n, count) => (count === 1 ? "تقديم واحد بانتظار إجرائك" : `${n} بانتظار إجرائك`),
+    layout: { label: "عرض الحزم", board: "كانبان", list: "جدول" },
+    list: {
+      table: "قائمة الحزم",
+      number: "رقم الحزمة",
+      name: "الحزمة",
+      progress: "التقدم",
+      items: "التقديمات",
+      types: "حسب النوع",
+      states: "حسب رمز المراجعة",
+      state: packageStateLabels.ar,
+      waiting: "بانتظارك",
+      owner: "الشركة المالكة",
+    },
     close: "إغلاق",
     cancel: "إلغاء",
     refusals: { ...refusalsAr, invalid_name: "أدخل الاسم بالإنجليزية والعربية." },
@@ -293,6 +336,7 @@ export const packagesBoardLabels: Record<Locale, PackagesBoardLabels> = {
       hints: { trade: "Trade", company: "Owning Company" },
       noMatchesTitle: "لا توجد حزم مطابقة",
       noMatchesBody: "جرّب بحثًا آخر، أو امسح التصفية.",
+      mine: "بحاجة لإجرائي",
     },
   },
 };

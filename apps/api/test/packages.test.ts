@@ -786,7 +786,16 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     // The Trades of the items each reads (RP-953), in the Project's order of Trades.
     const projectTrades = (await getPackage(at.c1Pm, pkg.id)).filters.trades;
     const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, sort: expect.any(Number) }));
-    const summary = (counts: PackageSummary["counts"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
+    // By Type and state too (RP-1143, the card's Type ledger): the same items, so the same totals.
+    const mar = (states: { done: number; revise: number; open: number }) => ({
+      typeId: expect.any(String),
+      code: "MAR",
+      name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }),
+      total: states.done + states.revise + states.open,
+      replace: 0,
+      ...states,
+    });
+    const summary = (counts: PackageSummary["counts"], byType: PackageSummary["byType"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
       id: pkg.id,
       projectId: at.projectId,
       number: pkg.number,
@@ -796,19 +805,32 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       owner: { participantId: at.c1ParticipantId, companyName: c1Name },
       trades,
       counts,
+      byType,
+      // Each viewer's own; checked below.
+      waiting: expect.any(Number),
     });
-    const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } });
+    const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } }, [mar({ done: 1, revise: 1, open: 6 })]);
     for (const by of [at.c1Pm, at.k1Manager, owner]) {
       expect(await boardEntry(by)).toEqual(all);
       const p = await getPackage(by, pkg.id);
       expect(p).toMatchObject(all);
       expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems, ...mechanicalItems].sort());
+      // Each row's state, as the counts read it.
+      const states = new Map(p.items.map((i) => [i.id, i.state]));
+      expect([states.get(electricalItems[0]!), states.get(mechanicalItems[0]!)]).toEqual(["done", "revise"]);
+      expect(p.items.filter((i) => i.state === "open")).toHaveLength(6);
+      // "Waiting for you" counts the rows that wait on this viewer, and no other.
+      expect((await boardEntry(by))!.waiting).toBe(p.items.filter((i) => i.waiting).length);
     }
+    // Every open item sits with K1 now: nothing waits on C1's PM.
+    expect((await boardEntry(at.c1Pm))!.waiting).toBe(0);
 
-    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, tradesOf(at.electrical));
+    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, [mar({ done: 1, revise: 0, open: 5 })], tradesOf(at.electrical));
     expect(await boardEntry(k1Electrical)).toEqual(narrowed);
     const p = await getPackage(k1Electrical, pkg.id);
     expect(p).toMatchObject(narrowed);
+    // Never a wait on an item they don't see.
+    expect((await boardEntry(k1Electrical))!.waiting).toBeLessThanOrEqual(p.items.filter((i) => i.waiting).length);
     expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems].sort());
     for (const i of p.items) expect(i.trade.id).toBe(at.electrical);
     // Nothing of the Mechanical items: no id, no Subject, no number, no total of 8.

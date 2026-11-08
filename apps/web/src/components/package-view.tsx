@@ -2,6 +2,7 @@
 
 import {
   listColumnKeys,
+  packageItemStates,
   packageNotReadyReasons,
   watchOutcomeNames,
   workItemSearchParams,
@@ -56,8 +57,11 @@ function usePackageLabels(): PackagePageLabels {
     ownedBy: t("ownedBy"),
     progress: t("progress"),
     closedOf: (closed, total) => t("closedOf", { closed, total }),
-    code: (code) => t("code", { code }),
-    stillOpen: t("stillOpen"),
+    state: keys("state", packageItemStates),
+    byType: t("byType"),
+    clearType: t("clearType"),
+    tabs: keys("tabs", ["label", "waiting", "all"] as const),
+    nothingHere: t("nothingHere"),
     submittals: t("submittals"),
     empty: t("empty"),
     done: t("done"),

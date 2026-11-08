@@ -18,6 +18,10 @@ export type PackagesFilter = {
   trade: string[];
   /** Owning Companies, by their Participant's id. */
   company: string[];
+  /** "Need my action" (RP-1143): only the Packages with a submittal waiting on the viewer. */
+  mine?: boolean;
+  /** How the Packages show (RP-1143): the board, or the List of Packages. Not a filter, kept with it in the URL. */
+  layout?: "list";
 };
 
 /** The owning Companies the view offers, by Participant, each with its Company name only (V14). */
@@ -29,7 +33,8 @@ export function filterPackages(packages: readonly PackageSummary[], filter: Pack
     (p) =>
       matchesSearch(filter.q, [p.number, p.name.en, p.name.ar]) &&
       (filter.trade.length === 0 || p.trades.some((t) => filter.trade.includes(t.id))) &&
-      (filter.company.length === 0 || filter.company.includes(p.owner.participantId)),
+      (filter.company.length === 0 || filter.company.includes(p.owner.participantId)) &&
+      (!filter.mine || p.waiting > 0),
   );
 }
 
@@ -55,7 +60,13 @@ const ids = (raw: string | undefined) => (raw ?? "").split(",").filter((v) => z.
 export function packagesFilterFromSearchParams(params: URLSearchParams | Record<string, string | string[] | undefined>): PackagesFilter {
   const get = (key: string) => (params instanceof URLSearchParams ? (params.get(key) ?? undefined) : [params[key]].flat()[0]);
   const q = get("q")?.trim();
-  return { ...(q ? { q } : {}), trade: ids(get("trade")), company: ids(get("company")) };
+  return {
+    ...(q ? { q } : {}),
+    trade: ids(get("trade")),
+    company: ids(get("company")),
+    ...(get("mine") === "1" ? { mine: true } : {}),
+    ...(get("layout") === "list" ? { layout: "list" as const } : {}),
+  };
 }
 
 /** The Packages view's URL query for `filter`, with `view=packages`. */
@@ -64,5 +75,7 @@ export function packagesFilterSearchParams(filter: PackagesFilter): URLSearchPar
   if (filter.q) params.set("q", filter.q);
   if (filter.trade.length > 0) params.set("trade", filter.trade.join(","));
   if (filter.company.length > 0) params.set("company", filter.company.join(","));
+  if (filter.mine) params.set("mine", "1");
+  if (filter.layout === "list") params.set("layout", "list");
   return params;
 }
