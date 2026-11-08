@@ -294,7 +294,10 @@ describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
     const { source } = await closedAtB("Held", [{ comment: "Held" }]);
     const own = await call<{ id: string; type: string; actor_member_id: string }>(
       c1Pm,
-      sql`select id, type, actor_member_id from work_item_event where work_item_id = ${source}::uuid and type = 'assigned'`,
+      // The actor through app.event_actor_members (RP-1139), which gives C1 its own Members' ids.
+      sql`select e.id, e.type, am.actor_member_id from work_item_event e
+        join app.event_actor_members(array(select x.id from work_item_event x where x.work_item_id = ${source}::uuid)) am on am.event_id = e.id
+        where e.work_item_id = ${source}::uuid and e.type = 'assigned'`,
     );
     const assigned = own.find((e) => e.actor_member_id === c1Pm);
     expect(assigned, "C1's PM reads their own assignment").toMatchObject({ type: "assigned", actor_member_id: c1Pm });
