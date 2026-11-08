@@ -11,6 +11,7 @@ import {
   type NotificationEmailContent,
   type NotificationEmailKind,
   type ParticipantInvitationEmail,
+  type ParticipantWithdrawnEmail,
   type StepAgeReportItem,
   type StepAgeReportWeeks,
 } from "@rabaed/domain";
@@ -42,6 +43,11 @@ export interface EmailTemplateValues {
    * invitation before accepting, and the link to their Company's Projects, where they accept or decline.
    */
   "participant-invitation": Omit<ParticipantInvitationEmail, "to" | "language"> & { link: string };
+  /**
+   * The Member's Company was withdrawn from a Project (RP-952, ADR 0028): the Project and its Host
+   * Company, never who withdrew it, and the link to their Company's Projects.
+   */
+  "participant-withdrawn": Omit<ParticipantWithdrawnEmail, "to" | "language"> & { link: string };
   /** A Step reached the Member or their Step Pool. */
   "notification-step-reached": NotificationEmailValues;
   /** Something happened on an item the Member watches. */
@@ -226,6 +232,35 @@ const participantInvitationTemplates: { "participant-invitation": Template<Email
           paragraphs: [
             [`${host} invites your Company to take part in ${project} on Rabaed as ${role}.`],
             ["Your Company joins the Project only if you accept. Open your Company's invitations to accept or decline:"],
+            [{ ltr: url, link: true }],
+          ],
+          signOff: signOff.en,
+        };
+  },
+};
+
+// A Participant's withdrawal (RP-952, ADR 0028; visibility.md "A Participant's withdrawal"), to its
+// Company's Authorized Person and Project Members only. It names the Project and the Host Company,
+// never the person who withdrew it.
+const participantWithdrawnTemplates: { "participant-withdrawn": Template<EmailTemplateValues["participant-withdrawn"]> } = {
+  "participant-withdrawn": (locale, { projectName, hostCompanyName, link }) => {
+    const url = webLink(link);
+    const [project, host] = [projectName[locale], hostCompanyName[locale]];
+    return locale === "ar"
+      ? {
+          subject: `لم تعد شركتكم مشاركة في ${project} على ربائد`,
+          paragraphs: [
+            [`سحبت ${host} شركتكم من ${project} على ربائد، فلم تعد شركتكم مشاركة فيه.`],
+            ["أُلغيت البنود المفتوحة التي رفعتها شركتكم في المشروع. لا تعود شركتكم إليه إلا بدعوة جديدة. مشاريع شركتكم:"],
+            [{ ltr: url, link: true }],
+          ],
+          signOff: signOff.ar,
+        }
+      : {
+          subject: `Your Company no longer takes part in ${project} on Rabaed`,
+          paragraphs: [
+            [`${host} withdrew your Company from ${project} on Rabaed, so your Company no longer takes part in it.`],
+            ["The open items your Company raised there were cancelled. Your Company comes back only through a new invitation. Your Company's Projects:"],
             [{ ltr: url, link: true }],
           ],
           signOff: signOff.en,
@@ -459,6 +494,7 @@ const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = {
   ...adminTemplates,
   ...passwordResetTemplates,
   ...participantInvitationTemplates,
+  ...participantWithdrawnTemplates,
   ...notificationTemplates,
   ...digestTemplates,
   ...reportTemplates,

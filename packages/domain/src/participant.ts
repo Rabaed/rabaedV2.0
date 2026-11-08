@@ -56,6 +56,47 @@ export interface ParticipantInvitationEmail {
 }
 
 /**
+ * What withdrawing a Participant will do, for the Host Company's Project Admin to confirm (RP-952,
+ * ADR 0028): counts only. The items are those it raised that left Draft (its Drafts are Cancelled
+ * too, but no other Company ever saw them, so they are not counted); the Steps are those it holds on
+ * other Companies' items.
+ */
+export const participantWithdrawalPreview = z.object({
+  itemsToCancel: z.number().int().nonnegative(),
+  stepsToVacate: z.number().int().nonnegative(),
+});
+export type ParticipantWithdrawalPreview = z.infer<typeof participantWithdrawalPreview>;
+
+/**
+ * A Project's open Participant-level Vacancies, for the Host Company's Project Admins (RP-952): the
+ * role each waits for and since when. The item only when the Admin sees it; otherwise null, as the
+ * Handover list does (RP-511).
+ */
+export const projectVacancies = z.object({
+  vacancies: z.array(
+    z.object({
+      id: z.uuid(),
+      item: z.object({ id: z.uuid(), documentNumber: z.string().nullable(), title: z.string() }).nullable(),
+      projectRole,
+      vacantSince: z.iso.datetime(),
+    }),
+  ),
+});
+export type ProjectVacancies = z.infer<typeof projectVacancies>;
+
+/**
+ * The email of a Participant's withdrawal (RP-952), from the worker's outbox handler to the mailer: to
+ * its Company's Authorized Person or one of its Project Members, naming the Project and its Host
+ * Company, never who withdrew it.
+ */
+export interface ParticipantWithdrawnEmail {
+  to: string;
+  language: Locale;
+  projectName: BilingualText;
+  hostCompanyName: BilingualText;
+}
+
+/**
  * A CR number a Project Admin invited that wasn't on Rabaed, for Rabaed to
  * onboard, open or converted: seen only through Rabaed Admin (V9, ADR 0009).
  */

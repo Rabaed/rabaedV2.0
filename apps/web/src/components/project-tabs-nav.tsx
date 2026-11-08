@@ -9,7 +9,7 @@ import { Link, usePathname } from "@/i18n/navigation";
 import { projectTabHref, projectTabOf } from "@/lib/new-item-route";
 
 /**
- * The Project tabs (RP-346, RP-406): Dashboard, Submittals, Activity and Settings always,
+ * The Project tabs (RP-346, RP-406, RP-1142): Dashboard, Submittals and Settings always,
  * and a Module's tab only when the Project has a Work Item Type in it. The New page is under
  * the tab of the Module it raises in (`?module=`), so a New Snag is under the Snag List (RP-1179).
  */

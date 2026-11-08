@@ -105,7 +105,7 @@ const setTrade = (by: Member, trade: VisibilityGrant) =>
 const ofPackage = async (by: Member, id: string) => (await notifications(by)).filter((n) => n.kind === "package_submitted" && n.package.id === id);
 /** `by`'s notifications about any of `items`. */
 const aboutItems = async (by: Member, items: string[]) =>
-  (await notifications(by)).filter((n) => n.kind !== "package_submitted" && items.includes(n.workItemId));
+  (await notifications(by)).filter((n) => n.workItemId !== null && items.includes(n.workItemId));
 
 beforeAll(async () => {
   await addSendBackType(migrator, TYPE, { en: "Package notification submittal", ar: "اعتماد إشعار الحزمة" }, schema);

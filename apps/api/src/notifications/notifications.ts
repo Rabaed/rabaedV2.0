@@ -17,7 +17,9 @@ import { sql } from "kysely";
 // what they may see now. Another Company appears by its name only (V14). A
 // Package Submit's (RP-643) names its Package, and counts only the submittals the
 // Member sees now, through app.notification_package; it is shown only while
-// that is at least one.
+// that is at least one. A withdrawal notice (RP-952) is about the Project its
+// Member's Company was withdrawn from, which they no longer see: its Project and
+// Host Company come from app.withdrawal_notice, their own notice's only.
 //
 // RP-1153 adds, each through the same RLS: the Project (the Member's own, project
 // RLS), whether a "Step reached" came to their Step Pool and still waits there
@@ -50,6 +52,7 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       project_id: string;
       project_code: string;
       project_name: BilingualText;
+      host_company_name: BilingualText | null;
       step_name: BilingualText | null;
       pool: boolean | null;
       pool_waiting: boolean | null;
@@ -67,7 +70,8 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
         select * from notification order by created_at desc, id desc limit ${LIMIT}
       )
       select n.id, n.kind, n.work_item_id, w.document_number, w.title, w.revision_no,
-        p.id as project_id, p.code as project_code, p.name as project_name,
+        n.project_id, coalesce(p.code, wn.project_code) as project_code, coalesce(p.name, wn.project_name) as project_name,
+        wn.host_company_name,
         s.name as step_name,
         sp.pool, sp.waiting as pool_waiting,
         n.event_type, tr.label as transition_label,
@@ -79,7 +83,9 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
         k.package_id, k.seq as package_seq, k.name as package_name, k.company_name as package_company_name, k.item_count,
         n.created_at, n.read_at
       from latest n
-      join project p on p.id = n.project_id
+      -- The Project through its RLS; a withdrawal notice's through app.withdrawal_notice (RP-952).
+      left join project p on p.id = n.project_id
+      left join lateral app.withdrawal_notice(n.id) wn on n.kind = 'participant_withdrawn'
       left join work_item w on w.id = n.work_item_id
       left join work_item_type wt on wt.id = w.work_item_type_id
       left join workflow_step s on s.id = n.step_id
@@ -110,6 +116,9 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
           createdAt: r.created_at.toISOString(),
           readAt: r.read_at?.toISOString() ?? null,
         };
+        if (r.kind === "participant_withdrawn") {
+          return { ...common, kind: r.kind, workItemId: null, step: null, pool: null, event: null, hostCompany: { legalName: r.host_company_name! } };
+        }
         if (r.kind === "package_submitted") {
           return {
             ...common,

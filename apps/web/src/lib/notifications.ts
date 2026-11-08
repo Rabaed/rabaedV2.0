@@ -15,6 +15,8 @@ const isCancel = (e: NonNullable<Notification["event"]>) => e.type === "cancelle
 /** What happened, in `locale`: a message key of `notifications.what` and its values. */
 export function whatHappened(n: Notification, locale: Locale): WhatHappened {
   if (n.kind === "package_submitted") return { key: "packageSubmitted", values: { company: n.package.companyName[locale], count: n.package.count, n: String(n.package.count) } };
+  // The Host Company that withdrew the Member's Company (RP-952), never the person.
+  if (n.kind === "participant_withdrawn") return { key: "participantWithdrawn", values: { company: n.hostCompany.legalName[locale] } };
   if (n.kind === "record_ready") return { key: "recordReady", values: {} };
   if (n.kind === "step_reached") return { key: n.pool ? "reachedPool" : "reached", values: { step: n.step?.name[locale] ?? "" } };
   const e = n.event;
@@ -35,6 +37,7 @@ export function whatHappened(n: Notification, locale: Locale): WhatHappened {
 /** The icon and tone of a notification's kind. */
 export function notificationLook(n: Notification): { icon: IconName; tone: NotificationTone } {
   if (n.kind === "package_submitted") return { icon: "package", tone: "info" };
+  if (n.kind === "participant_withdrawn") return { icon: "circle-x", tone: "neutral" };
   if (n.kind === "record_ready") return { icon: "file-download", tone: "success" };
   // eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon names, not copy
   if (n.kind === "step_reached") return n.pool ? { icon: "users", tone: "brand" } : { icon: "user-check", tone: "brand" };
@@ -47,8 +50,9 @@ export function notificationLook(n: Notification): { icon: IconName; tone: Notif
   return { icon: "send", tone: "info" };
 }
 
-/** Where a notification opens: its item, or its Package. */
-export const notificationHref = (n: Notification): string => (n.kind === "package_submitted" ? `/packages/${n.package.id}` : `/work-items/${n.workItemId}`);
+/** Where a notification opens: its item, its Package, or (a withdrawal, whose Project the Member no longer sees) their Company's Projects. */
+export const notificationHref = (n: Notification): string =>
+  n.kind === "package_submitted" ? `/packages/${n.package.id}` : n.kind === "participant_withdrawn" ? "/participants" : `/work-items/${n.workItemId}`;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

@@ -33,6 +33,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Daily email digest
 - [ ] Password reset emails
 - [ ] Participant Invitation emails
+- [ ] Participant withdrawn notices
 - [ ] Need My Action
 - [ ] Watch
 - [ ] Working Copy
