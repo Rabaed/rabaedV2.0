@@ -6,9 +6,17 @@ import type { Db } from "../src/client.ts";
 // id column `role` may SELECT must be on MEMBER_ID_ALLOW with the reason no other Company reads it; every entry must
 // still name one. Run at seam 2 as the app role (packages/db/test/rp-1258-visibility-rls.test.ts) and at seam 1 as
 // the role the api's own pool connects as (apps/api/test/rp-1258-visibility.test.ts).
+//
+// What it covers: Member id columns the role reads directly through its grants, on tables and views. Not what it
+// doesn't: a Member id inside a jsonb value (an answer's field times' `by`, ADR 0012; an admin_reassigned event's
+// handover from_member_id and to_member_id, internal to the holding Participant), nor what security definer app.*
+// functions return, which the RP-1166 id sweep covers (id-sweep.ts).
 
-/** A column `role` may SELECT that holds a Member's id; `column` is null for a view, which is reported whole. */
-export type ReadableMemberId = { table: string; column: string | null };
+/**
+ * A column `role` may SELECT that holds a Member's id. A view is reported whole: `column` null, with `columns` its
+ * columns in order, for the list MEMBER_ID_ALLOW pins.
+ */
+export type ReadableMemberId = { table: string; column: string | null; columns?: string[] };
 
 /**
  * Every Member id column `role` may SELECT in `public`: named `member_id` or `*_member_id`, or under a foreign key to
@@ -18,8 +26,8 @@ export type ReadableMemberId = { table: string; column: string | null };
  * it can't be told by its name.
  */
 export async function readableMemberIdColumns(db: Db, role: string): Promise<ReadableMemberId[]> {
-  const { rows } = await sql<ReadableMemberId>`
-    select c.relname as "table", a.attname as "column"
+  const { rows } = await sql<{ table: string; column: string | null; columns: string[] | null }>`
+    select c.relname::text as "table", a.attname::text as "column", null::text[] as columns
     from pg_catalog.pg_class c
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
     join pg_catalog.pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
@@ -32,18 +40,23 @@ export async function readableMemberIdColumns(db: Db, role: string): Promise<Rea
         ))
       and pg_catalog.has_column_privilege(${role}, c.oid, a.attnum, 'SELECT')
     union all
-    select c.relname, null
+    select c.relname::text, null, array(
+        select a.attname::text from pg_catalog.pg_attribute a
+        where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped order by a.attnum)
     from pg_catalog.pg_class c
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public' and c.relkind in ('v', 'm')
       and pg_catalog.has_any_column_privilege(${role}, c.oid, 'SELECT')
     order by 1, 2
   `.execute(db);
-  return rows;
+  return rows.map((r) => (r.columns === null ? { table: r.table, column: r.column } : { table: r.table, column: null, columns: r.columns }));
 }
 
-/** An allowed Member id column, as `table.column` (a view: its name alone), with the reason no other Company reads it (V14). */
-export type MemberIdAllow = { column: string; reason: string };
+/**
+ * An allowed Member id column, as `table.column`, with the reason no other Company reads it (V14). A view is allowed
+ * by its name alone, with `columns` pinned: the reason was checked against those columns, so any change fails.
+ */
+export type MemberIdAllow = { column: string; reason: string; columns?: readonly string[] };
 
 const OWN_MEMBER = "own Member's rows only (RLS member_id = app.current_member_id())";
 const OWN_PARTICIPANT = "own Participant's rows only (RLS participant_id in app.current_participant_ids())";
@@ -90,8 +103,12 @@ export const MEMBER_ID_ALLOW: readonly MemberIdAllow[] = [
     reason: "own Participant's rows only; a Project Admin also reads the Participant-wide rows, where it is null",
   },
   { column: "work_item_watch.member_id", reason: `${OWN_MEMBER}, on their own Projects` },
-  { column: "work_item_dimension_value_seen", reason: "a view of work_item_id, project_id, dimension_id, dimension_value_id: no Member id" },
-  { column: "work_item_scope_seen", reason: "a view of work_item_id, project_id, scope_id: no Member id" },
+  {
+    column: "work_item_dimension_value_seen",
+    reason: "a view of its item, Project, Dimension and value: no Member id",
+    columns: ["work_item_id", "project_id", "dimension_id", "dimension_value_id"],
+  },
+  { column: "work_item_scope_seen", reason: "a view of its item, Project and Scope: no Member id", columns: ["work_item_id", "project_id", "scope_id"] },
 ];
 
 const ALLOW_FILE = "packages/db/test-support/member-id-grants.ts";
@@ -114,10 +131,27 @@ export function memberIdGrantProblems(readable: readonly ReadableMemberId[], all
           `${name} is a Member id column the app role may SELECT, and it is not on MEMBER_ID_ALLOW: revoke it from the app role, or add it to MEMBER_ID_ALLOW in ${ALLOW_FILE} with the reason no other Company reads it (visibility.md V14)`,
         ];
   });
+  const entries = new Map(allow.map((a) => [a.column, a]));
+  const pins = readable.flatMap((r) => {
+    const entry = entries.get(allowKey(r));
+    if (entry === undefined) return [];
+    if (r.column !== null) {
+      return entry.columns === undefined ? [] : [`MEMBER_ID_ALLOW's entry ${entry.column} pins columns, but it is a column, not a view: remove them`];
+    }
+    const actual = r.columns ?? [];
+    if (entry.columns === undefined) {
+      return [`${entry.column} is a view on MEMBER_ID_ALLOW with no pinned columns: pin them (columns: [...]) so a column added later is caught`];
+    }
+    return actual.join(",") === entry.columns.join(",")
+      ? []
+      : [
+          `${entry.column}'s columns are now (${actual.join(", ")}), not the (${entry.columns.join(", ")}) MEMBER_ID_ALLOW pins: re-check the view for Member ids, then pin its columns again`,
+        ];
+  });
   const stale = allow
     .filter((a) => !found.has(a.column))
     .map((a) => `MEMBER_ID_ALLOW names ${a.column}, which the app role can't SELECT (or is gone): remove the entry`);
   const blank = allow.filter((a) => a.reason.trim() === "").map((a) => `MEMBER_ID_ALLOW's entry ${a.column} gives no reason`);
   const twice = allow.filter((a, i) => allow.findIndex((b) => b.column === a.column) !== i).map((a) => `MEMBER_ID_ALLOW names ${a.column} twice`);
-  return [...unlisted, ...stale, ...blank, ...twice];
+  return [...unlisted, ...pins, ...stale, ...blank, ...twice];
 }
