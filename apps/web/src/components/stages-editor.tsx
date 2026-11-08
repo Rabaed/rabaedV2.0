@@ -32,7 +32,7 @@ export function StagesEditor({ projectId, moduleKey, moduleName, stages, canEdit
   const path = `/projects/${projectId}/modules/${moduleKey}/stages`;
 
   const refusal = (error: string) =>
-    refusalMessage(t, { invalid_name: "invalidName", invalid_stage: "invalidStage", stage_exists: "exists", invalid_order: "invalidOrder", stage_in_use: "inUse" }, error);
+    refusalMessage(t, { invalid_name: "invalidName", invalid_stage: "invalidStage", stage_exists: "exists", invalid_order: "invalidOrder", stage_in_use: "inUse", last_cancelled_stage: "lastCancelled" }, error);
 
   async function run(call: Promise<Awaited<ReturnType<typeof setupCall>>>, done: string) {
     const res = await call;

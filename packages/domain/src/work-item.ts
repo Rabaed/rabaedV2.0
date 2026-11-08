@@ -80,6 +80,13 @@ export const stageCategories = ["draft", "in_progress", "closed_positive", "clos
 export const isOpenStageCategory = (category: (typeof stageCategories)[number]) =>
   category === "draft" || category === "in_progress";
 
+/**
+ * The Step Age a page shows for an item: none once it is closed or cancelled, since it no longer ages.
+ * A cancelled item reads its Cancelled Stage from its outcome, whatever Step it stopped at (RP-1263).
+ */
+export const shownStepAgeWeeks = (item: { stage: { category: (typeof stageCategories)[number] }; stepAgeWeeks: number | null }): number | null =>
+  isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null;
+
 const stage = z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) });
 
 /** A Trade or Location as a Work Item shows it. */

@@ -3,6 +3,7 @@ import {
   formatNumber,
   inspectionsInSubmittals,
   isOpenStageCategory,
+  shownStepAgeWeeks,
   moduleNames,
   moduleTabPaths,
   stepAgeLabel,
@@ -357,7 +358,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               map={workflowMap}
               locale={locale}
               documentNumber={item.documentNumber}
-              stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
+              stepAgeWeeks={shownStepAgeWeeks(item)}
             />
           )}
         </div>
