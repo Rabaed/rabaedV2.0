@@ -13,6 +13,13 @@ import { join, resolve } from "node:path";
 // names the file, line and kind, never the token. Tests build their fake tokens
 // from parts at run time (check-secrets.test.ts), so no file holds one.
 //
+// RP-1185: a private key's header is a finding only with its base64 body after it,
+// so a pattern or doc that names the header passes. Any other line that has to look
+// like a secret (and is not one) ends in a comment saying so and why: the text
+// "not a secret:" after //, # or <!--, then the reason. The line is skipped in
+// every mode. A mark with no reason is a finding itself, so a reviewer always has
+// the reason in front of them.
+//
 // Usage: node scripts/check-secrets.ts --staged          the lines staged for the next commit
 //        node scripts/check-secrets.ts --range <revs>    the lines those commits add (base..head)
 //        node scripts/check-secrets.ts --tree            every tracked text file, whole
@@ -31,6 +38,16 @@ export interface SecretRule {
 // `jiraToken = loadJiraToken()` and `token = someLongIdentifier` pass.
 const assignedToken = (length: number) => String.raw`["']?(?=[A-Za-z_=-]*[0-9])[A-Za-z0-9_=-]{${length},}(?![A-Za-z0-9_=(-])`;
 const assigned = (name: string, length = 20) => new RegExp(String.raw`${name}["']?\s*[:=]\s*${assignedToken(length)}`, "gi");
+
+const PEM_HEADER = /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY(?: BLOCK)?-----/;
+// A line of a key's body: 40 or more base64 characters (PEM lines are 64, PGP's 76), perhaps behind a comment mark.
+const PEM_BODY_LINE = /^\s*(?:(?:\/\/|#|\*|>)\s?)?[A-Za-z0-9+/]{40,}={0,2}\s*$/;
+// Between a header and the body: blank lines and "Name: value" lines (Proc-Type, DEK-Info, PGP's Version).
+const PEM_PREAMBLE_LINE = /^\s*(?:(?:\/\/|#|\*|>)\s?)?(?:[A-Za-z-]+:.*)?$/;
+const PEM_PREAMBLE_MAX = 4;
+
+// A line that says it is no secret, with the reason after the colon, so a reviewer sees it in the diff.
+const NOT_A_SECRET = /(?:\/\/|#|<!--)\s*not a secret:(.*)$/i;
 
 // AWS documents its example credentials; they end in EXAMPLE or EXAMPLEKEY.
 const awsExample = (match: string) => /EXAMPLE(?:KEY)?$/.test(match);
@@ -55,12 +72,17 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "sendgrid-api-key", description: "SendGrid API key", pattern: /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g },
   // A literal Basic header, as in a copied curl: base64 of email:token. Code builds it at run time.
   { id: "basic-auth-header", description: "Basic auth header with credentials", pattern: /Authorization:\s*Basic\s+[A-Za-z0-9+/]{16,}/gi },
-  // PEM keys (RSA, EC, OPENSSH, ENCRYPTED, none) and PGP key blocks.
-  { id: "private-key", description: "private key", pattern: /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY(?: BLOCK)?-----/g },
+  // PEM keys (RSA, EC, OPENSSH, ENCRYPTED, none) and PGP key blocks. The header alone is only text (a pattern in a PEM
+  // reader, a doc): a key is the header with its base64 body. Here the body follows on the same line, as in an env value
+  // or JSON string with "\n" escapes; a block over several lines is read by scanLines.
+  { id: "private-key", description: "private key", pattern: new RegExp(String.raw`${PEM_HEADER.source}(?:\s|\\r|\\n)*[A-Za-z0-9+/]{40,}`, "g") },
 ];
 /* eslint-enable rabaed/no-avoid-terms */
 
-const descriptions = new Map(SECRET_RULES.map((rule) => [rule.id, rule.description]));
+/** The finding for a line that says it is not a secret but gives no reason. */
+const UNEXPLAINED_EXEMPTION = "secret-exemption-without-reason";
+
+const descriptions = new Map([...SECRET_RULES.map((rule) => [rule.id, rule.description] as const), [UNEXPLAINED_EXEMPTION, "\"not a secret\" comment without a reason"] as const]);
 
 /** The rule ids that match a line, each once; a match the rule allows does not hide a later one. */
 export function findSecrets(line: string): string[] {
@@ -155,14 +177,58 @@ export function addedLines(diff: string): AddedLine[] {
   return added;
 }
 
+/** The reason a line gives for not being a secret: undefined with no such comment, "" when it has no reason. */
+export function exemptionReason(text: string): string | undefined {
+  const match = NOT_A_SECRET.exec(text);
+  if (!match) return undefined;
+  const reason = match[1]!.replace(/(?:-->|\*\/)\s*$/, "").trim();
+  return /[\p{L}\p{N}]/u.test(reason) ? reason : "";
+}
+
+/** Whether base64 body lines come after the header at `index`, on the next lines of the file (after the key's own header lines). */
+function hasBodyAfter(lines: AddedLine[], index: number): boolean {
+  let previous = lines[index]!.line;
+  let preamble = 0;
+  for (const next of lines.slice(index + 1)) {
+    if (next.line !== previous + 1) return false;
+    if (PEM_BODY_LINE.test(next.text)) return true;
+    if (!PEM_PREAMBLE_LINE.test(next.text) || ++preamble > PEM_PREAMBLE_MAX) return false;
+    previous = next.line;
+  }
+  return false;
+}
+
+/**
+ * The findings in one file's lines (in order, each with its line number). A line marked "not a secret: <reason>" is skipped,
+ * in every mode; a mark with no reason is a finding of its own. A key header is a finding only with its body after it.
+ */
+export function scanLines(file: string, lines: AddedLine[]): Finding[] {
+  return lines.flatMap((entry, index) => {
+    const reason = exemptionReason(entry.text);
+    if (reason) return [];
+    const rules = new Set(findSecrets(entry.text));
+    if (PEM_HEADER.test(entry.text) && hasBodyAfter(lines, index)) rules.add("private-key");
+    if (reason === "") rules.add(UNEXPLAINED_EXEMPTION);
+    return [...rules].map((rule) => ({ file, line: entry.line, rule }));
+  });
+}
+
 /** The findings on the lines a diff adds. */
 export function scanDiff(diff: string): Finding[] {
-  return addedLines(diff).flatMap(({ file, line, text }) => findSecrets(text).map((rule) => ({ file, line, rule })));
+  // A key block is read within a run: added lines of one file on consecutive line numbers.
+  const runs: AddedLine[][] = [];
+  for (const added of addedLines(diff)) {
+    const run = runs[runs.length - 1];
+    const last = run?.[run.length - 1];
+    if (run && last && last.file === added.file && last.line + 1 === added.line) run.push(added);
+    else runs.push([added]);
+  }
+  return runs.flatMap((run) => scanLines(run[0]!.file, run));
 }
 
 /** The findings in a whole file's text. */
 export function scanText(file: string, text: string): Finding[] {
-  return text.split("\n").flatMap((line, index) => findSecrets(line).map((rule) => ({ file, line: index + 1, rule })));
+  return scanLines(file, text.split("\n").map((line, index) => ({ file, line: index + 1, text: line })));
 }
 
 /** One finding as a line of output: never the token itself. */
