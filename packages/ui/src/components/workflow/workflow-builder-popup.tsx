@@ -168,6 +168,11 @@ export function ActionPopup({ transition, screens, mode, route, locale, labels, 
               </Field>
             </div>
           )}
+          {/* RP-1145 (the kit's wf2/forms.jsx, line 54): every Transition is signed on confirm (ADR 0017), so every pop-up says so. */}
+          <p className="flex items-center gap-2 rounded-md bg-warning-tint px-3 py-2 text-[13px] font-medium text-warning-fg">
+            <Icon name="signature" size={16} className="shrink-0" />
+            {labels.signatureApplied}
+          </p>
         </div>
         <DialogFooter className={cn(referenceModalFooter, "items-center")}>
           {missing.length > 0 && <span className="me-auto text-[12.5px] text-muted">{labels.requiredMissing(missing.map((f) => f.label[locale]).join(locale === "ar" ? "، " : ", "))}</span>}

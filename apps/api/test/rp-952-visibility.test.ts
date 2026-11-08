@@ -4,7 +4,8 @@
 // that left Draft are Cancelled by Rabaed, its Drafts too (with no Record), and its Steps on other
 // Companies' items become Vacancies that every reader reads as "Waiting for a new ‹role›", never its
 // Company. Its Authorized Person and Project Members are told, in the bell and by email, naming the
-// Host Company; nobody else is. Its Members lose the Project.
+// Host Company; nobody else is. Its Members lose the Project. PR 2 (RP-952-6, RP-952-7): the Vacancies
+// list names each Vacancy's Step, and only the Host Company's Project Admin reads the withdrawn Participants.
 //
 // The describes run in order on one Project: the refusals, then C2's withdrawal, then K1's.
 // The Type is test-only, on the test Workflow with a Send Back and a Cancel (addSendBackType).
@@ -14,6 +15,7 @@ import {
   workItemSearchParams,
   type NotificationList,
   type ParticipantWithdrawnEmail,
+  type ProjectParticipants,
   type ProjectVacancies,
   type WorkItemBoard,
   type WorkItemDetail,
@@ -24,7 +26,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { all, bilingual, memberOnProject, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { all, bilingual, memberOnProject, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
 const urls = testDatabaseUrls();
@@ -324,5 +326,77 @@ describe("scenario RP-952-5: after the withdrawal, K1's Members lose the Project
   it("refuses a second withdrawal as for an id that does not exist", async () => {
     await expectHidden(withdraw(c1.caller, participant.k1)); // not hidden-from: a refused command; the first withdrawal of K1 is RP-952-3's
     await expectHidden(preview(c1.caller, participant.k1)); // not hidden-from: nobody may preview a withdrawn Participant; C1 previewed K1 in RP-952-3
+  });
+});
+
+describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and nothing more of an item the Admin doesn't see", () => {
+  // Every Vacancy row carries its Step (the schema requires it, and the test checks it), so the row's id stands for it.
+  const steps = async (by: Caller) => (await readById<ProjectVacancies>(`/v1/projects/${projectId}/vacancies`)(by)).flatMap((v) => v.vacancies.map((x) => ({ id: x.id })));
+  const theRow = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/vacancies`), 200)).json() as ProjectVacancies;
+
+  it("gives C1's Project Admin the Step it waits at, and nobody else", async () => {
+    const [row] = (await theRow(c1.caller)).vacancies;
+    expect(row!.step).toEqual({ name: { en: "Consultant review", ar: "مراجعة الاستشاري" } });
+    await expectHiddenFrom({
+      read: steps,
+      target: row!.id,
+      seenBy: c1.caller,
+      hiddenFrom: [c1Engineer, c1Pm, c2.caller, k1.caller, otherAdmin],
+      name: nameOf,
+      label: "the Vacancy's Step",
+    });
+  });
+
+  it("to the Admin once they don't see the item: its Step and role only, never its id, Document Number, Subject or a Company", async () => {
+    // C1's Project Admin narrows their own Visibility to a Location the item is not at; then puts it back.
+    const elsewhere = (await ok(c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BZ", name: bilingual("Building Z"), parentId: null }), 201)).json().id as string;
+    const mine = `/v1/participants/${participant.c1}/members/${c1.company.authorizedPerson.id}/visibility`;
+    const seen = (await theRow(c1.caller)).vacancies.find((v) => v.item?.id === vacantItem)!;
+    await ok(c1.caller.request("PUT", mine, { trade: all, location: only(elsewhere) }));
+    try {
+      const unseen = (await theRow(c1.caller)).vacancies.find((v) => v.id === seen.id)!;
+      expect(unseen).toEqual({ id: seen.id, item: null, projectRole: seen.projectRole, step: seen.step, vacantSince: seen.vacantSince });
+      expect(JSON.stringify(unseen)).not.toContain(vacantItem); // not hidden-from: the same Admin read the item's id in this row a moment ago (`seen`)
+    } finally {
+      await ok(c1.caller.request("PUT", mine, { trade: all, location: all }));
+    }
+  });
+});
+
+describe("scenario RP-952-7: only the Host Company's Project Admin reads the withdrawn Participants", () => {
+  const participants = (by: Caller) => readById<ProjectParticipants>(`/v1/projects/${projectId}/participants`)(by);
+
+  it("lists C2 and K1 as withdrawn, with their Company and Project Role, to C1's Project Admin and nobody else", async () => {
+    const [list] = await participants(c1.caller);
+    expect(list!.canWithdraw).toBe(true);
+    expect(list!.withdrawn.map((w) => [w.id, w.projectRole.baseRole]).sort()).toEqual(
+      [
+        [participant.c2, "contractor"],
+        [participant.k1, "consultant"],
+      ].sort(),
+    );
+    for (const w of list!.withdrawn) expect(w.withdrawnAt).toEqual(expect.any(String));
+    for (const p of [participant.c2, participant.k1]) {
+      await expectHiddenFrom({
+        read: async (by) => (await participants(by)).flatMap((l) => l.withdrawn),
+        target: p,
+        seenBy: c1.caller,
+        hiddenFrom: [c1Engineer, c1Pm],
+        name: nameOf,
+        label: "the withdrawn Participants",
+      });
+    }
+    // The withdrawn Companies and another Project's Admin read no list of the Project at all.
+    await expectHiddenFrom({ read: participants, idOf: () => projectId, target: projectId, seenBy: c1Engineer, hiddenFrom: [c2.caller, k1.caller, otherAdmin], name: nameOf, label: "the Participants" });
+  });
+
+  it("never lists them among the active Participants, and tells only the Host Company's Project Admin they may withdraw", async () => {
+    const [admin] = await participants(c1.caller);
+    // Positive control: the active list holds C1 itself.
+    expect(admin!.participants.map((p) => p.id)).toEqual([participant.c1]);
+    for (const by of [c1Engineer, c1Pm]) {
+      const [list] = await participants(by);
+      expect(list!.canWithdraw, nameOf(by)).toBe(false);
+    }
   });
 });

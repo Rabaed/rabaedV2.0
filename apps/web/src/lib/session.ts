@@ -36,6 +36,7 @@ import type {
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  ProjectVacancies,
   RaisableTypes,
   RegisterImport,
   RegisterImportFields,
@@ -113,6 +114,11 @@ export const readProject = cache((projectId: string): Promise<ApiRead<ProjectSum
 /** The Participants of one of the signed-in Member's Projects; null if it isn't one of theirs. */
 export function getProjectParticipants(projectId: string): Promise<ProjectParticipants | null> {
   return apiGet<ProjectParticipants>(`/v1/projects/${encodeURIComponent(projectId)}/participants`);
+}
+
+/** A Project's Vacancies (RP-952), for the Host Company's Project Admins; null for anyone else. */
+export function getProjectVacancies(projectId: string): Promise<ProjectVacancies | null> {
+  return apiGet<ProjectVacancies>(`/v1/projects/${encodeURIComponent(projectId)}/vacancies`);
 }
 
 /** The signed-in Member's own Company's Participants they may look into (Company Projects, V15). */

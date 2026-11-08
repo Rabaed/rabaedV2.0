@@ -75,6 +75,11 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
       from app.project_participants(${projectId}::uuid) p
       join participant pt on pt.id = p.participant_id
     `.execute(trx);
+    // The withdrawn ones, and whether the viewer may withdraw, for the Host Company's Project Admins only (RP-952-7).
+    const { rows: host } = await sql<{ is_host_admin: boolean }>`select app.is_host_admin(${projectId}::uuid) as is_host_admin`.execute(trx);
+    const { rows: withdrawn } = await sql<{ participant_id: string; legal_name: BilingualText; base_role: BaseRole; role_name: BilingualText; withdrawn_at: Date }>`
+      select participant_id, legal_name, base_role, role_name, withdrawn_at from app.project_withdrawn_participants(${projectId}::uuid)
+    `.execute(trx);
     return {
       hostCompany: { legalName: onProject.hostName },
       participants: rows.map((r) => ({
@@ -85,6 +90,13 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
         ordinal: r.ordinal,
         codeLocked: r.code_locked,
         isOwnCompany: r.own,
+      })),
+      canWithdraw: host[0]!.is_host_admin,
+      withdrawn: withdrawn.map((r) => ({
+        id: r.participant_id,
+        company: { legalName: r.legal_name },
+        projectRole: { baseRole: r.base_role, name: r.role_name },
+        withdrawnAt: r.withdrawn_at.toISOString(),
       })),
     };
   });
@@ -443,12 +455,15 @@ export function listProjectVacancies(db: Db, memberId: string, projectId: string
       base_role: BaseRole;
       role_name: BilingualText;
       vacant_since: Date;
+      step_name: BilingualText;
     }>`select * from app.project_vacancies(${projectId}::uuid)`.execute(trx);
     return {
       vacancies: rows.map((r) => ({
         id: r.step_assignment_id,
         item: r.work_item_id === null ? null : { id: r.work_item_id, documentNumber: r.document_number, title: r.title! },
         projectRole: { baseRole: r.base_role, name: r.role_name },
+        // The Step, even of an item the Admin doesn't see: the owner's answer to Q3 (RP-952-6).
+        step: { name: r.step_name },
         vacantSince: r.vacant_since.toISOString(),
       })),
     };

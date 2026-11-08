@@ -18,7 +18,6 @@ import {
 import { useEffect, useId, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
-import { Avatar } from "../data/avatar.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { EmptyState } from "../feedback/states.tsx";
@@ -32,7 +31,7 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overla
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot, StagePill } from "../status/stage-pill.tsx";
-import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { HeaderBadge, OwnerMark, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
@@ -95,6 +94,8 @@ export type SnagListLabels = {
   noNumber: string;
   /** After a Step's name, when nobody in the viewer's Company has picked it up. */
   notPickedUp: string;
+  /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›". */
+  waitingFor: (role: string) => string;
   /** A short Review Code's pill, e.g. "Code B". */
   code: (code: string) => string;
   /** A thumbnail's text, e.g. "Photo of Cable tray not bonded". */
@@ -685,13 +686,7 @@ function With({ row, locale, labels, small }: { row: WorkItemRow; locale: Locale
   if (!owner) return dash;
   return (
     <span className="flex min-w-0 items-center gap-2">
-      {owner.kind === "pool" ? (
-        <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-          <Icon name={poolIcon} size={13} />
-        </span>
-      ) : (
-        <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" solid decorative />
-      )}
+      <OwnerMark owner={owner} solid />
       <span className={cn("truncate", small && "text-caption text-text-secondary")}>{owner.name}</span>
     </span>
   );

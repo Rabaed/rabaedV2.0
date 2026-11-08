@@ -36,6 +36,7 @@ const labels: SnagExportLabels = {
   stepAgeWeeks: "Step Age (weeks)",
   raisedManually: "By hand",
   notPickedUp: "Not picked up",
+  waitingFor: (role: string) => `Waiting for a new ${role}`,
   noNumber: "No number yet",
   fileName: "Snag List",
 };

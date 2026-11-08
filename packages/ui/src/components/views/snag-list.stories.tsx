@@ -61,6 +61,7 @@ const labels: Record<Locale, SnagListLabels> = {
     showGroup: (stage) => `Show ${stage}`,
     noNumber: "No number yet",
     notPickedUp: "Not picked up",
+    waitingFor: (role: string) => `Waiting for a new ${role}`,
     code: (code) => `Code ${code}`,
     photoOf: (subject) => `Photo of ${subject}`,
     board: "Kanban",
@@ -130,6 +131,7 @@ const labels: Record<Locale, SnagListLabels> = {
     showGroup: (stage) => `إظهار ${stage}`,
     noNumber: "بلا رقم بعد",
     notPickedUp: "لم تُستلَم",
+    waitingFor: (role: string) => `بانتظار ${role} الجديد`,
     code: (code) => `Code ${code}`,
     photoOf: (subject) => `صورة ${subject}`,
     board: "كانبان",
@@ -562,8 +564,8 @@ const bulkLabels: Record<Locale, SnagBulkLabels> = {
 };
 
 const exportLabels: Record<Locale, SnagExportLabels> = {
-  en: { documentNumber: "Document Number", subject: "Subject", type: "Type", trade: "Trade", location: "Location", stage: "Stage", raisedFrom: "Raised from", with: "With", stepAgeWeeks: "Step Age (weeks)", raisedManually: "By hand", notPickedUp: "Not picked up", noNumber: "No number yet", fileName: "Snag List" },
-  ar: { documentNumber: "رقم المستند", subject: "الموضوع", type: "النوع", trade: "التخصص", location: "الموقع", stage: "المرحلة", raisedFrom: "المصدر", with: "لدى", stepAgeWeeks: "عمر الخطوة (بالأسابيع)", raisedManually: "يدويًا", notPickedUp: "لم تُستلَم", noNumber: "بلا رقم بعد", fileName: "قائمة الملاحظات" },
+  en: { documentNumber: "Document Number", subject: "Subject", type: "Type", trade: "Trade", location: "Location", stage: "Stage", raisedFrom: "Raised from", with: "With", stepAgeWeeks: "Step Age (weeks)", raisedManually: "By hand", notPickedUp: "Not picked up", waitingFor: (role: string) => `Waiting for a new ${role}`, noNumber: "No number yet", fileName: "Snag List" },
+  ar: { documentNumber: "رقم المستند", subject: "الموضوع", type: "النوع", trade: "التخصص", location: "الموقع", stage: "المرحلة", raisedFrom: "المصدر", with: "لدى", stepAgeWeeks: "عمر الخطوة (بالأسابيع)", raisedManually: "يدويًا", notPickedUp: "لم تُستلَم", waitingFor: (role: string) => `بانتظار ${role} الجديد`, noNumber: "بلا رقم بعد", fileName: "قائمة الملاحظات" },
 };
 
 const ali = { memberId: "00000000-0000-4000-8000-0000000000d1", name: b("Ali Sonour", "علي سنور") };

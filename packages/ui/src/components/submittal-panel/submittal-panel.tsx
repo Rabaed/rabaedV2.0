@@ -8,7 +8,7 @@ import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
-import { PoolMark } from "../views/kanban-card.tsx";
+import { PoolMark, vacancyIcon } from "../views/kanban-card.tsx";
 import { submittalPanelKey, type SubmittalPanelWith } from "./panel-model.ts";
 import { submittalPanelNormalWidth } from "./panel-preferences.ts";
 
@@ -436,6 +436,12 @@ export function SubmittalPanelFacts({ locale, labels, with: holder, stepAgeWeeks
               {holder.names.join(listSeparator[locale])}
               {holder.more > 0 && ` ${labels.more(formatNumber(holder.more, locale))}`}
             </span>
+          </>
+        ) : holder.kind === "vacancy" ? (
+          // A Vacancy (RP-952): the role it waits for, with a pool's dashed mark; never a Company.
+          <>
+            <PoolMark icon={vacancyIcon} />
+            <span className="min-w-0">{holder.name}</span>
           </>
         ) : (
           // Another Company, or "Owner review": its name only, no avatar.

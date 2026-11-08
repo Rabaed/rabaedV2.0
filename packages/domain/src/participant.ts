@@ -69,8 +69,9 @@ export type ParticipantWithdrawalPreview = z.infer<typeof participantWithdrawalP
 
 /**
  * A Project's open Participant-level Vacancies, for the Host Company's Project Admins (RP-952): the
- * role each waits for and since when. The item only when the Admin sees it; otherwise null, as the
- * Handover list does (RP-511).
+ * role each waits for, the Step it waits at and since when. The item only when the Admin sees it;
+ * otherwise null, as the Handover list does (RP-511): then only the Step and the role (the owner's
+ * answer to Q3, scenario RP-952-6).
  */
 export const projectVacancies = z.object({
   vacancies: z.array(
@@ -78,6 +79,7 @@ export const projectVacancies = z.object({
       id: z.uuid(),
       item: z.object({ id: z.uuid(), documentNumber: z.string().nullable(), title: z.string() }).nullable(),
       projectRole,
+      step: z.object({ name: bilingualText }),
       vacantSince: z.iso.datetime(),
     }),
   ),
@@ -140,11 +142,27 @@ export type ProjectParticipant = z.infer<typeof projectParticipant>;
 /** The Company that hosts a Project: the one other Company every Participant sees by name (V15). */
 const hostCompany = z.object({ legalName: bilingualText });
 
+/** A Participant the Host Company's Project Admin withdrew (RP-952, ADR 0028): no undo. */
+export const withdrawnParticipant = z.object({
+  id: z.uuid(),
+  company: z.object({ legalName: bilingualText }),
+  projectRole,
+  withdrawnAt: z.iso.datetime(),
+});
+export type WithdrawnParticipant = z.infer<typeof withdrawnParticipant>;
+
 /**
  * The Participants of a Project the viewer may list: every one for its Project
- * Admins, otherwise only the viewer's own Company's (V15).
+ * Admins, otherwise only the viewer's own Company's (V15). `canWithdraw` and the
+ * `withdrawn` ones only for the Host Company's Project Admins (RP-952-7): to anyone
+ * else false and empty. Their own Company is the Host Company, so its row is never withdrawn.
  */
-export const projectParticipants = z.object({ hostCompany, participants: z.array(projectParticipant) });
+export const projectParticipants = z.object({
+  hostCompany,
+  participants: z.array(projectParticipant),
+  canWithdraw: z.boolean(),
+  withdrawn: z.array(withdrawnParticipant),
+});
 export type ProjectParticipants = z.infer<typeof projectParticipants>;
 
 /** One Project the Authorized Person's Company takes part in (GET /v1/participants). */

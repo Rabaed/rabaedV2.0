@@ -23,6 +23,8 @@ export type SnagExportLabels = {
   raisedManually: string;
   /** After a Step's name, when nobody in the viewer's Company has picked it up. */
   notPickedUp: string;
+  /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›". */
+  waitingFor: (role: string) => string;
   noNumber: string;
   /** The file's name, without an extension, e.g. "Snag List". */
   fileName: string;
