@@ -35,7 +35,7 @@ const copy = {
 function labelsFor(locale: Locale): VacanciesListLabels {
   const en = locale === "en";
   return {
-    description: en ? "Steps whose Company was withdrawn. Each waits for a new Participant in its Project Role." : "خطوات سُحبت شركتها. تنتظر كل منها مشاركًا جديدًا بدورها.",
+    description: en ? "Steps whose Participant was withdrawn. Each waits for a new Participant in its Project Role." : "خطوات سُحبت شركتها. تنتظر كل منها مشاركًا جديدًا بدورها.",
     waitingFor: (role) => (en ? `Waiting for a new ${role}` : `بانتظار ${role} الجديد`),
     hiddenItem: (step, project) => (en ? `An item at ${step} on ${project}` : `عنصر عند ${step} في ${project}`),
     noNumber: en ? "No number yet" : "بلا رقم بعد",

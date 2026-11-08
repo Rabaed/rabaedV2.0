@@ -44,7 +44,7 @@ export function VacanciesList({ vacancies, projectName, now, locale, labels, hre
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">{labels.description}</p>
-      <ul className="divide-y divide-border-subtle rounded-md border border-border" data-testid="vacancies">
+      <ul className="max-h-[480px] divide-y divide-border-subtle overflow-y-auto rounded-md border border-border" data-testid="vacancies">
         {vacancies.map((v) => {
           const step = v.step.name[locale];
           return (

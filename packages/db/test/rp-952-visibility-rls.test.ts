@@ -542,8 +542,8 @@ describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and n
 
   it("gives both of C1's Project Admins the Step, and nobody else", async () => {
     await expectHiddenFrom({
-      // The Vacancies that carry their Step, by the Vacancy's id.
-      read: async (as) => (await vacancySteps(as)).filter((v) => v.step_name !== null).map((v) => ({ id: v.id })),
+      // Every Vacancy row carries its Step (the test after this one checks it), so the row's id stands for it.
+      read: async (as) => (await vacancySteps(as)).map((v) => ({ id: v.id })),
       target: assignment,
       seenBy: [c1.ap, c1Admin],
       hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap],
@@ -562,9 +562,9 @@ describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and n
 
 describe("scenario RP-952-7: only the Host Company's Project Admins read the withdrawn Participants", () => {
   const withdrawn = (as: string) =>
-    call<{ participant_id: string; company_id: string; base_role: string; withdrawn_at: Date }>(
+    call<{ participant_id: string; base_role: string; withdrawn_at: Date }>(
       as,
-      sql`select participant_id, company_id, base_role, withdrawn_at from app.project_withdrawn_participants(${projectId}::uuid)`,
+      sql`select participant_id, base_role, withdrawn_at from app.project_withdrawn_participants(${projectId}::uuid)`,
     );
   const active = (as: string) => call<{ participant_id: string }>(as, sql`select participant_id from app.project_participants(${projectId}::uuid)`);
 
@@ -580,10 +580,10 @@ describe("scenario RP-952-7: only the Host Company's Project Admins read the wit
       });
     }
     const rows = await withdrawn(c1.ap);
-    expect(rows.map((r) => [r.participant_id, r.company_id, r.base_role]).sort()).toEqual(
+    expect(rows.map((r) => [r.participant_id, r.base_role]).sort()).toEqual(
       [
-        [participant.c2, c2.id, "contractor"],
-        [participant.k1, k1.id, "consultant"],
+        [participant.c2, "contractor"],
+        [participant.k1, "consultant"],
       ].sort(),
     );
     for (const r of rows) expect(r.withdrawn_at).toBeInstanceOf(Date);

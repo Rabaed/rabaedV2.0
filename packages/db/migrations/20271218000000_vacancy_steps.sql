@@ -46,7 +46,7 @@ revoke all on function app.project_vacancies(uuid) from public;
 grant execute on function app.project_vacancies(uuid) to rabaed_app;
 
 create function app.project_withdrawn_participants(p_project_id uuid)
-  returns table (participant_id uuid, company_id uuid, legal_name jsonb, base_role text, role_name jsonb, withdrawn_at timestamptz)
+  returns table (participant_id uuid, legal_name jsonb, base_role text, role_name jsonb, withdrawn_at timestamptz)
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
@@ -56,7 +56,7 @@ create function app.project_withdrawn_participants(p_project_id uuid)
         return;
       end if;
       return query
-        select p.id, co.id, co.legal_name, r.base_role, r.name, p.withdrawn_at
+        select p.id, co.legal_name, r.base_role, r.name, p.withdrawn_at
         from participant p
         join company co on co.id = p.company_id
         join project_role r on r.id = p.project_role_id

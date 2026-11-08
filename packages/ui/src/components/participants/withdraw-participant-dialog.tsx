@@ -19,7 +19,7 @@ export type WithdrawParticipantDialogLabels = {
   countsInclude: string;
   /** "This can't be undone." */
   noUndo: string;
-  /** "The Company can come back only through a new invitation." */
+  /** "The Company can come back only through a new Invitation." */
   comeBack: string;
   /** While the counts load. */
   counting: string;

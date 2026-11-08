@@ -65,7 +65,7 @@ export function WithdrawParticipantButton({
 
   return (
     <>
-      <Button variant="secondary" size="sm" aria-label={t("buttonLabel", { company: companyName })} onClick={() => void start()}>
+      <Button variant="ghost" size="sm" className="border border-border" aria-label={t("buttonLabel", { company: companyName })} onClick={() => void start()}>
         {t("button")}
       </Button>
       <WithdrawParticipantDialog

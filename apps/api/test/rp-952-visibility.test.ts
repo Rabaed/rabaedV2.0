@@ -330,9 +330,8 @@ describe("scenario RP-952-5: after the withdrawal, K1's Members lose the Project
 });
 
 describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and nothing more of an item the Admin doesn't see", () => {
-  // The Vacancies that carry their Step, by the Vacancy's id.
-  const steps = async (by: Caller) =>
-    (await readById<ProjectVacancies>(`/v1/projects/${projectId}/vacancies`)(by)).flatMap((v) => v.vacancies.filter((x) => x.step?.name).map((x) => ({ id: x.id })));
+  // Every Vacancy row carries its Step (the schema requires it, and the test checks it), so the row's id stands for it.
+  const steps = async (by: Caller) => (await readById<ProjectVacancies>(`/v1/projects/${projectId}/vacancies`)(by)).flatMap((v) => v.vacancies.map((x) => ({ id: x.id })));
   const theRow = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/vacancies`), 200)).json() as ProjectVacancies;
 
   it("gives C1's Project Admin the Step it waits at, and nobody else", async () => {

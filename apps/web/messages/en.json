@@ -638,7 +638,7 @@
       "stepsToVacate": "{count, plural, one {{n} Step it holds will wait for a new {role}} other {{n} Steps it holds will wait for a new {role}}}",
       "countsInclude": "The counts include items you may not see.",
       "noUndo": "This can't be undone.",
-      "comeBack": "The Company can come back only through a new invitation.",
+      "comeBack": "The Company can come back only through a new Invitation.",
       "counting": "Counting…",
       "cancel": "Cancel",
       "confirm": "Withdraw",
@@ -650,7 +650,7 @@
     },
     "vacancies": {
       "title": "Vacancies",
-      "description": "Steps whose Company was withdrawn. Each waits for a new Participant in its Project Role.",
+      "description": "Steps whose Participant was withdrawn. Each waits for a new Participant in its Project Role.",
       "hiddenItem": "An item at {step} on {project}",
       "empty": "No Step is waiting for a new Participant."
     },

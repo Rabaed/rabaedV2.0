@@ -34,7 +34,7 @@ function labelsFor(locale: Locale): WithdrawParticipantDialogLabels {
       en ? `${n} ${count === 1 ? "Step it holds" : "Steps it holds"} will wait for a new ${role}` : count === 1 ? `خطوة واحدة لديه ستنتظر ${role} الجديد` : `${n} خطوات لديه ستنتظر ${role} الجديد`,
     countsInclude: en ? "The counts include items you may not see." : "تشمل الأعداد عناصر قد لا تراها.",
     noUndo: en ? "This can't be undone." : "لا يمكن التراجع عن هذا.",
-    comeBack: en ? "The Company can come back only through a new invitation." : "لا تعود الشركة إلا بدعوة جديدة.",
+    comeBack: en ? "The Company can come back only through a new Invitation." : "لا تعود الشركة إلا بدعوة جديدة.",
     counting: copy.counting[locale],
     cancel: copy.cancel[locale],
     confirm: copy.confirm[locale],
