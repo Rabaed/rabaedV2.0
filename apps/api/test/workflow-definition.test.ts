@@ -77,8 +77,8 @@ beforeAll(async () => {
   await addSendBackType(migrator, "WFCNL", { en: "Cancel check", ar: "فحص الإلغاء" }, sendBackForm, { withCancel: true, recommendCode: true });
   // A Project's own Workflow copied from the MAR's latest Version by the foreign-Project fixture
   // (RP-1016) is among them, whichever tests ran first: its Code Transitions name the Code Screens,
-  // whose files a Screen may hold (ADR 0024). When the copy lost the Screen, they failed here only
-  // after a file that builds a foreign Project ran first (RP-1257).
+  // whose files a Screen may hold (ADR 0024). While the copy left its Screens out, the publish
+  // checks below failed on it only when a file that builds a foreign Project ran first (RP-1257).
   await buildForeignProject(api, migrator, { code: "WFDFP" });
   versions = (
     await sql<Version>`

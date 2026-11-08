@@ -43,7 +43,7 @@ export async function projectWorkflow(migrator: Db, projectId: string): Promise<
       returning id, key, workflow_version_id
     ), transitions as (
       -- With the Screen each one names (RP-516): its action_form is that Screen's copy, which may hold
-      -- the Screen's files (ADR 0024), and without the pin it reads as an Action Form that may not (RP-1257).
+      -- the Screen's files (ADR 0024); without its Screen it reads as an Action Form, which may not (RP-1257).
       insert into workflow_transition (
         workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications,
         screen_key, screen_version_id)
