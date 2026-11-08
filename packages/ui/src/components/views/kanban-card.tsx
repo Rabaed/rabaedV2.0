@@ -1,7 +1,7 @@
 "use client";
 
 import { stepAgeDots, type Locale, type OutcomeLook } from "@rabaed/domain";
-import { useLayoutEffect, useState, type ElementType, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ElementType, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "../../lib/cn.ts";
 import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
@@ -147,7 +147,7 @@ export const poolIcon: IconName = "users";
  * takes a keyboard stop and sits above the card's link so a pointer reaches it, and a click or Enter on it still
  * opens the card. The tooltip holds exactly the text the card shows, never more (V14).
  */
-function CutText({ text, className }: { text: string; className?: string }) {
+function CutText({ text, cardLink, className }: { text: string; /** The card's own link, which a click or Enter on the text follows. */ cardLink: RefObject<HTMLElement | null>; className?: string }) {
   const [element, setElement] = useState<HTMLSpanElement | null>(null);
   const [cut, setCut] = useState(false);
   useLayoutEffect(() => {
@@ -160,21 +160,22 @@ function CutText({ text, className }: { text: string; className?: string }) {
   }, [element, text]);
   if (!cut) {
     return (
-      <span ref={setElement} className={cn("truncate", className)}>
+      <span ref={setElement} dir="auto" className={cn("truncate", className)}>
         {text}
       </span>
     );
   }
-  const cardLink = (from: HTMLElement) => from.closest("[data-kanban-card]")?.querySelector<HTMLElement>("h3 a");
   return (
-    <Tooltip content={text}>
+    // `dir="auto"`, as the Subject: an English name on an Arabic card is cut at its own end and reads in order.
+    <Tooltip content={<bdi>{text}</bdi>}>
       <span
         ref={setElement}
+        dir="auto"
         tabIndex={0}
-        // The same click on the card's link, modifier keys and all, so a Ctrl-click still opens a new tab.
-        onClick={(event: MouseEvent<HTMLSpanElement>) => cardLink(event.currentTarget)?.dispatchEvent(new globalThis.MouseEvent("click", event.nativeEvent))}
+        // The same click on the card's link, modifier keys and all, so the opener sees a plain click as one.
+        onClick={(event: MouseEvent<HTMLSpanElement>) => cardLink.current?.dispatchEvent(new globalThis.MouseEvent("click", event.nativeEvent))}
         onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
-          if (event.key === "Enter") cardLink(event.currentTarget)?.click();
+          if (event.key === "Enter" && !event.repeat) cardLink.current?.click();
         }}
         className={cn("relative z-10 truncate rounded-xs", focusRing, className)}
       >
@@ -211,6 +212,8 @@ export function KanbanCard({
   className,
 }: KanbanCardProps) {
   const approved = badge?.kind === "outcome" && badge.look === "a";
+  // The card's own link, which a cut text follows on a click or Enter (RP-509).
+  const linkRef = useRef<HTMLElement>(null);
   // 4 weeks or more at its step: the warm border and red dots, no wording (Rabaed shows age only).
   const aged = stepAgeWeeks !== null && stepAgeDots(stepAgeWeeks) >= 4;
   return (
@@ -237,7 +240,7 @@ export function KanbanCard({
           </span>
         )}
         <Icon name="file-text" size={14} className="shrink-0" />
-        {number ? <DocNo value={number} className="font-normal" /> : <CutText text={noNumberLabel} />}
+        {number ? <DocNo value={number} className="font-normal" /> : <CutText text={noNumberLabel} cardLink={linkRef} />}
         <span className="flex-1" />
         {actions && (
           <span className="relative z-10 flex shrink-0 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100 pointer-coarse:opacity-100">
@@ -247,6 +250,7 @@ export function KanbanCard({
       </div>
       <h3 className="mt-1.5 text-[15px] leading-[1.35] font-bold text-text">
         <Link
+          ref={linkRef}
           href={href}
           data-open-id={opener?.id}
           aria-current={open || undefined}
@@ -283,7 +287,7 @@ export function KanbanCard({
       {contractorName !== undefined && (
         <p className="mt-2 flex min-w-0 items-center gap-1.5 text-caption text-muted">
           <Icon name="briefcase" size={14} className="shrink-0" />
-          <CutText text={contractorName} />
+          <CutText text={contractorName} cardLink={linkRef} />
         </p>
       )}
       {place !== undefined && place.length > 0 && (
@@ -307,7 +311,7 @@ export function KanbanCard({
             ) : (
               <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
             )}
-            <CutText text={owner.name} className="text-sm" />
+            <CutText text={owner.name} cardLink={linkRef} className="text-sm" />
           </span>
         )}
         <span className="ms-auto flex shrink-0 items-center gap-2">

@@ -261,11 +261,24 @@ export const InAPackage: Story = {
 };
 
 // A cut text (RP-509): its full text in the shared tooltip, on hover and on keyboard focus; the card stays one line.
-const exactly = (value: string) => new RegExp(`^${value}$`);
-const focusedTooltip = async (trigger: HTMLElement) => {
+const exactly = (value: string) => new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+const tooltipClosed = () => waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+
+/** The text is cut, and shows exactly itself in the tooltip on keyboard focus and on hover; it ends closed. */
+async function expectCutWithTooltip(trigger: HTMLElement, full: string) {
+  // One line with an ellipsis.
+  await expect(trigger.scrollWidth).toBeGreaterThan(trigger.clientWidth);
+  await expect(trigger).toHaveAttribute("tabindex", "0");
   trigger.focus();
-  return screen.findByRole("tooltip");
-};
+  await expect(await screen.findByRole("tooltip")).toHaveTextContent(exactly(full));
+  await expect(trigger).toHaveAccessibleDescription(full);
+  trigger.blur();
+  await tooltipClosed();
+  await userEvent.hover(trigger);
+  await expect(await screen.findByRole("tooltip")).toHaveTextContent(exactly(full));
+  await userEvent.unhover(trigger);
+  await tooltipClosed();
+}
 
 /** A name that fits shows no tooltip and adds no stop to the keyboard's path. */
 export const UncutHolder: Story = {
@@ -275,7 +288,7 @@ export const UncutHolder: Story = {
     await expect(name).not.toHaveAttribute("tabindex");
     await userEvent.hover(name);
     // Past the tooltip's 300ms delay.
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 400));
     await expect(screen.queryByRole("tooltip")).toBeNull();
     await userEvent.unhover(name);
   },
@@ -284,6 +297,7 @@ export const UncutHolder: Story = {
 /**
  * Another Company's long name and a long Contractor line, cut: each shows its full text in the tooltip, on keyboard
  * focus and on hover. Another Company's tooltip is its Company name only, never a person or Step behind it (V5, V14).
+ * A click or Enter on a cut text still opens the card.
  */
 export const CutHolder: Story = {
   args: { variant: "cut" },
@@ -291,40 +305,32 @@ export const CutHolder: Story = {
     const locale = storyLocale(context);
     const c = card(context);
     const holder = within(c).getByText(text.longConsultant[locale]);
-    // One line with an ellipsis.
-    await expect(holder.scrollWidth).toBeGreaterThan(holder.clientWidth);
-    await expect(holder).toHaveAttribute("tabindex", "0");
-    await expect(await focusedTooltip(holder)).toHaveTextContent(exactly(text.longConsultant[locale]));
-    await expect(holder).toHaveAccessibleDescription(text.longConsultant[locale]);
-    holder.blur();
-    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
-    // The Contractor line too, on hover.
-    const contractor = within(c).getByText(text.longContractor[locale]);
-    await expect(contractor.scrollWidth).toBeGreaterThan(contractor.clientWidth);
-    await userEvent.hover(contractor);
-    await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent(exactly(text.longContractor[locale])));
-    await userEvent.unhover(contractor);
-    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
-    // A click on a cut text still opens the card.
+    await expect(holder).toHaveAttribute("dir", "auto");
+    await expectCutWithTooltip(holder, text.longConsultant[locale]);
+    await expectCutWithTooltip(within(c).getByText(text.longContractor[locale]), text.longContractor[locale]);
     const link = within(c).getByRole("link", { name: text.drainage[locale] });
     let opened = 0;
-    link.addEventListener("click", (event) => {
+    const count = (event: Event) => {
       opened += 1;
       event.preventDefault();
-    });
+    };
+    link.addEventListener("click", count);
     await userEvent.click(holder);
     await expect(opened).toBe(1);
+    await userEvent.keyboard("{Enter}");
+    await expect(opened).toBe(2);
+    link.removeEventListener("click", count);
     holder.blur();
+    await userEvent.unhover(holder);
+    await tooltipClosed();
   },
 };
 
-/** My own Company's long unclaimed-Step label, cut: the Pool label in full, nothing more. */
+/** My own Company's long unclaimed-Step label, cut: the Step Pool's label in full, nothing more. */
 export const CutPool: Story = {
   args: { variant: "cutPool" },
   play: async (context) => {
     const label = within(card(context)).getByText(text.longPool[storyLocale(context)]);
-    await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
-    await expect(await focusedTooltip(label)).toHaveTextContent(exactly(text.longPool[storyLocale(context)]));
-    label.blur();
+    await expectCutWithTooltip(label, text.longPool[storyLocale(context)]);
   },
 };
