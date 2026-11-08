@@ -14,8 +14,8 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "../../api/test/support/harness.ts";
-import { RECORD_JOB_LABELS, recordJobLabel } from "../src/documental-records.ts";
 import { buildTower, detail, draft, memberOnProject, ok, take, type Tower } from "../../api/test/support/tower.ts";
+import { RECORD_JOB_LABELS, recordJobLabel } from "../src/documental-records.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
@@ -130,8 +130,8 @@ const actionsOf = (action: string, target: string | null) =>
     .$if(target !== null, (q) => q.where("target_id", "=", target))
     .execute();
 
-// The Monitor's label for each record-job kind (RP-1106). The kinds are written once in SQL
-// (app.record_job_payload_keys, RP-1086), so a kind added there fails here until the Monitor knows it.
+// The Monitor's label for each record-job kind (RP-1106). The kinds are written once in SQL and read
+// through app.record_job_kinds() (RP-1086), so a kind added there fails here until the Monitor knows it.
 describe("the Monitor's record-job labels", () => {
   it("name every kind app.record_job_kinds() lists, and no other", async () => {
     const { rows } = await sql<{ kinds: string[] }>`select app.record_job_kinds() as kinds`.execute(migrator);
@@ -142,6 +142,8 @@ describe("the Monitor's record-job labels", () => {
     expect(recordJobLabel("documental_record")).toBe("record");
     expect(recordJobLabel("documental_record_reproduce")).toBe("reproduce");
     expect(() => recordJobLabel("documental_record_audit")).toThrow(/documental_record_audit/);
+    // A key every object inherits is no kind either.
+    expect(() => recordJobLabel("toString")).toThrow(/toString/);
   });
 });
 
