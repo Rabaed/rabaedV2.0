@@ -28,7 +28,9 @@ export function NotificationItem({ n, now, layout, onOpen }: { n: Notification; 
   const time = timeLabel(new Date(n.createdAt), now, locale);
   const look = notificationLook(n);
   // A Package Submit names its Package: its number (not a Document Number) and name.
-  const [number, subject] = n.kind === "package_submitted" ? [n.package.number, n.package.name[locale]] : [n.documentNumber, n.title];
+  // A withdrawal (RP-952) is about the Project, which the row names already: no number, no Subject.
+  const [number, subject] =
+    n.kind === "package_submitted" ? [n.package.number, n.package.name[locale]] : n.kind === "participant_withdrawn" ? [null, ""] : [n.documentNumber, n.title];
   const full = formatDate(new Date(n.createdAt), locale, { dateStyle: "medium", timeStyle: "short" });
   return (
     <NotificationRow

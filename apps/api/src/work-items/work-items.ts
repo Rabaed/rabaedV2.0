@@ -59,6 +59,7 @@ import {
   type WorkItemOutcome,
   type WorkItemRefField,
   type WorkItemSummary,
+  type WorkItemVacancy,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
@@ -735,6 +736,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       held_by: BilingualText | null;
       holder_name: BilingualText | null;
       pool_names: BilingualText[] | null;
+      vacancy: WorkItemVacancy["projectRole"] | null;
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
       can_save_answers: boolean;
@@ -761,6 +763,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         -- db-mask: app.work_item_holder_unchecked, so app.work_item_holder gives them no holder either).
         raiser.legal_name as raised_by, coalesce(app.with_owner_review(w.id), holder.legal_name) as held_by, m.full_name as holder_name,
         pool.names as pool_names,
+        -- Waiting for a new ‹role› when its holder was withdrawn (RP-952): the role, never the Company.
+        (select jsonb_build_object('baseRole', v.base_role, 'name', v.role_name) from app.work_item_vacancy(w.id) v) as vacancy,
         app.can_save_answers(w.id) as can_save_answers, app.sent_back_for_comment(w.id) as sent_back_for_comment, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
         app.can_create_replacement(w.id) as can_create_replacement,
@@ -860,6 +864,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
             pool: d.pool_names === null ? null : { names: d.pool_names },
           }
         : null,
+      vacancy: d.vacancy ? { projectRole: d.vacancy } : null,
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
       documentalRecord: record[0]!.state,
