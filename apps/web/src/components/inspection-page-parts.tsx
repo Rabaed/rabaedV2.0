@@ -73,7 +73,7 @@ function CountCard({ icon, title, counts, href }: { icon: IconName; title: strin
         <span className="text-sm text-muted">{title}</span>
         <span className="font-semibold">{counts}</span>
       </span>
-      {href && <Icon name="chevron-right" size={18} className="shrink-0 text-muted rtl:rotate-180" />}
+      {href && <Icon name="chevron-right" size={18} className="shrink-0 text-muted" />}
     </>
   );
   const box = "flex min-h-16 items-center gap-3 rounded-lg border border-border bg-surface p-4";

@@ -4,6 +4,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { linkedFromLabels, linksSectionLabels } from "../../storybook/form-engine.ts";
+import { isMirrored } from "../../storybook/mirror.ts";
 import { LinkedFromList } from "./linked-from.tsx";
 import { LinksSection } from "./links-section.tsx";
 
@@ -74,6 +75,9 @@ export const Listed: Story = {
     await expect(opens[0]).toHaveAttribute("href", `#/work-items/${itemId(0)}`);
     await expect(within(opens[0]!).getByText(numbers[0]!)).toHaveAttribute("dir", "ltr");
     await expect(opens[0]).toHaveTextContent(subjects[locale][0]!);
+    // RP-1256: the "opens" arrow is mirrored once in Arabic (Icon does it), not twice.
+    const arrow = opens[0]!.querySelector("svg[class*='arrow-up-right']")!;
+    await expect(isMirrored(arrow)).toBe(locale === "ar");
 
     const hidden = within(list).getByRole("button", { expanded: false });
     await expect(hidden).toHaveTextContent(numbers[1]!);
