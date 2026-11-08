@@ -124,6 +124,8 @@ export type WorkItemListLabels = {
   /** Export's two kinds (RP-409's "what you see" and "the whole table"): "visible columns", "all columns". */
   visibleColumns: string;
   allColumns: string;
+  /** One of Export's choices: "Excel (.xml) — visible columns", from the format's name, its file's extension and the columns. */
+  exportChoice: (format: string, extension: string, columns: string) => string;
   /** The ⋯ menu's row opening the column settings. */
   columnSettingsItem: string;
   /** Back from Export's choices to the menu, where they take its place on a phone. */
@@ -431,11 +433,14 @@ function WorkItemListBody({
   // The ⋯ menu (RP-1141, the kit's `moreMenu()`). Export takes the rows chosen when there are some
   // (the owner's answer, 2026-11-08); its heading counts what the pager counts, so none under a search.
   const total = listTotal(list, query);
-  const exportChoices = ([["excel", "shown"], ["excel", "whole"], ["csv", "shown"], ["csv", "whole"]] as const).map(([format, scope]) => ({
-    key: `${format}:${scope}`,
-    label: `${t(format)} (${format === "csv" ? ".csv" : ".xml"}) — ${t(scope === "shown" ? "visibleColumns" : "allColumns")}`,
-    onSelect: () => void exportRows(format, scope, selected.size > 0 ? selectedRows : loadExportRows!),
-  }));
+  const exportChoices = (allRows: NonNullable<typeof loadExportRows>) =>
+    ([["excel", "shown"], ["excel", "whole"], ["csv", "shown"], ["csv", "whole"]] as const).map(([format, scope]) => ({
+      key: `${format}:${scope}`,
+      label: labels.exportChoice(t(format), format === "csv" ? ".csv" : ".xml", t(scope === "shown" ? "visibleColumns" : "allColumns")),
+      onSelect: () => void exportRows(format, scope, selected.size > 0 ? selectedRows : allRows),
+      // The kit's line between Excel and CSV.
+      separated: format === "csv" && scope === "shown",
+    }));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const moreMenu = board ? (
     moreLinks.length > 0 && <MoreActionsMenu actions={moreLinks} label={t("more")} linkAs={Link} />
@@ -453,7 +458,7 @@ function WorkItemListBody({
                 : total === null
                   ? t("exportHeadingSearch")
                   : labels.exportHeading(n(total), total),
-            choices: exportChoices,
+            choices: exportChoices(loadExportRows),
             busy: exporting,
           }
         }

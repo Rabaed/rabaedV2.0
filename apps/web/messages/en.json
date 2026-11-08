@@ -269,6 +269,7 @@
       "exportHeadingSelected": "Export {n} selected",
       "visibleColumns": "visible columns",
       "allColumns": "all columns",
+      "exportChoice": "{format} ({extension}) — {columns}",
       "columnSettingsItem": "Column settings",
       "back": "Back",
       "wholeTable": {

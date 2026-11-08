@@ -85,6 +85,8 @@ function rowKnown(row: Pick<WorkItemRow, "outcome">): Partial<RowPermissions> {
 function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
+  // "42 submittals", or "42 items" for any other Module.
+  const what = (n: string, count: number) => t(module === "submittals" ? "list.submittals" : "list.items", { n, count });
   const locale = useLocale() as Locale;
   const shared = {
     noNumber: l("noNumber"),
@@ -126,13 +128,14 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       csv: l("csv"),
       excel: l("excel"),
       exportSelected: l("exportSelected"),
-      exported: (n, count, format) => t("list.exported", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
-      exportedCapped: (n, count, format) => t("list.exportedCapped", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
-      exportHeading: (n, count) => t("list.exportHeading", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }) }),
+      exported: (n, count, format) => t("list.exported", { what: what(n, count), format }),
+      exportedCapped: (n, count, format) => t("list.exportedCapped", { what: what(n, count), format }),
+      exportHeading: (n, count) => t("list.exportHeading", { what: what(n, count) }),
       exportHeadingSearch: l(module === "submittals" ? "exportHeadingSearchSubmittals" : "exportHeadingSearchItems"),
       exportHeadingSelected: (n, count) => t("list.exportHeadingSelected", { n, count }),
       visibleColumns: l("visibleColumns"),
       allColumns: l("allColumns"),
+      exportChoice: (format, extension, columns) => t("list.exportChoice", { format, extension, columns }),
       columnSettingsItem: l("columnSettingsItem"),
       back: l("back"),
       wholeTable: Object.fromEntries((["typeName", "location", "creationDate", "submissionDate", "project"] as const).map((key) => [key, t(`list.wholeTable.${key}`)])) as WholeTableLabels,
@@ -160,7 +163,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       page: (page) => t("list.page", { page }),
       pageOf: (page, pages) => t("list.pageOf", { page, pages }),
       // "42 submittals" on the Submittals, as the owner's design has it; "42 items" elsewhere.
-      items: (n, count) => t(module === "submittals" ? "list.submittals" : "list.items", { n, count }),
+      items: (n, count) => what(n, count),
       dashboardFigure: l("dashboardFigure"),
       withinDays: (days, count) => t("list.withinDays", { days, count }),
       level: (n) => t("list.level", { n }),

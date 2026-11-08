@@ -222,7 +222,13 @@ function MoreLink({ action, linkAs: Link }: { action: MoreAction; linkAs: Elemen
 }
 
 /** One of Export's choices, e.g. "CSV (.csv) — visible columns". */
-export type ExportChoice = { key: string; label: string; onSelect: () => void };
+export type ExportChoice = {
+  key: string;
+  label: string;
+  onSelect: () => void;
+  /** A line above it, as the kit's between Excel and CSV. */
+  separated?: boolean;
+};
 
 export type ListMoreMenuProps = {
   /** The button's accessible name and the menu's, e.g. "More actions". */
@@ -295,11 +301,16 @@ export function ListMoreMenu({ label, export: exporting, links = [], linkAs = "a
               type="button"
               disabled={exporting.busy}
               aria-expanded={sub}
-              aria-controls={`${id}-export`}
+              aria-controls={sub ? `${id}-export` : undefined}
               onPointerEnter={(e) => e.pointerType === "mouse" && setSub(true)}
-              // A click opens them (a hover may have already); Enter or Space opens and closes them.
-              onClick={(e) => (e.detail !== 0 ? setSub(true) : sub ? setSub(false) : openChoices())}
+              onClick={(e) => {
+                // A click opens them (a hover may have already); Enter or Space opens and closes them.
+                if (e.detail !== 0) setSub(true);
+                else if (sub) setSub(false);
+                else openChoices();
+              }}
               onKeyDown={(e) => {
+                // The kit's chevron points one way and its choices open the other, so either arrow opens them.
                 if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
                 e.preventDefault();
                 openChoices();
@@ -314,11 +325,14 @@ export function ListMoreMenu({ label, export: exporting, links = [], linkAs = "a
               <Icon name="chevron-right" size={15} className="rtl:-scale-x-100" />
             </button>
           )}
-          {links.map((action) => (
-            <div key={action.key} {...hoverOthers}>
-              <MoreLink action={action} linkAs={linkAs} />
-            </div>
-          ))}
+          {links.length > 0 && (
+            // Named as the Kanban's menu names them (`MoreActionsMenu`).
+            <nav aria-label={label} {...hoverOthers}>
+              {links.map((action) => (
+                <MoreLink key={action.key} action={action} linkAs={linkAs} />
+              ))}
+            </nav>
+          )}
           {columnSettings && (
             <div {...hoverOthers}>
               {(exporting || links.length > 0) && moreSeparator}
@@ -347,10 +361,9 @@ export function ListMoreMenu({ label, export: exporting, links = [], linkAs = "a
             <h2 id={`${id}-export-title`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
               {exporting.heading}
             </h2>
-            {exporting.choices.map((choice, i) => (
+            {exporting.choices.map((choice) => (
               <Fragment key={choice.key}>
-                {/* The kit splits Excel from CSV. */}
-                {i === 2 && moreSeparator}
+                {choice.separated && moreSeparator}
                 <PopoverClose asChild>
                   <button type="button" onClick={choice.onSelect} className={cn(moreItem, "min-h-9")}>
                     {choice.label}

@@ -269,6 +269,7 @@
       "exportHeadingSelected": "تصدير {n} محدد",
       "visibleColumns": "الأعمدة الظاهرة",
       "allColumns": "كل الأعمدة",
+      "exportChoice": "{format} ({extension}) — {columns}",
       "columnSettingsItem": "إعدادات الأعمدة",
       "back": "رجوع",
       "wholeTable": {

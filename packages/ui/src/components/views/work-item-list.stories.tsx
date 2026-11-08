@@ -488,7 +488,7 @@ export const GroupMenuOpen: Story = {
 const openExport = async (context: PlayContext) => {
   await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
   const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
-  await userEvent.click(within(menu).getByRole("button", { name: new RegExp(`^${storyText(context, copy.export)}`) }));
+  await userEvent.click(within(menu).getByRole("button", { name: (name) => name.startsWith(storyText(context, copy.export)) }));
   return menu;
 };
 const exportChoices = [
@@ -544,7 +544,7 @@ export const ExportingUnderASearch: Story = {
   },
 };
 
-/** By keyboard: an arrow on Export opens its choices on the first; Escape goes back to Export, the menu still open. */
+/** By keyboard: the arrow toward Export's choices (they open on the menu's start side) opens them on the first; Escape goes back to Export, the menu still open. */
 export const ExportByKeyboard: Story = {
   parameters: overlay,
   play: async (context) => {
@@ -552,12 +552,29 @@ export const ExportByKeyboard: Story = {
     const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
     const exportRow = within(menu).getByRole("button", { name: storyText(context, copy.export) });
     exportRow.focus();
-    await userEvent.keyboard(storyLocale(context) === "ar" ? "{ArrowLeft}" : "{ArrowRight}");
+    await userEvent.keyboard(storyLocale(context) === "ar" ? "{ArrowRight}" : "{ArrowLeft}");
     await waitFor(() => expect(within(menu).getByRole("button", { name: storyText(context, exportChoices[0]!) })).toHaveFocus());
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(exportRow).toHaveFocus());
     await expect(exportRow).toHaveAttribute("aria-expanded", "false");
     await expect(menu).toBeVisible();
+  },
+};
+
+/** On a phone Export's choices take the menu's place, with a row back to it. Left open for the screenshot. */
+export const ExportOnAPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  play: async (context) => {
+    const menu = await openExport(context);
+    // Hidden while the choices show, so found among the hidden too.
+    const exportRow = within(menu).getByRole("button", { name: storyText(context, copy.export), hidden: true });
+    await expect(exportRow).not.toBeVisible();
+    await expect(within(menu).getByRole("group", { name: storyText(context, b("Export 7 submittals", "تصدير 7 تقديم")) })).toBeVisible();
+    await userEvent.click(within(menu).getByRole("button", { name: storyText(context, b("Back", "رجوع")) }));
+    await waitFor(() => expect(exportRow).toHaveFocus());
+    await expect(within(menu).queryByRole("group")).toBeNull();
+    await userEvent.click(exportRow);
+    await expect(within(menu).getByRole("button", { name: storyText(context, b("Back", "رجوع")) })).toBeVisible();
   },
 };
 
