@@ -109,6 +109,8 @@ export const CI_OWN_FILES: readonly string[] = [
   "scripts/test-timing.ts",
   "scripts/test-titles.ts",
   "scripts/typecheck.ts",
+  // The rule for a verify line that left the unit and seam tests out (RP-1181): the gate imports it.
+  "scripts/verify-docs-only.ts",
   "scripts/verify-gate.ts",
   "scripts/visibility-scenarios.ts",
   "scripts/worktrees-stale.ts",

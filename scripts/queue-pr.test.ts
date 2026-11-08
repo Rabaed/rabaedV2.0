@@ -8,6 +8,7 @@ import { queuePr, queuePrWhenChecksPass, realSeam, staleCopyWarnings, waitForMer
 import { pnpmQueueComment } from "./queue-marker.ts";
 import { BASELINE_BOT_EMAIL } from "./reviewed-label.ts";
 import { baselineMarker, stampLine } from "./verify-gate.ts";
+import { TESTS_SKIPPED_LABEL } from "./verify-docs-only.ts";
 
 // A fake seam for a clean branch; each test overrides what it breaks.
 function fakeSeam(overrides: Partial<QueueSeam> = {}) {
@@ -338,6 +339,36 @@ describe("queuePr", () => {
       expect(text).toContain("no valid stamp");
       expect(text).toContain(fix);
       expect(enqueued).toEqual([]);
+    });
+
+    // RP-1181: the rule is verify-docs-only.ts's; here only that the queue hands it the PR's files.
+    describe("a line that left the unit and seam tests out (RP-1181)", () => {
+      const skippedLine = () => stampLine(`pnpm verify passed on abc1234: lint, typecheck, ${TESTS_SKIPPED_LABEL}.`);
+
+      it("queues it for a PR that changes only files no test reads", () => {
+        const { seam, enqueued } = fakeSeam({ body: skippedLine, changedFiles: () => ["planning/uat/round-0/cases/UX-1.ts"] });
+        expect(queuePr(149, seam).ok).toBe(true);
+        expect(enqueued).toEqual([["PR_node", "abc1234"]]);
+      });
+
+      it("refuses it for a PR that touches code, naming the file", () => {
+        const { seam, enqueued } = fakeSeam({ body: skippedLine, changedFiles: () => ["planning/uat/round-0/cases/UX-1.ts", "apps/api/src/a.ts"] });
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        const text = result.lines.join("\n");
+        expect(text).toContain("left out the unit and seam tests");
+        expect(text).toContain("apps/api/src/a.ts");
+        expect(text).toContain(fix);
+        expect(enqueued).toEqual([]);
+      });
+
+      it("refuses it for a PR that changes a file a test reads", () => {
+        const { seam, enqueued } = fakeSeam({ body: skippedLine, changedFiles: () => ["planning/uat/round-0/test-cases.json"] });
+        const result = queuePr(149, seam);
+        expect(result.ok).toBe(false);
+        expect(result.lines.join("\n")).toContain("test-cases.json is read by a test");
+        expect(enqueued).toEqual([]);
+      });
     });
 
     it("queues when the verified commit is followed only by clean merges of main", () => {
