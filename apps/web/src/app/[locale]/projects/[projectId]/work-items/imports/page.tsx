@@ -228,7 +228,7 @@ function ImportRow({
         )}
       </TableCell>
       <TableCell className="text-muted">
-        <Icon name="chevron-right" size={16} className="rtl:rotate-180" />
+        <Icon name="chevron-right" size={16} />
       </TableCell>
     </TableRow>
   );

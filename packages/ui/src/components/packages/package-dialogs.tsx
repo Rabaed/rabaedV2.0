@@ -1,7 +1,7 @@
 "use client";
 
 import type { BilingualText } from "@rabaed/domain";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { Button } from "../button/button.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
@@ -57,8 +57,20 @@ export type NewPackageLabels = RenamePackageLabels;
  * Arabic. The API numbers it for the Member's own Participant (PKG-001…) and refuses anyone
  * outside the Project; the view opens it once created.
  */
-export function NewPackageDialog({ labels, close, cancel, refusals, onCreate }: Shared & { labels: NewPackageLabels; onCreate: (name: BilingualText) => Result }) {
-  return <PackageNameDialog name={emptyName} primary labels={labels} close={close} cancel={cancel} refusals={refusals} onSave={onCreate} />;
+export function NewPackageDialog({
+  labels,
+  close,
+  cancel,
+  refusals,
+  onCreate,
+  trigger,
+}: Shared & {
+  labels: NewPackageLabels;
+  onCreate: (name: BilingualText) => Result;
+  /** What opens it, instead of the "+ New Package" button: the Open column's "+" (RP-1143). */
+  trigger?: ReactElement;
+}) {
+  return <PackageNameDialog name={emptyName} primary labels={labels} close={close} cancel={cancel} refusals={refusals} onSave={onCreate} trigger={trigger} />;
 }
 
 // eslint-disable-next-line rabaed/no-ui-translations -- a name not typed yet, not a label
@@ -73,7 +85,8 @@ function PackageNameDialog({
   cancel,
   refusals,
   onSave,
-}: Shared & { name: BilingualText; primary?: boolean; labels: RenamePackageLabels; onSave: (name: BilingualText) => Result }) {
+  trigger,
+}: Shared & { name: BilingualText; primary?: boolean; labels: RenamePackageLabels; onSave: (name: BilingualText) => Result; trigger?: ReactElement | undefined }) {
   const [open, setOpen] = useState(false);
   const [en, setEn] = useState(name.en);
   const [ar, setAr] = useState(name.ar);
@@ -93,10 +106,12 @@ function PackageNameDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant={primary ? "primary" : "secondary"}>
-          <Icon name={primary ? "plus" : "pencil"} />
-          {labels.trigger}
-        </Button>
+        {trigger ?? (
+          <Button variant={primary ? "primary" : "secondary"}>
+            <Icon name={primary ? "plus" : "pencil"} />
+            {labels.trigger}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent title={labels.title} description={labels.description} closeLabel={close}>
         <form

@@ -17,6 +17,8 @@ const pkg = (id: string, number: string, name: { en: string; ar: string }, owner
   owner: { participantId: owner, companyName: owner === c1 ? b("Al Bina Contracting", "البناء للمقاولات") : b("Riyadh Works", "أعمال الرياض") },
   trades,
   counts: { total: 1, open: 1, codes: {} },
+  byType: [],
+  waiting: 0,
 });
 
 const bathrooms = pkg("1", "PKG-004", b("Bathrooms – Tower 1", "دورات المياه – البرج 1"), c1, [mechanical]);
@@ -86,5 +88,21 @@ describe("the Packages view's filter in its URL (RP-953)", () => {
     expect(params.toString()).toBe(new URLSearchParams({ view: "packages", q: "tower", trade: `${electrical.id},${mechanical.id}`, company: c2 }).toString());
     expect(packagesFilterFromSearchParams(params)).toEqual({ q: "tower", trade: [electrical.id, mechanical.id], company: [c2] });
     expect(packagesFilterSearchParams(none).toString()).toBe("view=packages");
+  });
+});
+
+describe("Need my action and the Packages List (RP-1143)", () => {
+  const waiting = { ...lighting, waiting: 2 };
+  it("Need my action keeps the Packages with a submittal waiting on the viewer", () => {
+    expect(filterPackages([bathrooms, waiting, empty], { ...none, mine: true })).toEqual([waiting]);
+    expect(filterPackages([bathrooms, waiting], { ...none, mine: false })).toEqual([bathrooms, waiting]);
+  });
+
+  it("keeps Need my action and the List in the URL, and leaves them out when off", () => {
+    const params = packagesFilterSearchParams({ ...none, mine: true, show: "list" });
+    expect(params.get("mine")).toBe("1");
+    expect(params.get("show")).toBe("list");
+    expect(packagesFilterFromSearchParams(params)).toEqual({ ...none, mine: true, show: "list" });
+    expect(packagesFilterFromSearchParams({ mine: "yes", show: "grid" })).toEqual(none);
   });
 });

@@ -57,6 +57,7 @@ export function AddPackageItemsDialog({
   refusals,
   search,
   onAdd,
+  primary = false,
 }: {
   packageId: string;
   trades: { id: string; code: string; name: BilingualText }[];
@@ -67,6 +68,8 @@ export function AddPackageItemsDialog({
   refusals: Record<string, string> & { unavailable: string };
   search: PackageItemSearch;
   onAdd: (workItemIds: string[]) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** The page's primary action, when Submit Package isn't offered (RP-1143, gap table row 26). */
+  primary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -110,7 +113,7 @@ export function AddPackageItemsDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="secondary">
+        <Button variant={primary ? "primary" : "secondary"}>
           <Icon name="plus" />
           {labels.trigger}
         </Button>

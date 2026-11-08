@@ -90,6 +90,8 @@ export type WorkItemTableProps = {
   };
   /** In each row's last cell, pinned at the reading end: its menu. */
   rowEnd?: (row: WorkItemRow) => ReactNode;
+  /** Classes for each row's first cell, such as a coloured starting edge (the Package page's states, RP-1143). */
+  rowStartClassName?: (row: WorkItemRow) => string | undefined;
   /** The rows in groups (Group by), each under its header row; without, the rows as they come. */
   groups?: TableGroup[];
   /** A group's header row, spanning `colSpan` cells. */
@@ -144,6 +146,7 @@ export function WorkItemTable({
   settings,
   selection,
   rowEnd,
+  rowStartClassName,
   groups,
   groupHeader,
   stageShowsCode = false,
@@ -286,7 +289,7 @@ export function WorkItemTable({
                       }}
                     >
                       {selection && (
-                        <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
+                        <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center", rowStartClassName?.(row))}>
                           {(selection.selectable?.(row) ?? true) && (
                             <Checkbox
                               aria-label={selection.selectRow(row.title)}
@@ -303,7 +306,7 @@ export function WorkItemTable({
                         </td>
                       )}
                       {shown.map((key, i) => (
-                        <td key={key} className={cn(cell, i === 0 && pinnedFirst)}>
+                        <td key={key} className={cn(cell, i === 0 && pinnedFirst, i === 0 && !selection && rowStartClassName?.(row))}>
                           <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} onOpen={onOpen} />
                         </td>
                       ))}

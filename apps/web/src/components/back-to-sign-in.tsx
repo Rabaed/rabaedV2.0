@@ -7,7 +7,7 @@ export async function BackToSignIn() {
   const t = await getTranslations("passwordReset");
   return (
     <Link href="/sign-in" className="inline-flex items-center gap-1.5 self-start text-[13.5px] font-semibold text-muted hover:text-text">
-      <Icon name="arrow-left" size={16} className="rtl:-scale-x-100" />
+      <Icon name="arrow-left" size={16} />
       {t("back")}
     </Link>
   );

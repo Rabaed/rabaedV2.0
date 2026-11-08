@@ -4,6 +4,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { linkedFromLabels, linksSectionLabels } from "../../storybook/form-engine.ts";
+import { isMirrored } from "../../storybook/mirror.ts";
 import { LinkedFromList } from "./linked-from.tsx";
 import { LinksSection } from "./links-section.tsx";
 
@@ -234,5 +235,9 @@ export const OnThePage: Story = {
     const from = canvasElement.querySelector<HTMLElement>("[data-testid='work-item-linked-from']")!;
     await expect(Math.abs(from.getBoundingClientRect().top - links.getBoundingClientRect().top)).toBeLessThan(40);
     await expect(within(links).getAllByRole("link")).toHaveLength(2);
+    // RP-1256: each row's "opens" arrow is mirrored once in Arabic (Icon does it), not twice.
+    const arrows = [...links.querySelectorAll("svg[class*='arrow-up-right']")];
+    await expect(arrows).toHaveLength(2);
+    await expect(arrows.map(isMirrored)).toEqual(arrows.map(() => storyLocale(context) === "ar"));
   },
 };

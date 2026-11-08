@@ -3260,8 +3260,11 @@
     "ownedBy": "Owned by",
     "progress": "Progress",
     "closedOf": "{closed} of {total} closed",
-    "code": "Code {code}",
-    "stillOpen": "Still open",
+    "state": { "done": "Code A/B", "replace": "Code D", "revise": "Code C", "open": "Still open" },
+    "byType": "By Type",
+    "clearType": "Clear",
+    "tabs": { "label": "Show submittals", "waiting": "Waiting for you", "all": "All" },
+    "nothingHere": "No submittals here.",
     "submittals": "Submittals",
     "table": "Submittals in this Package",
     "empty": "No submittals in this Package yet.",
@@ -3308,7 +3311,22 @@
       "trade": "Trade",
       "company": "Owning Company",
       "noMatchesTitle": "No Packages match",
-      "noMatchesBody": "Try another search, or clear the filters."
+      "noMatchesBody": "Try another search, or clear the filters.",
+      "mine": "Need My Action",
+      "doneRule": "A Package is Done once every latest submittal in it has closed at Code A, B or D. A Code C waits for its Revision.",
+      "byType": "By Type",
+      "noSubmittals": "No submittals yet",
+      "waiting": "{count, plural, one {1 waiting for your action} other {{n} waiting for your action}}",
+      "show": { "label": "Show Packages as", "board": "Cards", "list": "Table" },
+      "list": {
+        "table": "Packages list",
+        "number": "Package No.",
+        "name": "Package",
+        "progress": "Progress",
+        "states": "By Review Code",
+        "waiting": "Waiting for you",
+        "owner": "Owning Company"
+      }
     },
     "create": {
       "trigger": "New Package",
@@ -3326,7 +3344,7 @@
       "confirm": "Delete Package"
     },
     "addItems": {
-      "trigger": "Add items",
+      "trigger": "Add submittals",
       "title": "Add submittals",
       "description": "Your Company's submittals: Drafts, ones at internal review and Submitted ones. One already in another Package can't be added.",
       "search": "Search",
@@ -3344,7 +3362,7 @@
     },
     "bulk": {
       "bar": "Take a Transition on the selected submittals",
-      "hint": "Select the submittals waiting on you to take one Transition on them all.",
+      "waiting": "{count, plural, one {1 submittal is waiting for you} other {{n} submittals are waiting for you}}",
       "selected": "{n} selected",
       "transitions": "Transitions they share",
       "noneShared": "These don't share a Transition. Select ones at the same Step.",

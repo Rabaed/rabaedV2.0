@@ -786,7 +786,18 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     // The Trades of the items each reads (RP-953), in the Project's order of Trades.
     const projectTrades = (await getPackage(at.c1Pm, pkg.id)).filters.trades;
     const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, sort: expect.any(Number) }));
-    const summary = (counts: PackageSummary["counts"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
+    // By Type and state too (RP-1143, the card's Type ledger): the same items, so the same totals. All eight
+    // are of the test Type the tower raises, read here as its rows give it.
+    const { type } = (await getPackage(at.c1Pm, pkg.id)).items[0]!;
+    const mar = (states: { done: number; revise: number; open: number }) => ({
+      typeId: expect.any(String),
+      code: type.code,
+      name: type.name,
+      total: states.done + states.revise + states.open,
+      replace: 0,
+      ...states,
+    });
+    const summary = (counts: PackageSummary["counts"], byType: PackageSummary["byType"], trades = tradesOf(at.electrical, at.mechanical)): PackageSummary => ({
       id: pkg.id,
       projectId: at.projectId,
       number: pkg.number,
@@ -796,19 +807,32 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       owner: { participantId: at.c1ParticipantId, companyName: c1Name },
       trades,
       counts,
+      byType,
+      // Each viewer's own; checked below.
+      waiting: expect.any(Number),
     });
-    const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } });
+    const all = summary({ total: 8, open: 6, codes: { A: 1, C: 1 } }, [mar({ done: 1, revise: 1, open: 6 })]);
     for (const by of [at.c1Pm, at.k1Manager, owner]) {
       expect(await boardEntry(by)).toEqual(all);
       const p = await getPackage(by, pkg.id);
       expect(p).toMatchObject(all);
       expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems, ...mechanicalItems].sort());
+      // Each row's state, as the counts read it.
+      const states = new Map(p.items.map((i) => [i.id, i.state]));
+      expect([states.get(electricalItems[0]!), states.get(mechanicalItems[0]!)]).toEqual(["done", "revise"]);
+      expect(p.items.filter((i) => i.state === "open").map((i) => i.id).sort()).toEqual([...electricalItems.slice(1), ...mechanicalItems.slice(1)].sort());
+      // "Waiting for you" counts the rows that wait on this viewer, and no other.
+      expect((await boardEntry(by))!.waiting).toBe(p.items.filter((i) => i.waiting).length);
     }
+    // Every open item sits with K1 now: nothing waits on C1's PM.
+    expect((await boardEntry(at.c1Pm))!.waiting).toBe(0);
 
-    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, tradesOf(at.electrical));
+    const narrowed = summary({ total: 6, open: 5, codes: { A: 1 } }, [mar({ done: 1, revise: 0, open: 5 })], tradesOf(at.electrical));
     expect(await boardEntry(k1Electrical)).toEqual(narrowed);
     const p = await getPackage(k1Electrical, pkg.id);
     expect(p).toMatchObject(narrowed);
+    // Only waits on the items they see: the board's count is the rows of their page that wait on them.
+    expect((await boardEntry(k1Electrical))!.waiting).toBe(p.items.filter((i) => i.waiting).length);
     expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems].sort());
     for (const i of p.items) expect(i.trade.id).toBe(at.electrical);
     // Nothing of the Mechanical items: no id, no Subject, no number, no total of 8.
@@ -870,7 +894,8 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       for (const item of (await getPackage(by, pkg.id)).items) {
         const r = rowsSeen.get(item.id)!;
         const { notReady, ...row } = item;
-        expect(row).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean) });
+        // Its List row, with the page's own fields (RP-1143: where it stands, whether it waits on the viewer).
+        expect(row).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean), state: expect.any(String), waiting: expect.any(Boolean) });
         // What stops a Submit Package is the owner's to read only (RP-974).
         if (by !== at.c1Pm) expect(notReady).toBeNull();
       }

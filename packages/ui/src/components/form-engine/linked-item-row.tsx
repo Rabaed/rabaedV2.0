@@ -64,7 +64,7 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, hid
       <span className="min-w-0 flex-1 text-brand-fg">
         <bdi>{subject}</bdi>
       </span>
-      {!hidden && <Icon name="arrow-up-right" size={14} className="shrink-0 text-muted rtl:-scale-x-100" />}
+      {!hidden && <Icon name="arrow-up-right" size={14} className="shrink-0 text-muted" />}
     </>
   ) : (
     <>
