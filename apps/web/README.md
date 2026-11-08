@@ -38,6 +38,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |
 | `projects/[projectId]/settings/approved-suppliers/page.tsx` | `/projects/:projectId/settings/approved-suppliers` | The Approved Supplier List: suppliers per Trade; a Project Admin adds and withdraws (RP-592) |
+| `projects/[projectId]/settings/bulk-actions/page.tsx` | `/projects/:projectId/settings/bulk-actions` | Bulk Imports: opens the register import wizard and the Imports, to a Member who may import (RP-1144) |
 | `projects/[projectId]/settings/modules/page.tsx` | `/projects/:projectId/settings/modules` | Where Modules show: "Show Inspections in Submittals"; a Project Admin turns it on or off (RP-652) |
 | `projects/[projectId]/settings/record/page.tsx` | `/projects/:projectId/settings/record` | Documental Record: the language records are printed in and Hijri dates; a Project Admin sets them, and they apply to records made afterwards (RP-151) |
 | `projects/[projectId]/settings/required-links/page.tsx` | `/projects/:projectId/settings/required-links` | Required links: which link questions an item can't leave Draft without, such as the WIR's Approved submittals; a Project Admin turns each on (RP-82) |
