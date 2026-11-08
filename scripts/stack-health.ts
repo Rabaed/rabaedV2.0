@@ -144,22 +144,25 @@ export async function runWhileUp<T, R>(items: T[], { down, run, save, drop }: Wh
 // shots are written under a staging folder outside the repo while it runs; `save` moves them into evidence/ and
 // `drop` deletes them, so a case the stack went down under leaves the committed evidence as it was.
 
-/** Where the shot a result records as `path` (relative to the round folder, e.g. "evidence/VIS-01-1-list.jpg") waits. */
-export function stagedShot(staging: string, path: string): string {
-  return resolve(staging, path);
-}
+/** The staging folder shots wait in, and the round folder whose evidence/ they move to. */
+export type ShotFolders = { staging: string; round: string };
 
-/** `path` under `folder`; throws for one that leaves it (absolute, or with `..`), so a bad result never deletes or overwrites elsewhere. */
-function under(folder: string, path: string): string {
+/** `path` resolved under `folder`; throws for one that leaves it (absolute, another drive, `..`), so a bad path never deletes or overwrites elsewhere. */
+function pathInside(folder: string, path: string): string {
   const full = resolve(folder, path);
   const rel = relative(folder, full);
   if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`Shot path "${path}" is outside ${folder}.`);
   return full;
 }
 
+/** Where the shot a result records as `path` (relative to the round folder, e.g. "evidence/VIS-01-1-list.jpg") waits. */
+export function stagedShot(staging: string, path: string): string {
+  return pathInside(staging, path);
+}
+
 /** Moves each staged shot to its path under `round`, replacing the one there. A copy, not a rename: the OS temp folder may be on another drive. */
-export function keepShots(paths: readonly string[], { staging, round }: { staging: string; round: string }): void {
-  const moves = paths.map((path) => ({ from: under(staging, path), to: under(round, path) }));
+export function keepShots(paths: readonly string[], { staging, round }: ShotFolders): void {
+  const moves = paths.map((path) => ({ from: pathInside(staging, path), to: pathInside(round, path) }));
   for (const { from, to } of moves) {
     mkdirSync(dirname(to), { recursive: true });
     copyFileSync(from, to);
@@ -168,8 +171,8 @@ export function keepShots(paths: readonly string[], { staging, round }: { stagin
 }
 
 /** Deletes each staged shot; the evidence under the round folder is not touched. */
-export function dropShots(paths: readonly string[], staging: string): void {
-  const files = paths.map((path) => under(staging, path));
+export function dropShots(paths: readonly string[], { staging }: Pick<ShotFolders, "staging">): void {
+  const files = paths.map((path) => pathInside(staging, path));
   for (const file of files) rmSync(file, { force: true });
 }
 

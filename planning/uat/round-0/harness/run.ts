@@ -108,6 +108,7 @@ async function main() {
   if (ids) for (const id of ids) if (!registry.some((c) => c.id === id)) console.warn(`No case ${id} in the loaded files.`);
   const counts: Record<string, number> = {};
   let outcome: WhileUpOutcome;
+  const shotFolders = { staging: shotStaging, round };
   try {
     // A case the stack went down under is not saved, so its earlier result in results/ stays.
     outcome = await runWhileUp(todo, {
@@ -118,14 +119,14 @@ async function main() {
       },
       // A case's shots wait in shotStaging (RP-1161): evidence/ gets them only with the saved result.
       save: (c, result) => {
-        keepShots(result.screenshots, { staging: shotStaging, round });
+        keepShots(result.screenshots, shotFolders);
         saveResult(c.id, result);
         counts[result.status] = (counts[result.status] ?? 0) + 1;
         const failed = result.checks.filter((k) => !k.ok).length;
         const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
         console.log(`${c.id.padEnd(10)} ${result.status.toUpperCase().padEnd(8)} ${result.checks.length - failed}/${result.checks.length} checks, ${result.screenshots.length} shots${why}`);
       },
-      drop: (_c, result) => dropShots(result.screenshots, shotStaging),
+      drop: (_c, result) => dropShots(result.screenshots, shotFolders),
     });
   } finally {
     await closeBrowser();

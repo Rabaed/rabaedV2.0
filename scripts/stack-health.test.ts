@@ -291,7 +291,7 @@ describe("staged shots (RP-1161)", () => {
       down: async (_id, when) => (when === "after" ? "db down" : undefined),
       run,
       save: (_id, result) => keepShots(result.screenshots, { staging, round }),
-      drop: (_id, result) => dropShots(result.screenshots, staging),
+      drop: (_id, result) => dropShots(result.screenshots, { staging }),
     });
     expect(outcome).toEqual({ saved: 0, stopped: "db down" });
     expect(readFileSync(committed, "utf8")).toBe("committed shot");
@@ -304,7 +304,7 @@ describe("staged shots (RP-1161)", () => {
       down: async () => undefined,
       run,
       save: (_id, result) => keepShots(result.screenshots, { staging, round }),
-      drop: (_id, result) => dropShots(result.screenshots, staging),
+      drop: (_id, result) => dropShots(result.screenshots, { staging }),
     });
     expect(outcome).toEqual({ saved: 1, stopped: undefined });
     expect(readFileSync(committed, "utf8")).toBe("new shot");
@@ -321,8 +321,10 @@ describe("staged shots (RP-1161)", () => {
     writeFileSync(staged, "new shot");
     const outsider = join(folder(), "keep.txt");
     writeFileSync(outsider, "keep");
-    for (const bad of [outsider, "../keep.txt", "evidence/../../keep.txt"]) {
-      expect(() => dropShots(["evidence/VIS-01-1-list.jpg", bad], staging)).toThrow(/outside/);
+    // "evidence/.." is the folder itself; on Windows a path on another drive resolves to no path inside it at all.
+    const others = process.platform === "win32" ? [`${outsider.startsWith("Z") ? "Y" : "Z"}:\\keep.txt`] : [];
+    for (const bad of [outsider, "../keep.txt", "evidence/../../keep.txt", "evidence/..", ...others]) {
+      expect(() => dropShots(["evidence/VIS-01-1-list.jpg", bad], { staging })).toThrow(/outside/);
       expect(() => keepShots(["evidence/VIS-01-1-list.jpg", bad], { staging, round })).toThrow(/outside/);
     }
     expect(readFileSync(outsider, "utf8")).toBe("keep");
