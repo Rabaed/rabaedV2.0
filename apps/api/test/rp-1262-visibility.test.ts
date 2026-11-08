@@ -1,6 +1,6 @@
 // Seam 1 for passing a withdrawn Participant's Vacancies to the replacement Participant's Step Pool
 // (RP-1262; ADR 0028; GLOSSARY › Vacancy; workflow-engine.md §9; visibility.md "A Participant's
-// withdrawal"; scenarios RP-1262-1 to RP-1262-3). C1's Project Admin withdraws K1 while K1 holds C1's
+// withdrawal"; scenarios RP-1262-1 to RP-1262-4). C1's Project Admin withdraws K1 while K1 holds C1's
 // item, then invites K2 as the new Consultant. K2 accepts, and the Vacancy passes to its Step Pool once
 // its Visibility covers the item: only K2 gains the item, C1 reads it as held by K2 with no "Waiting for
 // a new Consultant", the Vacancies card lists it no more, and K1, which left, reads nothing.
@@ -200,5 +200,42 @@ describe("scenario RP-1262-3: the withdrawn Company reads nothing new", () => {
     await expectHiddenFrom({ read: itemById(item), target: item, seenBy: k2Engineer, hiddenFrom: k1s, name: nameOf, label: "the item" });
     await expectHiddenFrom({ read: readById(`/v1/projects/${projectId}`), target: projectId, seenBy: k2Engineer, hiddenFrom: k1s, name: nameOf, label: "the Project" });
     for (const by of k1s) expect(await bell(by), nameOf(by)).not.toContain("step_reached"); // not hidden-from: K2's engineer's bell above holds the item's "Step reached"
+  });
+});
+
+describe("scenario RP-1262-4: with two covering Consultants nobody is picked; narrowing one passes the Vacancies to the other", () => {
+  it("keeps both Vacancies while K3 and K4 cover the items, then gives them to K3 once K4 is narrowed", async () => {
+    // A second item of C1's, which only K2 covers when it is Submitted, so it reaches K2.
+    const created = await ok(c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Busbar", answers: { model: "Busbar", trade: electrical, location: buildingA } }), 201);
+    const second = created.json().id as string;
+    await take(c1Engineer, second, "send_for_review");
+    await ok(c1Pm.post(`/v1/work-items/${second}/pick-up`));
+    await take(c1Pm, second, "submit");
+    const consultant = async (name: string) => {
+      const company = await api.authorizedPerson();
+      const id = await api.addParticipant(c1.caller, projectId, company.company, "consultant");
+      const engineer = await projectMember(api, company, id, ["engineer"]);
+      await ok(c1.caller.request("PUT", `/v1/participants/${id}/visibility`, { trade: all, location: all }));
+      names.set(company.caller, `${name}'s Authorized Person`);
+      names.set(engineer, `the ${name} engineer`);
+      return { company, id, engineer };
+    };
+    const k3 = await consultant("K3");
+    const k4 = await consultant("K4");
+    await ok(c1.caller.post(`/v1/participants/${participant.k2}/withdraw`));
+    const items = [item, second];
+    expect((await vacancyItems(c1.caller)).map((v) => v.id).sort()).toEqual([...items].sort());
+    // Under the Overlap, neither covering Consultant gains either item.
+    for (const id of items) {
+      await expectHiddenFrom({ read: itemById(id), target: id, seenBy: c1Engineer, hiddenFrom: [k3.company.caller, k3.engineer, k4.company.caller, k4.engineer], name: nameOf, label: "under the Overlap" });
+    }
+    // C1's Project Admin narrows K4 to no Trade: K3 is the one Consultant covering them.
+    await ok(c1.caller.request("PUT", `/v1/participants/${k4.id}/visibility`, { trade: { isAll: false, valueIds: [] }, location: all }));
+    for (const id of items) {
+      const [d] = await itemById(id)(k3.engineer);
+      expect(d!.heldBy?.memberName, "K3's pool of one holds it").not.toBeNull();
+      await expectHiddenFrom({ read: itemById(id), target: id, seenBy: [k3.engineer, c1Engineer], hiddenFrom: [k4.company.caller, k4.engineer, k2Engineer, c2Engineer], name: nameOf, label: "after K4 is narrowed" });
+    }
+    expect((await vacancies(c1.caller))[0]!.vacancies).toEqual([]); // not hidden-from: the same Admin's list held both items above
   });
 });
