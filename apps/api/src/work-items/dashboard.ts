@@ -45,7 +45,7 @@ export function getDashboard(db: Db, memberId: string, projectId: string, now: D
     `.execute(trx);
     const everything = workItemQuery.parse({});
     const modules: Dashboard["modules"] = [];
-    // In the Project's tab order (RP-1176, UX-03): Submittals first, the Snag List after Inspections.
+    // In the Project's tab order (RP-1176, UX-03, RP-1142): Submittals first, then Inspections, Site Reports, the Snag List.
     for (const key of moduleTabOrder) {
       const ofModule = types.filter((t) => t.module_key === key);
       if (ofModule.length === 0) continue;

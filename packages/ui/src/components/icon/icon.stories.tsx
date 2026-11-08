@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { isMirrored } from "../../storybook/mirror.ts";
 import { Icon, directionalIconNames, iconNames } from "./icon.tsx";
 
 const meta = {
@@ -12,12 +13,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
-
-/** An icon is mirrored when it renders flipped on the horizontal axis. */
-function isMirrored(icon: Element) {
-  const { scale, transform } = getComputedStyle(icon);
-  return scale.startsWith("-1") || transform.startsWith("matrix(-1");
-}
 
 function iconIn(context: PlayContext, testId: string) {
   return context.canvas.getByTestId(testId).querySelector("svg")!;

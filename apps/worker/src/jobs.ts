@@ -4,6 +4,7 @@ import {
   notificationDigestHandler,
   notificationEmailHandler,
   participantInvitationHandler,
+  participantWithdrawnHandler,
   passwordResetHandler,
   stepAgeReportHandler,
   weeklyStepAgeReportJob,
@@ -14,6 +15,7 @@ import {
   notificationDigestMessage,
   notificationMessage,
   participantInvitationMessage,
+  participantWithdrawnMessage,
   passwordResetMessage,
   stepAgeReportMessage,
   type Mailer,
@@ -45,5 +47,6 @@ export function outboxHandlers(mailer: () => Mailer, webUrl: string): Record<str
     step_age_report: stepAgeReportHandler((report) => mailer().send(stepAgeReportMessage(report, webUrl))),
     password_reset: passwordResetHandler((email) => mailer().send(passwordResetMessage(email, webUrl))),
     participant_invitation: participantInvitationHandler((email) => mailer().send(participantInvitationMessage(email, webUrl))),
+    participant_withdrawn: participantWithdrawnHandler((email) => mailer().send(participantWithdrawnMessage(email, webUrl))),
   };
 }

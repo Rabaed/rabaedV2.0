@@ -4,8 +4,10 @@ import {
   companyInvitations,
   companyParticipations,
   participantMembers,
+  participantWithdrawalPreview,
   projectInvitations,
   projectParticipants,
+  projectVacancies,
   removeProjectMemberRequest,
   setMemberPositionsRequest,
   setParticipantCodeRequest,
@@ -22,11 +24,14 @@ import {
   listParticipantMembers,
   listParticipants,
   listProjectInvitations,
+  listProjectVacancies,
+  previewParticipantWithdrawal,
   removeProjectMember,
   respondToInvitation,
   setMemberPositions,
   setParticipantCode,
   withdrawInvitation,
+  withdrawParticipant,
 } from "../projects/participants.ts";
 import { refusal } from "../refusals.ts";
 
@@ -124,6 +129,38 @@ export const participantRoutes =
         const result = await setParticipantCode(ctx.db, memberId, participantId, request.body.code);
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
+      },
+    );
+
+    // Withdrawing a Participant (RP-952, ADR 0028): only the Host Company's Project Admin, and never
+    // the Host Company itself (409 host_company). Anyone else gets the plain 404 (scenario RP-952-2).
+    // The preview is counts only, for the confirmation.
+    app.get(
+      "/v1/participants/:participantId/withdrawal",
+      { schema: { params: participantParams, response: { 200: participantWithdrawalPreview } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await previewParticipantWithdrawal(ctx.db, memberId, idOrNotFound(request.params.participantId));
+        if (!result.ok) throw refusal(result);
+        return { itemsToCancel: result.itemsToCancel, stepsToVacate: result.stepsToVacate };
+      },
+    );
+
+    // No undo: the Company comes back only through a new Invitation.
+    app.post("/v1/participants/:participantId/withdraw", { schema: { params: participantParams } }, async (request, reply) => {
+      const memberId = ctx.requireMember(request);
+      const result = await withdrawParticipant(ctx.db, memberId, idOrNotFound(request.params.participantId), ctx.now());
+      if (!result.ok) throw refusal(result);
+      return reply.code(204).send();
+    });
+
+    // The Project's Vacancies, for the Host Company's Project Admins only; the plain 404 for anyone else.
+    app.get(
+      "/v1/projects/:projectId/vacancies",
+      { schema: { params: z.object({ projectId: z.string() }), response: { 200: projectVacancies } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(listProjectVacancies(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 

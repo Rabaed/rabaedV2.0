@@ -92,6 +92,9 @@ async function itemArguments(id: string): Promise<Record<string, unknown>> {
     p_module_keys: modules,
     p_type_codes: null,
     p_event_id: event?.id ?? null,
+    // Every event and Document of the item, for the readers that take a list of them (RP-1139: app.event_actor_members, app.document_uploaders).
+    p_event_ids: (await migrator.query<{ id: string }>("select id from work_item_event where work_item_id = $1", [id])).rows.map((r) => r.id),
+    p_document_ids: (await migrator.query<{ id: string }>("select id from document where work_item_id = $1", [id])).rows.map((r) => r.id),
     p_reply_event_id: event?.id ?? null,
     p_after_event_id: null,
     p_transition_id: event?.transition_id ?? null,

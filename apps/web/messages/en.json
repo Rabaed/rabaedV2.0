@@ -77,7 +77,6 @@
     "snag_list": "Snag List",
     "site_reports": "Site Reports",
     "drawings": "Drawings",
-    "activity": "Activity Feed",
     "settings": "Settings"
   },
   "snagList": {
@@ -2042,7 +2041,8 @@
       "cancelledBy": "Cancelled by {company}",
       "cancelled": "Cancelled",
       "recordReady": "Record ready to download",
-      "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}"
+      "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}",
+      "participantWithdrawn": "{company} withdrew your Company from the Project"
     },
     "time": {
       "minutes": "{n} min",

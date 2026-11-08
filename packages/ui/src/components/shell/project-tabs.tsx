@@ -5,17 +5,20 @@ import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 
-/** The Project tabs in the agreed order (design change requests, 2026-09-27): a Module's tab is its Module key. */
-export const projectTabKeys = ["dashboard", ...moduleTabOrder, "activity", "settings"] as const;
+/**
+ * The Project tabs in the kit's order (RP-1142, owner 2026-11-08): a Module's tab is its Module key. The Activity Feed
+ * has no tab: it is a panel in the Dashboard, whose "View all" opens its page (GLOSSARY.md › Module).
+ */
+export const projectTabKeys = ["dashboard", ...moduleTabOrder, "settings"] as const;
 export type ProjectTabKey = (typeof projectTabKeys)[number];
 
 /**
- * The tabs a Project shows (RP-346, RP-406): Dashboard, Submittals, Activity and Settings always;
+ * The tabs a Project shows (RP-346, RP-406, RP-1142): Dashboard, Submittals and Settings always;
  * another Module's tab only when the Project has a Work Item Type in it. Never
  * an empty tab, and no placeholder for what isn't built.
  */
 export function visibleProjectTabs(modules: readonly ModuleKey[]): ProjectTabKey[] {
-  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "activity", "settings", ...modules]);
+  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "settings", ...modules]);
   return projectTabKeys.filter((key) => shown.has(key));
 }
 

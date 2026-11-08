@@ -1,6 +1,7 @@
 import { migrationsDir } from "./migrations.ts";
 import { startServices } from "./test-services.ts";
 import { stampLine } from "./verify-gate.ts";
+import { TESTS_SKIPPED_LABEL, SKIP_REASON, SKIPPED_TESTS, skipTests } from "./verify-docs-only.ts";
 
 // Which checks `pnpm verify` (RP-459) runs for a diff. Pure, so it is unit-tested.
 
@@ -24,10 +25,13 @@ export function selectSteps(changed: string[]): Selection {
   const files = changed.map((file) => file.replaceAll("\\", "/"));
   const migrationChanged = files.some((file) => file.startsWith(`${migrationsDir}/`));
   const uiChanged = files.some((file) => storyFolders.some((folder) => file.startsWith(folder)));
+  // RP-1181: a diff of only documents no test reads leaves out the unit and seam suites (scripts/verify-docs-only.ts).
+  const docsOnly = skipTests(files).skip;
   // Why a step does not run for this diff; the others always run.
   const skipReason: Partial<Record<StepName, string>> = {
     // eslint-disable-next-line rabaed/no-avoid-terms -- the database-schema migration files, named as the check script names them.
     ...(migrationChanged ? {} : { "check:migrations": "no migration changed against origin/main" }),
+    ...(docsOnly ? Object.fromEntries(SKIPPED_TESTS.map((name) => [name, SKIP_REASON])) : {}),
     ...(uiChanged ? {} : { "test:stories": "nothing changed in packages/ui or apps/web" }),
   };
 
@@ -66,12 +70,15 @@ export const isSeamStep = (step: string): boolean => step.startsWith("test:seam"
  * The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted
  * changes (RP-563). After `--from` (RP-1019) it starts `pnpm verify --from <step>` and names the steps it did not run,
  * so it never reads as a full pass. Only a full, clean run on a known commit ends with the stamp the verify gate
- * checks (scripts/verify-gate.ts, RP-1094), so an edited line no longer counts.
+ * checks (scripts/verify-gate.ts, RP-1094), so an edited line no longer counts. A run that left the unit and seam
+ * suites out for a docs-only diff (`docsOnly`, RP-1181) ends its steps with `TESTS_SKIPPED_LABEL`, which names them: the
+ * gate accepts that line only for a diff `skipTests` passes (scripts/verify-gate.ts).
  */
-export function finalLine({ sha, dirty, steps, from }: { sha: string; dirty: boolean; steps: string[]; from?: From }): string {
+export function finalLine({ sha, dirty, steps, from, docsOnly }: { sha: string; dirty: boolean; steps: string[]; from?: From; docsOnly?: boolean }): string {
   const command = runCommand(from);
   const notRun = from ? ` Not run: ${from.notRun.join(", ")}, so this is not a complete run.` : "";
-  const line = `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.${notRun}`;
+  const named = docsOnly ? [...steps, TESTS_SKIPPED_LABEL] : steps;
+  const line = `${command} passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${named.join(", ")}.${notRun}`;
   return from || dirty || sha === "" ? line : stampLine(line);
 }
 

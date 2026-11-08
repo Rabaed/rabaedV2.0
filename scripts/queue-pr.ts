@@ -195,6 +195,8 @@ type Prepared =
 interface VerifyInputs {
   body: string;
   ownChanges: string[];
+  /** The PR's files against origin/main: a stamped line that left the unit and seam tests out counts only for a docs-only change (RP-1181). */
+  changed: string[];
 }
 
 const refused = (result: QueueResult): Prepared => ({ kind: "refused", result });
@@ -276,7 +278,7 @@ type VerifyState = { state: "passed"; via: "stamp" | "ci" } | { state: "running"
  * followed, or CI green on it (`verifiedOrGreen`). While CI runs, `running` with the refusal to print without --wait.
  */
 function verifyState(pr: number, head: string, seam: QueueSeam, inputs: VerifyInputs, evidence: CiEvidence): VerifyState {
-  const gate = verifiedOrGreen(inputs.body, head, pr, seam, inputs.ownChanges, evidence);
+  const gate = verifiedOrGreen(inputs.body, head, pr, seam, inputs.ownChanges, evidence, inputs.changed);
   if (gate.ok) return { state: "passed", via: gate.via };
   if (gate.running) {
     return {
@@ -421,7 +423,7 @@ function refusals(pr: number, seam: QueueSeam, options: { noReview?: boolean; wa
   if (!own.ok) return own.result;
   // A docs-only PR that drops a scenario row or grows a list still needs one (RP-1196), as in the verify-gate check.
   if (needsVerify(labels, changed) || own.value.length > 0) {
-    const inputs = { body, ownChanges: own.value };
+    const inputs = { body, ownChanges: own.value, changed };
     const state = verifyState(pr, head, seam, inputs, ciEvidence(seam, head));
     if (state.state === "refused") return state.result;
     if (state.state === "running" && !options.waitForLabelRun) return state.result;

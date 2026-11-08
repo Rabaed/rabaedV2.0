@@ -3,6 +3,7 @@ import type { CiRun } from "./ci-green.ts";
 import { addEvent, addReviewed, isTrustedAuthor, overHttp, reviewAt, reviewMarker, writersAmong, type AddSeam, type Permission, type ReviewComment } from "./reviewed-add.ts";
 import { BASELINE_BOT_EMAIL, BASELINE_FOLDER, REVIEWED_LABEL, type ReviewedGit } from "./reviewed-label.ts";
 import { stampLine } from "./verify-gate.ts";
+import { TESTS_SKIPPED_LABEL } from "./verify-docs-only.ts";
 
 const HEAD = "a".repeat(40);
 const OLD = "b".repeat(40);
@@ -243,6 +244,18 @@ describe("addReviewed", () => {
     const result = await addReviewed({ pr: 5 }, seam);
     expect(result).toMatchObject({ ok: true, added: true });
     expect(calls).toEqual(["fetch", "add", "rerun 41"]);
+  });
+
+  // RP-1181: the verify gate's rule for a line that left the unit and seam tests out, applied to the PR's files here too.
+  it("takes a stamped line that left the unit and seam tests out for a docs-only change, and not once the PR changes code", async () => {
+    const body = stampLine(`pnpm verify passed on ${HEAD.slice(0, 9)}: lint, typecheck, ${TESTS_SKIPPED_LABEL}.`);
+    const docs = fakeSeam({ body, changed: ["planning/uat/round-0/cases/ZZZ.ts"] });
+    expect(await addReviewed({ pr: 5 }, docs.seam)).toMatchObject({ ok: true, added: true });
+    const code = fakeSeam({ body, changed: ["planning/uat/round-0/cases/ZZZ.ts", "scripts/x.ts"] });
+    const refused = await addReviewed({ pr: 5 }, code.seam);
+    expect(refused.added).toBe(false);
+    expect(refused.summary).toContain("scripts/x.ts is not under planning/ or docs/");
+    expect(code.calls).not.toContain("add");
   });
 
   it("fails, naming why, and adds nothing when git cannot read a changed package.json (RP-1196)", async () => {

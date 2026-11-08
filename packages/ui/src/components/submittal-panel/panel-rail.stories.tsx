@@ -3,6 +3,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { expectAlongTheFlow } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { submittalOwnerMap } from "../../storybook/submittal-route.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -202,6 +203,10 @@ async function expectStripOnOneLine(context: PlayContext) {
   await expect(middles.every((middle) => Math.abs(middle - middles[0]!) <= 1)).toBe(true);
   await expect(strip.querySelector("ol")!.scrollWidth).toBeLessThanOrEqual(strip.querySelector("ol")!.clientWidth);
   await expect(stops.at(-1)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(strip.getBoundingClientRect().bottom);
+  // Its chevrons point along the flow: right to left in Arabic (RP-1114).
+  const chevrons = [...strip.querySelectorAll("li > svg")];
+  await expect(chevrons.length).toBe(stops.length - 1);
+  await expectAlongTheFlow(chevrons, storyLocale(context));
   // The stop holding the item takes the room the strip has: its role or line is cut short only when the row is full.
   const list = strip.querySelector("ol")!;
   const boxes = stops.map((li) => li.getBoundingClientRect());

@@ -242,7 +242,8 @@ export function SubmittalPanel({
               <Icon name={crumbIcon} size={15} className="shrink-0" />
               {/* The Module and the place are left out in the Compact band (`.sdp-crumb-label`). */}
               <span className="sdp-crumb-label whitespace-nowrap">{labels.module}</span>
-              <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={15} className="sdp-crumb-label shrink-0" />
+              {/* Points on to the item: Icon turns it round in Arabic itself. */}
+              <Icon name="chevron-right" size={15} className="sdp-crumb-label shrink-0" />
             </>
           )}
           <span className="truncate font-bold text-text">{crumb}</span>

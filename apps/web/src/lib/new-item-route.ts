@@ -25,7 +25,6 @@ export function projectTabHref(projectId: string, key: ProjectTabKey): string {
   const base = `/projects/${projectId}`;
   if (key === "dashboard") return base;
   if (key === "settings") return `${base}/settings`;
-  if (key === "activity") return `${base}/activity`;
   return `${base}/${moduleTabPaths[key]}`;
 }
 
@@ -34,10 +33,13 @@ export function projectTabHref(projectId: string, key: ProjectTabKey): string {
  * which belongs to the Module its `?module=` names (`moduleParam`), so a New Snag is under the Snag List.
  * A Module without a tab of its own (`modules`, the Modules with tabs: Inspections shown in the
  * Submittals tab, RP-652) raises under Submittals. A Package page (`/packages/<id>`, the path its
- * notifications link to) names no Project, but sits in its Project's Submittals tab (RP-1164).
+ * notifications link to) names no Project, but sits in its Project's Submittals tab (RP-1164). The Activity Feed page
+ * has no tab: it sits under the Dashboard, whose panel opens it (RP-1142).
  */
 export function projectTabOf(projectId: string, pathname: string, moduleParam: string | null, modules: readonly ModuleKey[]): ProjectTabKey | undefined {
   if (pathname.startsWith("/packages/")) return "submittals";
+  const activity = `/projects/${projectId}/activity`;
+  if (pathname === activity || pathname.startsWith(`${activity}/`)) return "dashboard";
   const raisesIn = moduleKeySchema.safeParse(moduleParam).data;
   if (raisesIn && pathname === newItemHref(projectId, "submittals")) return modules.includes(raisesIn) ? raisesIn : "submittals";
   return [...projectTabKeys]

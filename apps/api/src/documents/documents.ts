@@ -55,8 +55,9 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       -- order they were uploaded in: ids are random and say nothing of it (ADR 0015).
       join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
       join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
-      -- member's own RLS shows only the viewer's own Company's people (V14).
-      left join member m on m.id = d.uploaded_by_member_id
+      -- The uploader's id for the viewer's own Company only (RP-1139), whose people member's RLS names (V14).
+      left join app.document_uploaders(array(select x.id from document x where x.work_item_id = ${workItemId}::uuid)) du on du.document_id = d.id
+      left join member m on m.id = du.uploaded_by_member_id
       where d.work_item_id = ${workItemId}
       order by t.seq
     `.execute(trx);

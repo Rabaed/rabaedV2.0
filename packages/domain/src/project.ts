@@ -23,8 +23,8 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequest>;
 
 export const createdProject = z.object({ projectId: z.uuid(), projectNumber: z.number().int().positive() });
 
-/** Rabaed's Modules (`moduleKeys`), in the order of the Project's tabs. */
-export const moduleTabOrder = ["submittals", "inspections", "snag_list", "site_reports", "drawings"] as const satisfies readonly ModuleKey[];
+/** Rabaed's Modules (`moduleKeys`), in the order of the Project's tabs: the kit's order, Site Reports before Snag List (owner, RP-1142). */
+export const moduleTabOrder = ["submittals", "inspections", "site_reports", "snag_list", "drawings"] as const satisfies readonly ModuleKey[];
 
 /**
  * Each Module tab's path under its Project, `/projects/{id}/{path}`: the one
