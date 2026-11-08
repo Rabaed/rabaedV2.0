@@ -1,42 +1,37 @@
 // Seam 2 for admin_action.seq (RP-1117): the order Rabaed Engineers' actions were written in. Ids are random
 // (ADR 0015) and `at` follows the database's clock, which can step back, so only seq is write order.
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { sql } from "kysely";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { createDb, type Db } from "../src/index.ts";
+import { buildSeamTwoTower, testDatabaseUrls, type SeamTwoTower } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
-const tag = randomUUID().slice(0, 8);
-const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 
-let migrator: Db;
+let migrator: pg.Client;
 let admin: Db;
 let app: Db;
+let tower: SeamTwoTower;
 let engineerId = "";
-let memberId = "";
 
 beforeAll(async () => {
-  migrator = createDb(urls.migrator, { max: 1 });
+  migrator = new pg.Client({ connectionString: urls.migrator });
+  await migrator.connect();
   admin = createDb(urls.admin, { max: 1 });
   app = createDb(urls.app, { max: 1 });
-  engineerId = (await sql<{ id: string }>`
-    insert into rabaed_engineer (email, full_name) values (${`seq-${tag}@rabaed.test`}, 'Seq Test') returning id
-  `.execute(migrator)).rows[0]!.id;
-  const companyId = (await sql<{ id: string }>`
-    insert into company (legal_name, cr_number, vat_number, onboarded_by)
-    values ('{"en": "Seq Co", "ar": "Seq Co"}'::jsonb, ${digits(10)}, ${`3${digits(13)}3`}, ${engineerId}::uuid)
-    returning id
-  `.execute(migrator)).rows[0]!.id;
-  memberId = (await sql<{ id: string }>`
-    insert into member (company_id, email, full_name, status)
-    values (${companyId}::uuid, ${`seq-member-${tag}@rabaed.test`}, '{"en": "M", "ar": "M"}'::jsonb, 'active')
-    returning id
-  `.execute(migrator)).rows[0]!.id;
+  tower = await buildSeamTwoTower(app, migrator, { projectCode: "SEQ" });
+  // An Engineer of this test's own, so its rows are the only ones it reads.
+  engineerId = (
+    await migrator.query<{ id: string }>("insert into rabaed_engineer (email, full_name) values ($1, 'Seq Test') returning id", [
+      `seq-${randomUUID().slice(0, 8)}@rabaed.test`,
+    ])
+  ).rows[0]!.id;
 });
 
 afterAll(async () => {
-  await Promise.all([migrator?.destroy(), admin?.destroy(), app?.destroy()]);
+  await Promise.all([admin?.destroy(), app?.destroy()]);
+  await migrator?.end();
 });
 
 /** An action recorded as the admin role, at `at` (the database's now() when not given). */
@@ -54,12 +49,7 @@ describe("admin_action.seq", () => {
     await record("first", "2030-01-02T00:00:00Z");
     await record("second", "2030-01-01T00:00:00Z");
     await record("third", "2030-01-01T00:00:00Z");
-    const written = await admin
-      .selectFrom("admin_action")
-      .select("reason")
-      .where("engineer_id", "=", engineerId)
-      .orderBy("seq")
-      .execute();
+    const written = await admin.selectFrom("admin_action").select("reason").where("engineer_id", "=", engineerId).orderBy("seq").execute();
     expect(written.map((r) => r.reason)).toEqual(["first", "second", "third"]);
   });
 
@@ -69,16 +59,25 @@ describe("admin_action.seq", () => {
     expect(BigInt(seq)).toBeGreaterThan(BigInt(max ?? 0));
   });
 
-  it("is never written by hand", async () => {
+  it("is never written by hand, and never twice even when an insert overrides the identity", async () => {
+    const { seq } = await record("taken");
     await expect(
       sql`
         insert into admin_action (seq, engineer_id, action, target_kind, reason)
-        values (1, ${engineerId}::uuid, 'read_numbering', 'seq-test', 'by hand')
+        values (${seq}::bigint + 1000000, ${engineerId}::uuid, 'read_numbering', 'seq-test', 'by hand')
       `.execute(admin),
     ).rejects.toThrow(/cannot insert a non-DEFAULT value into column "seq"/);
+    await expect(
+      sql`
+        insert into admin_action (seq, engineer_id, action, target_kind, reason) overriding system value
+        values (${seq}::bigint, ${engineerId}::uuid, 'read_numbering', 'seq-test', 'a repeat')
+      `.execute(admin),
+    ).rejects.toThrow(/admin_action_seq_key/);
   });
 
-  it("stays out of the app role's reach, as the rest of admin_action does (V9)", async () => {
-    await expect(withMember(app, memberId, (trx) => sql`select seq from admin_action`.execute(trx))).rejects.toThrow(/permission denied/);
+  it("stays out of the app role's reach, as the rest of admin_action does (V9), while the Member still reads its own Company", async () => {
+    const member = tower.c1.members.engineer;
+    expect(await tower.call<{ id: string }>(member, sql`select id from company`)).toContainEqual({ id: tower.c1.id });
+    await expect(tower.call(member, sql<{ seq: string }>`select seq from admin_action`)).rejects.toThrow(/permission denied/);
   });
 });

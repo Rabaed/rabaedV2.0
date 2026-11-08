@@ -161,7 +161,7 @@ export interface AdminActionTable {
   at: Generated<Timestamp>;
   /**
    * The order the actions were written in (RP-1117): `(at, id)` is not, since ids are random and the clock can step
-   * back. Generated always, never written. bigint: pg returns it as a string.
+   * back. Generated always and unique, never written by the app. bigint: pg returns it as a string.
    */
   seq: ColumnType<string, never, never>;
 }

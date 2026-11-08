@@ -6,7 +6,8 @@
 --
 -- Who reads admin_action is unchanged (visibility.md V9): rabaed_app has no grant on the table, so none on
 -- the new column; rabaed_admin's table-wide select and insert cover it, and an identity column needs no grant
--- on its sequence. "generated always" means no one writes seq by hand.
+-- on its sequence. "generated always" refuses a seq written by hand unless the insert says `overriding system
+-- value`; the unique constraint refuses that one too when it repeats a seq.
 
 -- The rows already there are numbered in their (at, id) order, the order they were read in until now. The
 -- column gets its identity only afterwards, so its sequence starts after the last of them.
@@ -16,6 +17,7 @@ update admin_action a set seq = o.n
   where o.id = a.id;
 alter table admin_action alter column seq set not null;
 alter table admin_action alter column seq add generated always as identity;
+alter table admin_action add constraint admin_action_seq_key unique (seq);
 select setval(pg_get_serial_sequence('admin_action', 'seq'), coalesce(max(seq), 0) + 1, false) from admin_action;
 
 -- An item's Re-produce requests in the order they were made. As 20271006000000's body; only the sort
