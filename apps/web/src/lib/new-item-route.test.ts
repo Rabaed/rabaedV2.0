@@ -18,6 +18,8 @@ describe("projectTabOf", () => {
 
   it("is the tab whose page is open", () => {
     expect(projectTabOf("p1", "/projects/p1", null, tabs)).toBe("dashboard");
+    // The Activity Feed page has no tab of its own: it opens from the Dashboard's panel (RP-1142).
+    expect(projectTabOf("p1", "/projects/p1/activity", null, tabs)).toBe("dashboard");
     expect(projectTabOf("p1", "/projects/p1/work-items", null, tabs)).toBe("submittals");
     expect(projectTabOf("p1", "/projects/p1/inspections", null, tabs)).toBe("inspections");
     expect(projectTabOf("p1", "/projects/p1/snag-list/new", null, tabs)).toBe("snag_list");

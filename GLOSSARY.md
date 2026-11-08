@@ -117,7 +117,7 @@ A Location's progress picture (Complete, In Progress, Issues, Pending) worked ou
 _Avoid_: Progress percentage
 
 **Module**:
-One tab of a Project: Dashboard, Submittals, Inspections, Snag List, Site Reports, Drawings, Files, Views, Schedule, Settings. Submittals, Inspections, Snag List and Site Reports hold Work Items. Packages live inside Submittals, the Activity Feed inside the Dashboard, and the Approved Supplier List inside Settings. A Project may show Inspections inside the Submittals tab instead of its own; it stays its own Module either way.
+One tab of a Project: Dashboard, Submittals, Inspections, Site Reports, Snag List, Drawings, Files, Views, Schedule, Settings (the order of the refreshed kit, owner 2026-11-08, RP-1142). Submittals, Inspections, Site Reports and Snag List hold Work Items. Packages live inside Submittals, the Activity Feed inside the Dashboard, and the Approved Supplier List inside Settings. A Project may show Inspections inside the Submittals tab instead of its own; it stays its own Module either way.
 _Avoid_: Section, app
 
 **Work Item**:
