@@ -20,11 +20,15 @@ import {
 import { sql } from "kysely";
 import { isDeepStrictEqual } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildForeignProject } from "./support/foreign-project.ts";
+import { createTestApi } from "./support/harness.ts";
 import { addActionsType, addRulesType } from "./support/rules.ts";
 import { addSendBackType } from "./support/send-back.ts";
 
+const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
 afterAll(async () => {
+  await api.close();
   await migrator.destroy();
 });
 
@@ -71,6 +75,11 @@ beforeAll(async () => {
   await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, sendBackForm);
   // And one with Cancels and a Step that Recommends a Code (RP-433).
   await addSendBackType(migrator, "WFCNL", { en: "Cancel check", ar: "فحص الإلغاء" }, sendBackForm, { withCancel: true, recommendCode: true });
+  // A Project's own Workflow copied from the MAR's latest Version by the foreign-Project fixture
+  // (RP-1016) is among them, whichever tests ran first: its Code Transitions name the Code Screens,
+  // whose files a Screen may hold (ADR 0024). When the copy lost the Screen, they failed here only
+  // after a file that builds a foreign Project ran first (RP-1257).
+  await buildForeignProject(api, migrator, { code: "WFDFP" });
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
