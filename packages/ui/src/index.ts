@@ -441,6 +441,7 @@ export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/
 export { workflowBuilderLabels, type Translate } from "./components/workflow/workflow-builder-labels-from.ts";
 export { ErrorRows, ImportRows, PackageCell, RowReasons } from "./components/register-import/register-import-rows.tsx";
 export { logDownload, rejectedRowsDownload, saveDownload } from "./components/register-import/register-import-downloads.ts";
+export { filterImportRows, labelOf, mappedColumns, valuesMatched, type RowsShown } from "./components/register-import/register-import-summary.ts";
 export {
   RegisterImportWizard,
   type RegisterImportCallResult,

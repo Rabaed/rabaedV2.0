@@ -1,7 +1,35 @@
 "use client";
 
 import { formatNumber, workItemListHref, type BilingualText, type Locale, type RegisterImport, type RegisterImportFields, type RegisterImportMapping, type RegisterImportRow } from "@rabaed/domain";
-import { Button, Icon, ImportRows, RegisterImportWizard as Wizard, buttonVariants, rejectedRowsDownload, saveDownload, type RegisterImportClient } from "@rabaed/ui";
+import {
+  Button,
+  Icon,
+  ImportRows,
+  Input,
+  RegisterImportWizard as Wizard,
+  SegmentedControl,
+  Table,
+  TableBody,
+  TableCard,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  buttonVariants,
+  cn,
+  filterImportRows,
+  labelOf,
+  mappedColumns,
+  rejectedRowsDownload,
+  saveDownload,
+  valuesMatched,
+  type RegisterImportClient,
+  type RowsShown,
+} from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
@@ -37,8 +65,11 @@ export function RegisterImportWizard({
   fields,
   me,
   initialPreview = null,
+  initialMapping = null,
 }: {
   projectId: string;
+  /** A saved mapping to apply once the register is read ("Use in new import", RP-1144). */
+  initialMapping?: string | null;
   locale: Locale;
   /** The importer: the raiser of every row nobody else is assigned. */
   me: { id: string; name: BilingualText };
@@ -72,6 +103,13 @@ export function RegisterImportWizard({
       // A reload reopens this preview at Validate.
       onPreviewed={(id) => window.history.replaceState(null, "", `?preview=${id}`)}
       draftLink={draftLink}
+      // RP-1144: the Result step's Packages open their page.
+      packageLink={(packageId, children) => (
+        <Link href={`/packages/${packageId}`} className="text-brand-fg underline-offset-4 hover:underline">
+          {children}
+        </Link>
+      )}
+      initialMapping={initialMapping}
       // A Member tries the wizard with a made-up register (RP-954).
       sample
       // "Open the Drafts" (RP-954): the Submittals List of this import's Drafts that the Member sees
@@ -80,12 +118,19 @@ export function RegisterImportWizard({
       resultActions={(preview, created) => {
         const seen = preview.status === "created" ? preview.rows.filter((r) => r.workItemId !== null).length : created;
         return (
-          seen > 0 && (
-            <Link href={workItemListHref(projectId, { importId: preview.id })} className={buttonVariants()}>
-              <Icon name="list" />
-              {t("result.open", { count: seen, n: formatNumber(seen, locale) })}
+          <>
+            {seen > 0 && (
+              <Link href={workItemListHref(projectId, { importId: preview.id })} className={buttonVariants()}>
+                <Icon name="list" />
+                {t("result.open", { count: seen, n: formatNumber(seen, locale) })}
+              </Link>
+            )}
+            {/* RP-1144: the import's own page (the app only, never Rabaed Admin). */}
+            <Link href={`/projects/${projectId}/work-items/imports/${preview.id}`} className={buttonVariants({ variant: "secondary" })}>
+              <Icon name="history" />
+              {t("review.viewImport")}
             </Link>
-          )
+          </>
         );
       }}
     />
@@ -154,4 +199,243 @@ export function RegisterImportRows({
 }) {
   const t = useTranslations("registerImport");
   return <ImportRows rows={rows} label={label} locale={locale} mapping={mapping} importer={importer} t={(key, values) => t(key, values)} results draftLink={draftLink} />;
+}
+
+/**
+ * One import's page below its counts (RP-1144; the kit's import-register.html › One import):
+ * its Rows, shown all, created or rejected and found by Subject or row number, and the Mapping
+ * used: each column and the field it filled, the values matched, and who raised the rows and
+ * where they went. An unseen Draft stays "created" without its id (visibility.md).
+ */
+export function RegisterImportBody({ record, locale }: { record: RegisterImport; locale: Locale }) {
+  const t = useTranslations("registerImport");
+  const [shown, setShown] = useState<RowsShown>("all");
+  const [query, setQuery] = useState("");
+  const n = (value: number) => formatNumber(value, locale);
+  const rows = filterImportRows(record.rows, shown, query);
+  const total = filterImportRows(record.rows, shown, "").length;
+  const counts: Record<RowsShown, number> = {
+    all: record.rows.length,
+    created: record.rows.filter((r) => r.created).length,
+    rejected: record.rows.filter((r) => r.reasons.length > 0).length,
+  };
+  const fieldLabel = (field: string) => {
+    if (!field.startsWith("field:")) return t(`fields.${field}`);
+    const key = field.slice("field:".length);
+    const label = record.mapping.fields?.find((f) => f.key === key)?.label?.[locale] ?? key;
+    return t("detail.formField", { label });
+  };
+  const byColumn = new Map(mappedColumns(record.mapping).map((c) => [c.column, c.field]));
+  const fixedTrade = (id: string) => record.rows.find((r) => r.trade.match?.id === id)?.trade.match?.name[locale] ?? "—";
+  const packageColumn = record.mapping.package ? (record.headers[record.mapping.package.column] ?? "—") : null;
+  const rules = record.mapping.assign?.rules?.length ?? 0;
+
+  return (
+    <Tabs defaultValue="rows">
+      <TabsList aria-label={t("detail.rows")}>
+        <TabsTrigger value="rows" count={n(record.rows.length)}>
+          {t("review.tabRows")}
+        </TabsTrigger>
+        <TabsTrigger value="mapping">{t("review.tabMapping")}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="rows" className="flex flex-col gap-3 pt-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SegmentedControl
+            aria-label={t("review.tabRows")}
+            value={shown}
+            onValueChange={(value) => setShown(value === "created" || value === "rejected" ? value : "all")}
+            options={(["all", "created", "rejected"] as const).map((s) => ({
+              value: s,
+              label: (
+                <span className="inline-flex items-center gap-1.5">
+                  {t(s === "all" ? "review.showAll" : s === "created" ? "review.showCreated" : "review.showRejected")}
+                  <span className="tabular-nums">{n(counts[s])}</span>
+                </span>
+              ),
+            }))}
+          />
+          {/* Filters as the reader types, so not the List's ToolbarSearch (which searches on Enter). */}
+          <label className="flex min-w-56 flex-1 items-center gap-2 sm:max-w-80">
+            <Icon name="search" size={16} className="text-muted" />
+            <Input aria-label={t("review.search")} placeholder={t("review.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+          <span className="ms-auto text-[13px] text-muted">{t("review.showing", { shown: n(rows.length), total: n(total) })}</span>
+        </div>
+        <div className="overflow-x-auto rounded-md border border-border bg-surface">
+          <RegisterImportRows rows={rows} label={t("detail.rows")} locale={locale} mapping={record.mapping} importer={record.defaultRaiser.name} />
+        </div>
+      </TabsContent>
+      <TabsContent value="mapping" className="pt-4">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <TableCard>
+            <Table label={t("review.tabMapping")}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("review.column")}</TableHead>
+                  <TableHead className="w-8">
+                    <span className="sr-only">→</span>
+                  </TableHead>
+                  <TableHead>{t("review.field")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {record.headers.map((header, column) => {
+                  const field = byColumn.get(column);
+                  return (
+                    <TableRow key={column}>
+                      <TableCell className="font-semibold">
+                        <bdi>{header || "—"}</bdi>
+                      </TableCell>
+                      <TableCell aria-hidden className="text-muted">
+                        <Icon name="arrow-right" size={14} className="rtl:rotate-180" />
+                      </TableCell>
+                      <TableCell className={cn(!field && "text-muted")}>{field ? fieldLabel(field) : t("review.notMapped")}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* A fixed Type or Trade reads no column: one value for every row. */}
+                {(
+                  [
+                    ["type", "value" in record.mapping.type ? record.mapping.type.value : null],
+                    ["trade", "value" in record.mapping.trade ? fixedTrade(record.mapping.trade.value) : null],
+                  ] as const
+                ).map(([field, value]) =>
+                  value === null ? null : (
+                    <TableRow key={field}>
+                      <TableCell className="font-semibold">{t(`fields.${field}`)}</TableCell>
+                      <TableCell />
+                      <TableCell>
+                        <bdi>{t("detail.everyRow", { value })}</bdi>
+                      </TableCell>
+                    </TableRow>
+                  ),
+                )}
+              </TableBody>
+            </Table>
+          </TableCard>
+          <div className="flex flex-col gap-3">
+            <section className="flex flex-col gap-1.5 rounded-md border border-border bg-surface p-3">
+              <h3 className="text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">{t("review.valuesMatched")}</h3>
+              <ul className="flex flex-col gap-1">
+                {valuesMatched(record).map((v) => (
+                  <li
+                    key={`${v.field}:${v.text}`}
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-sm px-2.5 py-1.5 text-[13.5px]",
+                      v.match ? "bg-surface-subtle" : "bg-danger-tint text-danger-fg",
+                    )}
+                  >
+                    <bdi className="font-semibold">{v.text}</bdi>
+                    <span>{v.match ? labelOf(v.match, locale) : t("review.notMatched")}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section className="flex flex-col gap-1.5 rounded-md border border-border bg-surface p-3">
+              <h3 className="text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">{t("review.assignPackages")}</h3>
+              <dl className="flex flex-col gap-1 text-[13.5px]">
+                <div className="flex items-center justify-between gap-3 rounded-sm bg-surface-subtle px-2.5 py-1.5">
+                  <dt>{t("review.defaultRaiser")}</dt>
+                  <dd className="font-semibold">{record.defaultRaiser.name[locale]}</dd>
+                </div>
+                {rules > 0 && (
+                  <div className="flex items-center justify-between gap-3 rounded-sm bg-surface-subtle px-2.5 py-1.5">
+                    <dt>{t("assign.rules")}</dt>
+                    <dd className="font-semibold">{t("review.rules", { count: rules, n: n(rules) })}</dd>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3 rounded-sm bg-surface-subtle px-2.5 py-1.5">
+                  <dt>{t("validate.packages")}</dt>
+                  <dd className="font-semibold">
+                    {record.mapping.packages
+                      ? t("review.packagesFile")
+                      : packageColumn !== null
+                        ? t("review.packagesColumn", { column: packageColumn })
+                        : t("review.packagesNone")}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </div>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** "Save as mapping" on an import's page (RP-1144): its mapping saved under a name for the Member's own Company. */
+export function SaveImportMapping({ projectId, mapping }: { projectId: string; mapping: RegisterImportMapping }) {
+  const t = useTranslations("registerImport");
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  async function save() {
+    const chosen = name.trim();
+    if (!chosen) return;
+    setBusy(true);
+    setFailed(null);
+    const result = await setupCall("POST", `/projects/${projectId}/register-import-mappings`, { name: chosen, mapping });
+    setBusy(false);
+    if (!result.ok) {
+      setFailed(t(`errors.${result.error === "name_taken" ? "nameTaken" : "unavailable"}`));
+      return;
+    }
+    setSaved(chosen);
+    setOpen(false);
+    setName("");
+  }
+  return (
+    <div className="flex flex-col items-end gap-2">
+      {!open && (
+        <Button
+          size="sm"
+          onClick={() => {
+            setSaved(null);
+            setOpen(true);
+          }}
+        >
+          <Icon name="device-floppy" />
+          {t("review.saveMapping")}
+        </Button>
+      )}
+      {open && (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Input className="w-56" aria-label={t("review.mappingName")} placeholder={t("review.mappingName")} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+          <Button type="submit" size="sm" disabled={busy || name.trim() === ""}>
+            {t("review.save")}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFailed(null);
+              setOpen(false);
+            }}
+          >
+            {t("review.cancel")}
+          </Button>
+        </form>
+      )}
+      {saved && (
+        <p role="status" className="flex items-center gap-1.5 text-[13px] text-success-fg">
+          <Icon name="circle-check" size={14} />
+          {t("review.mappingSaved", { name: saved })}
+        </p>
+      )}
+      {failed && (
+        <p role="alert" className="text-[13px] text-danger-fg">
+          {failed}
+        </p>
+      )}
+    </div>
+  );
 }
