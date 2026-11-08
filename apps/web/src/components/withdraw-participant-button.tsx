@@ -25,6 +25,7 @@ export function WithdrawParticipantButton({
 }) {
   const t = useTranslations("projects.withdrawParticipant");
   const tProjects = useTranslations("projects");
+  const tParticipants = useTranslations("participants");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const toast = useToast();
@@ -88,9 +89,9 @@ export function WithdrawParticipantButton({
           noUndo: t("noUndo"),
           comeBack: t("comeBack"),
           counting: t("counting"),
-          cancel: t("cancel"),
+          cancel: tParticipants("cancel"),
           confirm: t("confirm"),
-          close: t("close"),
+          close: tProjects("close"),
         }}
       />
     </>
