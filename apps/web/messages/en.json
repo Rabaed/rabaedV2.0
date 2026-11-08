@@ -629,6 +629,31 @@
     "awaitingAnswer": "Awaiting an answer",
     "withdraw": "Withdraw",
     "confirmWithdraw": "Withdraw this invitation? You can invite the same CR number again later.",
+    "withdrawParticipant": {
+      "button": "Withdraw",
+      "buttonLabel": "Withdraw {company} from the Project",
+      "title": "Withdraw {company} from {project}?",
+      "description": "Its Members lose the Project at once. Everything it did stays: its moves, replies, Documents and signatures.",
+      "itemsToCancel": "{count, plural, one {{n} item it raised will be Cancelled by Rabaed} other {{n} items it raised will be Cancelled by Rabaed}}",
+      "stepsToVacate": "{count, plural, one {{n} Step it holds will wait for a new {role}} other {{n} Steps it holds will wait for a new {role}}}",
+      "countsInclude": "The counts include items you may not see.",
+      "noUndo": "This can't be undone.",
+      "comeBack": "The Company can come back only through a new invitation.",
+      "counting": "Counting…",
+      "cancel": "Cancel",
+      "confirm": "Withdraw",
+      "close": "Close",
+      "done": "{company} was withdrawn from the Project",
+      "withdrawnHeading": "Withdrawn",
+      "withdrawnBadge": "Withdrawn",
+      "withdrawnOn": "Withdrawn on {date}"
+    },
+    "vacancies": {
+      "title": "Vacancies",
+      "description": "Steps whose Company was withdrawn. Each waits for a new Participant in its Project Role.",
+      "hiddenItem": "An item at {step} on {project}",
+      "empty": "No Step is waiting for a new Participant."
+    },
     "needMyAction": "Need My Action",
     "closed": "Closed"
   },

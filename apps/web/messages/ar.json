@@ -629,6 +629,31 @@
     "awaitingAnswer": "بانتظار الرد",
     "withdraw": "سحب الدعوة",
     "confirmWithdraw": "سحب هذه الدعوة؟ يمكنك دعوة السجل التجاري نفسه لاحقاً.",
+    "withdrawParticipant": {
+      "button": "سحب",
+      "buttonLabel": "سحب {company} من المشروع",
+      "title": "سحب {company} من {project}؟",
+      "description": "يفقد أعضاؤها المشروع فورًا. يبقى كل ما فعلته: تحريكاتها وردودها ومستنداتها وتواقيعها.",
+      "itemsToCancel": "{count, plural, one {عنصر واحد قدّمته سيُلغى من رابض} other {{n} من العناصر التي قدّمتها ستُلغى من رابض}}",
+      "stepsToVacate": "{count, plural, one {خطوة واحدة لديها ستنتظر {role} الجديد} other {{n} من الخطوات لديها ستنتظر {role} الجديد}}",
+      "countsInclude": "تشمل الأعداد عناصر قد لا تراها.",
+      "noUndo": "لا يمكن التراجع عن هذا.",
+      "comeBack": "لا تعود الشركة إلا بدعوة جديدة.",
+      "counting": "جارٍ العدّ…",
+      "cancel": "إلغاء",
+      "confirm": "سحب",
+      "close": "إغلاق",
+      "done": "سُحبت {company} من المشروع",
+      "withdrawnHeading": "المسحوبة",
+      "withdrawnBadge": "مسحوبة",
+      "withdrawnOn": "سُحبت في {date}"
+    },
+    "vacancies": {
+      "title": "الشواغر",
+      "description": "خطوات سُحبت شركتها. تنتظر كل منها مشاركًا جديدًا بدورها.",
+      "hiddenItem": "عنصر عند {step} في {project}",
+      "empty": "لا توجد خطوة بانتظار مشارك جديد."
+    },
     "needMyAction": "بحاجة لإجرائي",
     "closed": "مغلق"
   },

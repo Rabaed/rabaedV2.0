@@ -150,6 +150,7 @@ const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's own name, not a Member
 export const poolIcon: IconName = "users";
 /** A Vacancy: a Step waiting for a new Participant (RP-952). */
+// eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy
 export const vacancyIcon: IconName = "user-search";
 
 /**

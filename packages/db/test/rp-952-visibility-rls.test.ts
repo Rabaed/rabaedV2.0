@@ -4,7 +4,9 @@
 // transaction the Participant's items that left Draft are Cancelled by Rabaed with a Record, its
 // Drafts and Draft Revisions with none, and its Steps on other Companies' items become
 // Participant-level Vacancies that name only its Project Role. Its Authorized Person and Project
-// Members are told; nobody else is. Its Members lose the Project.
+// Members are told; nobody else is. Its Members lose the Project. PR 2 (RP-952-6, RP-952-7): the
+// Vacancies list names each Vacancy's Step, and only the Host Company's Project Admins read the
+// withdrawn Participants.
 //
 // The describes run in order on one Project: the refusals, then C2's withdrawal, then K1's.
 import { randomInt, randomUUID } from "node:crypto";
@@ -540,8 +542,9 @@ describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and n
 
   it("gives both of C1's Project Admins the Step, and nobody else", async () => {
     await expectHiddenFrom({
-      read: async (as) => (await vacancySteps(as)).map((v) => ({ id: `${v.id}:${v.step_name.en}` })),
-      target: `${assignment}:${stepName.en}`,
+      // The Vacancies that carry their Step, by the Vacancy's id.
+      read: async (as) => (await vacancySteps(as)).filter((v) => v.step_name !== null).map((v) => ({ id: v.id })),
+      target: assignment,
       seenBy: [c1.ap, c1Admin],
       hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap],
       name: nameOf,

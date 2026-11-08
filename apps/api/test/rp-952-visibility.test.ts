@@ -330,16 +330,17 @@ describe("scenario RP-952-5: after the withdrawal, K1's Members lose the Project
 });
 
 describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and nothing more of an item the Admin doesn't see", () => {
+  // The Vacancies that carry their Step, by the Vacancy's id.
   const steps = async (by: Caller) =>
-    (await readById<ProjectVacancies>(`/v1/projects/${projectId}/vacancies`)(by)).flatMap((v) => v.vacancies.map((x) => ({ ...x, id: `${x.id}:${x.step.name.en}` })));
+    (await readById<ProjectVacancies>(`/v1/projects/${projectId}/vacancies`)(by)).flatMap((v) => v.vacancies.filter((x) => x.step?.name).map((x) => ({ id: x.id })));
   const theRow = async (by: Caller) => (await ok(by.get(`/v1/projects/${projectId}/vacancies`), 200)).json() as ProjectVacancies;
 
   it("gives C1's Project Admin the Step it waits at, and nobody else", async () => {
     const [row] = (await theRow(c1.caller)).vacancies;
-    expect(row!.step.name.en).toBe("Consultant review");
+    expect(row!.step).toEqual({ name: { en: "Consultant review", ar: "مراجعة الاستشاري" } });
     await expectHiddenFrom({
       read: steps,
-      target: `${row!.id}:${row!.step.name.en}`,
+      target: row!.id,
       seenBy: c1.caller,
       hiddenFrom: [c1Engineer, c1Pm, c2.caller, k1.caller, otherAdmin],
       name: nameOf,
