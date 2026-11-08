@@ -9,6 +9,7 @@ import { moduleKeySchema } from "./module.ts";
 import { documentNumberSegments } from "./numbering.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 import { workItemPackage } from "./package.ts";
+import { baseRoles } from "./project.ts";
 import { replyChecklistRead } from "./reply-checklist.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
@@ -136,6 +137,14 @@ export const workItemWith = z.discriminatedUnion("kind", [
 export type WorkItemWith = z.infer<typeof workItemWith>;
 
 /**
+ * An open item whose Step its holder's withdrawal made a Participant-level Vacancy (RP-952, ADR 0028):
+ * no Company holds it (`with` is null), and every reader reads "Waiting for a new ‹role›", the
+ * withdrawn Participant's Project Role, never its Company. Step Age keeps counting.
+ */
+export const workItemVacancy = z.object({ projectRole: z.object({ baseRole: z.enum(baseRoles), name: bilingualText }) });
+export type WorkItemVacancy = z.infer<typeof workItemVacancy>;
+
+/**
  * The item a Snag List item's `raised_from` Link names (RP-94, RP-628), by Document Number and
  * Subject (E1). Its id and its outcome (the Review Code or Inspection Result, with how a badge
  * shows it) only when the viewer sees that item: a Link never carries its live data.
@@ -154,8 +163,10 @@ export const workItemRow = workItemSummary.extend({
   revisionNo: z.number().int().nonnegative(),
   /** The Review Code or Inspection Result, once closed. */
   outcome: workItemOutcome.nullable(),
-  /** Null once closed: nobody holds it. */
+  /** Null once closed: nobody holds it. Null too while its Step is a Vacancy (`vacancy`). */
   with: workItemWith.nullable(),
+  /** Set while its Step is a Participant-level Vacancy (RP-952); null or left out otherwise. */
+  vacancy: workItemVacancy.nullable().optional(),
   /** When it was first Submitted: for everyone who sees it. Null while it has not been. */
   submissionDate: z.iso.datetime().nullable(),
   /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */
@@ -774,6 +785,8 @@ export const workItemDetail = workItemSummary.extend({
       pool: z.object({ names: z.array(bilingualText) }).nullable(),
     })
     .nullable(),
+  /** Set while its Step is a Participant-level Vacancy (RP-952): `heldBy` is null then. */
+  vacancy: workItemVacancy.nullable().optional(),
   /** Set once closed: the Issued Code (A, C…). */
   outcome: workItemOutcome.nullable(),
   closedAt: z.iso.datetime().nullable(),
