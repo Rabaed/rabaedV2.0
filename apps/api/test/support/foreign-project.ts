@@ -19,7 +19,7 @@ const typeCode = (prefix: string) => `${prefix}${Array.from({ length: 4 }, () =>
 
 /**
  * A copy of the MAR's latest published Workflow Version, as Version 1 of `projectId`'s own Workflow,
- * published. Returns the Workflow's (workflow_definition) id.
+ * published, each Transition with the Screen it names. Returns the Workflow's (workflow_definition) id.
  */
 export async function projectWorkflow(migrator: Db, projectId: string): Promise<string> {
   const { rows } = await sql<{ definition_id: string; version_id: string }>`
@@ -42,9 +42,13 @@ export async function projectWorkflow(migrator: Db, projectId: string): Promise<
       from version, mar join workflow_step s on s.workflow_version_id = mar.id
       returning id, key, workflow_version_id
     ), transitions as (
+      -- With the Screen each one names (RP-516): its action_form is that Screen's copy, which may hold
+      -- the Screen's files (ADR 0024); without its Screen it reads as an Action Form, which may not (RP-1257).
       insert into workflow_transition (
-        workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications)
-      select f.workflow_version_id, tr.key, f.id, s.id, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.notifications
+        workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions, notifications,
+        screen_key, screen_version_id)
+      select f.workflow_version_id, tr.key, f.id, s.id, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions, tr.notifications,
+        tr.screen_key, tr.screen_version_id
       from mar
       join workflow_transition tr on tr.workflow_version_id = mar.id
       join workflow_step fs on fs.id = tr.from_step_id
