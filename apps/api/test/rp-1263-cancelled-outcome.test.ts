@@ -185,6 +185,15 @@ describe("a Snag Rabaed cancels at its raiser's withdrawal: the Snag List has a 
     ).json().id;
     await take(at.k1Manager, snag, "raise");
     await ok(at.c1Pm.post(`/v1/work-items/${snag}/pick-up`));
+    // Before the cancel: C1 reads it open, at Open; C2 never does.
+    await expectHiddenFrom({
+      read: async (by) => (await itemById(by, snag)).filter((d) => d.outcome === null && d.stage.key === "open"),
+      target: snag,
+      seenBy: [at.c1Pm, at.c1Engineer],
+      hiddenFrom: [c2Engineer],
+      name: nameOf,
+      label: "the open Snag",
+    });
     await withdraw(c1.caller, at.k1ParticipantId!);
   });
 
@@ -194,6 +203,14 @@ describe("a Snag Rabaed cancels at its raiser's withdrawal: the Snag List has a 
     const keys = stages.map((s) => s.key);
     expect(stages.find((s) => s.key === "cancelled")).toMatchObject({ category: "cancelled", name: { en: "Cancelled", ar: "ملغى" } });
     expect(keys.indexOf("cancelled")).toBeGreaterThan(keys.indexOf("closed"));
+  });
+
+  it("every Module of a new Project with Stages has a cancelled Stage, so a cancelled item always has one to read", async () => {
+    // The Modules with a Stage set: Site Reports and Drawings have none yet.
+    for (const module of ["submittals", "inspections", "snag_list"] as const) {
+      const stages = (await stagesOf(at.c1Pm, at.projectId, module)).stages;
+      expect(stages.filter((s) => s.category === "cancelled").length, module).toBeGreaterThan(0);
+    }
   });
 
   it("C1, which saw it, reads it Cancelled in the Cancelled Stage and Kanban column; C2 never reads it", async () => {

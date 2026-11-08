@@ -242,14 +242,16 @@ create or replace function app.delete_stage(p_project_id uuid, p_module_key text
 -- 7. -------------------------------------------------------------------------------------------------
 -- The Rabaed Defaults: a Cancelled Stage, last, for each Module with none (the Snag List). A new Rabaed
 -- Default reaches only Projects created from now on (20270207000000_default_sets_reach_new_projects);
--- step 8 gives the existing ones theirs. A Module whose Rabaed Default key `cancelled` were another kind
--- of Stage would be skipped here: none is (the Rabaed Defaults are the platform's own), unlike a Project's.
+-- step 8 gives the existing ones theirs. Key `cancelled`, or `rabaed_cancelled` where the Module already
+-- uses that key for another kind of Stage, as in step 8.
 insert into stage (owner_kind, module_key, key, name, category, sort)
-select 'rabaed', m.module_key, 'cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', max(m.sort) + 1
+select 'rabaed', m.module_key,
+  case when bool_or(m.key = 'cancelled') then 'rabaed_cancelled' else 'cancelled' end,
+  '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', max(m.sort) + 1
 from stage m
 where m.owner_kind = 'rabaed'
 group by m.module_key
-having not bool_or(m.category = 'cancelled') and not bool_or(m.key = 'cancelled');
+having not bool_or(m.category = 'cancelled');
 
 -- 8. -------------------------------------------------------------------------------------------------
 -- Each Project Module with no cancelled-category Stage gets one, last, as its own: key `cancelled`, or
