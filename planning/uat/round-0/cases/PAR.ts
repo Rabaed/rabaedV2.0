@@ -484,7 +484,7 @@ defineCase("PAR-16", async (t) => {
 const GRC = { en: "Gulf Review Consultants", ar: "الخليج للمراجعة الاستشارية" };
 const SEEN = "UAT03-MAR-01-0002";
 const UNSEEN = "UAT03-MAR-02-0001";
-const UNSEEN_SUBJECT = "Beta Build – MV switchgear, with Gulf Review Consultants";
+const UNSEEN_SUBJECT = "Beta Build – MV switchgear, at the second Consultant";
 const WAITING = { en: "Waiting for a new Consultant", ar: "بانتظار الاستشاري الجديد" };
 const UAT03_NAME = "UAT 03 · Project Admin (Saeed)";
 /** A date as a page could print it: 2026-11-09, 9/11/2026, or a month by name. */
@@ -552,9 +552,11 @@ defineCase("PAR-17", async (t) => {
     await vacancies.waitFor();
     const vacText = (await vacancies.innerText()).replace(/\s+/g, " ");
     await t.shot(page, "vacancies");
-    t.check(`The seen item is a link with its number and Subject (${SEEN})`, (await vacancies.getByRole("link").filter({ hasText: SEEN }).count()) === 1 && vacText.includes("PAR-17 Exit signs – with Gulf Review Consultants"), vacText.slice(0, 300));
+    t.check(`The seen item is a link with its number and Subject (${SEEN})`, (await vacancies.getByRole("link").filter({ hasText: SEEN }).count()) === 1 && vacText.includes("PAR-17 Exit signs – at the second Consultant"), vacText.slice(0, 300));
     t.check("The unseen item reads only its Step and the Project", vacText.includes(`An item at Consultant Engineer on ${UAT03_NAME}`), vacText.slice(0, 300));
-    t.check("The unseen item shows no number, Subject or Company", !vacText.includes(UNSEEN) && !vacText.includes("MV switchgear") && !/Beta Build|Gulf Review/.test(vacText), vacText.slice(0, 300));
+    const unseenRow = ((await vacancies.locator("li").filter({ hasText: "An item at " }).first().innerText().catch(() => "")) ?? "").replace(/\s+/g, " ");
+    t.check("The unseen item shows no number, Subject or Company", !!unseenRow && !/UAT03-|MV switchgear|Beta Build|Gulf Review|TMC/.test(unseenRow), unseenRow);
+    t.check("No Company is named anywhere on the card", !/Beta Build|Gulf Review|TMC Constructions|Design Consultants/.test(vacText) && !vacText.includes(UNSEEN), vacText.slice(0, 300));
     t.check("Step Age dots only: no date, due date, deadline or overdue", !DATE.test(vacText) && !/due date|deadline|overdue|\bdue\b/i.test(vacText), vacText.slice(0, 300));
     t.check("Both rows wait for a new Consultant", (vacText.match(/Waiting for a new Consultant/g) ?? []).length === 2, vacText.slice(0, 300));
     const api = (await saeed.get(`/projects/${pid}/vacancies`)).body as any;

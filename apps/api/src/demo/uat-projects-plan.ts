@@ -239,8 +239,8 @@ function uat03(): Staged[] {
   const grc = { consultantEngineer: "tariq" as const };
   return [
     s(["PAR-10"], mar("PAR-10 Cable trays – numbered with TMC's code", "A02", "with_consultant_engineer", P.trays), tmc(1)),
-    s(["PAR-17"], mar("PAR-17 Exit signs – with Gulf Review Consultants", "A03", "with_consultant_engineer", P.exitSigns, grc), tmc(2)),
-    hidden(["PAR-17"], mar("Beta Build – MV switchgear, with Gulf Review Consultants", "PGF", "with_consultant_engineer", P.switchgear, { ...grc, owner: "beta" }), series("UAT03", "MAR", "02")(1)),
+    s(["PAR-17"], mar("PAR-17 Exit signs – at the second Consultant", "A03", "with_consultant_engineer", P.exitSigns, grc), tmc(2)),
+    hidden(["PAR-17"], mar("Beta Build – MV switchgear, at the second Consultant", "PGF", "with_consultant_engineer", P.switchgear, { ...grc, owner: "beta" }), series("UAT03", "MAR", "02")(1)),
   ];
 }
 

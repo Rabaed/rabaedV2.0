@@ -367,21 +367,21 @@ describe("UAT 03's Gulf Review Consultants, for PAR-17 (RP-1264)", () => {
     for (const s of held) {
       const [id] = await idsOn(uat03, s.item.title);
       const d = await detail(as.tariq, id!);
-      expect([d.step?.key, d.heldBy?.companyName.en, d.heldBy?.memberName?.en], s.item.title).toEqual(["consultant_engineer", "Gulf Review Consultants", "Tariq Al Shehri"]);
+      expect([d.step?.key, d.heldBy?.companyName.en, d.heldBy?.memberName?.en], s.item.title).toEqual(["consultant_engineer", "Gulf Review Consultants", "Tariq Al Shehri"]); // not hidden-from: who holds the item, read by its holder
     }
     const [tmc] = await idsOn(uat03, held[0]!.item.title);
-    expect((await detail(as.saeed, tmc!)).heldBy?.companyName.en).toBe("Gulf Review Consultants");
+    expect((await detail(as.saeed, tmc!)).heldBy?.companyName.en).toBe("Gulf Review Consultants"); // not hidden-from: TMC's own item, which Saeed reads, names its holder's Company
     const [beta] = await idsOn(uat03, held[1]!.item.title);
     await expectHiddenFrom({ read: readById(`/v1/work-items/${beta}`), target: beta!, seenBy: [as.yousef, as.tariq], hiddenFrom: as.saeed, name: nameOf, label: "RP-1264 PAR-17 Beta Build's item" });
   });
 
   it("gives Saeed the counts PAR-17 reads: nothing to Cancel, two Steps to wait for a new Consultant", async () => {
     const uat03 = await projectOf("UAT03");
-    const { participants } = (await as.saeed.get(`/v1/projects/${uat03}/participants`)).json() as { participants: { id: string; company: { legalName: { en: string } } }[] };
+    const { participants } = (await as.saeed.get(`/v1/projects/${uat03}/participants`)).json() as { participants: { id: string; company: { legalName: { en: string } } }[] }; // not hidden-from: the Project Admin reads his own Project's Participants
     const grc = participants.find((p) => p.company.legalName.en === "Gulf Review Consultants")!; // not hidden-from: a Participant of Saeed's own Project, by name
     const preview = await as.saeed.get(`/v1/participants/${grc.id}/withdrawal`);
     expect(preview.statusCode, preview.body).toBe(200);
-    expect(preview.json()).toEqual({ itemsToCancel: 0, stepsToVacate: 2 });
+    expect(preview.json()).toEqual({ itemsToCancel: 0, stepsToVacate: 2 }); // not hidden-from: the counts the Host Company's Project Admin is shown, by design (RP-952-1)
   });
 });
 

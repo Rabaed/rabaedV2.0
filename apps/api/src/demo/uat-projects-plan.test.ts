@@ -72,6 +72,8 @@ describe("the UAT roles (RP-1248, RP-1249, RP-1250)", () => {
       [["PAR-17"], "UAT03-MAR-01-0002", false, "with_consultant_engineer"],
       [["PAR-17"], "UAT03-MAR-02-0001", true, "with_consultant_engineer"],
     ]);
+    // Their Subjects name no Company: after the withdrawal PAR-17 checks that nothing names the one withdrawn.
+    for (const s of held) expect(s.item.title).not.toMatch(/Gulf Review|الخليج/);
     // Every other UAT 03 item stays with Design Consultants, and no other case names the staged Company's items.
     for (const s of uat03.filter((x) => !held.includes(x))) expect(s.cases, s.item.title).not.toContain("PAR-17");
     for (const c of cases.filter((x) => x.id !== "PAR-17")) expect(`${c.steps}\n${c.expected}`, c.id).not.toMatch(/Gulf Review|Tariq/);
