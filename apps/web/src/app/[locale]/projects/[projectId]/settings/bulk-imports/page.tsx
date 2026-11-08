@@ -3,22 +3,22 @@ import { Icon, SettingsHeader, buttonVariants } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getProject, getRaisableTypes } from "@/lib/session";
+import { getMe, getProject, getRaisableTypes, mayImportRegister } from "@/lib/session";
 
 /**
- * Project → Settings → Bulk Actions (RP-1144; the kit's settings-bulk.html, owner's answer
+ * Project → Settings → Bulk Imports (RP-1144; the kit's settings-bulk.html "Bulk Actions", renamed: GLOSSARY.md avoids "Action"; owner's answer
  * 2026-11-08): the door to the Submittal Register Import. It opens the same wizard and the same
  * Imports page the Submittals List's More menu opens, at the same addresses; the kit's own
  * five-step flow and its Drawings folder are not built. Only a Member who may raise a Submittals
  * Type reaches it, since only they may import (story 4); an import is their own Company's.
  */
-export default async function BulkActionsPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
+export default async function BulkImportsPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("bulkActions");
+  const t = await getTranslations("bulkImports");
   const [me, project, raisable] = await Promise.all([getMe(), getProject(projectId), getRaisableTypes(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !raisable || raisable.types.length === 0) notFound();
+  if (!project || !mayImportRegister(raisable)) notFound();
   const base = `/projects/${project.id}/work-items`;
 
   return (

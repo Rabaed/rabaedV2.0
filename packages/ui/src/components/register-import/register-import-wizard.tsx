@@ -33,7 +33,7 @@ import { PackagesCard, type PackagesChoice } from "./register-import-packages.ts
 import { ImportLog, ImportSummary } from "./register-import-review.tsx";
 import { ErrorRows, ImportRows, PackageCell, within } from "./register-import-rows.tsx";
 import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnLoad, type Suggested } from "./register-import-suggested.ts";
-import { wizardSteps } from "./register-import-summary.ts";
+import { wizardSteps, type WizardStep } from "./register-import-summary.ts";
 
 // The Submittal Register Import wizard (RP-637, RP-639; the owner's design RP-634):
 // Upload → Sheet & header row → Map fields (a field suggested for each column from its
@@ -51,7 +51,17 @@ import { wizardSteps } from "./register-import-summary.ts";
 // assigned, `importer` with `fixedImporter`). Each app gives its own calls (`client`), its
 // `registerImport` messages (`t`) and its links.
 
-type Step = "upload" | "sheet" | "map" | "values" | "assign" | "validate" | "result";
+type Step = WizardStep | "result";
+
+/** A Package's number (left to right), as the app links it, else plain. */
+function PackageNumber({ id, number, link }: { id: string; number: string; link: ((packageId: string, children: ReactNode) => ReactNode) | undefined }) {
+  const text = (
+    <bdi dir="ltr" translate="no">
+      {number}
+    </bdi>
+  );
+  return <>{link ? link(id, text) : text}</>;
+}
 
 /** What a call of the import answered: its body, or the refusal's code (`unavailable` when it couldn't be made). */
 export type RegisterImportCallResult = { ok: true; body: unknown } | { ok: false; error: string };
@@ -716,7 +726,7 @@ export function RegisterImportWizard({
             </li>
           )}
           {stepper.map((s, index) => {
-            const at = (stepper as string[]).indexOf(step);
+            const at = stepper.indexOf(step);
             const done = index < at;
             return (
               <li key={s} aria-current={s === step ? "step" : undefined} className="flex items-center gap-2 text-[14px]">
@@ -1464,14 +1474,7 @@ export function RegisterImportWizard({
                 <dd className="flex items-center gap-2 font-bold">
                   {p.package ? (
                     // RP-1144: each Package opens from here, where the app gives a link.
-                    (() => {
-                      const number = (
-                        <bdi dir="ltr" translate="no">
-                          {p.package.number}
-                        </bdi>
-                      );
-                      return packageLink ? packageLink(p.package.id, number) : number;
-                    })()
+                    <PackageNumber id={p.package.id} number={p.package.number} link={packageLink} />
                   ) : (
                     <bdi>{p.newName}</bdi>
                   )}

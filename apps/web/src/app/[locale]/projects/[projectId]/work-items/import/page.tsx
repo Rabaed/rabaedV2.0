@@ -3,6 +3,7 @@ import { Icon, buttonVariants } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { PageBackLink } from "@/components/page-back-link";
+import { RegisterImportCrumbs } from "@/components/register-import-crumbs";
 import { RegisterImportWizard } from "@/components/register-import-wizard";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getMyVisibility, getProject, getRaisableTypes, getRegisterImport, getRegisterImportFields, getRegisterImports } from "@/lib/session";
@@ -46,13 +47,10 @@ export default async function ImportRegisterPage({
       {/* Back (RP-1241), else to the Submittals with the Member's last filters there (RP-1240). */}
       <PageBackLink parent={`/projects/${project.id}/work-items`} />
       {/* RP-1144 (the kit's import-register.html): Submittals › Import register, and the Imports with their count. */}
-      <nav aria-label={t("breadcrumb")} className="flex items-center gap-2 text-[13px] text-muted">
-        <Link href={`/projects/${project.id}/work-items`} className="hover:text-text hover:underline">
-          {t("crumbSubmittals")}
-        </Link>
-        <Icon name="chevron-right" size={14} className="rtl:rotate-180" />
-        <span className="font-semibold text-text">{t("importRegister")}</span>
-      </nav>
+      <RegisterImportCrumbs
+        label={t("breadcrumb")}
+        parts={[{ text: t("crumbSubmittals"), href: `/projects/${project.id}/work-items` }, { text: t("importRegister") }]}
+      />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-h3 font-bold">{t("importRegister")}</h1>

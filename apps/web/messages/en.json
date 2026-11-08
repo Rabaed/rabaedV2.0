@@ -2241,7 +2241,7 @@
   },
   "settings": {
     "heading": "Project settings",
-    "bulkActions": "Bulk Imports",
+    "bulkImports": "Bulk Imports",
     "numbering": "Document Numbering",
     "tradesLocations": "Trades & Locations",
     "approvedSuppliers": "Approved Supplier List",
@@ -2823,7 +2823,7 @@
     "notAllowed": "Only your Company's Authorized Person can save to the Library.",
     "failed": "It couldn't be saved. Try again."
   },
-  "bulkActions": {
+  "bulkImports": {
     "title": "Bulk Imports",
     "lede": "Bring many items into the Project at once. Every row is validated before anything is created.",
     "submittalsTitle": "Submittals from Excel",
@@ -2863,6 +2863,7 @@
     },
     "review": {
       "viewImport": "View this import",
+      "open": "Open the import",
       "new": "New",
       "used": "Used",
       "tabImports": "Imports",

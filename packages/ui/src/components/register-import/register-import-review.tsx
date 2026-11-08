@@ -4,6 +4,7 @@ import { formatNumber, type Locale, type RegisterImport } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
+import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Icon } from "../icon/icon.tsx";
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 import { PackageCell } from "./register-import-rows.tsx";
@@ -21,22 +22,12 @@ export function ImportLog({ imported, t, locale, onDownload }: { imported: Regis
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label={t("log.levels")} className="flex flex-wrap gap-1.5">
-          {(["all", "error", "info"] as const).map((level) => (
-            <button
-              key={level}
-              type="button"
-              aria-pressed={shown === level}
-              onClick={() => setShown(level)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-[13px] font-semibold",
-                shown === level ? "border-brand bg-brand-tint text-brand-fg" : "border-border bg-surface text-text-secondary hover:bg-hover",
-              )}
-            >
-              {t(`log.${level}`)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          aria-label={t("log.levels")}
+          value={shown}
+          onValueChange={(value) => setShown(value === "error" || value === "info" ? value : "all")}
+          options={(["all", "error", "info"] as const).map((level) => ({ value: level, label: t(`log.${level}`) }))}
+        />
         <Button variant="secondary" size="sm" className="ms-auto" onClick={onDownload}>
           <Icon name="download" />
           {t("validate.downloadLog")}

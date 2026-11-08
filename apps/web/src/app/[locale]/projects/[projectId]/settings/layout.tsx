@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ProjectSettingsNav } from "@/components/project-settings-nav";
 import { SettingsBackLink } from "@/components/settings-back-link";
 import { redirect } from "@/i18n/navigation";
-import { getMe, getProject, getProjectParticipants, getRaisableTypes } from "@/lib/session";
+import { getMe, getProject, getProjectParticipants, getRaisableTypes, mayImportRegister } from "@/lib/session";
 
 /** Every Project Settings page: the settings navigation beside the page (RP-412). */
 export default async function ProjectSettingsLayout({
@@ -34,7 +34,7 @@ export default async function ProjectSettingsLayout({
           projectId={project.id}
           isProjectAdmin={project.isProjectAdmin}
           ownParticipantId={ownParticipant?.id}
-          mayImport={raisable !== null && raisable.types.length > 0}
+          mayImport={mayImportRegister(raisable)}
         />
       }
     >

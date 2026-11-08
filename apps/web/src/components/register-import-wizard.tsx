@@ -7,6 +7,14 @@ import {
   ImportRows,
   Input,
   RegisterImportWizard as Wizard,
+  SegmentedControl,
+  Table,
+  TableBody,
+  TableCard,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tabs,
   TabsContent,
   TabsList,
@@ -232,23 +240,21 @@ export function RegisterImportBody({ record, locale }: { record: RegisterImport;
       </TabsList>
       <TabsContent value="rows" className="flex flex-col gap-3 pt-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div role="group" aria-label={t("review.tabRows")} className="flex flex-wrap gap-1.5">
-            {(["all", "created", "rejected"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={shown === s}
-                onClick={() => setShown(s)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] font-semibold",
-                  shown === s ? "border-brand bg-brand-tint text-brand-fg" : "border-border bg-surface text-text-secondary hover:bg-hover",
-                )}
-              >
-                {t(s === "all" ? "review.showAll" : s === "created" ? "review.showCreated" : "review.showRejected")}
-                <span className="tabular-nums">{n(counts[s])}</span>
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label={t("review.tabRows")}
+            value={shown}
+            onValueChange={(value) => setShown(value === "created" || value === "rejected" ? value : "all")}
+            options={(["all", "created", "rejected"] as const).map((s) => ({
+              value: s,
+              label: (
+                <span className="inline-flex items-center gap-1.5">
+                  {t(s === "all" ? "review.showAll" : s === "created" ? "review.showCreated" : "review.showRejected")}
+                  <span className="tabular-nums">{n(counts[s])}</span>
+                </span>
+              ),
+            }))}
+          />
+          {/* Filters as the reader types, so not the List's ToolbarSearch (which searches on Enter). */}
           <label className="flex min-w-56 flex-1 items-center gap-2 sm:max-w-80">
             <Icon name="search" size={16} className="text-muted" />
             <Input aria-label={t("review.search")} placeholder={t("review.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -261,60 +267,52 @@ export function RegisterImportBody({ record, locale }: { record: RegisterImport;
       </TabsContent>
       <TabsContent value="mapping" className="pt-4">
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="overflow-x-auto rounded-md border border-border bg-surface">
-            <table className="w-full text-[14px]">
-              <caption className="sr-only">{t("review.tabMapping")}</caption>
-              <thead>
-                <tr className="border-b border-border text-[12.5px] font-bold text-text-secondary">
-                  <th scope="col" className="px-4 py-3 text-start">
-                    {t("review.column")}
-                  </th>
-                  <th scope="col" className="w-8" />
-                  <th scope="col" className="px-4 py-3 text-start">
-                    {t("review.field")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+          <TableCard>
+            <Table label={t("review.tabMapping")}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("review.column")}</TableHead>
+                  <TableHead className="w-8">
+                    <span className="sr-only">→</span>
+                  </TableHead>
+                  <TableHead>{t("review.field")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {record.headers.map((header, column) => {
                   const field = byColumn.get(column);
                   return (
-                    <tr key={column} className="border-b border-border-subtle last:border-0">
-                      <th scope="row" className="px-4 py-2.5 text-start font-semibold">
+                    <TableRow key={column}>
+                      <TableCell className="font-semibold">
                         <bdi>{header || "—"}</bdi>
-                      </th>
-                      <td aria-hidden className="text-muted">
+                      </TableCell>
+                      <TableCell aria-hidden className="text-muted">
                         <Icon name="arrow-right" size={14} className="rtl:rotate-180" />
-                      </td>
-                      <td className={cn("px-4 py-2.5", !field && "text-muted")}>{field ? fieldLabel(field) : t("review.notMapped")}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className={cn(!field && "text-muted")}>{field ? fieldLabel(field) : t("review.notMapped")}</TableCell>
+                    </TableRow>
                   );
                 })}
-                {"value" in record.mapping.type && (
-                  <tr className="border-t border-border">
-                    <th scope="row" className="px-4 py-2.5 text-start font-semibold">
-                      {t("fields.type")}
-                    </th>
-                    <td />
-                    <td className="px-4 py-2.5">
-                      <bdi>{t("detail.everyRow", { value: record.mapping.type.value })}</bdi>
-                    </td>
-                  </tr>
+                {/* A fixed Type or Trade reads no column: one value for every row. */}
+                {(
+                  [
+                    ["type", "value" in record.mapping.type ? record.mapping.type.value : null],
+                    ["trade", "value" in record.mapping.trade ? fixedTrade(record.mapping.trade.value) : null],
+                  ] as const
+                ).map(([field, value]) =>
+                  value === null ? null : (
+                    <TableRow key={field}>
+                      <TableCell className="font-semibold">{t(`fields.${field}`)}</TableCell>
+                      <TableCell />
+                      <TableCell>
+                        <bdi>{t("detail.everyRow", { value })}</bdi>
+                      </TableCell>
+                    </TableRow>
+                  ),
                 )}
-                {"value" in record.mapping.trade && (
-                  <tr className="border-t border-border">
-                    <th scope="row" className="px-4 py-2.5 text-start font-semibold">
-                      {t("fields.trade")}
-                    </th>
-                    <td />
-                    <td className="px-4 py-2.5">
-                      <bdi>{t("detail.everyRow", { value: fixedTrade(record.mapping.trade.value) })}</bdi>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </TableCard>
           <div className="flex flex-col gap-3">
             <section className="flex flex-col gap-1.5 rounded-md border border-border bg-surface p-3">
               <h3 className="text-[11.5px] font-bold tracking-[0.06em] text-muted uppercase">{t("review.valuesMatched")}</h3>
@@ -391,7 +389,13 @@ export function SaveImportMapping({ projectId, mapping }: { projectId: string; m
   return (
     <div className="flex flex-col items-end gap-2">
       {!open && (
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setSaved(null);
+            setOpen(true);
+          }}
+        >
           <Icon name="device-floppy" />
           {t("review.saveMapping")}
         </Button>
@@ -408,7 +412,15 @@ export function SaveImportMapping({ projectId, mapping }: { projectId: string; m
           <Button type="submit" size="sm" disabled={busy || name.trim() === ""}>
             {t("review.save")}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFailed(null);
+              setOpen(false);
+            }}
+          >
             {t("review.cancel")}
           </Button>
         </form>

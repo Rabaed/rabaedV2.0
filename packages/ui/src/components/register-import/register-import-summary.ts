@@ -7,11 +7,11 @@ import { reasonLines } from "./register-import-rows.tsx";
 // imported, the validation log, and an import's rows as its page filters them. No time anywhere:
 // when an import ran is when its Drafts were started (docs/visibility.md, scenario 61).
 
-/** The wizard's steps in its stepper (Result is not one). */
+/** The wizard's steps in its stepper; Result follows them and is not one. */
 export type WizardStep = "upload" | "sheet" | "map" | "values" | "assign" | "validate";
 
 /** The stepper: Map values only while a column is ticked to match its values, or while the importer is on it. */
-export function wizardSteps(tickedColumns: number, at: string): WizardStep[] {
+export function wizardSteps(tickedColumns: number, at: WizardStep | "result"): WizardStep[] {
   const values = tickedColumns > 0 || at === "values";
   return ["upload", "sheet", "map", ...(values ? (["values"] as const) : []), "assign", "validate"];
 }

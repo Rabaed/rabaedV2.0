@@ -37,7 +37,7 @@ export function ProjectSettingsNav({
     { key: "numbering", label: t("numbering"), icon: "list", href: `${base}/numbering` },
     { key: "workflows", label: t("workflows"), icon: "refresh", href: `${base}/workflows` },
     // RP-1144 (the kit's Settings nav): the door to the import wizard and the Imports, for a Member who may import.
-    ...(mayImport ? [{ key: "bulk-actions", label: t("bulkActions"), icon: "upload", href: `${base}/bulk-actions` } satisfies SettingsNavItem] : []),
+    ...(mayImport ? [{ key: "bulk-imports", label: t("bulkImports"), icon: "upload", href: `${base}/bulk-imports` } satisfies SettingsNavItem] : []),
     { key: "screens", label: t("screens"), icon: "template", href: `${base}/screens` },
     { key: "stages", label: t("stages"), icon: "flag", href: `${base}/stages` },
     { key: "outcomes", label: t("outcomes"), icon: "circle-check", href: `${base}/outcomes` },

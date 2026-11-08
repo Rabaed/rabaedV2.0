@@ -21,8 +21,9 @@ import {
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { PageBackLink } from "@/components/page-back-link";
+import { PackageUseBadge, RegisterImportCrumbs } from "@/components/register-import-crumbs";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getProject, getRaisableTypes, getRegisterImportFields, getRegisterImports } from "@/lib/session";
+import { getMe, getProject, getRaisableTypes, getRegisterImportFields, getRegisterImports, mayImportRegister } from "@/lib/session";
 
 /**
  * The Imports page (RP-637, spec RP-631 stories 32–33; RP-1144: the kit's import-register.html ›
@@ -40,7 +41,7 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
   const [me, project, imports, raisable] = await Promise.all([getMe(), getProject(projectId), getRegisterImports(projectId), getRaisableTypes(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !imports) notFound();
-  const mayImport = raisable !== null && raisable.types.length > 0;
+  const mayImport = mayImportRegister(raisable);
   // The saved mappings come with what a register may fill: only for a Member who may import.
   const fields = mayImport ? await getRegisterImportFields(projectId) : null;
   const n = (value: number) => formatNumber(value, locale);
@@ -52,13 +53,10 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
         <div className="flex flex-col gap-1">
           {/* Back (RP-1241), else to the Submittals with the Member's last filters there (RP-1240). */}
           <PageBackLink parent={`/projects/${project.id}/work-items`} />
-          <nav aria-label={t("breadcrumb")} className="flex items-center gap-2 text-[13px] text-muted">
-            <Link href={`/projects/${project.id}/work-items`} className="hover:text-text hover:underline">
-              {t("crumbSubmittals")}
-            </Link>
-            <Icon name="chevron-right" size={14} className="rtl:rotate-180" />
-            <span className="font-semibold text-text">{t("imports")}</span>
-          </nav>
+          <RegisterImportCrumbs
+            label={t("breadcrumb")}
+            parts={[{ text: t("crumbSubmittals"), href: `/projects/${project.id}/work-items` }, { text: t("imports") }]}
+          />
           <h1 className="text-h3 font-bold">{t("imports")}</h1>
           <p className="text-[14px] text-muted">{t("importsHint")}</p>
         </div>
@@ -95,7 +93,9 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
                   <TableHead align="end">{t("list.created")}</TableHead>
                   <TableHead align="end">{t("list.leftOut")}</TableHead>
                   <TableHead>{t("list.packages")}</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-10">
+                    <span className="sr-only">{t("review.open")}</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -120,7 +120,9 @@ export default async function RegisterImportsPage({ params }: { params: Promise<
                   <TableRow>
                     <TableHead>{t("review.savedMapping")}</TableHead>
                     <TableHead align="end">{t("review.savedColumns")}</TableHead>
-                    <TableHead />
+                    <TableHead>
+                      <span className="sr-only">{t("review.savedUse")}</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -216,9 +218,7 @@ function ImportRow({
           <span className="flex flex-wrap gap-x-3 gap-y-1">
             {item.packages.map((p) => (
               <span key={p.id} className="inline-flex items-center gap-1.5 text-[13px]">
-                <span className={cn("rounded-xs px-1.5 py-0.5 text-[11.5px] font-bold", p.new ? "bg-success-tint text-success-fg" : "bg-info-tint text-info-fg")}>
-                  {p.new ? t("review.new") : t("review.used")}
-                </span>
+                <PackageUseBadge created={p.new} label={p.new ? t("review.new") : t("review.used")} />
                 <bdi dir="ltr" translate="no" className="font-semibold">
                   {p.number}
                 </bdi>
