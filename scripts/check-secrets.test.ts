@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { addedLines, findSecrets, formatFinding, scanDiff, scanRange, scanStaged, scanText, scanTree, SECRET_RULES } from "./check-secrets.ts";
+import { addedLines, findSecrets, formatFinding, exemptionReason, scanDiff, scanRange, scanStaged, scanText, scanTree, SECRET_RULES } from "./check-secrets.ts";
 
 // RP-1100. Every fake token here is built from parts at run time, so no file in
 // the repo holds anything shaped like a token: not this scan, gitleaks, nor a
@@ -21,8 +21,14 @@ const tokens = {
   awsSecret: join2("aws_secret", "_access_key = ", chars(40, "abcXYZ019/+")),
   sendgrid: join2("S", "G.", chars(22), ".", chars(43)),
   basicAuth: join2("Authorization: ", "Basic ", chars(40)),
-  privateKey: join2("-----BEGIN ", "RSA PRIVATE", " KEY-----"),
+  // A key in one string, its lines joined by "\n" escapes, as in an env value or a JSON file.
+  privateKey: join2("-----BEGIN ", "RSA PRIVATE", " KEY-----", "\\n", chars(64)),
 };
+
+// RP-1185. A key block over several lines: the header, then the body (64 characters a line). Built at run time too.
+const pemHeader = (kind = "") => join2("-----BEGIN ", kind, "PRIVATE", " KEY-----");
+const pemBlock = (kind = "") => [pemHeader(kind), chars(64), chars(64, "xY7zW5vU3tS1rQ9"), join2("-----END ", kind, "PRIVATE", " KEY-----")];
+const exempt = (reason: string) => join2("// not a ", "secret:", reason);
 
 const expectedRule: Record<keyof typeof tokens, string> = {
   atlassian: "atlassian-api-token",
@@ -47,7 +53,13 @@ describe("findSecrets", () => {
   });
 
   it("finds a PGP private key block", () => {
-    expect(findSecrets(join2("-----BEGIN ", "PGP PRIVATE", " KEY BLOCK-----"))).toEqual(["private-key"]);
+    expect(findSecrets(join2("-----BEGIN ", "PGP PRIVATE", " KEY BLOCK-----", " ", chars(64)))).toEqual(["private-key"]);
+  });
+
+  it("lets a header alone through: only text, as in a pattern or a doc (RP-1185)", () => {
+    expect(findSecrets(pemHeader())).toEqual([]);
+    expect(findSecrets(join2("-----BEGIN ", "PGP PRIVATE", " KEY BLOCK-----"))).toEqual([]);
+    expect(findSecrets(join2("const header = '", pemHeader("RSA "), "';"))).toEqual([]);
   });
 
   it("lets an assignment through whose value is a call or a plain identifier", () => {
@@ -167,6 +179,140 @@ describe("scanDiff", () => {
   it("finds a token only on added lines: removing one is how it gets fixed", () => {
     const diff = ["--- a/a.ts", "+++ b/a.ts", "@@ -1 +1,2 @@", `-const old = "${tokens.github}";`, "+const ok = 1;", `+const key = "${tokens.sendgrid}";`].join("\n");
     expect(scanDiff(diff)).toEqual([{ file: "a.ts", line: 2, rule: "sendgrid-api-key" }]);
+  });
+});
+
+// RP-1185: #559 was refused for a header that was only a pattern in a PEM reader and its test.
+describe("a private key block", () => {
+  const addedDiff = (file: string, lines: string[]) => ["--- /dev/null", `+++ b/${file}`, `@@ -0,0 +1,${lines.length} @@`, ...lines.map((line) => `+${line}`)].join("\n");
+
+  it("passes when only the header is there: a pattern, a label or a doc", () => {
+    const text = [`const PEM = /${pemHeader()}/;`, `The file starts with ${pemHeader("RSA ")} and ends with the END line.`, pemHeader(), "", "next paragraph", pemBlock()[3]!].join("\n");
+    expect(scanText("pem-reader.ts", text)).toEqual([]);
+    expect(scanDiff(addedDiff("pem-reader.ts", text.split("\n")))).toEqual([]);
+  });
+
+  it("is refused when base64 lines follow the header, as in a real key", () => {
+    for (const kind of ["", "RSA ", "EC ", "OPENSSH ", "ENCRYPTED "]) {
+      const text = ["const x = 1;", ...pemBlock(kind)].join("\n");
+      expect(scanText("key.ts", text)).toEqual([{ file: "key.ts", line: 2, rule: "private-key" }]);
+      expect(scanDiff(addedDiff("key.ts", text.split("\n")))).toEqual([{ file: "key.ts", line: 2, rule: "private-key" }]);
+    }
+  });
+
+  it("is refused with the key's own header lines, and behind a comment mark", () => {
+    const encrypted = [pemHeader("RSA "), "Proc-Type: 4,ENCRYPTED", "DEK-Info: AES-128-CBC,0123456789ABCDEF", "", chars(64)];
+    expect(scanText("k.pem", encrypted.join("\n"))).toEqual([{ file: "k.pem", line: 1, rule: "private-key" }]);
+    expect(scanText("k.sh", [`# ${pemHeader()}`, `# ${chars(64)}`].join("\n"))).toEqual([{ file: "k.sh", line: 1, rule: "private-key" }]);
+  });
+
+  it("is refused in a diff when the body is on the next added lines only", () => {
+    const diff = ["--- a/k.ts", "+++ b/k.ts", "@@ -4,0 +5,3 @@", `+${pemHeader()}`, `+${chars(64)}`, `+${chars(64)}`].join("\n");
+    expect(scanDiff(diff)).toEqual([{ file: "k.ts", line: 5, rule: "private-key" }]);
+  });
+
+  it("is refused when the key is joined strings or a quoted list, and on CRLF lines", () => {
+    const joined = [`const key = "${pemHeader()}\\n" +`, `  "${chars(64)}\\n" +`, `  "${chars(64)}\\n";`].join("\n");
+    expect(scanText("k.ts", joined)).toEqual([{ file: "k.ts", line: 1, rule: "private-key" }]);
+    const list = ["[", `  "${pemHeader()}",`, `  "${chars(64)}",`, "]"].join("\n");
+    expect(scanText("k.json", list)).toEqual([{ file: "k.json", line: 2, rule: "private-key" }]);
+    expect(scanText("k.ts", `const pem = "${pemHeader()}" + "${chars(64)}";`)).toEqual([{ file: "k.ts", line: 1, rule: "private-key" }]);
+    expect(scanText("k.pem", pemBlock().join("\r\n"))).toEqual([{ file: "k.pem", line: 1, rule: "private-key" }]);
+  });
+
+  it("passes a header whose next lines are not a body", () => {
+    expect(scanText("a.md", [pemHeader(), "some words that follow the header in a doc", chars(64)].join("\n"))).toEqual([]);
+    expect(scanText("a.md", [pemHeader(), "", "", "", "", "", chars(64)].join("\n"))).toEqual([]);
+  });
+});
+
+describe("the not-a-secret comment", () => {
+  it("skips the marked line, for a key block's header and for a token", () => {
+    expect(scanText("a.ts", [`const PEM = "${pemHeader()}\\n${chars(64)}"; ${exempt(" a fixture the reader test parses, no real key")}`].join("\n"))).toEqual([]);
+    expect(scanText("a.ts", `const key = "${tokens.github}"; ${exempt(" documented example in the Jira guide")}`)).toEqual([]);
+    expect(scanText("a.sh", `export KEY=${tokens.github} ${exempt(" test value").replace("//", "#")}`)).toEqual([]);
+    expect(scanText("a.md", `${tokens.github} <!-- ${exempt(" shown in the docs").slice(3)} -->`)).toEqual([]);
+  });
+
+  it("skips the marked line of a CRLF file, as --tree reads one on Windows", () => {
+    const text = [`const a = "${tokens.github}"; ${exempt(" a fixture")}`, "const b = 1;", ""].join("\r\n");
+    expect(scanText("a.ts", text)).toEqual([]);
+  });
+
+  it("skips only the marked line", () => {
+    const text = [`const a = "${tokens.github}"; ${exempt(" a fixture")}`, `const b = "${tokens.sendgrid}";`].join("\n");
+    expect(scanText("a.ts", text)).toEqual([{ file: "a.ts", line: 2, rule: "sendgrid-api-key" }]);
+  });
+
+  it("is refused when it gives no reason", () => {
+    for (const empty of ["", " ", "   ", " x", " ...", " -->"]) {
+      const line = `const a = 1; ${empty === " -->" ? `<!-- ${exempt("").slice(3)}${empty}` : exempt(empty)}`;
+      expect(scanText("a.ts", line)).toEqual([{ file: "a.ts", line: 1, rule: "secret-exemption-without-reason" }]);
+    }
+  });
+
+  it("does not hide a token behind a comment with no reason", () => {
+    expect(scanText("a.ts", `const key = "${tokens.github}"; ${exempt("")}`)).toEqual([
+      { file: "a.ts", line: 1, rule: "github-token" },
+      { file: "a.ts", line: 1, rule: "secret-exemption-without-reason" },
+    ]);
+  });
+
+  it("reads the reason of the comment, and names the refusal without the line's text", () => {
+    expect(exemptionReason(exempt(" a fixture"))).toBe("a fixture");
+    expect(exemptionReason("const a = 1;")).toBeUndefined();
+    expect(formatFinding({ file: "a.ts", line: 1, rule: "secret-exemption-without-reason" })).toBe('  a.ts:1: "not a secret" comment without a reason (secret-exemption-without-reason)');
+  });
+
+  describe("in every mode", () => {
+    let repo: string;
+    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", stdio: "pipe" });
+    const cli = (...args: string[]) => spawnSync("node", [join(import.meta.dirname, "check-secrets.ts"), ...args], { cwd: repo, encoding: "utf8" });
+    beforeEach(() => {
+      repo = mkdtempSync(join(tmpdir(), "rabaed-secrets-exempt-"));
+      git("init", "-q", "-b", "main");
+      writeFileSync(join(repo, "README.md"), "# repo\n");
+      git("add", "-A");
+      git("commit", "-q", "-m", "start");
+    });
+    afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+    const keyLine = (suffix: string) => `const pem = "${pemHeader()}\\n${chars(64)}"; ${suffix}\n`;
+
+    it("passes a marked line and fails the same line without the reason, with --staged, --range and --tree", () => {
+      git("checkout", "-q", "-b", "pr");
+      writeFileSync(join(repo, "reader.ts"), keyLine(exempt(" a parser fixture")));
+      git("add", "-A");
+      expect(scanStaged(repo)).toEqual([]);
+      expect(cli("--staged")).toMatchObject({ status: 0 });
+      git("commit", "-q", "-m", "marked");
+      expect(cli("--range", "main..pr")).toMatchObject({ status: 0 });
+      expect(cli("--tree")).toMatchObject({ status: 0 });
+
+      writeFileSync(join(repo, "reader.ts"), keyLine(exempt("")));
+      git("add", "-A");
+      expect(cli("--staged")).toMatchObject({ status: 1, stderr: expect.stringContaining("reader.ts:1: \"not a secret\" comment without a reason") });
+      git("commit", "-q", "-m", "no reason");
+      expect(cli("--range", "main..pr").status).toBe(1);
+      expect(cli("--tree").status).toBe(1);
+    });
+
+    it("refuses a key block over several lines in a commit, and passes the header alone", () => {
+      git("checkout", "-q", "-b", "pr");
+      writeFileSync(join(repo, "pattern.ts"), `const PEM = /${pemHeader()}/;\n`);
+      git("add", "-A");
+      git("commit", "-q", "-m", "pattern");
+      expect(cli("--range", "main..pr")).toMatchObject({ status: 0 });
+      writeFileSync(join(repo, "leak.txt"), pemBlock().join("\n") + "\n");
+      git("add", "-A");
+      git("commit", "-q", "-m", "key");
+      const failed = cli("--range", "main..pr");
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("leak.txt:1: private key (private-key)");
+      expect(failed.stderr).toContain("end its line with a comment saying so and why");
+      expect(failed.stderr).not.toContain(chars(64).slice(0, 12));
+      expect(cli("--tree").status).toBe(1);
+    });
   });
 });
 
