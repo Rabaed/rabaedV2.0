@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
-import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
-import { runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
+import { CaseRun, registry, shotStaging, type CaseResult, type Status } from "./case.ts";
+import { dropShots, keepShots, runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
@@ -116,13 +116,16 @@ async function main() {
         if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
         return runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
       },
+      // A case's shots wait in shotStaging (RP-1161): evidence/ gets them only with the saved result.
       save: (c, result) => {
+        keepShots(result.screenshots, { staging: shotStaging, round });
         saveResult(c.id, result);
         counts[result.status] = (counts[result.status] ?? 0) + 1;
         const failed = result.checks.filter((k) => !k.ok).length;
         const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
         console.log(`${c.id.padEnd(10)} ${result.status.toUpperCase().padEnd(8)} ${result.checks.length - failed}/${result.checks.length} checks, ${result.screenshots.length} shots${why}`);
       },
+      drop: (_c, result) => dropShots(result.screenshots, shotStaging),
     });
   } finally {
     await closeBrowser();
