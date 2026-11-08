@@ -1,6 +1,6 @@
 import type { Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, waitFor, within } from "storybook/test";
+import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import { KanbanCard, type KanbanCardProps } from "./kanban-card.tsx";
 
@@ -38,6 +38,10 @@ const text = {
   bathrooms: b("Bathrooms – Tower 1", "الحمامات – البرج 1"),
   // The owning Company, next to the number (RP-974).
   builders: b("Gulf Builders", "بناة الخليج"),
+  // Too long for a 318px card, so cut with an ellipsis (RP-509).
+  longConsultant: b("Al Rajhi Design Consultants Engineering Office", "مكتب الراجحي للاستشارات الهندسية والتصميم"),
+  longPool: b("Consultant technical review · Not picked up", "المراجعة الفنية للاستشاري · لم تُستلَم بعد"),
+  longContractor: b("Al Futtaim Contracting and Engineering Services Company", "شركة الفطيم للمقاولات العامة والخدمات الهندسية والصيانة المحدودة"),
   openPackage: b("Open Package PKG-004 Gulf Builders Bathrooms – Tower 1", "فتح الحزمة \u2066PKG-004\u2069 بناة الخليج الحمامات – البرج 1"),
 };
 
@@ -61,7 +65,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
 });
 
 // Each story names what differs from the default card by a key below; the render builds it in the story's language.
-type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package";
+type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package" | "cut" | "cutPool";
 type StoryArgs = KanbanCardProps & { variant?: Variant };
 
 const meta = {
@@ -113,6 +117,15 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       return { owner: { kind: "pool", name: locale === "en" ? "Contractor review · Not picked up" : "مراجعة المقاول · لم تُستلَم" } };
     case "contractor":
       return { ...shared, badge: { kind: "revision", label: "R2" }, contractorName: text.contractor[locale] };
+    case "cut":
+      return {
+        ...civil,
+        title: text.drainage[locale],
+        contractorName: text.longContractor[locale],
+        owner: { kind: "company", name: text.longConsultant[locale], initialsFrom: text.longConsultant.en },
+      };
+    case "cutPool":
+      return { owner: { kind: "pool", name: text.longPool[locale] } };
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
     case "package":
@@ -244,5 +257,74 @@ export const InAPackage: Story = {
     await expect(chip.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
     // Below the tags.
     await expect(box.top).toBeGreaterThan(within(c).getByText("MAR").getBoundingClientRect().bottom - 1);
+  },
+};
+
+// A cut text (RP-509): its full text in the shared tooltip, on hover and on keyboard focus; the card stays one line.
+const exactly = (value: string) => new RegExp(`^${value}$`);
+const focusedTooltip = async (trigger: HTMLElement) => {
+  trigger.focus();
+  return screen.findByRole("tooltip");
+};
+
+/** A name that fits shows no tooltip and adds no stop to the keyboard's path. */
+export const UncutHolder: Story = {
+  play: async (context) => {
+    const name = within(card(context)).getByText(text.nasser[storyLocale(context)]);
+    await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+    await expect(name).not.toHaveAttribute("tabindex");
+    await userEvent.hover(name);
+    // Past the tooltip's 300ms delay.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await expect(screen.queryByRole("tooltip")).toBeNull();
+    await userEvent.unhover(name);
+  },
+};
+
+/**
+ * Another Company's long name and a long Contractor line, cut: each shows its full text in the tooltip, on keyboard
+ * focus and on hover. Another Company's tooltip is its Company name only, never a person or Step behind it (V5, V14).
+ */
+export const CutHolder: Story = {
+  args: { variant: "cut" },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const c = card(context);
+    const holder = within(c).getByText(text.longConsultant[locale]);
+    // One line with an ellipsis.
+    await expect(holder.scrollWidth).toBeGreaterThan(holder.clientWidth);
+    await expect(holder).toHaveAttribute("tabindex", "0");
+    await expect(await focusedTooltip(holder)).toHaveTextContent(exactly(text.longConsultant[locale]));
+    await expect(holder).toHaveAccessibleDescription(text.longConsultant[locale]);
+    holder.blur();
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    // The Contractor line too, on hover.
+    const contractor = within(c).getByText(text.longContractor[locale]);
+    await expect(contractor.scrollWidth).toBeGreaterThan(contractor.clientWidth);
+    await userEvent.hover(contractor);
+    await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent(exactly(text.longContractor[locale])));
+    await userEvent.unhover(contractor);
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    // A click on a cut text still opens the card.
+    const link = within(c).getByRole("link", { name: text.drainage[locale] });
+    let opened = 0;
+    link.addEventListener("click", (event) => {
+      opened += 1;
+      event.preventDefault();
+    });
+    await userEvent.click(holder);
+    await expect(opened).toBe(1);
+    holder.blur();
+  },
+};
+
+/** My own Company's long unclaimed-Step label, cut: the Pool label in full, nothing more. */
+export const CutPool: Story = {
+  args: { variant: "cutPool" },
+  play: async (context) => {
+    const label = within(card(context)).getByText(text.longPool[storyLocale(context)]);
+    await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    await expect(await focusedTooltip(label)).toHaveTextContent(exactly(text.longPool[storyLocale(context)]));
+    label.blur();
   },
 };

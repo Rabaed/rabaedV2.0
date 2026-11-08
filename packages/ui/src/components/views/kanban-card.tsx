@@ -1,13 +1,14 @@
 "use client";
 
 import { stepAgeDots, type Locale, type OutcomeLook } from "@rabaed/domain";
-import type { ElementType, MouseEvent, ReactNode } from "react";
+import { useLayoutEffect, useState, type ElementType, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
+import { Tooltip } from "../overlay/tooltip.tsx";
 import { PackageChip, type PackageChipProps } from "../packages/package-chip.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 
@@ -140,6 +141,49 @@ const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's own name, not a Member
 export const poolIcon: IconName = "users";
 
+/**
+ * One line of the card's text, cut with an ellipsis when it doesn't fit (RP-509; the owner chose a tooltip, so the
+ * card stays one line). Only when cut, its full text shows in the shared tooltip on hover and keyboard focus: it then
+ * takes a keyboard stop and sits above the card's link so a pointer reaches it, and a click or Enter on it still
+ * opens the card. The tooltip holds exactly the text the card shows, never more (V14).
+ */
+function CutText({ text, className }: { text: string; className?: string }) {
+  const [element, setElement] = useState<HTMLSpanElement | null>(null);
+  const [cut, setCut] = useState(false);
+  useLayoutEffect(() => {
+    if (!element) return;
+    const measure = () => setCut(element.scrollWidth > element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element, text]);
+  if (!cut) {
+    return (
+      <span ref={setElement} className={cn("truncate", className)}>
+        {text}
+      </span>
+    );
+  }
+  const cardLink = (from: HTMLElement) => from.closest("[data-kanban-card]")?.querySelector<HTMLElement>("h3 a");
+  return (
+    <Tooltip content={text}>
+      <span
+        ref={setElement}
+        tabIndex={0}
+        // The same click on the card's link, modifier keys and all, so a Ctrl-click still opens a new tab.
+        onClick={(event: MouseEvent<HTMLSpanElement>) => cardLink(event.currentTarget)?.dispatchEvent(new globalThis.MouseEvent("click", event.nativeEvent))}
+        onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+          if (event.key === "Enter") cardLink(event.currentTarget)?.click();
+        }}
+        className={cn("relative z-10 truncate rounded-xs", focusRing, className)}
+      >
+        {text}
+      </span>
+    </Tooltip>
+  );
+}
+
 /** The Location's icon per level: Zone a map, Building a building, Floor stairs. */
 const placeIcons: IconName[] = ["map", "building", "stairs"];
 
@@ -193,7 +237,7 @@ export function KanbanCard({
           </span>
         )}
         <Icon name="file-text" size={14} className="shrink-0" />
-        {number ? <DocNo value={number} className="font-normal" /> : <span className="truncate">{noNumberLabel}</span>}
+        {number ? <DocNo value={number} className="font-normal" /> : <CutText text={noNumberLabel} />}
         <span className="flex-1" />
         {actions && (
           <span className="relative z-10 flex shrink-0 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100 pointer-coarse:opacity-100">
@@ -239,7 +283,7 @@ export function KanbanCard({
       {contractorName !== undefined && (
         <p className="mt-2 flex min-w-0 items-center gap-1.5 text-caption text-muted">
           <Icon name="briefcase" size={14} className="shrink-0" />
-          <span className="truncate">{contractorName}</span>
+          <CutText text={contractorName} />
         </p>
       )}
       {place !== undefined && place.length > 0 && (
@@ -263,7 +307,7 @@ export function KanbanCard({
             ) : (
               <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
             )}
-            <span className="truncate text-sm">{owner.name}</span>
+            <CutText text={owner.name} className="text-sm" />
           </span>
         )}
         <span className="ms-auto flex shrink-0 items-center gap-2">
