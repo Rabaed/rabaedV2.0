@@ -156,6 +156,8 @@ export type WorkflowBuilderLabels = {
   /** The pop-up's Recommended Code, on a Transition from a Step that recommends a code. */
   recommendCode: string;
   recommendCodeHelp: string;
+  /** On every pop-up (RP-1145): each Transition is signed when confirmed (ADR 0017). */
+  signatureApplied: string;
   /** An outcome creating items, and a Screen without the table to list them. */
   itemsTableMissing: string;
   editInScreens: string;

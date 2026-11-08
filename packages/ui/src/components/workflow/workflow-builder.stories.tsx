@@ -470,6 +470,8 @@ export const PreviewPopup: Story = {
     const dialog = within(await within(document.body).findByRole("dialog"));
     await expect(dialog.getByText(labels.requiredMissing(locale === "ar" ? "السبب" : "Reason"))).toBeVisible();
     await expect(dialog.getByRole("button", { name: labels.confirm })).toBeDisabled();
+    // RP-1145 (the kit's wf2/forms.jsx line 54; ADR 0017 signs every Transition): on every pop-up.
+    await expect(dialog.getByText(labels.signatureApplied)).toBeVisible();
   },
 };
 

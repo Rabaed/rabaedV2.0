@@ -249,6 +249,7 @@ export function workflowBuilderLabels({
     addRow: t("addRow"),
     recommendCode: t("recommendCode"),
     recommendCodeHelp: t("recommendCodeHelp"),
+    signatureApplied: t("signatureApplied"),
     itemsTableMissing: t("itemsTableMissing"),
     editInScreens: t("editInScreens"),
     previewPopup: t("previewPopup"),
