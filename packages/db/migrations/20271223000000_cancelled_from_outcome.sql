@@ -52,8 +52,10 @@ create or replace function app.step_as_seen_unchecked(p_work_item_id uuid, p_par
     begin
       return query
         select s.id,
-          -- A cancelled item reads its Module's Cancelled Stage, whatever Step it stopped at (RP-1263).
-          app.stage_key_as_read(w.project_id, w.work_item_type_id, w.outcome, s.stage_key),
+          -- A cancelled item reads its Module's Cancelled Stage, whatever Step it stopped at (RP-1263). Asked of a
+          -- cancelled item only, so the List's read of every other row calls nothing more than before.
+          case when w.outcome = 'cancelled' then app.stage_key_as_read(w.project_id, w.work_item_type_id, w.outcome, s.stage_key)
+            else s.stage_key end,
           case
             -- A Draft (never left its Draft Step, so never numbered): its Step began when it
             -- was started, which reaches nobody (ADR 0020; visibility.md "Creation Date").
