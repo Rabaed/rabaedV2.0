@@ -786,11 +786,13 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     // The Trades of the items each reads (RP-953), in the Project's order of Trades.
     const projectTrades = (await getPackage(at.c1Pm, pkg.id)).filters.trades;
     const tradesOf = (...ids: string[]) => projectTrades.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, sort: expect.any(Number) }));
-    // By Type and state too (RP-1143, the card's Type ledger): the same items, so the same totals.
+    // By Type and state too (RP-1143, the card's Type ledger): the same items, so the same totals. All eight
+    // are of the test Type the tower raises, read here as its rows give it.
+    const { type } = (await getPackage(at.c1Pm, pkg.id)).items[0]!;
     const mar = (states: { done: number; revise: number; open: number }) => ({
       typeId: expect.any(String),
-      code: "MAR",
-      name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }),
+      code: type.code,
+      name: type.name,
       total: states.done + states.revise + states.open,
       replace: 0,
       ...states,
@@ -892,7 +894,8 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       for (const item of (await getPackage(by, pkg.id)).items) {
         const r = rowsSeen.get(item.id)!;
         const { notReady, ...row } = item;
-        expect(row).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean) });
+        // Its List row, with the page's own fields (RP-1143: where it stands, whether it waits on the viewer).
+        expect(row).toEqual({ ...r, bulkTransitions: expect.any(Array), toSubmit: expect.any(Boolean), state: expect.any(String), waiting: expect.any(Boolean) });
         // What stops a Submit Package is the owner's to read only (RP-974).
         if (by !== at.c1Pm) expect(notReady).toBeNull();
       }
