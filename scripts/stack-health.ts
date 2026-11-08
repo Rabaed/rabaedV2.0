@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { connect } from "node:net";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isValidLane, lanePorts } from "./lanes.ts";
 
@@ -110,6 +112,8 @@ export type WhileUpSteps<T, R> = {
   down: (item: T, when: "before" | "after") => Promise<string | undefined>;
   run: (item: T) => Promise<R>;
   save: (item: T, result: R) => void;
+  /** Called instead of `save` when the stack is down after `item` ran, to throw away what it left (RP-1161). */
+  drop?: (item: T, result: R) => void;
 };
 
 /**
@@ -119,18 +123,57 @@ export type WhileUpSteps<T, R> = {
  */
 export type WhileUpOutcome = { saved: number; stopped: string | undefined };
 
-export async function runWhileUp<T, R>(items: T[], { down, run, save }: WhileUpSteps<T, R>): Promise<WhileUpOutcome> {
+export async function runWhileUp<T, R>(items: T[], { down, run, save, drop }: WhileUpSteps<T, R>): Promise<WhileUpOutcome> {
   let saved = 0;
   for (const item of items) {
     const before = await down(item, "before");
     if (before) return { saved, stopped: before };
     const result = await run(item);
     const after = await down(item, "after");
-    if (after) return { saved, stopped: after };
+    if (after) {
+      drop?.(item, result);
+      return { saved, stopped: after };
+    }
     save(item, result);
     saved++;
   }
   return { saved, stopped: undefined };
+}
+
+// The UAT harness's staged screenshots (RP-1161), here beside runWhileUp so the unit suite reaches them. A case's
+// shots are written under a staging folder outside the repo while it runs; `save` moves them into evidence/ and
+// `drop` deletes them, so a case the stack went down under leaves the committed evidence as it was.
+
+/** The staging folder shots wait in, and the round folder whose evidence/ they move to. */
+export type ShotFolders = { staging: string; round: string };
+
+/** `path` resolved under `folder`; throws for one that leaves it (absolute, another drive, `..`), so a bad path never deletes or overwrites elsewhere. */
+function pathInside(folder: string, path: string): string {
+  const full = resolve(folder, path);
+  const rel = relative(folder, full);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`Shot path "${path}" is outside ${folder}.`);
+  return full;
+}
+
+/** Where the shot a result records as `path` (relative to the round folder, e.g. "evidence/VIS-01-1-list.jpg") waits. */
+export function stagedShot(staging: string, path: string): string {
+  return pathInside(staging, path);
+}
+
+/** Moves each staged shot to its path under `round`, replacing the one there. A copy, not a rename: the OS temp folder may be on another drive. */
+export function keepShots(paths: readonly string[], { staging, round }: ShotFolders): void {
+  const moves = paths.map((path) => ({ from: pathInside(staging, path), to: pathInside(round, path) }));
+  for (const { from, to } of moves) {
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(from, to);
+    rmSync(from);
+  }
+}
+
+/** Deletes each staged shot; the evidence under the round folder is not touched. */
+export function dropShots(paths: readonly string[], { staging }: Pick<ShotFolders, "staging">): void {
+  const files = paths.map((path) => pathInside(staging, path));
+  for (const file of files) rmSync(file, { force: true });
 }
 
 /**
