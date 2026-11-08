@@ -1,13 +1,14 @@
-import { workItemListHref, type Locale } from "@rabaed/domain";
-import { cn, focusRing, KeyValues, ProjectDashboard, TitledCard, touchBox } from "@rabaed/ui";
+import { formatDate, workItemListHref, type Locale } from "@rabaed/domain";
+import { Badge, cn, focusRing, KeyValues, ProjectDashboard, TitledCard, touchBox, VacanciesList } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ActivityFeedView } from "@/components/activity-feed-view";
 import { AddParticipantForm } from "@/components/add-participant-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
+import { WithdrawParticipantButton } from "@/components/withdraw-participant-button";
 import { Link, redirect } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
-import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
+import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants, getProjectVacancies } from "@/lib/session";
 
 /** The class of a link in a card, as the kit's (`.ln`), with the shared focus ring and touch size. */
 const cardLinkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg underline-offset-4 hover:underline", focusRing, touchBox);
@@ -27,7 +28,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project) notFound();
-  const invitations = project.isProjectAdmin ? await getProjectInvitations(project.id) : null;
+  const [invitations, vacancies] = await Promise.all([
+    project.isProjectAdmin ? getProjectInvitations(project.id) : null,
+    // The Host Company's Project Admin only (the API answers anyone else 404).
+    participants?.canWithdraw ? getProjectVacancies(project.id) : null,
+  ]);
+  const tWithdraw = await getTranslations("projects.withdrawParticipant");
+  const tVacancies = await getTranslations("projects.vacancies");
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -123,17 +130,47 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 </>
               ),
               value: (
-                <span className="flex flex-col items-start gap-1">
-                  {p.company.legalName[locale]}
-                  {p.isOwnCompany && (
-                    <Link href={`/participants/${p.id}`} className={cardLinkClass}>
-                      {t("projectMembers")}
-                    </Link>
+                <span className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                  <span className="flex flex-col items-start gap-1">
+                    {p.company.legalName[locale]}
+                    {p.isOwnCompany && (
+                      <Link href={`/participants/${p.id}`} className={cardLinkClass}>
+                        {t("projectMembers")}
+                      </Link>
+                    )}
+                  </span>
+                  {/* Withdraw (RP-952, ADR 0028): the Host Company's Project Admin only, whose own row is the Host Company's, never withdrawn. */}
+                  {participants.canWithdraw && !p.isOwnCompany && (
+                    <WithdrawParticipantButton
+                      participantId={p.id}
+                      companyName={p.company.legalName[locale]}
+                      projectName={project.name[locale]}
+                      roleName={p.projectRole.name[locale]}
+                    />
                   )}
                 </span>
               ),
             }))}
           />
+        )}
+        {/* The withdrawn Participants, for the Host Company's Project Admin only (RP-952-7): no undo, so no action. */}
+        {participants && participants.withdrawn.length > 0 && (
+          <div className="space-y-2 border-t border-border-subtle pt-[18px]">
+            <h3 className="text-sm font-semibold">{tWithdraw("withdrawnHeading")}</h3>
+            <ul className="divide-y divide-border border-y border-border" data-testid="withdrawn-participants">
+              {participants.withdrawn.map((w) => (
+                <li key={w.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-sm text-muted">
+                  <span>
+                    <span className="text-text">{w.company.legalName[locale]}</span> · {w.projectRole.name[locale]}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <Badge>{tWithdraw("withdrawnBadge")}</Badge>
+                    {tWithdraw("withdrawnOn", { date: formatDate(new Date(w.withdrawnAt), locale, { day: "numeric", month: "short", year: "numeric" }) })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {/* Pending invitations, for the Project Admin only: by CR number, never by Company name (ADR 0009). */}
         {invitations && invitations.invitations.length > 0 && (
@@ -157,6 +194,27 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         )}
         {project.isProjectAdmin && <AddParticipantForm projectId={project.id} />}
       </TitledCard>
+
+      {/* The Vacancies, for the Host Company's Project Admin, when there is one (RP-952): an unseen item by its Step and the Project only (RP-952-6). */}
+      {vacancies && vacancies.vacancies.length > 0 && (
+        <TitledCard title={tVacancies("title")}>
+          <VacanciesList
+            vacancies={vacancies.vacancies}
+            projectName={project.name[locale]}
+            now={new Date()}
+            locale={locale}
+            hrefFor={(id) => `/work-items/${id}`}
+            linkAs={Link}
+            labels={{
+              description: tVacancies("description"),
+              waitingFor: (role) => tViews("list.waitingFor", { role }),
+              hiddenItem: (step, projectName) => tVacancies("hiddenItem", { step, project: projectName }),
+              noNumber: tViews("list.noNumber"),
+              empty: tVacancies("empty"),
+            }}
+          />
+        </TitledCard>
+      )}
     </div>
   );
 }

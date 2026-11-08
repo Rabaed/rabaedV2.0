@@ -30,6 +30,11 @@ describe("the Submittal Panel's With (V14, gap A3)", () => {
   it("is with nobody once closed", () => {
     expect(submittalPanelWith(null, "en")).toBeNull();
   });
+
+  it("reads a Vacancy as the role it waits for, never a Company (RP-952)", () => {
+    // The API gives no holder while the Step is a Vacancy; the page words it from the role.
+    expect(submittalPanelWith(null, "en", "Waiting for a new Consultant")).toEqual({ kind: "vacancy", name: "Waiting for a new Consultant" });
+  });
 });
 
 describe("the panel's place among the loaded rows (gap C6)", () => {

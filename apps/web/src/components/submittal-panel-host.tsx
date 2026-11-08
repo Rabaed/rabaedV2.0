@@ -107,6 +107,7 @@ export function SubmittalPanelHost({
 }) {
   const t = useTranslations("submittalPanel");
   const tabs = useTranslations("projectTabs");
+  const tList = useTranslations("workItemViews.list");
   const ids = useSubmittalPanelIds();
   const [read, setRead] = useState<ItemRead | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -274,7 +275,7 @@ export function SubmittalPanelHost({
             <SubmittalPanelFacts
               locale={locale}
               labels={{ with: t("with"), stepAge: t("stepAge"), location: t("location"), more: (n) => t("more", { n }), none: "—" }}
-              with={submittalPanelWith(item.heldBy, locale)}
+              with={submittalPanelWith(item.heldBy, locale, item.vacancy ? tList("waitingFor", { role: item.vacancy.projectRole.name[locale] }) : null)}
               stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
               // Each level's code, "BLK-A · TWR-A · A06" (row 10); the Location section names the path.
               place={placeCodes.length > 0 ? [placeCodes.join(" · ")] : place}

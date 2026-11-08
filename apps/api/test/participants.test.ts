@@ -373,6 +373,9 @@ describe("the Participants of a Project", () => {
           isOwnCompany: true,
         },
       ],
+      // Not the Host Company's Project Admin: no Withdraw, and no withdrawn Participants (RP-952-7).
+      canWithdraw: false,
+      withdrawn: [], // not hidden-from: nobody is withdrawn on this Project; RP-952-7 proves the read at both seams
     });
     // Nowhere in the answer: the Project Admin's names each of these.
     const others = [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId];

@@ -66,6 +66,8 @@ export type WorkItemListLabels = {
   withMe: string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
+  /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›". */
+  waitingFor: (role: string) => string;
   /** The "With" filter's choice of every Step not picked up. */
   anyNotPickedUp: string;
   trade: string;

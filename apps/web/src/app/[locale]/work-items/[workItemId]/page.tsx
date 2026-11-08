@@ -522,6 +522,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               </dd>
             </>
           )}
+          {item.vacancy && (
+            <>
+              {/* A Participant-level Vacancy (RP-952): the role it waits for, never the withdrawn Company. */}
+              <dt className="text-muted">{t("fields.with")}</dt>
+              <dd data-testid="with-line">{tViews("list.waitingFor", { role: item.vacancy.projectRole.name[locale] })}</dd>
+            </>
+          )}
           {item.heldBy && (
             <>
               {/* "With": another Company by its name only, a person only within the viewer's own (V14). */}

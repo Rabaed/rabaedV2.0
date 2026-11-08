@@ -65,7 +65,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
 });
 
 // Each story names what differs from the default card by a key below; the render builds it in the story's language.
-type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package" | "cut" | "cutPool";
+type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package" | "cut" | "cutPool" | "vacancy";
 type StoryArgs = KanbanCardProps & { variant?: Variant };
 
 const meta = {
@@ -126,6 +126,8 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       };
     case "cutPool":
       return { owner: { kind: "pool", name: text.longPool[locale] } };
+    case "vacancy":
+      return { owner: { kind: "vacancy", name: locale === "en" ? "Waiting for a new Consultant" : "بانتظار الاستشاري الجديد" } };
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
     case "package":
@@ -222,6 +224,22 @@ export const HeldByAnotherCompany: Story = { args: { variant: "company" } };
 
 /** My own Company's Step nobody has picked up yet. */
 export const NotPickedUp: Story = { args: { variant: "pool" } };
+
+/**
+ * A Participant-level Vacancy (RP-952): the Step's Participant was withdrawn, so the card waits for
+ * a new one of its role. A dashed mark like a pool's, the role's name, and never a Company.
+ */
+export const Vacancy: Story = {
+  args: { variant: "vacancy" },
+  play: async (context) => {
+    const c = card(context);
+    const words = storyLocale(context) === "en" ? "Waiting for a new Consultant" : "بانتظار الاستشاري الجديد";
+    await expect(within(c).getByText(words)).toBeVisible();
+    // The dashed mark, not an avatar: a Vacancy has no person and no Company to draw.
+    await expect(within(c).getByText(words).parentElement!.querySelector(".border-dashed")).not.toBeNull();
+    await expect(c).not.toHaveTextContent(text.consultant[storyLocale(context)]);
+  },
+};
 
 /** With the Contractor name switched on: one muted line with the company icon, between the tags and the plan location. */
 export const WithContractorName: Story = {

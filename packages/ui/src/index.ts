@@ -49,6 +49,12 @@ export { LinkedFromList, type LinkedFromLabels, type LinkedFromListProps } from 
 export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
 export { HandoverDialog, type HandoverDialogLabels, type HandoverDialogProps } from "./components/handover/handover-dialog.tsx";
+export { VacanciesList, type VacanciesListLabels, type VacanciesListProps } from "./components/participants/vacancies-list.tsx";
+export {
+  WithdrawParticipantDialog,
+  type WithdrawParticipantDialogLabels,
+  type WithdrawParticipantDialogProps,
+} from "./components/participants/withdraw-participant-dialog.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {
   DocumentNumbering,

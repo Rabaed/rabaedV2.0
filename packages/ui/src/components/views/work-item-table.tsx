@@ -21,14 +21,13 @@ import { Checkbox } from "../form/checkbox.tsx";
 import { moveColumn } from "./column-settings.tsx";
 import { cn } from "../../lib/cn.ts";
 import { isPlainClick } from "../../lib/plain-click.ts";
-import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
-import { HeaderBadge, poolIcon, TradeChip } from "./kanban-card.tsx";
+import { HeaderBadge, OwnerMark, TradeChip } from "./kanban-card.tsx";
 import { badgeOf, ownerOf, placesOf } from "./work-item-board.tsx";
 
 // The List's table (RP-409, the owner's design): a header row of sortable
@@ -47,6 +46,8 @@ export type WorkItemTableLabels = {
   revisionNoNumber: (revision: string) => string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
+  /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›". */
+  waitingFor: (role: string) => string;
   /** The outcome of a cancelled item. */
   cancelled: string;
   /** A letter outcome's pill, e.g. "Code A". */
@@ -423,13 +424,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
       return (
         // A fitting table under 1600 wide: 140px at most (RP-1177), the name truncated, in full in the tooltip.
         <span title={owner.name} className="flex min-w-0 items-center gap-2 list-narrow:max-w-[140px]">
-          {owner.kind === "pool" ? (
-            <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-              <Icon name={poolIcon} size={13} />
-            </span>
-          ) : (
-            <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" solid decorative />
-          )}
+          <OwnerMark owner={owner} solid />
           <span className="min-w-0 truncate">{owner.name}</span>
         </span>
       );
@@ -445,7 +440,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
 }
 
 /** The labels a column's text reads. */
-export type CellTextLabels = Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "notPickedUp" | "cancelled" | "code" | "revision">;
+export type CellTextLabels = Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "notPickedUp" | "waitingFor" | "cancelled" | "code" | "revision">;
 
 type ColumnContext = {
   locale: Locale;

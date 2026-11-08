@@ -12,11 +12,15 @@ export type SubmittalPanelWith =
   /** A Step Pool of the viewer's own Company: up to 3 names in the reader's order, then how many more. */
   | { kind: "pool"; names: string[]; more: number }
   /** Another Company (or "Owner review"), by name only. */
-  | { kind: "company"; name: string };
+  | { kind: "company"; name: string }
+  /** A Participant-level Vacancy (RP-952): "Waiting for a new ‹role›", never a Company. */
+  | { kind: "vacancy"; name: string };
 
 const poolNamesShown = 3;
 
-export function submittalPanelWith(heldBy: WorkItemDetail["heldBy"], locale: Locale): SubmittalPanelWith | null {
+/** `waitingFor`: the words of a Vacancy ("Waiting for a new Consultant"), when the item's Step is one; the API then gives no holder. */
+export function submittalPanelWith(heldBy: WorkItemDetail["heldBy"], locale: Locale, waitingFor: string | null = null): SubmittalPanelWith | null {
+  if (waitingFor !== null) return { kind: "vacancy", name: waitingFor };
   if (!heldBy) return null;
   if (heldBy.memberName) return { kind: "person", name: heldBy.memberName[locale] };
   if (heldBy.pool && heldBy.pool.names.length > 0) {
