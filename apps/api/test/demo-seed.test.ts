@@ -129,7 +129,7 @@ describe("the submittals the demo seeds", () => {
 });
 
 describe("the demo seed", () => {
-  it("onboards the four Companies through Rabaed Admin, each with a reason in admin_action (V9)", async () => {
+  it("onboards the five Companies through Rabaed Admin, each with a reason in admin_action (V9)", async () => {
     const { rows } = await sql<{ action: string; reason: string; name: string }>`
       select a.action, a.reason, c.legal_name ->> 'en' as name
       from admin_action a
@@ -138,7 +138,8 @@ describe("the demo seed", () => {
       where e.email = ${DEMO_ENGINEER_EMAIL}
       order by a.seq
     `.execute(migrator);
-    expect(rows.map((r) => r.name)).toEqual(["TMC Constructions", "Beta Build", "Design Consultants LLC", "Al Waha PMC"]);
+    // Gulf Review Consultants is on UAT 03 only, for PAR-17 (RP-1264).
+    expect(rows.map((r) => r.name)).toEqual(["TMC Constructions", "Beta Build", "Design Consultants LLC", "Al Waha PMC", "Gulf Review Consultants"]);
     expect(rows.every((r) => r.action === "onboard_company" && r.reason.startsWith("Demo seed:"))).toBe(true);
   });
 
@@ -153,7 +154,7 @@ describe("the demo seed", () => {
       where e.email = ${DEMO_ENGINEER_EMAIL}
       order by a.at, a.id
     `.execute(migrator);
-    expect(rows).toHaveLength(4); // not hidden-from: the seed's content, its four Companies, read as the migrator
+    expect(rows).toHaveLength(5); // not hidden-from: the seed's content, its five Companies, read as the migrator
     for (const row of rows) expect(row, row.name).toMatchObject({ logo: "image/png", stamp: "image/png" });
   });
 

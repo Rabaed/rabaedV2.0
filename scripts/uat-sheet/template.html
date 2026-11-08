@@ -203,7 +203,7 @@ const T = {
         remove: "Remove", saved: "Saved", notSaved: "Could not save in this browser: use Save work (.json)", none: "No case in this section matches the filters.",
         exported: "Excel file downloaded.", savedJson: "Work saved as .json.", loaded: "Work loaded:", cases: "cases", mdDone: "Markdown downloaded.",
         badJson: "That file is not a work file from this sheet.", done: "done", of: "of", section: "Section", yourCases: "your cases", ownerSection: "UAT owner",
-        overall: "Your progress", needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run", needsMail: "Reads an email",
+        overall: "Your progress", needsOwner: "Needs the UAT owner", needsSetup: "Needs set-up first", needsJob: "Needs a job run", needsMail: "Reads an email", once: "Once per Reset UAT",
         mailNote: "On the UAT the email goes to the real mailbox of the address, not to a catcher: you can read it only if the address is yours; otherwise ask the UAT owner.",
         ownerNote: "The UAT owner runs the cases in this section: they need the owner's machine, Rabaed Admin or a mailbox you can't read. Skip them unless the owner asks you to.",
         peopleTitle: "Who's who: the demo people you can sign in as",
@@ -229,7 +229,7 @@ const T = {
         remove: "إزالة", saved: "حُفظ", notSaved: "تعذّر الحفظ في هذا المتصفح: استخدم حفظ العمل (.json)", none: "لا توجد حالة في هذا القسم تطابق التصفية.",
         exported: "نُزّل ملف Excel.", savedJson: "حُفظ العمل بصيغة .json.", loaded: "حُمّل العمل:", cases: "حالة", mdDone: "نُزّل ملف Markdown.",
         badJson: "هذا الملف ليس ملف عمل من هذه الورقة.", done: "منجزة", of: "من", section: "القسم", yourCases: "حالاتك", ownerSection: "مسؤول الاختبار",
-        overall: "تقدّمك", needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة", needsMail: "يقرأ بريدًا",
+        overall: "تقدّمك", needsOwner: "يحتاج إلى مسؤول الاختبار", needsSetup: "يحتاج إلى تهيئة مسبقة", needsJob: "يحتاج إلى تشغيل مهمة", needsMail: "يقرأ بريدًا", once: "مرة واحدة بعد كل إعادة تهيئة",
         mailNote: "في بيئة الاختبار يصل البريد إلى صندوق البريد الحقيقي لصاحب العنوان لا إلى أداة التقاط: لا تقرأه إلا إذا كان العنوان لك، وإلا فاطلب ذلك من مسؤول الاختبار.",
         ownerNote: "يشغّل مسؤول الاختبار حالات هذا القسم: تحتاج إلى جهازه أو إلى Rabaed Admin أو إلى بريد لا تستطيع قراءته. تخطّها إلا إذا طلب منك ذلك.",
         peopleTitle: "من هو من: الأشخاص التجريبيون الذين يمكنك الدخول باسمهم",
@@ -477,7 +477,8 @@ function caseHtml(c) {
     <div class="body">
       <h3 dir="auto"><span class="cid">${esc(c.id)}</span>${esc(c.title)}</h3>
       <div class="meta"><span class="tag">${esc(c.key)}</span>${c.round ? `<span class="tag">${esc(t("round"))} ${esc(c.round)}</span>` : ""}
-        <span class="tag"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))} ↗</a></span>${needTags}</div>
+        <span class="tag"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(t("open"))} ↗</a></span>${needTags}${c.once ? `<span class="tag need">${esc(t("once"))}</span>` : ""}</div>
+      ${c.once ? `<p class="note" dir="auto">${esc(DATA.once[lang])}</p>` : ""}
       ${c.who ? `<div class="lbl">${esc(t("who"))}</div><div class="who" dir="auto">${linkPeople(c.who)}</div>` : ""}
       ${c.steps.length ? `<div class="lbl">${esc(t("steps"))}</div><ol class="steps" dir="auto">${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
       ${c.expected ? `<div class="lbl">${esc(t("expected"))}</div><p class="exp" dir="auto">${esc(c.expected)}</p>` : ""}

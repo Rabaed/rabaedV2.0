@@ -55,13 +55,18 @@ const PEOPLE = {
   noura: ["noura.alharbi", "alwaha"],
   // On the UAT Projects only (RP-1250): the sample Project leaves him off, as before.
   omar: ["omar.alharbi", "tmc"],
+  // Gulf Review Consultants' Authorized Person, on UAT 03 only (RP-1264): signed in only for a Project it joins.
+  tariq: ["tariq.alshehri", "gulfreview"],
 } as const;
 /** A demo person the sample Project's runs sign in as. */
 export type SampleWho = keyof typeof PEOPLE;
 type Who = SampleWho;
 
-/** A Company on the Project, named by its Authorized Person: TMC's Saeed, Beta Build's Nasser, Design Consultants' Layla, Al Waha's Hind. */
-export type SampleCompany = "saeed" | "nasser" | "layla" | "hind";
+/**
+ * A Company on the Project, named by its Authorized Person: TMC's Saeed, Beta Build's Nasser, Design Consultants' Layla,
+ * Al Waha's Hind; and Gulf Review Consultants' Tariq, only on a Project whose people join it (RP-1264).
+ */
+export type SampleCompany = "saeed" | "nasser" | "layla" | "hind" | "tariq";
 
 /** Trades and Locations by their codes; all of the Project's where one is left out. */
 export interface SampleGrant {
@@ -80,19 +85,46 @@ export interface SamplePeople {
   leaveOff?: Who[];
   grants?: Partial<Record<Who, SampleGrant>>;
   participants?: Partial<Record<SampleCompany, SampleGrant>>;
+  /** Companies on this Project only, beside the four on every one (RP-1264): UAT 03's Gulf Review Consultants. */
+  join?: SampleCompany[];
 }
 
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position's key, as GLOSSARY.md's Position entry names it.
 const PM = "project_manager";
 
-/** Each Company on the Project: its Authorized Person, CR number (seed.ts's made-up ones), Role and Members with their Positions. */
-const COMPANIES: { ap: SampleCompany; crNumber: string; role: BaseRole; members: [Who, string[]][] }[] = [
-  { ap: "saeed", crNumber: "9999000001", role: "contractor", members: [["hafiz", ["engineer"]], ["ali", [PM]]] },
+/**
+ * Each Company on the Project: its Authorized Person, CR number (seed.ts's made-up ones), Role and Members with their
+ * Positions. One that `joins` is on a Project only when its people name it (SamplePeople.join).
+ */
+type Company = { ap: SampleCompany; name: string; crNumber: string; role: BaseRole; members: [Who, string[]][]; joins?: true };
+const COMPANIES: Company[] = [
+  { ap: "saeed", name: "TMC Constructions", crNumber: "9999000001", role: "contractor", members: [["hafiz", ["engineer"]], ["ali", [PM]]] },
   // Yousef is Beta Build's only Member here, so he also Submits its Packages (RP-1220): Project Manager beside Engineer.
-  { ap: "nasser", crNumber: "9999000002", role: "contractor", members: [["yousef", ["engineer", PM]]] },
-  { ap: "layla", crNumber: "9999000003", role: "consultant", members: [["ahmed", ["engineer"]], ["sara", ["engineer"]], ["mohammed", ["manager"]]] },
-  { ap: "hind", crNumber: "9999000004", role: "owner_representative", members: [["faisal", ["engineer"]], ["noura", [PM]]] },
+  { ap: "nasser", name: "Beta Build", crNumber: "9999000002", role: "contractor", members: [["yousef", ["engineer", PM]]] },
+  { ap: "layla", name: "Design Consultants LLC", crNumber: "9999000003", role: "consultant", members: [["ahmed", ["engineer"]], ["sara", ["engineer"]], ["mohammed", ["manager"]]] },
+  { ap: "hind", name: "Al Waha PMC", crNumber: "9999000004", role: "owner_representative", members: [["faisal", ["engineer"]], ["noura", [PM]]] },
+  // A second Consultant for PAR-17 (RP-1264): its Authorized Person is its one Member, its Consultant Engineer.
+  { ap: "tariq", name: "Gulf Review Consultants", crNumber: "9999000006", role: "consultant", members: [["tariq", ["engineer"]]], joins: true },
 ];
+
+/** The Company's people: its Authorized Person and its Members. */
+const peopleOf = (c: Company): Who[] => [c.ap, ...c.members.map(([who]) => who)];
+
+/** Whether the Company is on a Project of `people`: every Company is, but one that joins only where `people` names it. */
+const isOn = (c: Company, people: SamplePeople = {}) => !c.joins || (people.join?.includes(c.ap) ?? false);
+
+/**
+ * The Company whose Consultant Engineer holds an item, by name, which its Submit picks where two Consultants cover it:
+ * Design Consultants when the plan names no Engineer.
+ */
+const consultantOf = (engineer: SampleSubmittal["consultantEngineer"] = "ahmed") =>
+  COMPANIES.find((c) => c.role === "consultant" && c.members.some(([who]) => who === engineer))!.name;
+
+/** The people of the Companies that join only some Projects: signed in only when a Project being built has them. */
+const JOINING = new Set<Who>(COMPANIES.filter((c) => c.joins).flatMap(peopleOf));
+
+/** The demo people a Project of `people` needs signed in beside everyone else: those of the Companies it joins. */
+export const joiningPeople = (people: SamplePeople = {}): Who[] => COMPANIES.filter((c) => c.joins && isOn(c, people)).flatMap(peopleOf);
 
 const all: VisibilityGrant = { isAll: true, valueIds: [] };
 
@@ -165,7 +197,7 @@ export async function addSampleProject(
   password: string,
   options: SampleProjectOptions = {},
 ): Promise<SampleProjectResult> {
-  return withSampleLock(migrator, async (connection) => buildSampleProject(await signInAll(app, password), connection, options));
+  return withSampleLock(migrator, async (connection) => buildSampleProject(await signInAll(app, password, joiningPeople(options.people)), connection, options));
 }
 
 /**
@@ -286,13 +318,21 @@ export async function inParallel(moves: (() => Promise<void>)[], n: number): Pro
   if (failure) throw failure.error;
 }
 
-/** The demo people, each signed in as one browser (signInAll); several Projects built at once share them (RP-1254). */
+/**
+ * The demo people, each signed in as one browser (signInAll); several Projects built at once share them (RP-1254).
+ * A joining Company's people are there only when signInAll was asked for them.
+ */
 export type SignedIn = Record<Who, Call>;
 
-/** Everyone signs in first, so a password that no longer works stops the run before it writes anything. */
-export async function signInAll(app: FastifyInstance, password: string): Promise<SignedIn> {
+/**
+ * Everyone signs in first, so a password that no longer works stops the run before it writes anything. The people of a
+ * Company that joins only some Projects sign in only when `joining` names them (joiningPeople): a database seeded before
+ * that Company was added has no such person, and the sample Project never needs one.
+ */
+export async function signInAll(app: FastifyInstance, password: string, joining: Who[] = []): Promise<SignedIn> {
   const people = {} as SignedIn;
   for (const [who, [local, domain]] of Object.entries(PEOPLE) as [Who, readonly [string, string]][]) {
+    if (JOINING.has(who) && !joining.includes(who)) continue;
     const caller = browser(app);
     try {
       await caller("POST", "/v1/session", { email: demoEmail(local, domain), password });
@@ -364,7 +404,7 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
     trade: g.trades ? { isAll: false, valueIds: g.trades.map((c) => trade[c]) } : all,
     location: g.locations ? { isAll: false, valueIds: g.locations.map((c) => location[c]!) } : all,
   });
-  for (const company of COMPANIES) {
+  for (const company of COMPANIES.filter((c) => isOn(c, people))) {
     const ap = as[company.ap];
     const participantId = await participantOf(as, ap, projectId, which, company.crNumber, company.role);
     const own = grantOf(people.participants?.[company.ap]);
@@ -457,10 +497,11 @@ class Runner {
   ) {}
 
   /**
-   * `by` takes `transition`, picking the Step up first when it sits in their Step Pool, and naming
-   * TMC where the next Step could go to more than one Participant (a Snag's Contractor).
+   * `by` takes `transition`, picking the Step up first when it sits in their Step Pool, and naming `pick` (TMC by
+   * default) where the next Step could go to more than one Participant: a Snag's Contractor, or UAT 03's two
+   * Consultants (RP-1264).
    */
-  private async act(by: Call, id: string, transition: string, body: Record<string, unknown> = {}) {
+  private async act(by: Call, id: string, transition: string, body: Record<string, unknown> = {}, pick: string = SIDES.tmc.company) {
     // Taken straight away when `by` already holds the Step and no Participant is to be picked: the item's page costs
     // some 28 queries, a third of the seed's (RP-1254). Anything else is refused before it writes anything (not_holder,
     // participant_not_picked, …), and then it goes as it always did: read, pick up, read, take.
@@ -477,7 +518,7 @@ class Runner {
     }
     const offered = detail.actions.transitions.find((t) => t.key === transition);
     if (!offered) throw new Error(`Sample project: ${transition} is not offered on ${detail.documentNumber ?? "a Draft"} (offered: ${detail.actions.transitions.map((t) => t.key).join(", ") || "none"})`);
-    const participant = offered.participants?.find((p) => p.companyName.en === SIDES.tmc.company)?.participantId;
+    const participant = offered.participants?.find((p) => p.companyName.en === pick)?.participantId;
     await by("POST", `/v1/work-items/${id}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID(), ...body, ...(participant ? { participant } : {}) });
   }
 
@@ -567,7 +608,7 @@ class Runner {
     if (item.end === "returned") {
       return this.act(pm, id, "return", { answers: { reason: "Add the model's test certificate and resend. / أضف شهادة اختبار الطراز وأعد الإرسال." } });
     }
-    await this.act(pm, id, "submit", { answers: { cover_note: `${item.product.name} for ${item.location}, as specified in ${item.product.specificationSection}.` } });
+    await this.act(pm, id, "submit", { answers: { cover_note: `${item.product.name} for ${item.location}, as specified in ${item.product.specificationSection}.` } }, consultantOf(item.consultantEngineer));
     await this.reviewed(id, item, side);
   }
 
