@@ -559,7 +559,7 @@ const columnSorts: Record<WorkItemSort, ColumnSort> = {
   owner: {
     value: (lang) =>
       named(
-        sql`(case when r.closed then coalesce(cm.full_name, ${closerCompanyName})
+        sql`(case when r.closed then coalesce(${closerName}, ${closerCompanyName})
           when r.held_by_own and r.assignee_member_id is null then r.step_name
           else coalesce(m.full_name, r.holder_name, r.owner_review_name) end)`,
         lang,
@@ -751,11 +751,20 @@ const closerCompanyName = sql`(case when r.closed then (
     select x.legal_name from app.work_item_companies(r.id) x where x.participant_id = ce.actor_participant_id
   ) end)`;
 
+/**
+ * The closer's name, for one's own Participant's close only: another's is named by its Company only (V14). The id
+ * comes from app.event_actor_members, one's own Company's Member only (RP-1139). A case in the columns, not a join,
+ * so the function is called for the rows shown that one's own Participant closed, never for every row read.
+ */
+const closerName = sql`(case when r.closed and ce.actor_participant_id in (select app.current_participant_ids()) then (
+    select cm.full_name from app.event_actor_members(array[ce.id]) a join member cm on cm.id = a.actor_member_id
+  ) end)`;
+
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14). The holder's and raiser's
 // Companies are the row's own (`visibleRows`).
-const holderColumns = sql`${closerCompanyName} as closer_company_name, cm.full_name as closer_name,
+const holderColumns = sql`${closerCompanyName} as closer_company_name, ${closerName} as closer_name,
   m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
   hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role,
   -- Its Package (RP-636): only one the viewer sees, so a row never tells of another Company's Package. A column of
@@ -783,13 +792,6 @@ const holderJoins = sql`left join lateral (
     order by e.seq desc
     limit 1
   ) ce on true
-  -- Its actor's id, which app.event_actor_members gives for one's own Company's Member only (RP-1139),
-  -- asked only of one's own Participant's closes: another's is named by its Company only.
-  left join lateral (
-    select a.actor_member_id from app.event_actor_members(array[ce.id]) a
-    where ce.id is not null and ce.actor_participant_id in (select app.current_participant_ids())
-  ) ca on true
-  left join member cm on cm.id = ca.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
   left join member m on m.id = r.assignee_member_id
   left join lateral (
     select p.key, p.name, p.sort, pr.name as project_role
