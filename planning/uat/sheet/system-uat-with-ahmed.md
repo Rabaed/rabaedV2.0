@@ -1085,7 +1085,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Dashboard › Activity Feed panel › View all, and the Dashboard's Recent activity: the seed Submitted UAT02-MAR-01-0004, and Design Consultants reviewed and closed UAT02-MAR-01-0006 to 0009.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Dashboard: the Dashboard's Activity Feed panel and its View all page, where the seed Submitted UAT02-MAR-01-0004, and Design Consultants reviewed and closed UAT02-MAR-01-0006 to 0009.
   2. Search Submittals for "Beta Build", UAT02-MAR-02-0001 and UAT02-MAR-02-0002.
 - **Expected result:** Ali sees TMC's people by name and Design Consultants by Company name only: no person of theirs, Pick up, Send to Manager, Internal Note, Recommended Code, answers_changed or Document upload (V5, V14). Nothing of Beta Build's appears in the feed, a List, a count or a search: not its Draft "Beta Build – standby generator, Draft", nor UAT02-MAR-02-0001 (with Beta Build's PM) or UAT02-MAR-02-0002 (Submitted) (V1, V3). No setup changes appear.
 
@@ -1449,7 +1449,7 @@ Every case here is run in **UAT 04 · Consultant Engineer (Ahmed)**, as the one 
 - **Sign in as:** Ahmed (DCL engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 04 · Consultant Engineer (Ahmed): Submittals List, Kanban, Dashboard, Home, the Activity Feed (Dashboard › Activity Feed panel › View all) and the bell; note every count.
+  1. Projects > UAT 04 · Consultant Engineer (Ahmed): Submittals List, Kanban, Dashboard, Home, the Dashboard's Activity Feed panel and its View all page, and the bell; note every count.
   2. Search for "TMC – cable trays", UAT04-MAR-01-0007, "TMC – wiring devices", "Beta Build" and UAT04-MAR-02-0001.
 - **Expected result:** Nothing of TMC's before its Submit appears anywhere: not its Draft "TMC – wiring devices, Draft not sent" nor UAT04-MAR-01-0007 "TMC – cable trays, in Internal Review", and nothing of Beta Build's Draft "Beta Build – standby generator, Draft" or UAT04-MAR-02-0001 (with Beta Build's PM): in no List, Kanban, count, badge, Dashboard figure, search result, feed entry or notification (V1). The counts are of Submitted items only. (TMC's own reading of its Draft and Internal Review is Hafiz's and Ali's.)
 

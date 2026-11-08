@@ -451,7 +451,8 @@ describe("the Activity Feed is not a tab (RP-1259)", () => {
 
   it("SUB-28, UX-08, VIS-01 and VIS-57 reach the feed from Dashboard › Activity Feed panel › View all", () => {
     for (const id of ["SUB-28", "UX-08", "VIS-01", "VIS-57"]) {
-      expect(rows.find((r) => r.id === id)!.steps, id).toContain("Dashboard › Activity Feed panel › View all");
+      const steps = rows.find((r) => r.id === id)!.steps!;
+      expect(steps, id).toMatch(/Dashboard(?: ›|'s) Activity Feed panel (?:›|and its) View all/);
     }
   });
 });
