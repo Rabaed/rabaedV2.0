@@ -188,9 +188,12 @@ describe("a Snag Rabaed cancels at its raiser's withdrawal: the Snag List has a 
     await withdraw(c1.caller, at.k1ParticipantId!);
   });
 
-  it("a new Project's Snag List has a Cancelled Stage, last", async () => {
+  it("a new Project's Snag List has a Cancelled Stage, after its Closed", async () => {
+    // After, not last: another test may add a Rabaed Default Stage of its own to the Module.
     const stages = (await stagesOf(at.c1Pm, at.projectId, "snag_list")).stages;
-    expect(stages.at(-1)).toMatchObject({ key: "cancelled", category: "cancelled", name: { en: "Cancelled", ar: "ملغى" } });
+    const keys = stages.map((s) => s.key);
+    expect(stages.find((s) => s.key === "cancelled")).toMatchObject({ category: "cancelled", name: { en: "Cancelled", ar: "ملغى" } });
+    expect(keys.indexOf("cancelled")).toBeGreaterThan(keys.indexOf("closed"));
   });
 
   it("C1, which saw it, reads it Cancelled in the Cancelled Stage and Kanban column; C2 never reads it", async () => {
