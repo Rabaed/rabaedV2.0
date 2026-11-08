@@ -1528,6 +1528,7 @@
       "reassignedByRabaed": "Reassigned by Rabaed from {from} to {to}",
       "assignedByRabaed": "Assigned to {to} by Rabaed",
       "returnedToPoolByRabaed": "Returned to the pool by Rabaed",
+      "vacancyPassed": "Passed on by Rabaed",
       "other": "Updated",
       "numbered": "Document Number",
       "internalNote": "Internal Note",

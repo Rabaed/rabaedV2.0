@@ -49,3 +49,16 @@ describe("historyMoveLabel: a Rabaed Engineer's reassign (RP-1162)", () => {
     expect(historyMoveLabel(event({ handover: { from: name("Ali"), to: name("Khalid"), because: "reassigned" } }), "en", t)).toBe("reassigned(from=Ali, to=Khalid)");
   });
 });
+
+describe("historyMoveLabel: a Vacancy passed to the replacement Participant (RP-1262)", () => {
+  it("reads as passed on by Rabaed: the only shared `assigned` event, with no Member", () => {
+    const passed = event({ audience: "shared", by: { companyName: name("K2"), memberName: null, positions: [] } });
+    expect(historyMoveLabel(passed, "en", t)).toBe("vacancyPassed");
+    expect(historyMoveLabel(passed, "ar", t)).toBe("vacancyPassed");
+  });
+
+  it("leaves a pool of one's internal `assigned` event as it was", () => {
+    const onlyMember = event({ by: { companyName: name("K2"), memberName: name("Ali"), positions: [] } });
+    expect(historyMoveLabel(onlyMember, "en", t)).toBe("assignedOnlyMember(name=Ali)");
+  });
+});

@@ -17,6 +17,7 @@ type MoveKey =
   | "assignedByRabaed"
   | "returnedToPoolByRabaed"
   | "assignedOnlyMember"
+  | "vacancyPassed"
   | "created"
   | "answersChanged"
   | "other";
@@ -52,6 +53,9 @@ export function historyMoveLabel(e: Event, locale: Locale, t: HistoryTranslator)
     if (!to) return t("returnedToPoolByRabaed");
     return from ? t("reassignedByRabaed", { from, to }) : t("assignedByRabaed", { to });
   }
+  // A Vacancy passed to the replacement Participant (RP-1262): Rabaed's own, the one shared `assigned`
+  // event, naming the replacement's Company (by) and never the withdrawn one.
+  if (e.type === "assigned" && e.audience === "shared") return t("vacancyPassed");
   // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
   if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
   if (e.type === "created") return t("created");

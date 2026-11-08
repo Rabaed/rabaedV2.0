@@ -192,3 +192,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271219 | RP-1117 | 41 | admin_action_seq (moved from 20271216: main's 20271217 sorts after it, and RP-952 #721 holds 20271218) |
 | 20271218 | RP-952 | 32 | vacancy_steps |
 | 20271217 | RP-1139 | 11 | member_ids_rest |
+| 20271221 | RP-1262 | 42 | vacancy_handoff (20271220 is RP-1261's, lane 41) |
