@@ -818,7 +818,7 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
       // Each row's state, as the counts read it.
       const states = new Map(p.items.map((i) => [i.id, i.state]));
       expect([states.get(electricalItems[0]!), states.get(mechanicalItems[0]!)]).toEqual(["done", "revise"]);
-      expect(p.items.filter((i) => i.state === "open")).toHaveLength(6);
+      expect(p.items.filter((i) => i.state === "open").map((i) => i.id).sort()).toEqual([...electricalItems.slice(1), ...mechanicalItems.slice(1)].sort());
       // "Waiting for you" counts the rows that wait on this viewer, and no other.
       expect((await boardEntry(by))!.waiting).toBe(p.items.filter((i) => i.waiting).length);
     }
@@ -829,8 +829,8 @@ describe("RP-641: the Packages board and each viewer's counts (scenarios RP-588-
     expect(await boardEntry(k1Electrical)).toEqual(narrowed);
     const p = await getPackage(k1Electrical, pkg.id);
     expect(p).toMatchObject(narrowed);
-    // Never a wait on an item they don't see.
-    expect((await boardEntry(k1Electrical))!.waiting).toBeLessThanOrEqual(p.items.filter((i) => i.waiting).length);
+    // Only waits on the items they see: the board's count is the rows of their page that wait on them.
+    expect((await boardEntry(k1Electrical))!.waiting).toBe(p.items.filter((i) => i.waiting).length);
     expect(p.items.map((i) => i.id).sort()).toEqual([...electricalItems].sort());
     for (const i of p.items) expect(i.trade.id).toBe(at.electrical);
     // Nothing of the Mechanical items: no id, no Subject, no number, no total of 8.

@@ -128,7 +128,7 @@ async function summaryRows(trx: Trx, where: { projectId: string } | { packageId:
         from app.package_latest_items(k.id) l
         join work_item w on w.id = l.work_item_id
         join work_item_type t on t.id = w.work_item_type_id
-        cross join lateral (select ${itemState} as state, app.need_my_action(w.id) = 'waiting' as waiting) s
+        cross join lateral (select ${itemState} as state, coalesce(app.need_my_action(w.id) = 'waiting', false) as waiting) s
         where l.counted
         group by t.id, t.code, t.name
       ) g
@@ -173,7 +173,7 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
     // The latest Revision of each chain the viewer sees (spec story 30, app.package_latest_items).
     // With where each stands and whether it waits on the viewer (RP-1143: the rows' colours and the page's tabs).
     const { rows: ids } = await sql<{ id: string; state: PackageItemState; waiting: boolean }>`
-      select w.id, ${itemState} as state, app.need_my_action(w.id) = 'waiting' as waiting
+      select w.id, ${itemState} as state, coalesce(app.need_my_action(w.id) = 'waiting', false) as waiting
       from app.package_latest_items(${packageId}::uuid) l
       join work_item w on w.id = l.work_item_id
       order by w.document_number nulls last, w.title, w.id

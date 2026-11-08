@@ -173,7 +173,7 @@ export function PackagesBoard({
         </ListToolbar>
       )}
       {/* When a Package is Done (GLOSSARY Package), the kit's line in our words (RP-1143 row 8). */}
-      <p role="note" className="flex items-start gap-2 rounded-md bg-info-tint px-3.5 py-2.5 text-sm font-medium text-info-fg">
+      <p role="note" className="flex items-start gap-2 rounded-md bg-info-tint px-3 py-2.5 text-sm font-medium text-info-fg">
         <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
         {labels.doneRule}
       </p>
