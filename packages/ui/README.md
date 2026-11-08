@@ -26,7 +26,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `photo/` | The one photo tool (RP-656): `PhotoTool` (Take photo / Upload, thumbnails), `PhotoViewer` (Annotated / Original), `PhotoAnnotator` (the annotate view); `annotate-marks.ts` |
 | `profile/` | `ProfileSettings` (RP-1154): the Profile card and the Member's notification settings (email only; Pause all email, a mute per Project) |
 | `register-import/` | The Submittal Register Import wizard (RP-637, RP-645), one for the customer app and Rabaed Admin: `RegisterImportWizard` (each app gives its calls, `registerImport` messages and links), `ErrorRows`, `ImportRows`, `RowReasons` |
-| `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
+| `revision/` | `RevisionPicker` and `RevisionBanner` (RP-1253), `RevisionActions`, `ReplacementActions` |
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
 | `signature/` | The Signature (RP-85): `SignatureEditor` (Profile → Add Signature: draw, type or upload), `SignatureRequiredDialog` (no Signature, no Transition); `CompanyImages` and `StampRequiredDialog` (the logo and Stamp, RP-617); `ImageFileButton` (their image file control, a button in the page's language) |
@@ -352,7 +352,7 @@ These components have no words of their own: each takes a `labels` prop (a funct
 | `NumberingCounters` | `NumberingCountersLabels` (`startsAt` and `used` take the number as text) |
 | `RevisionActions` | `RevisionActionsLabels` (the section, both questions, `refusals`) |
 | `ReplacementActions` | `ReplacementActionsLabels` (the section, the question, `refusals`) |
-| `RevisionPicker` | `RevisionPickerLabels` (`label`); `revisionNoNumber` stays its own prop |
+| `RevisionPicker`, `RevisionBanner` | `RevisionPickerLabels` and `RevisionBannerLabels` ("Rev n" or Original, the dates and the banner lines, each a function); an earlier Revision's Outcome chip is the `outcome` prop |
 | `NotificationSettingsForm` | `NotificationSettingsLabels`. The outcomes' names come from `watchOutcomeNames` in `@rabaed/domain`; the language names stay in the component |
 
 ## Storybook and story tests

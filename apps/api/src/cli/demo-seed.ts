@@ -51,7 +51,7 @@ await ensureLocalBucket(fileStoreSettings);
 const mailbox = demoMailbox();
 const app = await buildApp({ db, config: seedingConfig(apiConfigFromEnv()), logger: false, files: createFileStore(fileStoreSettings), mailer: mailbox.mailer });
 try {
-  const seed = await seedDemo(app, mailbox, { migrator, admin: adminDb }, password, { files: true });
+  const seed = await seedDemo(app, mailbox, { migrator, admin: adminDb }, password, { files: true, log: (line) => console.log(`demo:seed: ${line}`) });
   console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2", "Al Nakheel District – Block A" and "Jeddah Corniche Villas" seeded, with the UAT Projects (${UAT_ROLES.map((r) => r.name.en).join(", ")}). Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));

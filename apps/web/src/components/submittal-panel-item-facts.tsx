@@ -1,11 +1,12 @@
 "use client";
 
-import { formatNumber, workItemListHref, type Locale, type WorkItemDetail } from "@rabaed/domain";
+import { formatNumber, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { WorkItemPaperRef } from "@/components/work-item-paper-ref";
 import { Link } from "@/i18n/navigation";
+import { raisedFromHref } from "@/lib/raised-from-href";
 
 type Field = { key: string; label: string; value: ReactNode; full?: boolean };
 
@@ -41,13 +42,14 @@ export function useSubmittalPanelItemFacts(item: WorkItemDetail, locale: Locale)
   // What was raised from it (its Comments, its Snags), one line per Type, each opening the Snag List filtered to them (RP-628).
   for (const f of item.raisedItems) {
     const counts = t("fields.raisedItemCounts", { open: n(f.open), closed: n(f.closed) });
+    const href = raisedFromHref(item.projectId, f.type.code, item.documentNumber);
     fields.push({
       key: `raised-${f.type.code}`,
       label: typeName(f.type),
       value: (
         <span data-testid={`raised-item-counts-${f.type.code}`}>
-          {item.documentNumber ? (
-            <Link href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [item.documentNumber] })} className={linkClass}>
+          {href ? (
+            <Link href={href} className={linkClass}>
               {counts}
             </Link>
           ) : (
@@ -61,13 +63,14 @@ export function useSubmittalPanelItemFacts(item: WorkItemDetail, locale: Locale)
   const previous = item.previousRaisedItems;
   for (const f of previous?.items ?? []) {
     const counts = t("fields.previousRaisedItemCounts", { closed: n(f.closed), open: n(f.open) });
+    const href = raisedFromHref(item.projectId, f.type.code, previous!.documentNumber);
     fields.push({
       key: `previous-${f.type.code}`,
       label: t("fields.previousRaisedItems", { type: typeName(f.type), revision: n(previous!.revisionNo) }),
       value: (
         <span data-testid={`previous-raised-item-counts-${f.type.code}`}>
-          {previous!.documentNumber ? (
-            <Link href={workItemListHref(item.projectId, { module: "snag_list", type: [f.type.code], raisedFrom: [previous!.documentNumber] })} className={linkClass}>
+          {href ? (
+            <Link href={href} className={linkClass}>
               {counts}
             </Link>
           ) : (

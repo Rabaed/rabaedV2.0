@@ -4,7 +4,7 @@ import type { Db } from "@rabaed/db";
 import { companyImagePrefix, type BaseRole, type BilingualText, type Locale, type StartedDocumentUpload, type VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { browser, demoEmail, SAMPLE_PHOTO_JPEG, type Call } from "./demo-api.ts";
+import { browser, demoEmail, SAMPLE_PHOTO_JPEG, secondsSince, type Call } from "./demo-api.ts";
 import type { DemoMailbox } from "./mailbox.ts";
 import { demoPdf } from "./demo-pdf.ts";
 import { demoLogoPng, demoStampPng } from "./demo-company-images.ts";
@@ -92,6 +92,11 @@ export interface SeedOptions {
    * the Project files bucket (only the api does, ADR 0007).
    */
   files?: boolean;
+  /**
+   * Prints how long each Project took and the total (RP-1254), so a slow seed shows where it is.
+   * Counts and times only: UAT's job log is public.
+   */
+  log?: (line: string) => void;
 }
 
 // Each invitation is accepted at once.
@@ -108,6 +113,8 @@ export async function seedDemo(
   password: string,
   options: SeedOptions = {},
 ): Promise<DemoSeed> {
+  const start = performance.now();
+  const log = options.log ?? (() => {});
   const people: DemoPerson[] = [];
 
   const engineer: DemoPerson = {
@@ -678,16 +685,20 @@ export async function seedDemo(
     // The sample Project (RP-1217): Al Nakheel District – Block A, the same Companies and people
     // with over a hundred Submittals and a full Snag List. Its Submittals leave Draft with their
     // Datasheets, so it comes only with the file store, as the MARs above do.
+    log(`seeded the Companies, people and Riyadh Gate Tower in ${secondsSince(start)}`);
+    const sample = performance.now();
     await addSampleProject(app, databases.migrator, password);
+    log(`seeded Al Nakheel in ${secondsSince(sample)}`);
     // The UAT Projects (RP-1248): one per role, with the same Companies and people, each holding what
     // its role's cases in the hand-run sheet act on. Riyadh Gate Tower stays the automated harness's.
-    await addUatProjects(app, databases.migrator, password);
+    await addUatProjects(app, databases.migrator, password, { log });
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
   // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
   // nothing else, so each sees only their own Project (the deploy's
   // visibility check on UAT, scripts/smoke.ts).
+  const villas = performance.now();
   await beta.caller("PATCH", `/v1/members/${beta.authorizedPersonId}`, { canCreateProjects: true });
   const { projectId: otherProjectId } = await beta.caller<{ projectId: string }>("POST", "/v1/projects", {
     name: bi("Jeddah Corniche Villas", "فلل كورنيش جدة"),
@@ -715,5 +726,7 @@ export async function seedDemo(
     },
   });
 
+  log(`seeded Jeddah Corniche Villas in ${secondsSince(villas)}`);
+  log(`seeded the demo in ${secondsSince(start)}`);
   return { projectId, otherProjectId, engineer, people };
 }

@@ -1,6 +1,7 @@
 # The UAT deploy (RP-1043, ADR 0026): every merge to main reaches UAT on Vercel,
 # stopping at the first failure:
-#   1. migrate UAT's Supabase database over the session pooler, check rabaed_app
+#   1. check neither R2 bucket (the Thmanyah fonts, the Project files) has public access
+#      (RP-1047); migrate UAT's Supabase database over the session pooler, check rabaed_app
 #      cannot get round RLS, seed the demo unless it is there, and publish the Rabaed
 #      Default Versions that differ (RP-1205); a refusal stops the deploy here;
 #   2. apply the api's and Rabaed Admin's Vercel settings and Sensitive variables,
@@ -34,7 +35,8 @@
 # Owner setup (once): environment `uat` holds the secrets and variables the steps
 # below name (the first step lists any missing); the three Vercel projects exist
 # (their ids and production addresses are variables); the R2 CORS rule is set in
-# Cloudflare's dashboard (PR #418).
+# Cloudflare's dashboard (PR #418); the secret CLOUDFLARE_R2_READ_TOKEN is a Cloudflare API
+# token with Account > Workers R2 Storage > Read only (PR #697 says how to make it).
 name: Deploy UAT
 on:
   push:
@@ -135,19 +137,32 @@ jobs:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
           PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          BUILD_ASSETS_BUCKET: ${{ vars.BUILD_ASSETS_BUCKET }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
         run: |
           missing=""
           for name in DATABASE_SUPERUSER_URL DATABASE_MIGRATOR_PASSWORD DATABASE_APP_PASSWORD DATABASE_ADMIN_PASSWORD DEMO_PASSWORD \
             VERCEL_TOKEN CRON_SECRET FILE_STORE_ACCESS_KEY_ID FILE_STORE_SECRET_ACCESS_KEY SENDGRID_API_KEY \
             SUPABASE_PROJECT_REF VERCEL_ORG_ID VERCEL_WEB_PROJECT_ID VERCEL_API_PROJECT_ID VERCEL_ADMIN_PROJECT_ID \
-            UAT_WEB_URL UAT_API_URL UAT_ADMIN_URL FILE_STORE_ENDPOINT PROJECT_FILES_BUCKET MAIL_FROM; do
+            UAT_WEB_URL UAT_API_URL UAT_ADMIN_URL FILE_STORE_ENDPOINT PROJECT_FILES_BUCKET BUILD_ASSETS_BUCKET MAIL_FROM; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
             echo "::error::Set these in the uat environment:$missing"
             exit 1
           fi
+
+      # The fonts' licence and the Project files' privacy rest on neither R2 bucket having its
+      # r2.dev URL or a custom domain on (scripts/r2-private.ts says why and how it asks). A public
+      # bucket, an answer it cannot read or a missing token fails here, before anything changes.
+      # This step alone holds CLOUDFLARE_R2_READ_TOKEN (the inputs check above leaves it out).
+      - name: Neither R2 bucket has public access
+        env:
+          CLOUDFLARE_R2_READ_TOKEN: ${{ secrets.CLOUDFLARE_R2_READ_TOKEN }}
+          FILE_STORE_ENDPOINT: ${{ vars.FILE_STORE_ENDPOINT }}
+          PROJECT_FILES_BUCKET: ${{ vars.PROJECT_FILES_BUCKET }}
+          BUILD_ASSETS_BUCKET: ${{ vars.BUILD_ASSETS_BUCKET }}
+        run: node scripts/r2-private.ts
 
       # The session pooler (DATABASE_SUPERUSER_URL, port 5432): migrations hold a
       # session advisory lock. Role passwords are set only when a role is created
@@ -269,7 +284,7 @@ jobs:
           if compgen -G "packages/ui/fonts/thmanyah/thmanyahsans-*.woff2" >/dev/null; then
             echo "arabic_font=Thmanyah Sans" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No Thmanyah fonts fetched (BUILD_ASSETS_BUCKET and the FONTS_* key in uat); Arabic falls back to IBM Plex Sans Arabic."
+            echo "::warning::No Thmanyah fonts fetched (the FONTS_* key in uat, or none under fonts/thmanyah/ in BUILD_ASSETS_BUCKET); Arabic falls back to IBM Plex Sans Arabic."
             echo "arabic_font=IBM Plex Sans Arabic" >> "$GITHUB_OUTPUT"
           fi
 

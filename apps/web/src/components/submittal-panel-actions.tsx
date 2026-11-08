@@ -39,6 +39,7 @@ import { useRef, useState } from "react";
 /** An outcome whose rows open Comments in the Snag List (Code B: `create_items`, workflow-engine.md). */
 const opensComments = (outcome: Outcome | undefined) => outcome?.actions.some((a) => a.kind === "create_items") ?? false;
 import { useRouter } from "@/i18n/navigation";
+import { useRevisionPickerLabels } from "@/components/work-item-revision-picker";
 
 /**
  * The Submittal Panel's action bar (RP-1237, gap table v3 rows 22–28 and 48–51; the owner's Anatomy V3
@@ -58,6 +59,7 @@ export function SubmittalPanelActionBar({
   events,
   editing,
   onEdit,
+  pastRevision = null,
 }: {
   item: WorkItemDetail;
   locale: Locale;
@@ -71,12 +73,16 @@ export function SubmittalPanelActionBar({
   events: WorkItemHistory["events"];
   editing: boolean;
   onEdit: () => void;
+  /** The open Revision's number when it is earlier than the latest the viewer sees (RP-1253): "Rev 1 · read only" and Download PDF only. */
+  pastRevision?: number | null;
 }) {
   const t = useTranslations("submittalPanel.bar");
   const tActions = useTranslations("workItems.actions");
   const tPopup = useTranslations("workItems.actions.popup");
   const tForm = useTranslations("workItems.form");
   const tSheet = useTranslations("submittalPanel.sheet");
+  const tPicker = useTranslations("revision.picker");
+  const revisionLabels = useRevisionPickerLabels();
   const form = useWorkItemForm();
   const saveDraft = useSaveDraft(locale);
 
@@ -169,8 +175,11 @@ export function SubmittalPanelActionBar({
     proposed: tr.proposed ? tActions("proposed") : undefined,
   });
 
-  const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly") };
-  const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks });
+  const waitingLabels = { pool: (count: number) => t("pool", { count, n: formatNumber(count, locale) }), pickedUp: (name: string) => t("pickedUp", { name }), viewOnly: t("viewOnly"),
+    pastRevision: (revision: string) => tPicker("readOnly", { revision }),
+    revision: revisionLabels.revision,
+  };
+  const bar = submittalPanelBar({ actions: item.actions, codes, heldBy: item.heldBy, stepAgeWeeks: item.stepAgeWeeks, pastRevision });
   const busy = opener.calls.pending || opener.waiting;
   const proposing = item.actions.transitions.some((tr) => tr.proposed);
   // Only a move forward is the primary (Send for review, Sign & submit); a Return, a Send Back or a Cancel never is.

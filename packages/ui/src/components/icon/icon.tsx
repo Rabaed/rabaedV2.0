@@ -123,6 +123,7 @@ import {
   IconDeviceMobile,
   IconArrowUpRight,
   IconCircle,
+  IconPoint,
   IconPencil,
   IconSquare,
   IconTypography,
@@ -266,6 +267,7 @@ const icons = {
   // The annotate view's tools (RP-656).
   "arrow-up-right": IconArrowUpRight,
   circle: IconCircle,
+  point: IconPoint,
   square: IconSquare,
   pencil: IconPencil,
   typography: IconTypography,
