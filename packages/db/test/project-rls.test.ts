@@ -197,6 +197,65 @@ async function fillProject(projectId: string, creator: string) {
      values ($1, '[{"kind": "project"}, {"kind": "participant"}]', '/', 5, '[0, 1]', $2)`,
     [projectId, creator],
   );
+
+  // The Project tables granted by column (RP-1258), as the migrator: each has its own RLS test of who reads its rows
+  // inside the Project; here only the Project boundary is checked. A Draft the creator holds, for the holder's rows.
+  const draft = await firstRowAs(
+    creator,
+    sql<{ outcome: string; work_item_id: string }>`
+      select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'MAR', 'Ducts', app.latest_form_version('MAR'), '{"description": "Spiral"}'::jsonb, ${values.trade}::uuid, ${values.location}::uuid, now(), ${[scope.scope_id]}::uuid[])
+    `,
+  );
+  expect(draft.outcome).toBe("created");
+  const items = JSON.stringify([{ key: "formwork", text: { en: "Formwork tight", ar: "القوالب محكمة" }, answers: "pass_fail_na", comment: "optional", photo: "off", on_negative: "create_snag" }]);
+  await migrator.query(
+    "insert into approved_supplier (project_id, name, trade_value_id, source, status, added_by_member_id) values ($1, $2, $3, 'preloaded', 'approved', $4)",
+    [projectId, name, values.trade, creator],
+  );
+  const template = await firstRowAs(
+    creator,
+    sql<{ outcome: string; template_id: string }>`select outcome, template_id from app.create_checklist_template(${projectId}::uuid, ${name}::jsonb, ${values.trade}::uuid, ${items}::jsonb, now())`,
+  );
+  expect(template.outcome).toBe("created");
+  const templateVersion = await one("select id from checklist_template_version where checklist_template_id = $1", [template.template_id]);
+  await migrator.query(
+    "insert into work_item_checklist (work_item_id, field_key, checklist_template_version_id, name, items, project_id) values ($1, 'own_checklist', $2, $3, $4, $5)",
+    [item, templateVersion, name, items, projectId],
+  );
+  await migrator.query("insert into reply_checklist (project_id, work_item_id, field_key, answers, participant_id, updated_by_member_id, updated_at) values ($1, $2, 'own_checklist', '{}', $3, $4, now())", [
+    projectId,
+    draft.work_item_id,
+    participantId,
+    creator,
+  ]);
+  await migrator.query("insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id) values ($1, $2, $3, 'related', $4)", [
+    projectId,
+    draft.work_item_id,
+    item,
+    creator,
+  ]);
+  await migrator.query("insert into package (project_id, participant_id, seq, name, created_by_member_id) values ($1, $2, 1, $3, $4)", [
+    projectId,
+    participantId,
+    name,
+    creator,
+  ]);
+  await migrator.query("insert into project_required_field (project_id, work_item_type_id, field_key, set_by_member_id) values ($1, $2, 'own_field', $3)", [
+    projectId,
+    type,
+    creator,
+  ]);
+  await migrator.query("insert into register_import_mapping (project_id, participant_id, name, mapping, created_by_member_id) values ($1, $2, 'Own', '{}', $3)", [
+    projectId,
+    participantId,
+    creator,
+  ]);
+  await migrator.query(
+    `insert into submittal_register_import (project_id, participant_id, run_by_member_id, file_name, sheet, header_row, headers, mapping, rows_total, rows_rejected)
+     values ($1, $2, $3, 'register.csv', 'Sheet1', 1, '[]', '{}', 0, 0)`,
+    [projectId, participantId, creator],
+  );
 }
 
 afterAll(async () => {
@@ -204,31 +263,48 @@ afterAll(async () => {
   await migrator?.end();
 });
 
+/**
+ * A Project table, the column holding its Project, and whether the app role reads that column. Where it doesn't
+ * (reply_checklist), the app role's read takes the Project from the row's item, through work_item's own RLS.
+ */
+type ProjectTable = { table: string; column: string; throughItem?: boolean };
+
 /** Every Project table and the column holding its Project. */
-async function projectTables(): Promise<{ table: string; column: string }[]> {
-  const { rows } = await migrator.query<{ table: string }>(`
-    select c.table_name as table from information_schema.columns c
+async function projectTables(): Promise<ProjectTable[]> {
+  const { rows } = await migrator.query<{ table: string; project_id_read: boolean; has_item: boolean }>(`
+    select c.table_name as table,
+      has_column_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'project_id', 'select') as project_id_read,
+      exists (select 1 from information_schema.columns i
+        where i.table_schema = c.table_schema and i.table_name = c.table_name and i.column_name = 'work_item_id') as has_item
+    from information_schema.columns c
     join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
     where c.table_schema = 'public' and c.column_name = 'project_id' and t.table_type = 'BASE TABLE'
-      -- The rest are out of the app role's reach altogether (see below). participant and numbering_pattern
-      -- were granted whole until RP-1139 granted them by column, leaving out their Member ids.
-      and (has_table_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'select')
-        or c.table_name in ('participant', 'numbering_pattern'))
+      -- The rest are out of the app role's reach altogether (see below). Granted whole or by column, as rls.test.ts
+      -- reads it (RP-1258): work_item, participant, numbering_pattern and others are granted by column.
+      and has_any_column_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'select')
     order by 1
   `);
-  return [{ table: "project", column: "id" }, ...rows.map((r) => ({ table: r.table, column: "project_id" }))];
+  const unplaced = rows.filter((r) => !r.project_id_read && !r.has_item).map((r) => r.table);
+  if (unplaced.length > 0) {
+    throw new Error(`the app role reads neither project_id nor work_item_id of ${unplaced.join(", ")}: say here how this test finds its Project`);
+  }
+  return [{ table: "project", column: "id" }, ...rows.map((r) => ({ table: r.table, column: "project_id", ...(r.project_id_read ? {} : { throughItem: true }) }))];
 }
 
 /** The Projects whose rows `trx` sees in `table`, unfiltered. */
-async function projectsSeen(trx: Db, { table, column }: { table: string; column: string }): Promise<string[]> {
-  const { rows } = await sql<{ project: string | null }>`
-    select distinct ${sql.ref(column)} as project from ${sql.table(table)}
-  `.execute(trx);
+async function projectsSeen(trx: Db, { table, column, throughItem }: ProjectTable): Promise<string[]> {
+  const { rows } = throughItem
+    ? await sql<{ project: string | null }>`
+        select distinct w.project_id as project from ${sql.table(table)} r join work_item w on w.id = r.work_item_id
+      `.execute(trx)
+    : await sql<{ project: string | null }>`
+        select distinct ${sql.ref(column)} as project from ${sql.table(table)}
+      `.execute(trx);
   return rows.map((r) => r.project).filter((p): p is string => p !== null);
 }
 
 /** The Projects `who` sees rows of in table `t`, as `{ id }` for expectHiddenFrom (RP-1095); `null` is no Member set. */
-const seenAs = async (who: string | null, t: { table: string; column: string }) =>
+const seenAs = async (who: string | null, t: ProjectTable) =>
   (who === null ? await app.transaction().execute((trx) => projectsSeen(trx, t)) : await withMember(app, who, (trx) => projectsSeen(trx, t))).map((id) => ({ id }));
 const whoIs = (who: string | null) =>
   who === null ? "no Member set" : who === ids.creatorA ? "A's creator" : who === ids.creatorB ? "B's creator" : who === ids.colleagueA ? "A's colleague" : who;
@@ -244,6 +320,11 @@ describe("every Project table", () => {
   it("includes the tables this ticket adds", async () => {
     const tables = (await projectTables()).map((t) => t.table);
     expect(tables).toEqual(expect.arrayContaining(["project", "participant", "project_member", "project_admin", "project_role"]));
+  });
+
+  it("includes the tables granted to the app role by column, not whole (RP-1258)", async () => {
+    const tables = (await projectTables()).map((t) => t.table);
+    expect(tables).toEqual(expect.arrayContaining(["work_item", "participant", "numbering_pattern", "approved_supplier", "project_required_field", "reply_checklist"]));
   });
 
   it("has rows of both Projects, so the check below can tell them apart", async () => {
