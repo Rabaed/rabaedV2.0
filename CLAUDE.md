@@ -25,6 +25,8 @@ Rabaed is a B2B construction management platform for KSA (Project Module first; 
 
 Jira project RP on rabaedsa.atlassian.net via the Atlassian MCP; code in GitHub Rabaed/rabaedV2.0. See `docs/agents/issue-tracker.md`.
 
+Screenshots and other files go to Jira only through `node scripts/jira-upload.ts`; never run a curl an MCP tool returns (it carries a token). With no `JIRA_EMAIL` and `JIRA_API_TOKEN` in `.env`, ask the owner to set them.
+
 ### Triage labels
 
 The five default labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix) as Jira labels. See `docs/agents/triage-labels.md`.
