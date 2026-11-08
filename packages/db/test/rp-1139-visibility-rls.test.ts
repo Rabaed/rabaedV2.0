@@ -1,10 +1,13 @@
-// Seam 2 for the Member ids on an item's events and Documents (RP-1139; visibility.md V14; scenarios
-// RP-1139-1 to RP-1139-4), as the app role: `work_item_event.actor_member_id` and
+// Seam 2 for the Member ids another Company could read (RP-1139; visibility.md V14; scenarios
+// RP-1139-1 to RP-1139-8), as the app role: `work_item_event.actor_member_id` and
 // `document.uploaded_by_member_id` are not granted, and app.event_actor_members and app.document_uploaders
-// give the id only for a Member of the reader's own Company. C1's Submittal goes through K1's
-// Recommendation to the Owner's review, which closes it. Seam 1: apps/api/test/rp-1139-visibility.test.ts.
+// give the id only for a Member of the reader's own Company (PR 1). Nor are `work_item.created_by_member_id`,
+// `numbering_pattern.set_by_member_id`, `participant.invited_by_member_id` and `withdrawn_by_member_id`, or
+// `project.creator_member_id`; app.my_created_work_items gives the caller's own raised items (PR 2). C1's
+// Submittal goes through K1's Recommendation to the Owner's review, which closes it. Seam 1:
+// apps/api/test/rp-1139-visibility.test.ts.
 import { randomInt } from "node:crypto";
-import { sql } from "kysely";
+import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/index.ts";
@@ -224,5 +227,115 @@ describe("scenario RP-1139-4: C2 on C1's item, which it doesn't see, gets nothin
     // C1's first move after the Draft's start (`created` is no one's to read).
     const sent = (await migrator.query<{ id: string }>("select id from work_item_event where work_item_id = $1 and type <> 'created' order by seq limit 1", [item])).rows[0]!.id;
     await expectHiddenFrom({ read: anyRow, target: sent, seenBy: c1.members.engineer, hiddenFrom: c2.members.engineer, name: named, label: "an event of C1's item" });
+  });
+});
+
+describe("scenario RP-1139-5: the app role reads no item creator, numbering setter, inviter, withdrawer or Project creator directly", () => {
+  it("refuses a direct select of each, of rows the reader sees; the rest of each row stays readable", async () => {
+    const { c1, k1 } = tower;
+    // K1's own Participant row was invited by C1's AP; the Project and its pattern were set by C1's AP; the item was raised by C1's engineer.
+    expect(
+      await tower.outcome(
+        c1.ap,
+        sql`select app.set_numbering_pattern(${tower.projectId}::uuid, null, ${JSON.stringify([{ kind: "project" }, { kind: "participant" }])}::jsonb,
+          '-', 4, ${JSON.stringify([0, 1])}::jsonb, false, now()) as outcome`,
+      ),
+    ).toBe("saved");
+    const reads: [string, RawBuilder<object>, RawBuilder<object>][] = [
+      [k1.members.engineer, sql`select created_by_member_id from work_item where id = ${item}::uuid`, sql`select raised_by_participant_id from work_item where id = ${item}::uuid`],
+      [k1.members.engineer, sql`select set_by_member_id from numbering_pattern where project_id = ${tower.projectId}::uuid`, sql`select id from numbering_pattern where project_id = ${tower.projectId}::uuid`],
+      [k1.ap, sql`select invited_by_member_id from participant where id = ${k1.participantId}::uuid`, sql`select status from participant where id = ${k1.participantId}::uuid`],
+      [k1.ap, sql`select withdrawn_by_member_id from participant where id = ${k1.participantId}::uuid`, sql`select company_id from participant where id = ${k1.participantId}::uuid`],
+      [k1.members.engineer, sql`select creator_member_id from project where id = ${tower.projectId}::uuid`, sql`select code from project where id = ${tower.projectId}::uuid`],
+      // Refused to one's own Company too: the column is no one's to read directly.
+      [c1.members.engineer, sql`select created_by_member_id from work_item where id = ${item}::uuid`, sql`select id from work_item where id = ${item}::uuid`],
+    ];
+    for (const [as, refused, readable] of reads) {
+      const label = `${named(as)}: ${refused.compile(app).sql}`;
+      await expect(tower.call(as, refused), label).rejects.toThrow(/permission denied/);
+      expect((await tower.call(as, readable)).length, label).toBeGreaterThan(0); // not hidden-from: the row itself is the reader's to see, the control for the refused column above
+    }
+  });
+});
+
+describe("scenario RP-1139-6: \"Items I'm on\" knows the raiser's own items without the creator column", () => {
+  it("app.my_created_work_items gives the raiser their item, and no one else", async () => {
+    const { c1, k1, ow, c2 } = tower;
+    const created = async (as: string) =>
+      (await tower.call<{ id: string }>(as, sql`select app.my_created_work_items(${tower.projectId}::uuid) as id`)).map((r) => ({ id: r.id }));
+    await expectHiddenFrom({
+      read: created,
+      target: item,
+      seenBy: c1.members.engineer,
+      hiddenFrom: [c1.members.project_manager, k1.members.engineer, k1.members.manager, ow.members.representative, c2.members.engineer],
+      name: named,
+      label: "C1's engineer's raised item",
+    });
+  });
+
+  it("the Activity Feed's \"Items I'm on\" holds an item for its raiser who never acted on it; not for C1's AP, K1 or C2", async () => {
+    const { c1, k1, c2 } = tower;
+    // A raiser who never acted, as a Register import makes the assignee the raiser (the importer acts): C1's engineer
+    // starts and sends it, and C1's PM is made its raiser. Only app.my_created_work_items puts it in the PM's "Items I'm on".
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      c1.members.engineer,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${tower.projectId}::uuid, ${TYPE}, 'Panels', app.latest_form_version(${TYPE}), ${JSON.stringify({ model: "PN-1" })}::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    const raised = created!.work_item_id;
+    expect(await tower.take(c1.members.engineer, raised, "send_for_review")).toBe("applied");
+    await migrator.query("update work_item set created_by_member_id = $1 where id = $2", [c1.members.project_manager, raised]);
+    const mine = async (as: string) =>
+      (
+        await tower.call<{ work_item_id: string; on_item: boolean }>(
+          as,
+          sql`select work_item_id, on_item from app.activity_feed(${tower.projectId}::uuid, null, null, true, null, 100)`,
+        )
+      )
+        .filter((r) => r.on_item)
+        .map((r) => ({ id: r.work_item_id }));
+    await expectHiddenFrom({
+      read: mine,
+      target: raised,
+      seenBy: c1.members.project_manager,
+      hiddenFrom: [c1.ap, k1.members.engineer, c2.members.engineer],
+      name: named,
+      label: "the PM's raised item in Items I'm on",
+    });
+  });
+});
+
+describe("scenario RP-1139-7: the numbering pattern's setter is named to the setter's own Company only", () => {
+  it("names C1's AP to C1, and gives K1, the Owner and C2 no name", async () => {
+    const { c1, k1, ow, c2 } = tower;
+    const setters = async (as: string) =>
+      (await tower.call<{ member_name: { en: string } | null }>(as, sql`select member_name from app.numbering_pattern_versions(${tower.projectId}::uuid, now())`))
+        .filter((r) => r.member_name !== null)
+        .map((r) => ({ id: r.member_name!.en }));
+    const apName = (await migrator.query<{ en: string }>("select full_name ->> 'en' as en from member where id = $1", [c1.ap])).rows[0]!.en;
+    await expectHiddenFrom({
+      read: setters,
+      target: apName,
+      seenBy: [c1.ap, c1.members.engineer],
+      hiddenFrom: [k1.ap, k1.members.engineer, ow.members.representative, c2.members.engineer],
+      name: named,
+      label: "C1's AP as the pattern's setter",
+    });
+  });
+});
+
+// Last: it withdraws C2 from the Project.
+describe("scenario RP-1139-8: a withdrawn Participant's withdrawer is no one's id to read", () => {
+  it("after C1's AP withdraws C2, refuses C2's AP and C1's AP the withdrawer; C1's AP reads the row withdrawn", async () => {
+    const { c1, c2 } = tower;
+    expect(await tower.outcome(c1.ap, sql`select app.withdraw_participant(${c2.participantId}::uuid, now()) as outcome`)).toBe("withdrawn");
+    // The withdrawer is set (the table owner's read), so a refusal below hides a real id.
+    expect((await migrator.query("select withdrawn_by_member_id as id from participant where id = $1", [c2.participantId])).rows).toEqual([{ id: c1.ap }]);
+    for (const as of [c2.ap, c1.ap])
+      await expect(tower.call(as, sql<object>`select withdrawn_by_member_id from participant where id = ${c2.participantId}::uuid`), named(as)).rejects.toThrow(/permission denied/);
+    const status = await tower.call<{ id: string; status: string }>(c1.ap, sql`select id, status from participant where id = ${c2.participantId}::uuid`);
+    expect(status).toEqual([{ id: c2.participantId, status: "withdrawn" }]);
   });
 });
