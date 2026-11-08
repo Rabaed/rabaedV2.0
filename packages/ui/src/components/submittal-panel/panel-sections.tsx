@@ -138,12 +138,13 @@ export function SubmittalPanelTags({ tags }: { tags: readonly string[] }) {
 }
 
 /** The Location, top level first, as chips in the reading direction. */
-export function SubmittalPanelPath({ locale, label, levels }: { locale: Locale; label: string; levels: readonly string[] }) {
+export function SubmittalPanelPath({ label, levels }: { label: string; levels: readonly string[] }) {
   return (
     <ol aria-label={label} className="flex flex-wrap items-center gap-1">
       {levels.map((level, i) => (
         <li key={i} className="flex items-center gap-1">
-          {i > 0 && <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={14} className="text-faint" />}
+          {/* Points on to the next level: Icon turns it round in Arabic itself. */}
+          {i > 0 && <Icon name="chevron-right" size={14} className="text-faint" />}
           <span className="inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-surface-subtle px-2.5 text-[13px] font-semibold shadow-[inset_0_0_0_1px_var(--border-subtle)]">
             {i === 0 && <Icon name="map-pin" size={14} className="text-muted" />}
             {level}
