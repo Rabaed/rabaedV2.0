@@ -40,14 +40,15 @@ const assignedToken = (length: number) => String.raw`["']?(?=[A-Za-z_=-]*[0-9])[
 const assigned = (name: string, length = 20) => new RegExp(String.raw`${name}["']?\s*[:=]\s*${assignedToken(length)}`, "gi");
 
 const PEM_HEADER = /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY(?: BLOCK)?-----/;
-// A line of a key's body: 40 or more base64 characters (PEM lines are 64, PGP's 76), perhaps behind a comment mark.
-const PEM_BODY_LINE = /^\s*(?:(?:\/\/|#|\*|>)\s?)?[A-Za-z0-9+/]{40,}={0,2}\s*$/;
+// A line of a key's body: 40 or more base64 characters (PEM lines are 64, PGP's 76), perhaps behind a comment mark, or
+// quoted in code: `"MIIE…\n" +` (joined strings), `"MIIE…",` (a JSON or code list).
+const PEM_BODY_LINE = /^\s*(?:(?:\/\/|#|\*|>)\s?)?["'`]?[A-Za-z0-9+/]{40,}={0,2}(?:\\r|\\n)*["'`]?\s*[,+;]*\s*$/;
 // Between a header and the body: blank lines and "Name: value" lines (Proc-Type, DEK-Info, PGP's Version).
 const PEM_PREAMBLE_LINE = /^\s*(?:(?:\/\/|#|\*|>)\s?)?(?:[A-Za-z-]+:.*)?$/;
 const PEM_PREAMBLE_MAX = 4;
 
 // A line that says it is no secret, with the reason after the colon, so a reviewer sees it in the diff.
-const NOT_A_SECRET = /(?:\/\/|#|<!--)\s*not a secret:(.*)$/i;
+const NOT_A_SECRET = /(?:\/\/|#|<!--)[ \t]*not a secret:([^\r\n]*)/i;
 
 // AWS documents its example credentials; they end in EXAMPLE or EXAMPLEKEY.
 const awsExample = (match: string) => /EXAMPLE(?:KEY)?$/.test(match);
@@ -75,7 +76,7 @@ export const SECRET_RULES: SecretRule[] = [
   // PEM keys (RSA, EC, OPENSSH, ENCRYPTED, none) and PGP key blocks. The header alone is only text (a pattern in a PEM
   // reader, a doc): a key is the header with its base64 body. Here the body follows on the same line, as in an env value
   // or JSON string with "\n" escapes; a block over several lines is read by scanLines.
-  { id: "private-key", description: "private key", pattern: new RegExp(String.raw`${PEM_HEADER.source}(?:\s|\\r|\\n)*[A-Za-z0-9+/]{40,}`, "g") },
+  { id: "private-key", description: "private key", pattern: new RegExp(String.raw`${PEM_HEADER.source}(?:\s|\\r|\\n|["'\`+,])*[A-Za-z0-9+/]{40,}`, "g") },
 ];
 /* eslint-enable rabaed/no-avoid-terms */
 
@@ -181,19 +182,19 @@ export function addedLines(diff: string): AddedLine[] {
 export function exemptionReason(text: string): string | undefined {
   const match = NOT_A_SECRET.exec(text);
   if (!match) return undefined;
-  const reason = match[1]!.replace(/(?:-->|\*\/)\s*$/, "").trim();
-  return /[\p{L}\p{N}]/u.test(reason) ? reason : "";
+  const reason = match[1]!.replace(/-->\s*$/, "").trim();
+  // A real reason has words: three letters or digits at least, so "x" or "..." is no reason.
+  return reason.replace(/[^\p{L}\p{N}]/gu, "").length >= 3 ? reason : "";
 }
 
 /** Whether base64 body lines come after the header at `index`, on the next lines of the file (after the key's own header lines). */
 function hasBodyAfter(lines: AddedLine[], index: number): boolean {
-  let previous = lines[index]!.line;
   let preamble = 0;
-  for (const next of lines.slice(index + 1)) {
-    if (next.line !== previous + 1) return false;
+  for (let i = index + 1; i < lines.length; i++) {
+    const next = lines[i]!;
+    if (next.line !== lines[i - 1]!.line + 1) return false;
     if (PEM_BODY_LINE.test(next.text)) return true;
     if (!PEM_PREAMBLE_LINE.test(next.text) || ++preamble > PEM_PREAMBLE_MAX) return false;
-    previous = next.line;
   }
   return false;
 }
@@ -202,14 +203,14 @@ function hasBodyAfter(lines: AddedLine[], index: number): boolean {
  * The findings in one file's lines (in order, each with its line number). A line marked "not a secret: <reason>" is skipped,
  * in every mode; a mark with no reason is a finding of its own. A key header is a finding only with its body after it.
  */
-export function scanLines(file: string, lines: AddedLine[]): Finding[] {
+export function scanLines(lines: AddedLine[]): Finding[] {
   return lines.flatMap((entry, index) => {
     const reason = exemptionReason(entry.text);
     if (reason) return [];
     const rules = new Set(findSecrets(entry.text));
     if (PEM_HEADER.test(entry.text) && hasBodyAfter(lines, index)) rules.add("private-key");
     if (reason === "") rules.add(UNEXPLAINED_EXEMPTION);
-    return [...rules].map((rule) => ({ file, line: entry.line, rule }));
+    return [...rules].map((rule) => ({ file: entry.file, line: entry.line, rule }));
   });
 }
 
@@ -223,12 +224,13 @@ export function scanDiff(diff: string): Finding[] {
     if (run && last && last.file === added.file && last.line + 1 === added.line) run.push(added);
     else runs.push([added]);
   }
-  return runs.flatMap((run) => scanLines(run[0]!.file, run));
+  return runs.flatMap(scanLines);
 }
 
 /** The findings in a whole file's text. */
 export function scanText(file: string, text: string): Finding[] {
-  return scanLines(file, text.split("\n").map((line, index) => ({ file, line: index + 1, text: line })));
+  // \r?\n: a CRLF working copy (Windows) must read like the LF diff lines.
+  return scanLines(text.split(/\r?\n/).map((line, index) => ({ file, line: index + 1, text: line })));
 }
 
 /** One finding as a line of output: never the token itself. */
@@ -298,6 +300,7 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     for (const finding of findings) console.error(formatFinding(finding));
     console.error("Remove it and read it from the environment instead (.env is gitignored; .env.example names the variable, no value).");
     console.error("If it was ever real, rotate it: a pushed commit stays readable.");
+    console.error("If it is not a secret (a pattern, a fixture), end its line with a comment saying so and why: // not a secret: <the reason>");
     process.exit(1);
   }
   console.log(`No secrets ${where}.`);

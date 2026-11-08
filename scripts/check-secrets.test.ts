@@ -211,6 +211,15 @@ describe("a private key block", () => {
     expect(scanDiff(diff)).toEqual([{ file: "k.ts", line: 5, rule: "private-key" }]);
   });
 
+  it("is refused when the key is joined strings or a quoted list, and on CRLF lines", () => {
+    const joined = [`const key = "${pemHeader()}\\n" +`, `  "${chars(64)}\\n" +`, `  "${chars(64)}\\n";`].join("\n");
+    expect(scanText("k.ts", joined)).toEqual([{ file: "k.ts", line: 1, rule: "private-key" }]);
+    const list = ["[", `  "${pemHeader()}",`, `  "${chars(64)}",`, "]"].join("\n");
+    expect(scanText("k.json", list)).toEqual([{ file: "k.json", line: 2, rule: "private-key" }]);
+    expect(scanText("k.ts", `const pem = "${pemHeader()}" + "${chars(64)}";`)).toEqual([{ file: "k.ts", line: 1, rule: "private-key" }]);
+    expect(scanText("k.pem", pemBlock().join("\r\n"))).toEqual([{ file: "k.pem", line: 1, rule: "private-key" }]);
+  });
+
   it("passes a header whose next lines are not a body", () => {
     expect(scanText("a.md", [pemHeader(), "some words that follow the header in a doc", chars(64)].join("\n"))).toEqual([]);
     expect(scanText("a.md", [pemHeader(), "", "", "", "", "", chars(64)].join("\n"))).toEqual([]);
@@ -225,13 +234,18 @@ describe("the not-a-secret comment", () => {
     expect(scanText("a.md", `${tokens.github} <!-- ${exempt(" shown in the docs").slice(3)} -->`)).toEqual([]);
   });
 
+  it("skips the marked line of a CRLF file, as --tree reads one on Windows", () => {
+    const text = [`const a = "${tokens.github}"; ${exempt(" a fixture")}`, "const b = 1;", ""].join("\r\n");
+    expect(scanText("a.ts", text)).toEqual([]);
+  });
+
   it("skips only the marked line", () => {
     const text = [`const a = "${tokens.github}"; ${exempt(" a fixture")}`, `const b = "${tokens.sendgrid}";`].join("\n");
     expect(scanText("a.ts", text)).toEqual([{ file: "a.ts", line: 2, rule: "sendgrid-api-key" }]);
   });
 
   it("is refused when it gives no reason", () => {
-    for (const empty of ["", " ", "   ", " -->"]) {
+    for (const empty of ["", " ", "   ", " x", " ...", " -->"]) {
       const line = `const a = 1; ${empty === " -->" ? `<!-- ${exempt("").slice(3)}${empty}` : exempt(empty)}`;
       expect(scanText("a.ts", line)).toEqual([{ file: "a.ts", line: 1, rule: "secret-exemption-without-reason" }]);
     }
@@ -295,6 +309,7 @@ describe("the not-a-secret comment", () => {
       const failed = cli("--range", "main..pr");
       expect(failed.status).toBe(1);
       expect(failed.stderr).toContain("leak.txt:1: private key (private-key)");
+      expect(failed.stderr).toContain("end its line with a comment saying so and why");
       expect(failed.stderr).not.toContain(chars(64).slice(0, 12));
       expect(cli("--tree").status).toBe(1);
     });
