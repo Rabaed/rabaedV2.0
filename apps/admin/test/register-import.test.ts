@@ -63,10 +63,10 @@ const csvOf = (rows: string[][]) => ({
 });
 const reasonsByRow = (preview: RegisterImport) => Object.fromEntries(preview.rows.map((r) => [r.rowNo, r.reasons]));
 const actionsOf = async (engineerId: string) =>
-  adminDb.selectFrom("admin_action").select(["action", "target_kind", "target_id", "reason", "after"]).where("engineer_id", "=", engineerId).orderBy("at").orderBy("id").execute();
-/** The Engineer's actions with their ids, in no order: a test picks out the ones it made by id. */
+  adminDb.selectFrom("admin_action").select(["action", "target_kind", "target_id", "reason", "after"]).where("engineer_id", "=", engineerId).orderBy("seq").execute();
+/** The Engineer's actions with their ids, in the order they were written: a test picks out the ones it made by id. */
 const actionIdsOf = async (engineerId: string) =>
-  adminDb.selectFrom("admin_action").select(["id", "action", "after"]).where("engineer_id", "=", engineerId).execute();
+  adminDb.selectFrom("admin_action").select(["id", "action", "after"]).where("engineer_id", "=", engineerId).orderBy("seq").execute();
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
@@ -628,8 +628,7 @@ describe("An Engineer's import and Packages (RP-644)", () => {
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 422, body: { error: "package_not_found" } });
       expect({ status: member.statusCode, body: member.json() }).toEqual({ status: 422, body: { error: "package_not_found" } });
     }
-    // Refused by the preview itself, logged as such: the actions this test added, by id (two transactions' times can
-    // come back in either order, RP-1105).
+    // Refused by the preview itself, logged as such: the actions this test added, picked out by id.
     const logged = (await actionIdsOf(engineer.id)).filter((a) => !before.has(a.id));
     expect(logged.map((a) => [a.action, (a.after as { outcome?: string }).outcome])).toEqual([
       ["preview_register_import", "package_not_found"],

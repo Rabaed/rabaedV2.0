@@ -159,6 +159,11 @@ export interface AdminActionTable {
   before: Json | null;
   after: Json | null;
   at: Generated<Timestamp>;
+  /**
+   * The order the actions were written in (RP-1117): `(at, id)` is not, since ids are random and the clock can step
+   * back. Generated always, never written. bigint: pg returns it as a string.
+   */
+  seq: ColumnType<string, never, never>;
 }
 
 export type BaseRole = "contractor" | "consultant" | "owner" | "owner_representative";
