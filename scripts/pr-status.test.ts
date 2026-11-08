@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { prStatus, prStatusMain, type PrGit, type PrStatusSeam } from "./pr-status.ts";
 import type { Gh } from "./orch-status.ts";
 import { stampLine } from "./verify-gate.ts";
+import { TESTS_SKIPPED_LABEL } from "./verify-docs-only.ts";
 
 const HEAD = "a".repeat(40);
 const OLD = "b".repeat(40);
@@ -137,6 +138,15 @@ describe("prStatus", () => {
     const report = prStatus(seam({ "pr view 7": pull({ body }) }), 7);
     expect(report.gate).toEqual({ ok: true, by: `\`pnpm verify\` on ${HEAD}` });
     expect(report.stamped).toEqual([HEAD]);
+  });
+
+  // RP-1181: a line that left the unit and seam tests out counts for a docs-only change only, as the verify gate has it.
+  it("passes the gate on a stamped line that left the unit and seam tests out for a UAT-only change, and not once the PR changes code", () => {
+    const body = `${stampLine(`pnpm verify passed on ${HEAD}: lint, typecheck, ${TESTS_SKIPPED_LABEL}.`)}\n`;
+    const only = prStatus(seam({ "pr view 7": pull({ body }) }, { changedFiles: () => ["planning/uat/round-0/cases/ZZZ.ts"] }), 7);
+    expect(only.gate).toEqual({ ok: true, by: `\`pnpm verify\` on ${HEAD}` });
+    const mixed = prStatus(seam({ "pr view 7": pull({ body }) }, { changedFiles: () => ["planning/uat/round-0/cases/ZZZ.ts", "scripts/x.ts"] }), 7);
+    expect(mixed.gate && !mixed.gate.ok && mixed.gate.reason).toContain("scripts/x.ts is not under planning/ or docs/");
   });
 
   const ciRun = (status: string, conclusion: string | null) =>

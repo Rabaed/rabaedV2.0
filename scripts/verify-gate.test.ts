@@ -21,6 +21,7 @@ import {
   type ReviewComment,
 } from "./verify-gate.ts";
 import { finalLine } from "./verify-steps.ts";
+import { TESTS_SKIPPED_LABEL } from "./verify-docs-only.ts";
 
 const steps = ["lint", "typecheck", "test:unit"];
 const line = (sha: string) => finalLine({ sha, dirty: false, steps });
@@ -133,6 +134,55 @@ describe("verifyGate", () => {
     });
     expect(verifyGate(line("beef999"), "abc1234", baselines(BASELINE_BOT_EMAIL))).toEqual({ ok: true, commit: "beef999" });
     expect(verifyGate(line("beef999"), "abc1234", baselines("dev@example.com")).ok).toBe(false);
+  });
+
+  // RP-1181: a line that left the unit and seam tests out counts only for a diff of documents no test reads.
+  describe("a line that left the unit and seam tests out", () => {
+    const skipped = finalLine({ sha: "abc1234", dirty: false, steps: ["lint", "typecheck"], docsOnly: true });
+    const uat = ["planning/uat/round-0/cases/UX-1.ts", "planning/uat/round-0/harness/helper.ts"];
+
+    it("names the skipped suites on the stamped line", () => {
+      expect(skipped).toContain("lint, typecheck, tests skipped (docs only: test:unit+test:seam1+test:seam2).");
+      expect(verifiedCommits(skipped)).toEqual(["abc1234"]);
+    });
+
+    it("passes for a diff of only files no test reads", () => {
+      expect(verifyGate(skipped, "abc1234", noMerges, uat)).toEqual({ ok: true, commit: "abc1234" });
+    });
+
+    it("fails for a diff that touches code, naming the file", () => {
+      const gate = verifyGate(skipped, "abc1234", noMerges, [...uat, "apps/api/src/a.ts"]);
+      expect(gate.ok).toBe(false);
+      if (!gate.ok) {
+        expect(gate.reason).toContain("left out the unit and seam tests");
+        expect(gate.reason).toContain("apps/api/src/a.ts is not under planning/ or docs/");
+      }
+    });
+
+    it("fails for a diff that changes a file a test reads", () => {
+      const gate = verifyGate(skipped, "abc1234", noMerges, ["planning/uat/round-0/test-cases.json"]);
+      expect(gate.ok).toBe(false);
+      if (!gate.ok) expect(gate.reason).toContain("planning/uat/round-0/test-cases.json is read by a test");
+    });
+
+    it("fails when the caller could not list the changed files", () => {
+      expect(verifyGate(skipped, "abc1234", noMerges).ok).toBe(false);
+    });
+
+    it("fails for a line with the label added by hand: the stamp does not cover it", () => {
+      const edited = line("abc1234").replace("test:unit.", `${TESTS_SKIPPED_LABEL}.`);
+      expect(verifyGate(edited, "abc1234", noMerges, uat).ok).toBe(false);
+    });
+
+    it("leaves a line that ran every suite alone, whatever the diff", () => {
+      expect(verifyGate(line("abc1234"), "abc1234", noMerges, ["apps/api/src/a.ts"])).toEqual({ ok: true, commit: "abc1234" });
+      expect(verifyGate(line("abc1234"), "abc1234", noMerges)).toEqual({ ok: true, commit: "abc1234" });
+    });
+
+    it("takes another stamped line of the body that ran every suite, when the diff grew past documents", () => {
+      const full = finalLine({ sha: "abc1234", dirty: false, steps: ["lint", "typecheck", "test:unit", "test:seam1", "test:seam2"] });
+      expect(verifyGate(`${skipped}\n\n${full}`, "abc1234", noMerges, ["apps/api/src/a.ts"])).toEqual({ ok: true, commit: "abc1234" });
+    });
   });
 });
 
@@ -392,6 +442,17 @@ describe("requireVerified", () => {
     expect(result.ok).toBe(true);
     expect(result.summary).toContain("abc1234");
     expect(fetched).toEqual([7]);
+  });
+
+  it("passes a line that left the unit and seam tests out for a UAT-only PR, and fails it once the PR also changes code (RP-1181)", async () => {
+    const skipped = finalLine({ sha: "abc1234", dirty: false, steps: ["lint", "typecheck"], docsOnly: true });
+    const pull = async () => ({ body: skipped, headSha: "abc1234", labels: ["reviewed"] });
+    const only = fakeGate({ pull, changedFiles: () => ["planning/uat/round-0/cases/UX-1.ts"] });
+    expect((await requireVerified(prEvent, only.seam)).ok).toBe(true);
+    const mixed = fakeGate({ pull, changedFiles: () => ["planning/uat/round-0/cases/UX-1.ts", "scripts/x.ts"] });
+    const result = await requireVerified(prEvent, mixed.seam);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("scripts/x.ts is not under planning/ or docs/");
   });
 
   it("checks the event's head on a PR, not a newer one the API already shows", async () => {

@@ -31,6 +31,58 @@ describe("selectSteps", () => {
     expect(skipped.map((s) => s.name)).toEqual(["check:migrations", "test:stories"]);
     expect(skipped.every((s) => s.reason.length > 0)).toBe(true);
   });
+
+  // RP-1181: a diff of only files under planning/ or docs/ (or Markdown) that no test reads leaves out the three suites.
+  describe("a diff of only documents no test reads", () => {
+    const uat = ["planning/uat/round-0/cases/UX-1.ts", "planning/uat/sheet/round-9.html"];
+
+    it("keeps lint and typecheck, and skips the unit and seam suites with the reason", () => {
+      const selection = selectSteps(uat);
+      expect(selection.steps.map((step) => step.name)).toEqual(["lint", "typecheck"]);
+      expect(selection.skipped.map((s) => s.name)).toEqual(["check:migrations", "test:unit", "test:seam1", "test:seam2", "test:stories"]);
+      expect(selection.skipped.find((s) => s.name === "test:seam1")?.reason).toContain("no test reads it");
+    });
+
+    it("still runs check:migrations when a migration is in the diff, though that is code and runs everything", () => {
+      expect(names(["planning/uat/round-0/cases/UX-1.ts", "packages/db/migrations/20261009000000_x.sql"])).toEqual(["check:migrations", "lint", "typecheck", "test:unit", "test:seam1", "test:seam2"]);
+    });
+
+    it("runs every suite when one file is code, a file a test reads, or outside planning/ and docs/", () => {
+      const all = ["lint", "typecheck", "test:unit", "test:seam1", "test:seam2"];
+      expect(names([...uat, "scripts/verify.ts"])).toEqual(all);
+      expect(names([...uat, "planning/uat/round-0/test-cases.json"])).toEqual(all);
+      expect(names([...uat, "planning/migration-days.md"])).toEqual(all);
+      expect(names([...uat, "docs/visibility.md"])).toEqual(all);
+      expect(names([...uat, "GLOSSARY.md"])).toEqual(all);
+      expect(names([...uat, "packages/ui/src/board.tsx"])).toEqual([...all, "test:stories"]);
+    });
+
+    it("reads Windows paths as git's", () => {
+      expect(names(["planning\\uat\\round-0\\cases\\UX-1.ts"])).toEqual(["lint", "typecheck"]);
+    });
+
+    it("cannot be resumed at a suite it skipped, naming the reason", () => {
+      const result = startFrom(selectSteps(uat), "test:unit");
+      expect("error" in result && result.error).toContain("does not run test:unit for this branch");
+    });
+  });
+});
+
+describe("finalLine for a docs-only run (RP-1181)", () => {
+  it("names the skipped suites after the steps that ran, and stamps the line", () => {
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint", "typecheck"], docsOnly: true })).toBe(
+      stampLine("pnpm verify passed on abc1234: lint, typecheck, tests skipped (docs only: test:unit+test:seam1+test:seam2)."),
+    );
+  });
+
+  it("is the usual line when the suites ran", () => {
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint"], docsOnly: false })).toBe(stampLine("pnpm verify passed on abc1234: lint."));
+  });
+
+  it("is not stamped for a dirty tree, or a resumed run", () => {
+    expect(finalLine({ sha: "abc1234", dirty: true, steps: ["lint"], docsOnly: true })).not.toContain("Stamp");
+    expect(finalLine({ sha: "abc1234", dirty: false, steps: ["lint"], docsOnly: true, from: { step: "lint", notRun: ["check:migrations"] } })).not.toContain("Stamp");
+  });
 });
 
 describe("startFrom", () => {

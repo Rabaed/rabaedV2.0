@@ -170,12 +170,16 @@ const movedMidStep = (): string | undefined => {
 // Polled during a step, so a merge in the middle of a 20-minute suite stops it at once and not after it.
 const watchEveryMs = 15_000;
 
-const diff = spawnSync("git", ["diff", "--name-only", "origin/main"], { cwd: root, encoding: "utf8" });
+// --no-renames, as the verify gate lists a PR's files (RP-606): a rename lists its old path too, so code moved into
+// planning/ is a code change and the unit and seam suites still run (RP-1181).
+const diff = spawnSync("git", ["diff", "--name-only", "--no-renames", "origin/main"], { cwd: root, encoding: "utf8" });
 if (diff.status !== 0) stopEarly("git diff against origin/main failed; run `git fetch origin main` first.", diff.status ?? 1);
 const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8" });
 const changed = [...diff.stdout.split("\n"), ...untracked.stdout.split("\n")].filter(Boolean);
 
 const selected = selectSteps(changed);
+// RP-1181: the unit and seam suites left out for a diff of only documents no test reads; the last line names them.
+const docsOnly = selected.skipped.some(({ name }) => name === "test:unit");
 for (const { name, reason } of selected.skipped) out.info(`skip ${name}: ${reason}`);
 // `--from` (RP-1019): the steps before it are left out, and the last line names them.
 const resumed = options.from === undefined ? selected : startFrom(selected, options.from);
@@ -373,7 +377,7 @@ const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"
 if (mixWarning) out.error(`\n${mixWarning}`);
 if (claimsWarning) out.error(`\n${claimsWarning}`);
 if (overlaps) out.error(`\n${overlaps}`);
-const last = reuse ? reuseLine({ sha, dirty: status !== "", reuse, passed }) : finalLine({ sha, dirty: status !== "", steps: passed, ...(from ? { from } : {}) });
+const last = reuse ? reuseLine({ sha, dirty: status !== "", reuse, passed }) : finalLine({ sha, dirty: status !== "", steps: passed, docsOnly, ...(from ? { from } : {}) });
 if (options.pr !== undefined && prBody) {
   // A full, clean run on the PR's head only (writeVerifyLine checks the stamp and the head again, the PR may have been pushed to meanwhile).
   const written = writeVerifyLine(options.pr, last, startedOn, prBody);
