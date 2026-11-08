@@ -22,7 +22,7 @@ import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { boardLayoutMenuLabels, viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
 import { BoardLayoutMenu } from "./board-layout-menu.tsx";
 import { WorkItemBoard, WorkItemViewSwitch } from "./work-item-board.tsx";
-import { WorkItemList } from "./work-item-list.tsx";
+import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
 // The Submittals Kanban (RP-349; rebuilt to the owner's Kanban Board Anatomy,
 // RP-410) as a Contractor engineer of Al Futtaim sees it: a column per Stage
@@ -516,7 +516,7 @@ export const NoMoveHandler: Story = {
 };
 
 /** The toolbar the List shares, the Card view layout menu and the Kanban / List switch, as the Submittals tab shows it. */
-function Toolbar({ args, locale, boardClassName }: { args: Story["args"]; locale: "en" | "ar"; boardClassName?: string }) {
+function Toolbar({ args, locale, boardClassName, extra }: { args: Story["args"]; locale: "en" | "ar"; boardClassName?: string; extra?: Partial<WorkItemListProps> }) {
   const [layout, setLayout] = useState<BoardCardLayout>(defaultBoardCardLayout);
   const data = args?.board ?? board;
   return (
@@ -528,6 +528,7 @@ function Toolbar({ args, locale, boardClassName }: { args: Story["args"]; locale
       hrefFor={listHrefFor}
       itemHref={(id) => `#${id}`}
       onQueryChange={fn()}
+      {...extra}
       action={
         <a href="#new" className="inline-flex h-[42px] items-center rounded-sm bg-primary px-3.5 text-sm font-semibold text-on-primary pointer-coarse:min-h-11">
           {locale === "en" ? "+ Add Submittal" : "+ إضافة اعتماد"}
@@ -561,6 +562,36 @@ function Toolbar({ args, locale, boardClassName }: { args: Story["args"]; locale
     />
   );
 }
+
+/**
+ * The Kanban's ⋯ menu holds the Import links only (RP-1141, the owner's answer of 2026-11-08): Export
+ * and Column settings are the List's, even where the List would offer them. Left open for the screenshot.
+ */
+export const MoreMenuOnTheKanban: Story = {
+  parameters: { overlay: true },
+  render: (args, context) => (
+    <Toolbar
+      args={args}
+      locale={storyLocale(context)}
+      extra={{
+        loadExportRows: fn(async () => ({ items: [], capped: false })),
+        onSaveColumns: fn(async () => true),
+        moreLinks: [
+          { key: "import", label: storyText(context, { en: "Import register", ar: "استيراد السجل" }), icon: "upload", href: "#import" },
+          { key: "imports", label: storyText(context, { en: "Imports", ar: "عمليات الاستيراد" }), icon: "history", href: "#imports" },
+        ],
+      }}
+    />
+  ),
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: workItemListLabels[storyLocale(context)].more }));
+    const menu = await screen.findByRole("navigation", { name: workItemListLabels[storyLocale(context)].more });
+    await expect(within(menu).getAllByRole("link").map((l) => l.textContent)).toEqual(
+      [{ en: "Import register", ar: "استيراد السجل" }, { en: "Imports", ar: "عمليات الاستيراد" }].map((c) => storyText(context, c)),
+    );
+    await expect(screen.queryByRole("button", { name: workItemListLabels[storyLocale(context)].export })).toBeNull();
+  },
+};
 
 export const WithToolbar: Story = {
   render: (args, context) => <Toolbar args={args} locale={storyLocale(context)} />,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ElementType, type ReactNode } from "react";
+import { Fragment, useId, useRef, useState, type ElementType, type PointerEvent } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
@@ -9,7 +9,7 @@ import { RowActionsMenu, type RowActionsItem } from "../list/row-menu.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
 // The List's toolbar menus (RP-409, the owner's design): Group (GROUP BY Status, Discipline,
-// Type, With, Zone, Code) and Export with its arrow (CSV, Excel). List only.
+// Type, With, Zone, Code) and the ⋯ More menu with Export (RP-1141, the kit's `moreMenu()`).
 
 /** One choice of a toolbar menu. */
 export const menuItem = cn(
@@ -165,27 +165,18 @@ export type MoreActionsMenuProps = {
   linkAs?: ElementType;
 };
 
-/** The toolbar's ⋯ "More actions" menu (RP-637, the owner's design): links such as Import register and Imports. */
-export function MoreActionsMenu({ actions, label, linkAs: Link = "a" }: MoreActionsMenuProps) {
+/**
+ * The Kanban toolbar's ⋯ "More actions" menu (RP-637; RP-1141, the owner's answer of 2026-11-08):
+ * links only, such as Import register and Imports. The List's is `ListMoreMenu`.
+ */
+export function MoreActionsMenu({ actions, label, linkAs = "a" }: MoreActionsMenuProps) {
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label={label} title={label} className={cn(toolbarButton, toolbarFilled, "px-2 pointer-coarse:min-w-11")}>
-          <Icon name="dots" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent aria-label={label} align="end" className="w-72 rounded-md p-1 shadow-lg">
+      <MoreTrigger label={label} />
+      <PopoverContent aria-label={label} align="end" className="w-[300px] rounded-md p-1.5 shadow-lg">
         <nav aria-label={label}>
           {actions.map((action) => (
-            <PopoverClose asChild key={action.key}>
-              <Link href={action.href} className={cn(menuItem, "items-start whitespace-normal")}>
-                <Icon name={action.icon} size={16} className="mt-0.5" />
-                <span className="flex flex-col">
-                  {action.label}
-                  {action.description && <small className="text-[11.5px] text-muted">{action.description}</small>}
-                </span>
-              </Link>
-            </PopoverClose>
+            <MoreLink key={action.key} action={action} linkAs={linkAs} />
           ))}
         </nav>
       </PopoverContent>
@@ -193,58 +184,196 @@ export function MoreActionsMenu({ actions, label, linkAs: Link = "a" }: MoreActi
   );
 }
 
-export type ExportMenuProps = {
-  onExport: (format: ExportFormat, scope: ExportScope) => void;
-  labels: { export: string; options: string; shown: string; whole: string; csv: string; excel: string };
-  /** While an export is being made. */
-  busy?: boolean;
-};
+/** A row of the ⋯ More menu (the kit's `.pop.more .mi`): 38px or more, a 17px muted icon, a name with an optional line under it. */
+const moreItem = cn(
+  "flex min-h-[38px] w-full items-center gap-2.5 rounded-xs px-2.5 py-2 text-start text-[13.5px] text-text hover:bg-hover pointer-coarse:min-h-11",
+  "[&>svg]:shrink-0 [&>svg]:text-muted",
+  focusRing,
+);
+const moreSeparator = <div className="mx-1 my-1.5 h-px bg-border-subtle" />;
 
-/** Export (what you see, CSV) with its arrow menu: what you see or the whole table, each as CSV or Excel. */
-export function ExportMenu({ onExport, labels, busy = false }: ExportMenuProps) {
-  const id = useId();
-  const item = (format: ExportFormat, scope: ExportScope, icon: IconName, name: string, hint: ReactNode) => (
-    <PopoverClose asChild key={`${scope}:${format}`}>
-      <button type="button" onClick={() => onExport(format, scope)} className={menuItem}>
-        <Icon name={icon} size={16} />
-        {name}
-        <small className="ms-auto text-[11.5px] text-muted">{hint}</small>
+function MoreTrigger({ label }: { label: string }) {
+  return (
+    <PopoverTrigger asChild>
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        className={cn(toolbarButton, toolbarFilled, "px-2 pointer-coarse:min-w-11 data-[state=open]:bg-brand-tint data-[state=open]:text-brand-fg")}
+      >
+        <Icon name="dots" />
       </button>
+    </PopoverTrigger>
+  );
+}
+
+function MoreLink({ action, linkAs: Link }: { action: MoreAction; linkAs: ElementType }) {
+  return (
+    <PopoverClose asChild>
+      <Link href={action.href} className={moreItem}>
+        <Icon name={action.icon} size={17} />
+        <span className="flex flex-1 flex-col gap-px">
+          {action.label}
+          {action.description && <small className="text-[11.5px] font-medium text-muted">{action.description}</small>}
+        </span>
+      </Link>
     </PopoverClose>
   );
-  const group = (scope: ExportScope, title: string) => (
-    <div role="group" aria-labelledby={`${id}-${scope}`}>
-      <h2 id={`${id}-${scope}`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
-        {title}
-      </h2>
-      {item("csv", scope, "file-text", labels.csv, ".csv")}
-      {item("excel", scope, "table", labels.excel, ".xml")}
-    </div>
-  );
+}
+
+/** One of Export's choices, e.g. "CSV (.csv) — visible columns". */
+export type ExportChoice = {
+  key: string;
+  label: string;
+  onSelect: () => void;
+  /** A line above it, as the kit's between Excel and CSV. */
+  separated?: boolean;
+};
+
+export type ListMoreMenuProps = {
+  /** The button's accessible name and the menu's, e.g. "More actions". */
+  label: string;
+  /** Export, opening its choices beside the menu; without it, the menu has no Export. */
+  export?: {
+    label: string;
+    /** The line under it, e.g. "2 selected" while rows are selected. */
+    hint?: string;
+    /** The choices' heading, e.g. "Export 42 submittals". */
+    heading: string;
+    choices: ExportChoice[];
+    /** While an export is being made. */
+    busy?: boolean;
+  };
+  /** Links such as Import register and Imports (RP-637). */
+  links?: MoreAction[];
+  /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
+  linkAs?: ElementType;
+  /** Column settings, apart at the end: `open` shows the table's column settings panel. */
+  columnSettings?: { label: string; open: () => void };
+  /** The row going back from Export's choices, where they take the menu's place (under 768 wide). */
+  back: string;
+};
+
+/**
+ * The List toolbar's ⋯ More menu (RP-1141, the kit's `moreMenu()`): Export, whose choices open
+ * beside the menu (on hover, click or an arrow key; Escape goes back), the links, then Column settings.
+ */
+export function ListMoreMenu({ label, export: exporting, links = [], linkAs = "a", columnSettings, back }: ListMoreMenuProps) {
+  const id = useId();
+  const [sub, setSub] = useState(false);
+  const exportRow = useRef<HTMLButtonElement>(null);
+  const choices = useRef<HTMLDivElement>(null);
+  // Column settings opens once this menu has closed and given back the focus, so the panel keeps it.
+  const afterClose = useRef<(() => void) | null>(null);
+  const openChoices = () => {
+    setSub(true);
+    requestAnimationFrame(() => choices.current?.querySelector<HTMLButtonElement>("button:not([data-back])")?.focus());
+  };
+  const closeChoices = () => {
+    setSub(false);
+    requestAnimationFrame(() => exportRow.current?.focus());
+  };
+  const hoverOthers = { onPointerEnter: (e: PointerEvent) => e.pointerType === "mouse" && setSub(false) };
   return (
-    <span className="inline-flex shrink-0">
-      <button type="button" disabled={busy} onClick={() => onExport("csv", "shown")} className={cn(toolbarButton, toolbarFilled, "rounded-e-none disabled:opacity-60")}>
-        <Icon name="file-download" />
-        {labels.export}
-      </button>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={labels.options}
-            title={labels.options}
-            disabled={busy}
-            className={cn(toolbarButton, toolbarFilled, "-ms-px rounded-s-none px-2 pointer-coarse:min-w-11")}
+    <Popover onOpenChange={(open) => !open && setSub(false)}>
+      <MoreTrigger label={label} />
+      <PopoverContent
+        aria-label={label}
+        align="end"
+        className="relative w-[300px] rounded-md p-1.5 shadow-lg"
+        onEscapeKeyDown={(e) => {
+          if (!sub) return;
+          e.preventDefault();
+          closeChoices();
+        }}
+        onCloseAutoFocus={(e) => {
+          const then = afterClose.current;
+          if (!then) return;
+          afterClose.current = null;
+          e.preventDefault();
+          then();
+        }}
+      >
+        <div className={cn(sub && "max-md:hidden")}>
+          {exporting && (
+            <button
+              ref={exportRow}
+              type="button"
+              disabled={exporting.busy}
+              aria-expanded={sub}
+              aria-controls={sub ? `${id}-export` : undefined}
+              onPointerEnter={(e) => e.pointerType === "mouse" && setSub(true)}
+              onClick={(e) => {
+                // A click opens them (a hover may have already); Enter or Space opens and closes them.
+                if (e.detail !== 0) setSub(true);
+                else if (sub) setSub(false);
+                else openChoices();
+              }}
+              onKeyDown={(e) => {
+                // The kit's chevron points one way and its choices open the other, so either arrow opens them.
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                e.preventDefault();
+                openChoices();
+              }}
+              className={cn(moreItem, sub && "bg-hover", "disabled:opacity-60")}
+            >
+              <Icon name="file-download" size={17} />
+              <span className="flex flex-1 flex-col gap-px">
+                {exporting.label}
+                {exporting.hint && <small className="text-[11.5px] font-medium text-muted">{exporting.hint}</small>}
+              </span>
+              <Icon name="chevron-right" size={15} className="rtl:-scale-x-100" />
+            </button>
+          )}
+          {links.length > 0 && (
+            // Named as the Kanban's menu names them (`MoreActionsMenu`).
+            <nav aria-label={label} {...hoverOthers}>
+              {links.map((action) => (
+                <MoreLink key={action.key} action={action} linkAs={linkAs} />
+              ))}
+            </nav>
+          )}
+          {columnSettings && (
+            <div {...hoverOthers}>
+              {(exporting || links.length > 0) && moreSeparator}
+              <PopoverClose asChild>
+                <button type="button" onClick={() => (afterClose.current = columnSettings.open)} className={moreItem}>
+                  <Icon name="settings" size={17} />
+                  <span className="flex-1">{columnSettings.label}</span>
+                </button>
+              </PopoverClose>
+            </div>
+          )}
+        </div>
+        {exporting && sub && (
+          // Beside the menu on its start side (the kit's `.pop.subp`); under 768 wide, in its place.
+          <div
+            ref={choices}
+            id={`${id}-export`}
+            role="group"
+            aria-labelledby={`${id}-export-title`}
+            className="md:absolute md:end-[calc(100%+6px)] md:top-0 md:w-[290px] md:rounded-md md:border md:border-menu-border md:bg-surface md:p-1.5 md:shadow-lg"
           >
-            <Icon name="chevron-down" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent aria-label={labels.options} align="end" className="w-60 rounded-md p-1 shadow-lg">
-          {group("shown", labels.shown)}
-          <div className="m-1 h-px bg-border-subtle" />
-          {group("whole", labels.whole)}
-        </PopoverContent>
-      </Popover>
-    </span>
+            <button type="button" data-back onClick={closeChoices} className={cn(moreItem, "md:hidden")}>
+              <Icon name="chevron-left" size={17} className="rtl:-scale-x-100" />
+              <span className="flex-1">{back}</span>
+            </button>
+            <h2 id={`${id}-export-title`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
+              {exporting.heading}
+            </h2>
+            {exporting.choices.map((choice) => (
+              <Fragment key={choice.key}>
+                {choice.separated && moreSeparator}
+                <PopoverClose asChild>
+                  <button type="button" onClick={choice.onSelect} className={cn(moreItem, "min-h-9")}>
+                    {choice.label}
+                  </button>
+                </PopoverClose>
+              </Fragment>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
