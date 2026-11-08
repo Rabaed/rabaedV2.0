@@ -36,6 +36,8 @@ const demo = {
   noura: "noura.alharbi@alwaha.demo.rabaed.test",
   omar: "omar.alharbi@tmc.demo.rabaed.test",
   sara: "sara@designconsultants.demo.rabaed.test",
+  // Gulf Review Consultants' Authorized Person, on UAT 03 only (RP-1264).
+  tariq: "tariq.alshehri@gulfreview.demo.rabaed.test",
 } as const;
 type Who = keyof typeof demo;
 const as = {} as Record<Who, Caller>;
@@ -170,7 +172,7 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
     return ids[0]!;
   };
 
-  it("is on its person's Projects, with the four Companies on it", async () => {
+  it("is on its person's Projects, with the four Companies on it (and UAT 03 a fifth, RP-1264)", async () => {
     if (person === "layla") {
       // An Authorized Person, on no Project as a Member: her Company Projects list it (V15).
       const { participants } = (await as.layla.get("/v1/participants")).json() as { participants: { project: { id: string } }[] };
@@ -180,7 +182,7 @@ describe.each(later)("UAT $n, $name.en (RP-1249)", (r) => {
       expect(projects.find((p) => p.id === project)?.name.en).toBe(r.name.en); // not hidden-from: the person's own Project, by id
     }
     const { rows } = await sql<{ n: number }>`select count(*)::int as n from participant where project_id = ${project}::uuid`.execute(migrator);
-    expect(rows[0]!.n).toBe(4); // not hidden-from: the seed's four Companies, read as the migrator
+    expect(rows[0]!.n).toBe(r.n === "03" ? 5 : 4); // not hidden-from: the seed's Companies, read as the migrator
   });
 
   it("gives every staged item the Document Number the sheet names, and leaves each Draft without one", async () => {
@@ -339,6 +341,47 @@ describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
     const open = all.find((p) => p.name.en === "PKG-12 Package of Drafts")!.id; // not hidden-from: TMC's own Package, found by its PM
     await expectHiddenFrom({ read: packagesOf, target: open, seenBy: as.ali, hiddenFrom: as.sara, name: nameOf, label: "RP-1250 PKG-12 Open Package" });
     expect((await packagesOf(as.sara)).map((p) => p.name.en)).toContain("PKG-12 Package of both Trades"); // not hidden-from: the Submitted Package Sara reads
+  });
+});
+
+// PAR-17 (RP-1264): Saeed withdraws Gulf Review Consultants from UAT 03, so it is there and nowhere else, and holds
+// the two items the case needs at its Consultant Engineer Step: TMC's, which Saeed sees, and Beta Build's, which he doesn't.
+describe("UAT 03's Gulf Review Consultants, for PAR-17 (RP-1264)", () => {
+  const r = UAT_ROLES.find((x) => x.n === "03")!;
+  const held = r.staged().filter((s) => s.cases.includes("PAR-17"));
+
+  it("is on UAT 03 only, of all the demo's Projects", async () => {
+    const uat03 = await projectOf("UAT03");
+    const { projects } = (await as.tariq.get("/v1/projects")).json() as { projects: { id: string }[] };
+    expect(projects.map((p) => p.id)).toEqual([uat03]); // not hidden-from: Tariq's own Projects, one
+    const { rows } = await sql<{ code: string }>`
+      select p.code from participant x join company c on c.id = x.company_id join project p on p.id = x.project_id
+      where c.legal_name ->> 'en' = 'Gulf Review Consultants'
+    `.execute(migrator);
+    expect(rows.map((x) => x.code)).toEqual(["UAT03"]); // not hidden-from: where the seed put the Company, read as the migrator
+  });
+
+  it("holds both of PAR-17's items at Tariq's Consultant Engineer Step, and Saeed sees TMC's only", async () => {
+    const uat03 = await projectOf("UAT03");
+    expect(held.map((s) => s.number)).toEqual(["UAT03-MAR-01-0002", "UAT03-MAR-02-0001"]);
+    for (const s of held) {
+      const [id] = await idsOn(uat03, s.item.title);
+      const d = await detail(as.tariq, id!);
+      expect([d.step?.key, d.heldBy?.companyName.en, d.heldBy?.memberName?.en], s.item.title).toEqual(["consultant_engineer", "Gulf Review Consultants", "Tariq Al Shehri"]);
+    }
+    const [tmc] = await idsOn(uat03, held[0]!.item.title);
+    expect((await detail(as.saeed, tmc!)).heldBy?.companyName.en).toBe("Gulf Review Consultants");
+    const [beta] = await idsOn(uat03, held[1]!.item.title);
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${beta}`), target: beta!, seenBy: [as.yousef, as.tariq], hiddenFrom: as.saeed, name: nameOf, label: "RP-1264 PAR-17 Beta Build's item" });
+  });
+
+  it("gives Saeed the counts PAR-17 reads: nothing to Cancel, two Steps to wait for a new Consultant", async () => {
+    const uat03 = await projectOf("UAT03");
+    const { participants } = (await as.saeed.get(`/v1/projects/${uat03}/participants`)).json() as { participants: { id: string; company: { legalName: { en: string } } }[] };
+    const grc = participants.find((p) => p.company.legalName.en === "Gulf Review Consultants")!; // not hidden-from: a Participant of Saeed's own Project, by name
+    const preview = await as.saeed.get(`/v1/participants/${grc.id}/withdrawal`);
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json()).toEqual({ itemsToCancel: 0, stepsToVacate: 2 });
   });
 });
 

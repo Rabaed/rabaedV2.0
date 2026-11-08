@@ -133,7 +133,8 @@ export type SubmittalEnd =
   | "cancelled";
 
 /** The demo people the seed acts as, by their key in seed.ts. */
-export type ConsultantEngineer = "ahmed" | "sara";
+/** Who holds the Consultant Engineer Step: Design Consultants' Ahmed or Sara, or Gulf Review Consultants' Tariq (UAT 03 only, RP-1264). */
+export type ConsultantEngineer = "ahmed" | "sara" | "tariq";
 
 export interface SampleSubmittal {
   title: string;

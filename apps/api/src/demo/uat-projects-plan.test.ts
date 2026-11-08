@@ -60,6 +60,20 @@ describe("the UAT roles (RP-1248, RP-1249, RP-1250)", () => {
     expect(people.grants).toEqual({ ahmed: { trades: ["EL"] } });
     for (const r of UAT_ROLES.filter((x) => x.n !== "06")) expect(uatPeople(r).leaveOff ?? [], r.n).toEqual([]);
   });
+
+  it("put Gulf Review Consultants on UAT 03 only, holding PAR-17's two items, so withdrawing it touches no other case (RP-1264)", () => {
+    for (const r of UAT_ROLES) expect(uatPeople(r).join ?? [], r.n).toEqual(r.n === "03" ? ["tariq"] : []);
+    const uat03 = UAT_ROLES.find((r) => r.n === "03")!.staged();
+    const held = uat03.filter((s) => s.kind === "submittal" && s.item.consultantEngineer === "tariq");
+    // One of TMC's, which Saeed sees, and one of Beta Build's, which he must not: both at Tariq's Consultant Engineer Step.
+    expect(held.map((s) => [s.cases, s.number, s.mustNotSee ?? false, s.kind === "submittal" && s.item.end])).toEqual([
+      [["PAR-17"], "UAT03-MAR-01-0002", false, "with_consultant_engineer"],
+      [["PAR-17"], "UAT03-MAR-02-0001", true, "with_consultant_engineer"],
+    ]);
+    // Every other UAT 03 item stays with Design Consultants, and no other case names the staged Company's items.
+    for (const s of uat03.filter((x) => !held.includes(x))) expect(s.cases, s.item.title).not.toContain("PAR-17");
+    for (const c of cases.filter((x) => x.id !== "PAR-17")) expect(`${c.steps}\n${c.expected}`, c.id).not.toMatch(/Gulf Review|Tariq/);
+  });
 });
 
 describe.each(UAT_ROLES)("UAT $n: $name.en", (role) => {

@@ -228,9 +228,20 @@ function uat02Packages(): UatPackage[] {
   ];
 }
 
-/** UAT 03, Saeed (Project Admin, TMC's Authorized Person): Project Settings only, so one item, whose number puts TMC's Participant Code in use. */
+/**
+ * UAT 03, Saeed (Project Admin, TMC's Authorized Person): Project Settings, so one item whose number puts TMC's
+ * Participant Code in use; and, for PAR-17 alone (RP-1264), two items at the Consultant Engineer Step of Gulf Review
+ * Consultants, a second Consultant on this Project only, which Saeed withdraws: TMC's, which he sees, and Beta Build's,
+ * which he must not. Both covering every item, each Submit picks its Consultant (§3.1 of workflow-engine.md).
+ */
 function uat03(): Staged[] {
-  return [s(["PAR-10"], mar("PAR-10 Cable trays – numbered with TMC's code", "A02", "with_consultant_engineer", P.trays), series("UAT03", "MAR", "01")(1))];
+  const tmc = series("UAT03", "MAR", "01");
+  const grc = { consultantEngineer: "tariq" as const };
+  return [
+    s(["PAR-10"], mar("PAR-10 Cable trays – numbered with TMC's code", "A02", "with_consultant_engineer", P.trays), tmc(1)),
+    s(["PAR-17"], mar("PAR-17 Exit signs – with Gulf Review Consultants", "A03", "with_consultant_engineer", P.exitSigns, grc), tmc(2)),
+    hidden(["PAR-17"], mar("Beta Build – MV switchgear, with Gulf Review Consultants", "PGF", "with_consultant_engineer", P.switchgear, { ...grc, owner: "beta" }), series("UAT03", "MAR", "02")(1)),
+  ];
 }
 
 /**
@@ -473,6 +484,8 @@ export const UAT_ROLES: UatRole[] = [
     person: "saeed",
     personName: { en: "Saeed", ar: "سعيد" },
     staged: uat03,
+    // Gulf Review Consultants joins UAT 03 alone (RP-1264): PAR-17 withdraws it, so no other case may use it.
+    people: { join: ["tariq"] },
   },
   {
     n: "04",

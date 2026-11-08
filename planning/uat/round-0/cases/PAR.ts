@@ -478,4 +478,141 @@ defineCase("PAR-16", async (t) => {
   t.blocked("Needs FX-OW: UAT Owner Co is onboarded in Rabaed Admin (ADM-02: password plus an emailed code of the Rabaed Engineer, done by a person), then Saeed invites CR 9999000005 as Owner on Riyadh Gate Tower and Reem UAT accepts, grants Electrical and Mechanical and adds Sami UAT as PM. Fixture status: manual (results/fixtures.json).");
 });
 
+// PAR-17 (RP-1264): Saeed withdraws Gulf Review Consultants from UAT 03, where the seed put it for this case alone
+// with two items at its Consultant Engineer Step: TMC's UAT03-MAR-01-0002, which Saeed sees, and Beta Build's
+// UAT03-MAR-02-0001, which he must not (docs/visibility/scenarios/RP-952.md). It can't be undone: one run per Reset UAT.
+const GRC = { en: "Gulf Review Consultants", ar: "الخليج للمراجعة الاستشارية" };
+const SEEN = "UAT03-MAR-01-0002";
+const UNSEEN = "UAT03-MAR-02-0001";
+const UNSEEN_SUBJECT = "Beta Build – MV switchgear, with Gulf Review Consultants";
+const WAITING = { en: "Waiting for a new Consultant", ar: "بانتظار الاستشاري الجديد" };
+const UAT03_NAME = "UAT 03 · Project Admin (Saeed)";
+/** A date as a page could print it: 2026-11-09, 9/11/2026, or a month by name. */
+const DATE = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}\b|\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/;
+const textOf = async (page: import("playwright").Page, sel: string) => ((await page.locator(sel).first().innerText().catch(() => "")) ?? "").replace(/\s+/g, " ");
+
+defineCase("PAR-17", async (t) => {
+  const crew = new Crew();
+  const saeed = await crew.as("saeed");
+  const project = (((await saeed.get("/projects")).body as any).projects as any[]).find((p) => p.code === "UAT03");
+  if (!project) throw new Error("Saeed does not see UAT 03: seed the demo with the UAT Projects (pnpm demo).");
+  const pid = project.id as string;
+  const before = (await saeed.get(`/projects/${pid}/participants`)).body as any;
+  const grc = (before.participants as any[]).find((p) => p.company.legalName.en === GRC.en);
+  if (!grc) {
+    t.blocked("Gulf Review Consultants is not an active Participant of UAT 03: it was withdrawn already (PAR-17 runs once per Reset UAT) or the seed predates RP-1264. Reset UAT, or run `pnpm demo` on a fresh lane, then run PAR-17 again.");
+    return;
+  }
+  const tariq = await crew.as("tariq");
+  const hafiz = await crew.as("hafiz");
+  t.check("Setup: Tariq, Gulf Review Consultants' person, reads UAT 03 before the withdrawal", (await tariq.get(`/projects/${pid}`)).status === 200);
+  const seenId = (((await saeed.get(`/projects/${pid}/work-items?q=${SEEN}`)).body as any).items as any[]).find((i) => i.documentNumber === SEEN)?.id as string | undefined;
+  t.check(`Setup: Saeed sees ${SEEN}, held by Gulf Review Consultants`, !!seenId && (await saeed.get(`/work-items/${seenId}`).then((r) => (r.body as any).heldBy?.companyName?.en)) === GRC.en, String(seenId));
+  const par10 = (((await saeed.get(`/projects/${pid}/work-items?q=UAT03-MAR-01-0001`)).body as any).items as any[]).find((i) => i.documentNumber === "UAT03-MAR-01-0001")?.id as string | undefined;
+
+  // 1) The Participants card: Withdraw on every row but TMC's own.
+  const { context, page } = await pageAs("saeed");
+  try {
+    await page.goto(urlOf(`/projects/${pid}`), { waitUntil: "networkidle" });
+    const button = page.getByRole("button", { name: `Withdraw ${GRC.en} from the Project` });
+    await button.scrollIntoViewIfNeeded();
+    await t.shot(page, "participants-before");
+    t.check("Withdraw shows on Gulf Review Consultants' row", (await button.count()) === 1);
+    t.check("Withdraw never shows on TMC's own row", (await page.getByRole("button", { name: "Withdraw TMC Constructions from the Project" }).count()) === 0);
+    const others = before.participants.filter((p: any) => !p.isOwnCompany).length;
+    t.check("Withdraw shows on every other Participant's row", (await page.getByRole("button", { name: /^Withdraw .+ from the Project$/ }).count()) === others, `${others} other Participants`);
+
+    // 2) The confirmation: counts only, the hidden items included, no undo, no item named.
+    const preview = (await saeed.get(`/participants/${grc.id}/withdrawal`)).body as any;
+    t.check("The preview counts 0 items to Cancel and 2 Steps to become Vacancies", preview?.itemsToCancel === 0 && preview?.stepsToVacate === 2, JSON.stringify(preview));
+    await button.click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText("This can't be undone.").waitFor();
+    await dialog.getByText("2 Steps it holds will wait for a new Consultant").waitFor();
+    const dialogText = (await dialog.innerText()).replace(/\s+/g, " ");
+    await t.shot(page, "confirmation");
+    t.check("The confirmation gives the counts", dialogText.includes("0 items it raised will be Cancelled by Rabaed") && dialogText.includes("2 Steps it holds will wait for a new Consultant"), dialogText.slice(0, 300));
+    t.check("It says the counts include items Saeed may not see, and that it can't be undone", dialogText.includes("The counts include items you may not see.") && dialogText.includes("This can't be undone."), dialogText.slice(0, 300));
+    t.check("It names no item: no Document Number or Subject", !/UAT03-|PAR-17|Exit signs|MV switchgear/.test(dialogText), dialogText.slice(0, 300));
+
+    // 3) Confirm: Gulf Review Consultants moves under Withdrawn, with its badge and the date, and no actions.
+    await dialog.getByRole("button", { name: "Withdraw", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    const withdrawn = page.getByTestId("withdrawn-participants");
+    await withdrawn.waitFor();
+    const withdrawnText = (await withdrawn.innerText()).replace(/\s+/g, " ");
+    await t.shot(page, "withdrawn");
+    t.check("Gulf Review Consultants is under Withdrawn, with its badge and the date", withdrawnText.includes(GRC.en) && /Withdrawn/.test(withdrawnText) && /Withdrawn on /.test(withdrawnText), withdrawnText.slice(0, 200));
+    t.check("A withdrawn row offers no action", (await withdrawn.getByRole("button").count()) === 0);
+    const after = (await saeed.get(`/projects/${pid}/participants`)).body as any;
+    t.check("The api lists it withdrawn, and no longer among the active Participants", after.withdrawn.some((w: any) => w.id === grc.id) && !after.participants.some((p: any) => p.id === grc.id), JSON.stringify(after.withdrawn).slice(0, 200));
+
+    // 4) The Vacancies card: the seen item named and linked, the unseen one by its Step and the Project only.
+    const vacancies = page.getByTestId("vacancies");
+    await vacancies.waitFor();
+    const vacText = (await vacancies.innerText()).replace(/\s+/g, " ");
+    await t.shot(page, "vacancies");
+    t.check(`The seen item is a link with its number and Subject (${SEEN})`, (await vacancies.getByRole("link").filter({ hasText: SEEN }).count()) === 1 && vacText.includes("PAR-17 Exit signs – with Gulf Review Consultants"), vacText.slice(0, 300));
+    t.check("The unseen item reads only its Step and the Project", vacText.includes(`An item at Consultant Engineer on ${UAT03_NAME}`), vacText.slice(0, 300));
+    t.check("The unseen item shows no number, Subject or Company", !vacText.includes(UNSEEN) && !vacText.includes("MV switchgear") && !/Beta Build|Gulf Review/.test(vacText), vacText.slice(0, 300));
+    t.check("Step Age dots only: no date, due date, deadline or overdue", !DATE.test(vacText) && !/due date|deadline|overdue|\bdue\b/i.test(vacText), vacText.slice(0, 300));
+    t.check("Both rows wait for a new Consultant", (vacText.match(/Waiting for a new Consultant/g) ?? []).length === 2, vacText.slice(0, 300));
+    const api = (await saeed.get(`/projects/${pid}/vacancies`)).body as any;
+    const rows = (api?.vacancies ?? []) as any[];
+    const hidden = rows.find((v) => v.item === null);
+    t.check("The api gives the unseen Vacancy with no item: never its id, number or Subject", rows.length === 2 && !!hidden && !JSON.stringify(hidden).includes(UNSEEN) && !JSON.stringify(api).includes(UNSEEN_SUBJECT) && hidden.step?.name?.en === "Consultant Engineer", JSON.stringify(rows).slice(0, 300));
+  } finally {
+    await context.close();
+  }
+
+  // 5) List, Kanban and the item: "Waiting for a new Consultant", no Company, in English and Arabic.
+  for (const locale of ["en", "ar"] as const) {
+    const { context: c, page: p } = await pageAs("saeed", { locale });
+    try {
+      for (const view of ["list", "kanban"] as const) {
+        await p.goto(urlOf(`/projects/${pid}/work-items?view=${view}&q=${SEEN}`, locale), { waitUntil: "networkidle" });
+        await p.getByText(WAITING[locale]).first().waitFor().catch(() => undefined);
+        const main = (await p.getByRole("main").innerText()).replace(/\s+/g, " ");
+        await t.shot(p, `${view}-${locale}`);
+        t.check(`The ${view} (${locale}) reads "${WAITING[locale]}" and names no Company`, main.includes(WAITING[locale]) && !main.includes(GRC[locale]), main.slice(0, 200));
+      }
+      await p.goto(urlOf(`/work-items/${seenId}`, locale), { waitUntil: "networkidle" });
+      const withLine = p.locator('[data-fact="with"], [data-testid="with-line"]').filter({ hasText: WAITING[locale] }).first();
+      await withLine.waitFor().catch(() => undefined);
+      await t.shot(p, `item-${locale}`);
+      t.check(`The item (${locale}) reads With "${WAITING[locale]}"`, (await withLine.count()) === 1, await textOf(p, "main"));
+    } finally {
+      await c.close();
+    }
+  }
+  const row = (((await saeed.get(`/projects/${pid}/work-items?q=${SEEN}`)).body as any).items as any[]).find((i) => i.documentNumber === SEEN);
+  t.check("The List row's With is null and its vacancy names the Consultant role only", row?.with === null && row?.vacancy?.projectRole?.baseRole === "consultant" && !JSON.stringify(row).includes(GRC.en), JSON.stringify(row?.vacancy));
+
+  // 6) Must-not-see: Hafiz, a TMC Member who is not a Project Admin.
+  const { context: hc, page: hp } = await pageAs("hafiz");
+  try {
+    await hp.goto(urlOf(`/projects/${pid}`), { waitUntil: "networkidle" });
+    await t.shot(hp, "hafiz-project");
+    t.check("[VIS] Hafiz sees no Withdraw button", (await hp.getByRole("button", { name: /^Withdraw .+ from the Project$/ }).count()) === 0);
+    t.check("[VIS] Hafiz sees no Withdrawn section", (await hp.getByTestId("withdrawn-participants").count()) === 0);
+    t.check("[VIS] Hafiz sees no Vacancies card", (await hp.getByTestId("vacancies").count()) === 0 && !(await hp.getByRole("main").innerText()).includes("Vacancies"));
+  } finally {
+    await hc.close();
+  }
+  const hafizRead = (await hafiz.get(`/projects/${pid}/participants`)).body as any;
+  t.check("[VIS] Hafiz's api reads no withdrawn Participant and may not withdraw", (hafizRead?.withdrawn ?? []).length === 0 && hafizRead?.canWithdraw !== true, JSON.stringify({ withdrawn: hafizRead?.withdrawn, canWithdraw: hafizRead?.canWithdraw }));
+  t.check("[VIS] Hafiz gets the plain 404 for the Vacancies", (await hafiz.get(`/projects/${pid}/vacancies`)).status === 404);
+
+  // The withdrawn Company's person no longer sees UAT 03 or its items (RP-952-5).
+  const tariqProjects = (((await tariq.get("/projects")).body as any)?.projects ?? []) as any[];
+  t.check("[VIS] Tariq no longer reads UAT 03: it is off his Projects, and the Project is the plain 404", !tariqProjects.some((p) => p.id === pid) && (await tariq.get(`/projects/${pid}`)).status === 404, `${tariqProjects.length} Projects`);
+  t.check("[VIS] Tariq gets the plain 404 for the item his Company held", !!seenId && (await tariq.get(`/work-items/${seenId}`)).status === 404);
+
+  // Every other UAT 03 case: the other Participants and PAR-10's item are as they were.
+  const left = (((await saeed.get(`/projects/${pid}/participants`)).body as any).participants as any[]).map((p) => p.company.legalName.en).sort();
+  t.check("The four Companies the other UAT 03 cases use are still active", JSON.stringify(left) === JSON.stringify(["Al Waha PMC", "Beta Build", "Design Consultants LLC", "TMC Constructions"]), left.join(", "));
+  t.check("PAR-10's UAT03-MAR-01-0001 is still with Design Consultants", !!par10 && (await saeed.get(`/work-items/${par10}`).then((r) => (r.body as any).heldBy?.companyName?.en)) === "Design Consultants LLC", String(par10));
+  t.note("One run per Reset UAT: the withdrawal can't be undone, so a second run reports Blocked until the seed is reset.");
+});
+
 export const _used = [pageIsNotFound, must];
