@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  packageItemStates,
   packagesFilterFromSearchParams,
   packagesFilterSearchParams,
   type BilingualText,
@@ -29,9 +30,16 @@ function usePackagesBoardLabels(hints?: PackagesFilterLabels["hints"]): Packages
     status: keys("status", ["open", "in_progress", "done"] as const),
     noPackages: t("board.noPackages"),
     ownedBy: t("ownedBy"),
-    code: (code) => t("code", { code }),
-    stillOpen: t("stillOpen"),
     closedOf: (closed, total) => t("closedOf", { closed, total }),
+    doneRule: t("board.doneRule"),
+    byType: t("board.byType"),
+    noSubmittals: t("board.noSubmittals"),
+    waiting: (n, count) => t("board.waiting", { n, count }),
+    show: keys("board.show", ["label", "board", "list"] as const),
+    list: {
+      ...keys("board.list", ["table", "number", "name", "progress", "states", "waiting", "owner"] as const),
+      state: keys("state", packageItemStates),
+    },
     close: t("close"),
     cancel: t("cancel"),
     refusals: keys("refusals", ["unavailable", "project_closed", "invalid_name"] as const),
@@ -53,6 +61,7 @@ function usePackagesBoardLabels(hints?: PackagesFilterLabels["hints"]): Packages
       hints,
       noMatchesTitle: t("board.noMatchesTitle"),
       noMatchesBody: t("board.noMatchesBody"),
+      mine: t("board.mine"),
     },
   };
 }
@@ -62,7 +71,8 @@ function usePackagesBoardLabels(hints?: PackagesFilterLabels["hints"]): Packages
  * Member sees, as the board API gives them (RP-641), with the View switch beside List and
  * Kanban. "+ New Package" (story 1) for a Member who may raise a Submittals Type; the API
  * numbers it for their own Participant, and the new Package's page opens. The search and the
- * Trade and owning Company filters (RP-953) narrow those Packages, kept in the URL.
+ * Trade and owning Company filters (RP-953), "Need My Action" and the board or List of
+ * Packages (RP-1143) are kept in the URL.
  */
 export function PackagesBoardView({
   packages,

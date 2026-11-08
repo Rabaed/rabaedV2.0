@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  closedCount,
   filterPackages,
   formatNumber,
   packageFilterChoices,
+  packageStateTotals,
   packageStatuses,
   type BilingualText,
   type Locale,
@@ -13,29 +15,34 @@ import {
 } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { IconButton } from "../button/button.tsx";
 import { CompanyChip } from "../data/avatar.tsx";
-import { Badge } from "../data/badge.tsx";
 import { EmptyState } from "../feedback/states.tsx";
 import { focusRing } from "../form/control-styles.ts";
+import { SegmentedControl } from "../form/segmented-control.tsx";
+import { Switch } from "../form/switch.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { companyFilterChoice, filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
 import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
+import { PackageStatusPill, StateMiniBar, TypeIconTile } from "./package-states.tsx";
+import { PackagesList, type PackagesListLabels } from "./packages-list.tsx";
 
-// The Packages view of the Submittals (RP-660, spec RP-616 stories 24, 29–33; reference: the
-// RP-633 prototype's Package card, as corrected by design/prompts/packages.md "Reference
-// (RP-633)"): the Packages the viewer sees as a Kanban of Open, In Progress and Done. Each card
-// shows the PKG number left to right beside its owning Company (numbers count per Project and
-// owning Participant, so two Companies' Packages can both be PKG-001), its name, status and the
-// viewer's counts, as the board API gives them (RP-641): of the submittals they see only. No
-// dates, ever. Presentational: the view reads the Packages and makes the calls.
+// The Packages view of the Submittals (RP-660, spec RP-616 stories 24, 29–33): the Packages the
+// viewer sees as a Kanban of Open, In Progress and Done, or as the List of Packages (RP-1143).
+// Its look is the rebuilt kit screen's (RP-1143, `ui_kits/app/packages.html`, `packages/packages.js`
+// card() and list(), as the owner agreed on 2026-11-08): each card with its PKG number left to
+// right and its status pill, its name, a ledger of its submittals by Type (closed of total and one
+// segment per submittal by state), how many wait on the viewer, and its owning Company. Numbers count
+// per Project and owning Participant, so two Companies' Packages can both be PKG-001: the owning
+// Company shows on every card. Every count is of the submittals the viewer sees (RP-641). No dates, ever.
+// Presentational: the view reads the Packages and makes the calls.
 //
-// Search and filters (RP-953, design/prompts/packages.md "1. Packages view"): the search box
-// finds a Package by its PKG number or its name in either language; the Filter panel narrows by
-// Trade and by owning Company, as the List's does. Their choices come from the Packages given
-// only (packageFilterChoices): the Trades of the submittals the viewer sees in them, and their
-// owners, so no choice names a Trade or a Company the viewer sees nothing of.
+// Search and filters (RP-953): the search finds a Package by its PKG number or its name in either
+// language; the Filter panel narrows by Trade and by owning Company, its choices from the Packages
+// given only, so no choice names a Trade or a Company the viewer sees nothing of. "Need my action"
+// (RP-1143) keeps the Packages with a submittal waiting on the viewer.
 
 /** The search and Filter panel's words. */
 export type PackagesFilterLabels = {
@@ -48,7 +55,7 @@ export type PackagesFilterLabels = {
   filters: string;
   clearAll: string;
   done: string;
-  /** The × beside the Filter button: clears the search and every filter. */
+  /** The × beside the Filter button: clears the search, every filter and Need my action. */
   clear: string;
   /** Clears one field. */
   clearField: string;
@@ -65,6 +72,8 @@ export type PackagesFilterLabels = {
   /** When the search and filters leave no Package. */
   noMatchesTitle: string;
   noMatchesBody: string;
+  /** The "Need my action" switch (RP-1143). */
+  mine: string;
 };
 
 export type PackagesBoardLabels = {
@@ -77,11 +86,20 @@ export type PackagesBoardLabels = {
   noPackages: string;
   /** Read before the owning Company's name, e.g. "Owned by". */
   ownedBy: string;
-  /** A count's Review Code, e.g. "Code A". */
-  code: (code: string) => string;
-  stillOpen: string;
   /** Closed of the submittals the viewer sees, e.g. "3 of 8 closed". */
   closedOf: (closed: string, total: string) => string;
+  /** The line under the toolbar (RP-1143): when a Package is Done. */
+  doneRule: string;
+  /** The card's ledger by Type, read before it. */
+  byType: string;
+  /** A card whose Package has no submittal the viewer sees. */
+  noSubmittals: string;
+  /** "n waiting for your action": `n` written for the locale; `count` chooses the plural. */
+  waiting: (n: string, count: number) => string;
+  /** The Board / List switch. */
+  show: { label: string; board: string; list: string };
+  /** The table of Packages; its status, closed and empty words are the board's own. */
+  list: Omit<PackagesListLabels, "status" | "closedOf" | "noSubmittals">;
   close: string;
   cancel: string;
   /** A refused create, by the API's error code, and `unavailable` for any other. */
@@ -102,23 +120,15 @@ export type PackagesBoardProps = {
   viewSwitch?: ReactNode;
   /** "+ New Package", for a Member whose Company can build one; none, no button. */
   onCreate?: (name: BilingualText) => Promise<{ ok: true } | { ok: false; reason: string }>;
-  /** The search and filters the page keeps (its URL); none, nothing narrowed. */
+  /** The search, filters and how the Packages show, as the page keeps them (its URL); none, nothing narrowed, the board. */
   filter?: PackagesFilter;
-  /** Asked for with the new search and filters; none, no search box or Filter button. */
+  /** Asked for with the new search, filters or show; none, no search box, Filter, switch or Cards / Table choice. */
   onFilterChange?: (filter: PackagesFilter) => void;
 };
 
 const noFilter: PackagesFilter = { trade: [], company: [] };
 
-const statusTone = { open: "neutral", in_progress: "info", done: "success" } as const;
 const statusDot = { open: "bg-neutral-fg", in_progress: "bg-info-fg", done: "bg-success" } as const;
-// Full class names, so Tailwind finds them; an outcome other than A–D is neutral.
-const codeColour: Record<string, string> = {
-  A: "bg-code-a-bg text-code-a-fg",
-  B: "bg-code-b-bg text-code-b-fg",
-  C: "bg-code-c-bg text-code-c-fg",
-  D: "bg-code-d-bg text-code-d-fg",
-};
 
 export function PackagesBoard({
   packages: all,
@@ -134,32 +144,65 @@ export function PackagesBoard({
   const n = (value: number) => formatNumber(value, locale);
   const toolbar = viewSwitch !== undefined || onCreate !== undefined || onFilterChange !== undefined;
   const packages = filterPackages(all, filter);
-  const narrowed = filter.q !== undefined || filter.trade.length > 0 || filter.company.length > 0;
+  const narrowed = filter.q !== undefined || filter.trade.length > 0 || filter.company.length > 0 || filter.mine === true;
+  const list = filter.show === "list";
+  const end =
+    onFilterChange || viewSwitch !== undefined ? (
+      <>
+        {onFilterChange && (
+          <SegmentedControl
+            aria-label={labels.show.label}
+            value={list ? "list" : "board"}
+            onValueChange={(v) => onFilterChange({ ...withoutShow(filter), ...(v === "list" ? { show: "list" as const } : {}) })}
+            options={[
+              { value: "board", label: labels.show.board },
+              { value: "list", label: labels.show.list },
+            ]}
+          />
+        )}
+        {viewSwitch}
+      </>
+    ) : undefined;
   return (
     // The board takes the rest of the window under the toolbar (RP-1135, as RP-1092's boards).
     <div className="flex min-w-0 flex-col gap-4 fills-window:min-h-0 fills-window:flex-1">
       {toolbar && (
-        <ListToolbar label={labels.toolbar} end={viewSwitch}>
+        <ListToolbar label={labels.toolbar} end={end}>
           {onCreate && <NewPackageDialog labels={labels.create} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onCreate={onCreate} />}
           {onFilterChange && (
             <PackagesFilterControls packages={all} filter={filter} narrowed={narrowed} locale={locale} labels={labels.filter} close={labels.close} onChange={onFilterChange} />
           )}
         </ListToolbar>
       )}
+      {/* When a Package is Done (GLOSSARY Package), the kit's line in our words (RP-1143 row 8). */}
+      <p role="note" className="flex items-start gap-2 rounded-md bg-info-tint px-3 py-2.5 text-sm font-medium text-info-fg">
+        <Icon name="info-circle" size={16} className="mt-0.5 shrink-0" />
+        {labels.doneRule}
+      </p>
       {narrowed && packages.length === 0 ? (
         <EmptyState icon="search" title={labels.filter.noMatchesTitle}>
           {labels.filter.noMatchesBody}
         </EmptyState>
+      ) : list ? (
+        <PackagesList
+          packages={packages}
+          locale={locale}
+          labels={{ ...labels.list, status: labels.status, closedOf: labels.closedOf, noSubmittals: labels.noSubmittals }}
+          packageHref={packageHref}
+          linkAs={Link}
+        />
       ) : (
-        <PackageColumns packages={packages} locale={locale} labels={labels} packageHref={packageHref} linkAs={Link} n={n} />
+        <PackageColumns packages={packages} locale={locale} labels={labels} packageHref={packageHref} linkAs={Link} n={n} onCreate={onCreate} />
       )}
     </div>
   );
 }
 
+const withoutShow = ({ show: _show, ...rest }: PackagesFilter): PackagesFilter => rest;
+
 /**
- * The search box and the Filter button with its Trade and owning Company fields, then a × that
- * clears them all while any is on; each change asked for at once.
+ * The search box, the Filter button with its Trade and owning Company fields, a × that clears
+ * them all while any is on, and the "Need my action" switch; each change asked for at once.
  */
 function PackagesFilterControls({
   packages,
@@ -199,6 +242,7 @@ function PackagesFilterControls({
     ),
   });
   const filtered = filter.trade.length > 0 || filter.company.length > 0;
+  const { mine: _mine, ...notMine } = filter;
   return (
     <>
       <ToolbarSearch
@@ -211,7 +255,7 @@ function PackagesFilterControls({
         description={labels.searchHelp}
         maxLength={100}
         onSearch={(q) => onChange({ ...filter, q })}
-        // Wide enough for its placeholder beside the "/" hint at 1366; the toolbar has three controls only.
+        // Wide enough for its placeholder beside the "/" hint at 1366.
         className="sm:w-[272px]"
       />
       <span className="inline-flex shrink-0 items-center">
@@ -236,18 +280,24 @@ function PackagesFilterControls({
             type="button"
             aria-label={labels.clear}
             title={labels.clear}
-            onClick={() => onChange(noFilter)}
+            // The × clears what narrows, not how the Packages show.
+            onClick={() => onChange({ ...noFilter, ...(filter.show ? { show: filter.show } : {}) })}
             className={filterClearClass}
           >
             <Icon name="x" size={16} />
           </button>
         )}
       </span>
+      {/* The kit's "Need my action" (`.tgl`): the Packages with a submittal waiting on the viewer. */}
+      <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 px-1 text-sm font-semibold text-text">
+        <Switch checked={filter.mine === true} onCheckedChange={(on) => onChange(on ? { ...filter, mine: true } : notMine)} />
+        {labels.mine}
+      </label>
     </>
   );
 }
 
-/** The three columns, Open, In Progress and Done, each with its count and cards. */
+/** The three columns, Open, In Progress and Done, each with its count and cards; the Open column's "+" starts a Package. */
 function PackageColumns({
   packages,
   locale,
@@ -255,6 +305,7 @@ function PackageColumns({
   packageHref,
   linkAs: Link,
   n,
+  onCreate,
 }: {
   packages: PackageSummary[];
   locale: Locale;
@@ -262,57 +313,75 @@ function PackageColumns({
   packageHref: (id: string) => string;
   linkAs: ElementType;
   n: (value: number) => string;
+  onCreate: PackagesBoardProps["onCreate"];
 }) {
   return (
-      <section
-        aria-label={labels.board}
-        // Focusable, so the board can be scrolled with the keyboard.
-        tabIndex={0}
-        data-packages-board=""
-        // The page gives it the rest of the window (`fills-window`, RP-1135); it scrolls itself, so the page doesn't.
-        // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
-        data-fills-window=""
-        className={cn("relative -mx-4 min-h-64 flex-1 overflow-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing, "focus-visible:-outline-offset-2")}
-      >
-        <ol className="flex w-max items-start gap-[18px]">
-          {packageStatuses.map((status) => {
-            const cards = packages.filter((p) => p.status === status);
-            const headingId = `packages-column-${status}`;
-            return (
-              <li key={status} aria-labelledby={headingId} data-package-column={status} className="flex w-[330px] shrink-0 flex-col rounded-lg border border-border bg-surface">
-                <h2 id={headingId} className="flex items-center gap-2.5 border-b border-border-subtle px-4 py-[14px] text-lg leading-6 font-bold text-text">
+    <section
+      aria-label={labels.board}
+      // Focusable, so the board can be scrolled with the keyboard.
+      tabIndex={0}
+      data-packages-board=""
+      // The page gives it the rest of the window (`fills-window`, RP-1135); it scrolls itself, so the page doesn't.
+      // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
+      data-fills-window=""
+      className={cn("relative -mx-4 min-h-64 flex-1 overflow-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing, "focus-visible:-outline-offset-2")}
+    >
+      <ol className="flex w-max items-start gap-[18px]">
+        {packageStatuses.map((status) => {
+          const cards = packages.filter((p) => p.status === status);
+          const headingId = `packages-column-${status}`;
+          return (
+            // The kit's `.pkcol`: 330 px.
+            <li key={status} aria-labelledby={headingId} data-package-column={status} className="flex w-[330px] shrink-0 flex-col rounded-lg border border-border bg-surface">
+              <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-[11px]">
+                <h2 id={headingId} className="flex min-w-0 flex-1 items-center gap-2.5 py-[3px] text-lg leading-6 font-bold text-text">
                   <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", statusDot[status])} />
                   <span className="min-w-0 truncate">{labels.status[status]}</span>
                   <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">{n(cards.length)}</span>
                 </h2>
-                {cards.length === 0 ? (
-                  <p className="px-3 py-6 text-center text-caption text-muted">{labels.noPackages}</p>
-                ) : (
-                  <ul className="flex flex-col gap-[14px] px-2.5 py-2.5">
-                    {cards.map((p) => (
-                      <li key={p.id}>
-                        <PackageCard pkg={p} locale={locale} labels={labels} href={packageHref(p.id)} linkAs={Link} />
-                      </li>
-                    ))}
-                  </ul>
+                {/* The kit's "+" on the first column (`data-act="new"`): the same dialog as "+ New Package". */}
+                {status === "open" && onCreate && (
+                  <NewPackageDialog
+                    labels={labels.create}
+                    close={labels.close}
+                    cancel={labels.cancel}
+                    refusals={labels.refusals}
+                    onCreate={onCreate}
+                    trigger={
+                      <IconButton label={labels.create.trigger} size="sm" data-column-new="">
+                        <Icon name="plus" />
+                      </IconButton>
+                    }
+                  />
                 )}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+              </div>
+              {cards.length === 0 ? (
+                <p className="px-3 py-6 text-center text-caption text-muted">{labels.noPackages}</p>
+              ) : (
+                <ul className="flex flex-col gap-[14px] px-2.5 py-2.5">
+                  {cards.map((p) => (
+                    <li key={p.id}>
+                      <PackageCard pkg={p} locale={locale} labels={labels} href={packageHref(p.id)} linkAs={Link} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
-/** One Package: number and owning Company, status, name, the counts by Review Code and still open, and the closed share. */
+/**
+ * One Package (the kit's `card()`): its number and status pill, its name, its ledger by Type, how
+ * many of its submittals wait on the viewer, and its owning Company with the closed share.
+ */
 function PackageCard({ pkg, locale, labels, href, linkAs: Link }: { pkg: PackageSummary; locale: Locale; labels: PackagesBoardLabels; href: string; linkAs: ElementType }) {
   const n = (value: number) => formatNumber(value, locale);
-  const { total, open, codes } = pkg.counts;
-  const closed = total - open;
-  // A to D in order, then any other outcome as the API names it; only those with a count.
-  const codeKeys = [...new Set(["A", "B", "C", "D", ...Object.keys(codes).sort()])].filter((code) => (codes[code] ?? 0) > 0);
-  const share = total === 0 ? 0 : (closed / total) * 100;
-  const closedText = labels.closedOf(n(closed), n(total));
+  const totals = packageStateTotals(pkg.byType);
+  const closedText = labels.closedOf(n(totals.closed), n(totals.total));
   return (
     <Link
       href={href}
@@ -322,52 +391,76 @@ function PackageCard({ pkg, locale, labels, href, linkAs: Link }: { pkg: Package
         focusRing,
       )}
     >
-      <span className="flex min-w-0 items-center gap-2">
-        <bdi dir="ltr" translate="no" data-package-number="" className="shrink-0 font-ui text-caption font-bold text-muted">
+      {/* The kit's `.pkc .r1`: the number at the start, the status at the end. */}
+      <span className="flex min-w-0 items-center justify-between gap-2">
+        <bdi dir="ltr" translate="no" data-package-number="" className="min-w-0 truncate font-ui text-caption font-bold text-muted">
           {pkg.number}
         </bdi>
-        {/* Beside the number: two Companies' Packages can share it. The Company by its name only (V14). */}
-        <span className="sr-only">{labels.ownedBy}</span>
-        <CompanyChip name={pkg.owner.companyName[locale]} className="min-w-0" />
+        <PackageStatusPill status={pkg.status} label={labels.status[pkg.status]} />
       </span>
       <h3 dir="auto" className="text-base leading-snug font-bold text-text">
         {pkg.name[locale]}
       </h3>
-      <ul className="flex flex-wrap items-center gap-1">
-        {codeKeys.map((code) => (
-          <li
-            key={code}
-            data-code={code}
-            className={cn("inline-flex h-[22px] items-center gap-1 rounded-[6px] px-1.5 text-notes font-semibold", codeColour[code] ?? "bg-neutral-tint text-neutral-fg")}
-          >
-            <span className="sr-only">{labels.code(code)}</span>
-            <span aria-hidden="true" translate="no">
-              {code}
-            </span>
-            <span className="font-ui tabular-nums">{n(codes[code]!)}</span>
-          </li>
-        ))}
-        <li data-code="open" className="inline-flex h-[22px] items-center gap-1 rounded-[6px] bg-neutral-tint px-1.5 text-notes font-medium text-text-secondary">
-          {labels.stillOpen}
-          <span className="font-ui font-semibold tabular-nums">{n(open)}</span>
-        </li>
-      </ul>
-      <span
-        role="progressbar"
-        aria-label={closedText}
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={closed}
-        className="flex h-2 overflow-hidden rounded-full bg-neutral-tint"
-      >
-        <span className="h-full rounded-full bg-success" style={{ width: `${share}%` }} />
-      </span>
-      <span className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-2.5">
-        <Badge tone={statusTone[pkg.status]} dot data-package-status={pkg.status}>
-          {labels.status[pkg.status]}
-        </Badge>
-        <span className="ms-auto text-caption text-muted">{closedText}</span>
+      <TypeLedger pkg={pkg} locale={locale} labels={labels} />
+      {pkg.waiting > 0 && (
+        // The kit's `.pmine`.
+        <span data-package-waiting="" className="inline-flex h-6 items-center gap-1.5 self-start rounded-[7px] bg-brand-tint px-2 text-caption font-bold text-brand-fg">
+          <Icon name="hand-finger" size={14} />
+          {labels.waiting(n(pkg.waiting), pkg.waiting)}
+        </span>
+      )}
+      {/* The kit's `.pkc .r3`, with the owning Company where the kit has From → To: numbers repeat between Companies. */}
+      <span className="flex min-w-0 items-center gap-2 border-t border-border-subtle pt-2.5">
+        <span className="sr-only">{labels.ownedBy}</span>
+        <CompanyChip name={pkg.owner.companyName[locale]} className="min-w-0" />
+        <span
+          role="progressbar"
+          aria-label={closedText}
+          aria-valuemin={0}
+          aria-valuemax={totals.total}
+          aria-valuenow={totals.closed}
+          className="ms-auto shrink-0 text-caption whitespace-nowrap text-muted"
+        >
+          {closedText}
+        </span>
       </span>
     </Link>
+  );
+}
+
+/** The kit's Type ledger (`.pled`, `.plr`): per Type, its icon, code and name, a segment per submittal, and closed of total. */
+function TypeLedger({ pkg, locale, labels }: { pkg: PackageSummary; locale: Locale; labels: PackagesBoardLabels }) {
+  const n = (value: number) => formatNumber(value, locale);
+  if (pkg.byType.length === 0) {
+    return <p className="rounded-md border border-dashed border-border px-3 py-2.5 text-caption text-muted">{labels.noSubmittals}</p>;
+  }
+  return (
+    <ul aria-label={labels.byType} data-type-ledger="" className="flex flex-col overflow-hidden rounded-md border border-border-subtle">
+      {pkg.byType.map((t) => {
+        const closed = closedCount(t);
+        return (
+          <li
+            key={t.typeId}
+            data-type={t.code}
+            className="grid grid-cols-[24px_minmax(0,1fr)_64px_auto] items-center gap-2 px-2.5 py-[7px] text-caption [&+&]:border-t [&+&]:border-border-subtle"
+          >
+            <TypeIconTile code={t.code} />
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <b translate="no" className="font-bold">
+                {t.code}
+              </b>
+              <span className="truncate text-muted">{t.name[locale]}</span>
+            </span>
+            <StateMiniBar counts={t} />
+            <span className={cn("text-end font-ui font-bold whitespace-nowrap tabular-nums", closed === t.total ? "text-success-fg" : "text-text")}>
+              <span className="sr-only">{labels.closedOf(n(closed), n(t.total))}</span>
+              <span aria-hidden="true" dir="ltr">
+                {n(closed)}/{n(t.total)}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

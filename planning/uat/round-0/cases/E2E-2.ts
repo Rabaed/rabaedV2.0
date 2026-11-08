@@ -663,14 +663,14 @@ defineCase("J12", async (t) => {
   for (const title of titles) ids.push(await H.createItem(ali, tm, "MAR", title, await H.marAnswers(tm)));
   await go(ap, `/packages/${packageId}`);
   await settle(ap);
-  await ap.getByRole("button", { name: /Add items/ }).first().click();
+  await ap.getByRole("button", { name: /Add submittals/ }).first().click();
   const add = ap.getByRole("dialog");
   await add.waitFor({ state: "visible" });
   await add.getByPlaceholder(/Number, Subject/).fill(`UAT J12 panel`);
   await add.getByRole("checkbox").first().waitFor({ timeout: 20000 });
   await settle(ap, 800);
   const offered = await add.innerText();
-  t.check("[PKG-03] Ali's own Drafts are offered in Add items", titles.every((x) => offered.includes(x.replace(` ${tag}`, ""))), offered.replaceAll("\n", " | ").slice(0, 200));
+  t.check("[PKG-03] Ali's own Drafts are offered in Add submittals", titles.every((x) => offered.includes(x.replace(` ${tag}`, ""))), offered.replaceAll("\n", " | ").slice(0, 200));
   for (const title of titles) await add.getByRole("checkbox", { name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).check();
   await add.getByRole("button", { name: /^Add 3 submittals/ }).click();
   await settle(ap, 1500);

@@ -67,8 +67,8 @@ export type BulkTakeRequest = {
 export type PackageBulkLabels = {
   /** The bar's name. */
   bar: string;
-  /** In the bar while nothing is selected. */
-  hint: string;
+  /** In the bar while nothing is selected (RP-1143): "n submittals are waiting for you"; `count` chooses the plural. */
+  waiting: (n: string, count: number) => string;
   /** E.g. "3 selected". */
   selected: (n: string, count: number) => string;
   /** The bar's Transitions, as a group. */
@@ -200,10 +200,18 @@ export function usePackageBulk({
         )}
       >
         {chosen.length === 0 ? (
-          <span className="flex items-center gap-2 text-muted">
-            <Icon name="list-check" size={16} />
-            {labels.hint}
-          </span>
+          // The kit's idle bar (`bulkBar()`, RP-1143): how many wait on the viewer, and one click to select them all.
+          <>
+            <span className="flex items-center gap-2 text-text">
+              <Icon name="hand-finger" size={18} className="text-brand-fg" />
+              {labels.waiting(n(waiting.length), waiting.length)}
+            </span>
+            <span className="flex-1" />
+            <Button size="sm" variant="secondary" onClick={() => setPicked(waitingIds)}>
+              <Icon name="list-check" />
+              {labels.selectAll}
+            </Button>
+          </>
         ) : (
           <>
             <strong className="font-ui text-body font-bold tabular-nums">{labels.selected(n(chosen.length), chosen.length)}</strong>
