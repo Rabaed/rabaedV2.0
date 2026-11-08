@@ -64,7 +64,7 @@ export function PackageComments({ comments, locale, labels, itemHref, linkAs: Li
             onClick={() => setOpen(!open)}
             className={cn("flex items-center gap-2 rounded-xs text-start pointer-coarse:min-h-11", focusRing)}
           >
-            <Icon name={open ? "chevron-down" : "chevron-right"} size={18} className={cn("text-muted", !open && "rtl:-scale-x-100")} />
+            <Icon name={open ? "chevron-down" : "chevron-right"} size={18} className="text-muted" />
             <span>{labels.title}</span>
             <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">{formatNumber(comments.length, locale)}</span>
           </button>

@@ -326,7 +326,7 @@ export function SnagLocationStep({
           </li>
           {path.map((p) => (
             <li key={p.id} className="flex items-center gap-1">
-              <Icon name={locale === "ar" ? "chevron-left" : "chevron-right"} size={14} />
+              <Icon name="chevron-right" size={14} />
               <button type="button" aria-current={p.id === picked ? "location" : undefined} onClick={() => onPick(p.id)} className={cn(crumb, "aria-[current=location]:text-text")}>
                 {p.name[locale]}
               </button>
