@@ -146,7 +146,7 @@ function readGate(seam: PrStatusSeam, pull: Pull): { gate: NonNullable<PrReport[
   }
   const labels = (pull.labels ?? []).map((l) => l.name);
   if (!needsVerify(labels, changed) && ownChanges.length === 0) return { gate: { ok: true, by: `${DOCS_ONLY_LABEL}: no verify run needed` }, stamped };
-  const verdict = verifiedOrGreen(body, head, pull.number, seam.git, ownChanges, ciEvidence(seam.gh, head));
+  const verdict = verifiedOrGreen(body, head, pull.number, seam.git, ownChanges, ciEvidence(seam.gh, head), changed);
   return { gate: verdict.ok ? { ok: true, by: verifiedBy(verdict) } : { ok: false, reason: verdict.reason }, stamped };
 }
 

@@ -33,6 +33,8 @@
  *   joinProject(app, projectId, invite, authorizedPersonId)   join-project.ts: invites a Company and accepts as its Authorized Person.
  *   expectHiddenFrom(options)       hidden-from.ts: a row is read, by id, first by each viewer who may see it, then by
  *                                   none who may not (RP-1095); every "hidden from" assert, at both seams, uses it.
+ *   readableMemberIdColumns(db, role), memberIdGrantProblems(readable, allow), MEMBER_ID_ALLOW
+ *                                   member-id-grants.ts: the Member id grant ratchet (RP-1258, V14), run at both seams.
  * Every Member of the test database has a Signature, and every Company a Stamp, by default (RP-85,
  *   RP-617: no Signature or no Stamp, no Transition): test-defaults.ts installs both when the database is reset.
  * Defined below:
@@ -64,6 +66,7 @@ export { runAsOwner, withSignature, withoutSignature, type RunAsOwner } from "./
 export { withStamp, withoutStamp } from "./stamp.ts";
 export { joinProject } from "./join-project.ts";
 export { expectHiddenFrom, type HiddenFromOptions } from "./hidden-from.ts";
+export { MEMBER_ID_ALLOW, memberIdGrantProblems, readableMemberIdColumns, type MemberIdAllow, type ReadableMemberId } from "./member-id-grants.ts";
 export {
   bilingual,
   buildSeamTwoTower,

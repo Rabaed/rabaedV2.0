@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { ciOverHttp, ciOwnChanges, ciRunningLine, ciVerdict, ratchetGains, readCiEvidence, type CiEvidence, type CiReads, type RatchetGain } from "./ci-green.ts";
 import { onlyCleanCommitsSince, realGit, type ReviewedGit } from "./reviewed-label.ts";
 import { DOCS_ONLY_LABEL, isDoc, queuedPrNumber, requiredEvent, type RequiredEvent } from "./reviewed-required.ts";
+import { skipRefusal } from "./verify-docs-only.ts";
 
 // The verify gate (RP-1094): a PR merges only when its body shows `pnpm verify` passed on its head,
 // or on a commit only clean merges of main followed (`onlyCleanCommitsSince`, RP-1017), or the screenshot
@@ -54,8 +55,8 @@ export const stampLine = (line: string): string => `${line} Stamp ${stampOf(line
  */
 export const LINE = /pnpm verify passed on ([0-9a-f]{7,40}): ([^\n`]*?\.)(?: Stamp ([0-9a-f]{16})\.)?(?=\W|$)/g;
 
-function readLines(body: string): { commit: string; stamped: boolean }[] {
-  return [...body.matchAll(LINE)].map(([, commit = "", steps = "", stamp]) => ({ commit, stamped: stamp !== undefined && stamp === stampOf(`pnpm verify passed on ${commit}: ${steps}`) }));
+function readLines(body: string): { commit: string; steps: string; stamped: boolean }[] {
+  return [...body.matchAll(LINE)].map(([, commit = "", steps = "", stamp]) => ({ commit, steps, stamped: stamp !== undefined && stamp === stampOf(`pnpm verify passed on ${commit}: ${steps}`) }));
 }
 
 const stampedCommits = (lines: { commit: string; stamped: boolean }[]) => lines.flatMap(({ commit, stamped }) => (stamped ? [commit] : []));
@@ -85,17 +86,30 @@ export function replaceVerifyLines(body: string, line: string): { body: string; 
 
 export type VerifyGate = { ok: true; commit: string } | { ok: false; reason: string };
 
-/** Passes when a stamped line names `head` or a commit only clean merges of main (and baseline-only bot commits) led to it from. */
-export function verifyGate(body: string, head: string, git: ReviewedGit): VerifyGate {
+/**
+ * Passes when a stamped line names `head` or a commit only clean merges of main (and baseline-only bot commits) led to it from.
+ * A line that left the unit and seam tests out as for a docs-only change (RP-1181, `DOCS_ONLY_LABEL`) passes only when
+ * `changed`, the PR's files against origin/main (`git diff --name-only --no-renames`), is such a change
+ * (`skipTests`, scripts/verify-docs-only.ts); without `changed` it fails.
+ */
+export function verifyGate(body: string, head: string, git: ReviewedGit, changed?: readonly string[]): VerifyGate {
   const lines = readLines(body);
-  const verified = stampedCommits(lines);
-  const commit = verified.find((candidate) => onlyCleanCommitsSince(candidate, head, git));
-  if (commit !== undefined) return { ok: true, commit };
+  const verified = lines.filter(({ stamped }) => stamped);
+  const refused: string[] = [];
+  const reached = verified.filter(({ commit }) => onlyCleanCommitsSince(commit, head, git));
+  const accepted = reached.find(({ commit, steps }) => {
+    const refusal = skipRefusal(steps, changed);
+    if (refusal !== undefined) refused.push(`its stamped verify line for ${commit} does not count: ${refusal}`);
+    return refusal === undefined;
+  });
+  if (accepted !== undefined) return { ok: true, commit: accepted.commit };
   if (lines.length === 0) return { ok: false, reason: `its body has no \`pnpm verify passed on <sha>:\` line, so nothing shows \`pnpm verify\` passed on its head ${head}` };
   const unstamped = lines.filter(({ stamped }) => !stamped).map(({ commit: sha }) => sha);
+  const unreached = verified.filter(({ commit }) => !reached.some((line) => line.commit === commit)).map(({ commit }) => commit);
   const parts = [
     ...(unstamped.length > 0 ? [`its verify line for ${unstamped.join(", ")} has no valid stamp (edited by hand, or printed before RP-1094), so it does not count`] : []),
-    ...(verified.length > 0 ? [`its stamped verify line names ${verified.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main and screenshot-bot baseline commits led to it from`] : []),
+    ...(unreached.length > 0 ? [`its stamped verify line names ${unreached.join(", ")}, which is neither the head ${head} nor a commit only clean merges of main and screenshot-bot baseline commits led to it from`] : []),
+    ...refused,
   ];
   return { ok: false, reason: parts.join("; ") };
 }
@@ -108,8 +122,8 @@ export type Verified = { ok: true; via: "stamp"; commit: string } | { ok: true; 
  * line is read first, so an API error never blocks it. `ownChanges` is `ciOwnChanges` of the PR; `running` is set
  * while the head's CI run is still going, with the required jobs left.
  */
-export function verifiedOrGreen(body: string, head: string, pr: number, git: ReviewedGit, ownChanges: string[], evidence: CiEvidence): Verified {
-  const line = verifyGate(body, head, git);
+export function verifiedOrGreen(body: string, head: string, pr: number, git: ReviewedGit, ownChanges: string[], evidence: CiEvidence, changed?: readonly string[]): Verified {
+  const line = verifyGate(body, head, git, changed);
   if (line.ok) return { ok: true, via: "stamp", commit: line.commit };
   const ci = ciVerdict(head, pr, ownChanges, evidence);
   if (ci.state === "green") return { ok: true, via: "ci", runId: ci.runId };
@@ -272,7 +286,7 @@ export async function requireVerified(event: RequiredEvent, seam: GateSeam): Pro
     if (refusals.length > 0) return { ok: false, summary: `PR #${pr}: ${refusals.join("; ")}. ${baselineFix(pr)}.` };
   }
   if (!needsVerify(pull.labels, changed) && ownChanges.length === 0) return { ok: true, summary: `PR #${pr} has the '${DOCS_ONLY_LABEL}' label and changes only docs: no verify run needed.` };
-  const gate = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam));
+  const gate = verifiedOrGreen(pull.body, head, pr, seam, ownChanges, await readCiEvidence(head, seam), changed);
   if (gate.ok && gate.via === "ci") return { ok: true, summary: `PR #${pr}: CI passed on its head ${head} (run ${gate.runId}), and it changes none of CI's own files: passes.` };
   if (gate.ok) return { ok: true, summary: `PR #${pr}: \`pnpm verify\` passed on ${gate.commit}${head.startsWith(gate.commit) ? ", its head" : `, which only clean merges of main and screenshot-bot baseline commits led to the head ${head} from`}: passes.` };
   return { ok: false, summary: `PR #${pr}: ${gate.reason}. ${verifyFix(pr, head)}. Editing the body, or CI finishing, runs this check again.` };
