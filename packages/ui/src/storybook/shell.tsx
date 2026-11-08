@@ -20,7 +20,6 @@ export const projectTabLabels: Record<ProjectTabKey, { en: string; ar: string }>
   snag_list: { en: "Snag List", ar: "قائمة الملاحظات" },
   site_reports: { en: "Site Reports", ar: "تقارير الموقع" },
   drawings: { en: "Drawings", ar: "المخططات" },
-  activity: { en: "Activity Feed", ar: "النشاط" },
   settings: { en: "Settings", ar: "الإعدادات" },
 };
 export const projectTabsLabel = { en: "Project", ar: "المشروع" };

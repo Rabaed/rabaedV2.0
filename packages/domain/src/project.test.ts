@@ -14,8 +14,8 @@ describe("Project code", () => {
 });
 
 describe("Module tab paths", () => {
-  it("keep the URLs as they are: Submittals at work-items, the others by their name", () => {
-    expect(moduleTabOrder.map((m) => moduleTabPaths[m])).toEqual(["work-items", "inspections", "snag-list", "site-reports", "drawings"]);
+  it("keep the URLs as they are: Submittals at work-items, the others by their name, in the kit's tab order (RP-1142)", () => {
+    expect(moduleTabOrder.map((m) => moduleTabPaths[m])).toEqual(["work-items", "inspections", "site-reports", "snag-list", "drawings"]);
   });
 
   it("cover every Module once", () => {
