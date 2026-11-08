@@ -271,9 +271,11 @@ type ProjectTable = { table: string; column: string; throughItem?: boolean };
 
 /** Every Project table and the column holding its Project. */
 async function projectTables(): Promise<ProjectTable[]> {
-  const { rows } = await migrator.query<{ table: string; project_id_read: boolean }>(`
+  const { rows } = await migrator.query<{ table: string; project_id_read: boolean; has_item: boolean }>(`
     select c.table_name as table,
-      has_column_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'project_id', 'select') as project_id_read
+      has_column_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'project_id', 'select') as project_id_read,
+      exists (select 1 from information_schema.columns i
+        where i.table_schema = c.table_schema and i.table_name = c.table_name and i.column_name = 'work_item_id') as has_item
     from information_schema.columns c
     join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
     where c.table_schema = 'public' and c.column_name = 'project_id' and t.table_type = 'BASE TABLE'
@@ -282,6 +284,10 @@ async function projectTables(): Promise<ProjectTable[]> {
       and has_any_column_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'select')
     order by 1
   `);
+  const unplaced = rows.filter((r) => !r.project_id_read && !r.has_item).map((r) => r.table);
+  if (unplaced.length > 0) {
+    throw new Error(`the app role reads neither project_id nor work_item_id of ${unplaced.join(", ")}: say here how this test finds its Project`);
+  }
   return [{ table: "project", column: "id" }, ...rows.map((r) => ({ table: r.table, column: "project_id", ...(r.project_id_read ? {} : { throughItem: true }) }))];
 }
 

@@ -69,7 +69,7 @@ export const MEMBER_ID_ALLOW: readonly MemberIdAllow[] = [
   {
     column: "project_admin.appointed_by_member_id",
     reason:
-      "own Company's rows only (RLS member_id in member, own Company), and only app.create_project writes it, naming the creator themselves",
+      "own Company's rows only (RLS member_id in member, own Company), and only app.create_project writes it (20260928210000, redefined 20270202000000), naming the creator themselves",
   },
   { column: "project_admin.member_id", reason: "own Company's Project Admins only (RLS member_id in member, own Company)" },
   { column: "project_member.member_id", reason: OWN_PARTICIPANT },
@@ -96,12 +96,15 @@ export const MEMBER_ID_ALLOW: readonly MemberIdAllow[] = [
 
 const ALLOW_FILE = "packages/db/test-support/member-id-grants.ts";
 
+/** The name MEMBER_ID_ALLOW gives a readable Member id: `table.column`, or a view's name alone. */
+const allowKey = (r: ReadableMemberId) => (r.column === null ? r.table : `${r.table}.${r.column}`);
+
 /** What breaks the ratchet: a readable Member id column or view that is not allowed, and an entry that names none. */
 export function memberIdGrantProblems(readable: readonly ReadableMemberId[], allow: readonly MemberIdAllow[]): string[] {
   const allowed = new Set(allow.map((a) => a.column));
-  const found = new Set(readable.map((r) => (r.column === null ? r.table : `${r.table}.${r.column}`)));
+  const found = new Set(readable.map(allowKey));
   const unlisted = readable.flatMap((r) => {
-    const name = r.column === null ? r.table : `${r.table}.${r.column}`;
+    const name = allowKey(r);
     if (allowed.has(name)) return [];
     return r.column === null
       ? [
