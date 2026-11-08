@@ -111,7 +111,8 @@ describe("the schema", () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where c.relkind in ('r', 'p')
         and n.nspname not in ('pg_catalog', 'information_schema')
-        and has_table_privilege(${APP_ROLE}, c.oid, 'select')
+        -- Granted whole or by column (RP-1139 grants project, participant and numbering_pattern by column).
+        and has_any_column_privilege(${APP_ROLE}, c.oid, 'select')
         and not c.relrowsecurity
     `.execute(app);
     expect(rows).toEqual([]);
