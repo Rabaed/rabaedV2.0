@@ -1,5 +1,5 @@
 // Seam 2 for the Member ids another Company could read (RP-1139; visibility.md V14; scenarios
-// RP-1139-1 to RP-1139-7), as the app role: `work_item_event.actor_member_id` and
+// RP-1139-1 to RP-1139-8), as the app role: `work_item_event.actor_member_id` and
 // `document.uploaded_by_member_id` are not granted, and app.event_actor_members and app.document_uploaders
 // give the id only for a Member of the reader's own Company (PR 1). Nor are `work_item.created_by_member_id`,
 // `numbering_pattern.set_by_member_id`, `participant.invited_by_member_id` and `withdrawn_by_member_id`, or
@@ -323,5 +323,19 @@ describe("scenario RP-1139-7: the numbering pattern's setter is named to the set
       name: named,
       label: "C1's AP as the pattern's setter",
     });
+  });
+});
+
+// Last: it withdraws C2 from the Project.
+describe("scenario RP-1139-8: a withdrawn Participant's withdrawer is no one's id to read", () => {
+  it("after C1's AP withdraws C2, refuses C2's AP and C1's AP the withdrawer; C1's AP reads the row withdrawn", async () => {
+    const { c1, c2 } = tower;
+    expect(await tower.outcome(c1.ap, sql`select app.withdraw_participant(${c2.participantId}::uuid, now()) as outcome`)).toBe("withdrawn");
+    // The withdrawer is set (the table owner's read), so a refusal below hides a real id.
+    expect((await migrator.query("select withdrawn_by_member_id as id from participant where id = $1", [c2.participantId])).rows).toEqual([{ id: c1.ap }]);
+    for (const as of [c2.ap, c1.ap])
+      await expect(tower.call(as, sql<object>`select withdrawn_by_member_id from participant where id = ${c2.participantId}::uuid`), named(as)).rejects.toThrow(/permission denied/);
+    const status = await tower.call<{ id: string; status: string }>(c1.ap, sql`select id, status from participant where id = ${c2.participantId}::uuid`);
+    expect(status).toEqual([{ id: c2.participantId, status: "withdrawn" }]);
   });
 });

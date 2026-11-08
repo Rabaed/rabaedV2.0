@@ -1,5 +1,5 @@
 // Seam 1 for the Member ids another Company could read (RP-1139; visibility.md V14; scenarios
-// RP-1139-1 to RP-1139-7): with `work_item_event.actor_member_id` and `document.uploaded_by_member_id`
+// RP-1139-1 to RP-1139-8): with `work_item_event.actor_member_id` and `document.uploaded_by_member_id`
 // (PR 1), and the item's creator, the numbering pattern's setter, a Participant's inviter and withdrawer
 // and the Project's creator (PR 2) no longer granted, the api still names each viewer's own Company's
 // people (the Documents' uploader, the history's actor, a closed card's closer, the pattern's setter),
@@ -42,6 +42,7 @@ let at: Tower;
 let id = "";
 let c1Document = "";
 type Person = { id: string; caller: Caller; name: string };
+let c2Participant = "";
 let c1Ap: Person;
 let k1Engineer: Person;
 let c1Engineer: Person;
@@ -95,7 +96,7 @@ beforeAll(async () => {
   const owParticipant = await api.addParticipant(c1.caller, at.projectId, ow.company, "owner");
   await ok(c1.caller.request("PUT", `/v1/participants/${owParticipant}/visibility`, { trade: all, location: all }));
   // C2, a second Contractor, covers Mechanical only: C1's Electrical item is not theirs to see.
-  const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+  c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: only(at.mechanical), location: all }));
   const person = async (company: Pick<Company, "caller">, participant: string, positions: string[], name: string): Promise<Person> => {
     const m = await memberOnProject(api, company, participant, positions, { name });
@@ -256,5 +257,22 @@ describe("scenario RP-1139-7: the numbering pattern's setter is named to the set
       name: named,
       label: "C1's AP as the pattern's setter",
     });
+  });
+});
+
+// Last: it withdraws C2 from the Project.
+describe("scenario RP-1139-8: a withdrawn Participant's withdrawer is no one's id to read", () => {
+  it("after C1's AP withdraws C2, C1 lists C2 withdrawn, and no read of C1, K1 or the Owner carries the withdrawer's id", async () => {
+    await ok(c1Ap.caller.post(`/v1/participants/${c2Participant}/withdraw`));
+    const withdrawer = (await sql<{ id: string }>`select withdrawn_by_member_id as id from participant where id = ${c2Participant}::uuid`.execute(migrator)).rows;
+    expect(withdrawer).toEqual([{ id: c1Ap.id }]);
+    // The control: C1's AP reads C2's Participant, withdrawn, on the Participants page.
+    const listed = (await ok(c1Ap.caller.get(`/v1/projects/${at.projectId}/participants`), 200)).body;
+    expect(listed.includes(c2Participant)).toBe(true);
+    const reads = [`/v1/projects/${at.projectId}`, `/v1/projects/${at.projectId}/participants`, `/v1/projects/${at.projectId}/activity`];
+    for (const by of [k1Manager, k1Engineer, owPm]) {
+      const bodies = (await Promise.all(reads.map((url) => by.caller.get(url)))).map((r) => r.body).join("\n");
+      expect(bodies.includes(c1Ap.id), `${by.name} reads the withdrawer's id`).toBe(false); // not hidden-from: no api read gives the withdrawer's id to anyone, so none can be the control; seam 2 proves the column refused
+    }
   });
 });
