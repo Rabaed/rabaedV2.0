@@ -2042,7 +2042,8 @@
       "cancelledBy": "Cancelled by {company}",
       "cancelled": "Cancelled",
       "recordReady": "Record ready to download",
-      "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}"
+      "packageSubmitted": "{company} Submitted {count, plural, one {1 submittal} other {{n} submittals}}",
+      "participantWithdrawn": "{company} withdrew your Company from the Project"
     },
     "time": {
       "minutes": "{n} min",

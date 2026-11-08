@@ -311,16 +311,16 @@ create function app.project_vacancies(p_project_id uuid)
 revoke all on function app.project_vacancies(uuid) from public;
 grant execute on function app.project_vacancies(uuid) to rabaed_app;
 
--- A withdrawal notice of the acting Member's own: the Project's name and its Host Company, which its
--- Member no longer reads through the Project. Nothing for any other notification or Member.
-create function app.withdrawal_notice(p_notification_id uuid) returns table (project_name jsonb, host_company_name jsonb)
+-- A withdrawal notice of the acting Member's own: the Project's code and name and its Host Company,
+-- which its Member no longer reads through the Project. Nothing for any other notification or Member.
+create function app.withdrawal_notice(p_notification_id uuid) returns table (project_code text, project_name jsonb, host_company_name jsonb)
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
     begin
       return query
-        select pr.name, host.legal_name
+        select pr.code, pr.name, host.legal_name
         from notification n
         join project pr on pr.id = n.project_id
         join company host on host.id = pr.host_company_id

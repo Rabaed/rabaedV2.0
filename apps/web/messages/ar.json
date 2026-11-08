@@ -2042,7 +2042,8 @@
       "cancelledBy": "ألغته {company}",
       "cancelled": "أُلغي",
       "recordReady": "السجل جاهز للتنزيل",
-      "packageSubmitted": "قدّم {company} {count, plural, one {تقديم واحد} two {تقديمان} few {{n} تقديمات} many {{n} تقديمًا} other {{n} تقديم}}"
+      "packageSubmitted": "قدّم {company} {count, plural, one {تقديم واحد} two {تقديمان} few {{n} تقديمات} many {{n} تقديمًا} other {{n} تقديم}}",
+      "participantWithdrawn": "سحبت {company} شركتكم من المشروع"
     },
     "time": {
       "minutes": "{n} د",

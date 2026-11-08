@@ -47,6 +47,7 @@ import {
   type WorkItemRow,
   type WorkItemSort,
   type WorkItemSummary,
+  type WorkItemVacancy,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 
@@ -133,6 +134,8 @@ type Row = {
   step_key: string | null;
   step_name: BilingualText | null;
   holder_name: BilingualText | null;
+  /** The Project Role an item whose Step is a Vacancy waits for (RP-952); null otherwise. */
+  vacancy: WorkItemVacancy["projectRole"] | null;
   holder_member_name: BilingualText | null;
   held_by_me: boolean;
   /** The raising Company's name: everyone who sees the item reads it (Search finds it too). */
@@ -208,6 +211,10 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
       -- The holder's and the raiser's Company by name, which everyone who sees the item reads (V14; the card's Contractor;
       -- db-mask: app.work_items_seen).
       case when w.owner_review is null then w.holder_company_name end as holder_name, w.raiser_company_name as raiser_name,
+      -- An open item nobody holds because its holder was withdrawn: the role it waits for, never the Company (RP-952;
+      -- db-mask: app.work_item_vacancy, which also gives nothing at the Owner's review).
+      case when w.owner_review is null and w.holder_participant_id is null and not ${closedStageCategory(sql.ref("st.category"))}
+        then (select jsonb_build_object('baseRole', v.base_role, 'name', v.role_name) from app.work_item_vacancy(w.id) v) end as vacancy,
       w.raised_by_participant_id as raiser_participant_id,
       -- One holder: a closed item has none.
       coalesce(w.holder_participant_id in (select app.current_participant_ids()), false) as held_by_own,
@@ -628,6 +635,8 @@ function toRow(r: Row, now: Date): WorkItemRow {
         : r.closer_company_name
           ? { kind: "company", companyName: r.closer_company_name }
           : null,
+    // Waiting for a new ‹role› (RP-952): no Company holds it, so `with` is null.
+    vacancy: open && r.vacancy ? { projectRole: r.vacancy } : null,
     with: !open
       ? null
       : r.owner_review_name

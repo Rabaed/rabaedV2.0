@@ -175,7 +175,7 @@ beforeAll(async () => {
     [other.ap, "another Project's Project Admin"],
   ] as const)
     names.set(as, name);
-  await call(other.ap, sql`select project_id from app.create_project('{"en": "Elsewhere", "ar": "مكان آخر"}'::jsonb, 'WDO', 'contractor')`);
+  await call(other.ap, sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Elsewhere", "ar": "مكان آخر"}'::jsonb, 'WDO', 'contractor')`);
   const [created] = await call<{ project_id: string }>(c1.ap, sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, 'WDP', 'contractor')`);
   projectId = created!.project_id;
   participant.c1 = (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id as string;
@@ -300,7 +300,7 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
       label: "the Cancelled item",
     });
     const events = await call<{ id: string }>(k1.member, sql`select id from work_item_event where work_item_id = ${submitted}::uuid and type = 'cancelled' and actor_participant_id is null`);
-    expect(events).toHaveLength(1);
+    expect(events).toHaveLength(1); // not hidden-from: one event, Rabaed's, counted for K1 who reads it
     // At its Version's Cancelled Step, as a Member's Cancel leaves it, so every reader reads it Cancelled.
     const [seen] = await call<{ stage_key: string }>(k1.member, sql`select stage_key from app.step_as_seen(${submitted}::uuid)`);
     expect(seen!.stage_key).toBe("cancelled");
@@ -314,7 +314,7 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
       expect(await recordQueued(id)).toBe(false);
       for (const as of [c1.ap, c1.member, k1.member, c2.member]) {
         // not hidden-from: nobody may read a withdrawn Company's Draft any more, so no viewer is left to read it first; the test above read it as C2 before the withdrawal.
-        expect(await itemRows(id)(as), `${nameOf(as)} reads ${id}`).toEqual([]);
+        expect(await itemRows(id)(as), `${nameOf(as)} reads ${id}`).toEqual([]); // not hidden-from: nobody may read it any more (proved before the withdrawal)
       }
     }
   });
@@ -349,7 +349,7 @@ describe("scenario RP-952-3: C1's Project Admin withdraws K1 while K1 holds C1's
     expect(rows).toEqual([{ status: "vacant", assignee_member_id: null }]);
     for (const as of [c1.member, c1Pm]) {
       // not hidden-from: after the withdrawal no reader has a holder for the item (the Vacancy holds it); the test before read K1 as its holder.
-      expect(await call(as, sql`select participant_id from app.work_item_holder(${item}::uuid)`), `${nameOf(as)}'s holder`).toEqual([]);
+      expect(await call(as, sql<{ participant_id: string }>`select participant_id from app.work_item_holder(${item}::uuid)`), `${nameOf(as)}'s holder`).toEqual([]); // not hidden-from: no reader has a holder now (K1 was read as holder before)
       const [seen] = await call<{ holder_participant_id: string | null; holder_company_name: unknown }>(
         as,
         sql`select holder_participant_id, holder_company_name from app.work_items_seen(${projectId}::uuid, array['submittals'], false, array[${item}::uuid])`,
@@ -389,12 +389,12 @@ describe("scenario RP-952-4: the withdrawal's notices reach K1's Authorized Pers
   it("gives each of them one in-app notice, naming the Host Company and the Project", async () => {
     for (const as of [k1.ap, k1.member, k1Manager]) {
       const notices = await withdrawalNotices(as);
-      expect(notices, nameOf(as)).toHaveLength(1);
-      const [notice] = await call<{ project_name: unknown; host_company_name: unknown }>(
+      expect(notices, nameOf(as)).toHaveLength(1); // not hidden-from: one notice delivered, the positive side
+      const [notice] = await call<{ project_code: string; project_name: unknown; host_company_name: unknown }>(
         as,
-        sql`select project_name, host_company_name from app.withdrawal_notice(${notices[0]!.id}::uuid)`,
+        sql`select project_code, project_name, host_company_name from app.withdrawal_notice(${notices[0]!.id}::uuid)`,
       );
-      expect(notice, nameOf(as)).toEqual({ project_name: { en: "Tower", ar: "برج" }, host_company_name: { en: "C1", ar: "C1" } });
+      expect(notice, nameOf(as)).toEqual({ project_code: "WDP", project_name: { en: "Tower", ar: "برج" }, host_company_name: { en: "C1", ar: "C1" } });
     }
   });
 
@@ -403,7 +403,7 @@ describe("scenario RP-952-4: the withdrawal's notices reach K1's Authorized Pers
       "select e.* from outbox o cross join lateral app.participant_withdrawn_email((o.payload ->> 'participantId')::uuid, (o.payload ->> 'memberId')::uuid) e where o.kind = 'participant_withdrawn' and o.payload ->> 'participantId' = $1",
       [participant.k1],
     );
-    expect(rows.map((r) => r.to_address).sort()).toHaveLength(3);
+    expect(rows.map((r) => r.to_address).sort()).toHaveLength(3); // not hidden-from: one email for each of K1's three
     for (const r of rows) {
       expect(Object.keys(r).sort()).toEqual(["host_company_name", "language", "project_name", "to_address"]);
       expect(r.host_company_name).toEqual({ en: "C1", ar: "C1" });
@@ -413,10 +413,10 @@ describe("scenario RP-952-4: the withdrawal's notices reach K1's Authorized Pers
   it("gives nobody else a withdrawal notice", async () => {
     for (const as of [c1.ap, c1.member, c1Pm]) {
       // not hidden-from: no notice is made for them, so there is no row to read first; K1's notices above prove the delivery ran.
-      expect(await withdrawalNotices(as), nameOf(as)).toEqual([]);
+      expect(await withdrawalNotices(as), nameOf(as)).toEqual([]); // not hidden-from: no notice is made for them
     }
     // C2's Members hold only the notice of C2's own withdrawal, none of K1's.
-    for (const as of [c2.ap, c2.member, c2Pm]) expect(await withdrawalNotices(as), nameOf(as)).toHaveLength(1);
+    for (const as of [c2.ap, c2.member, c2Pm]) expect(await withdrawalNotices(as), nameOf(as)).toHaveLength(1); // not hidden-from: only their own withdrawal's notice
     const notice = (await withdrawalNotices(k1.member))[0]!.id;
     // Nobody reads another Member's notice, nor its Project and Host Company.
     await expectHiddenFrom({

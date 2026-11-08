@@ -8,8 +8,10 @@ import {
   type CompanyParticipation,
   type HandoverPick,
   type ParticipantMembers,
+  type ParticipantWithdrawalPreview,
   type ProjectInvitations,
   type ProjectParticipants,
+  type ProjectVacancies,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
@@ -384,6 +386,77 @@ export function setMemberPositions(
       select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
+  });
+}
+
+const withdrawalRefusals = ["not_found", "project_closed", "host_company"] as const;
+type WithdrawalRefusal = { ok: false; reason: (typeof withdrawalRefusals)[number] };
+
+/**
+ * What withdrawing a Participant will do, for the Host Company's Project Admin to confirm (RP-952,
+ * ADR 0028): counts only. Not found for anyone else, as for an id that does not exist.
+ */
+export function previewParticipantWithdrawal(
+  db: Db,
+  memberId: string,
+  participantId: string,
+): Promise<({ ok: true } & ParticipantWithdrawalPreview) | WithdrawalRefusal> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string; items_to_cancel: number | null; steps_to_vacate: number | null }>`
+      select * from app.participant_withdrawal_preview(${participantId}::uuid)
+    `.execute(trx);
+    const row = rows[0]!;
+    const result = commandResult(row.outcome, "ok", withdrawalRefusals);
+    if (!result.ok) return result;
+    return { ok: true, itemsToCancel: row.items_to_cancel!, stepsToVacate: row.steps_to_vacate! };
+  });
+}
+
+/**
+ * The Host Company's Project Admin withdraws a Participant (RP-952, ADR 0028), in one transaction:
+ * its items that left Draft are Cancelled by Rabaed with a Record, its Drafts with none, its Steps on
+ * other Companies' items become Vacancies, and its Authorized Person and Project Members are told.
+ * There is no undo. Not found for anyone else.
+ */
+export function withdrawParticipant(db: Db, memberId: string, participantId: string, now: Date): Promise<{ ok: true } | WithdrawalRefusal> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.withdraw_participant(${participantId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "withdrawn", withdrawalRefusals);
+  });
+}
+
+/**
+ * The Project's open Vacancies, for the Host Company's Project Admins (RP-952): null for anyone else,
+ * as for a Project that is not theirs. The item only when the Admin sees it.
+ */
+export function listProjectVacancies(db: Db, memberId: string, projectId: string): Promise<ProjectVacancies | null> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows: host } = await sql<{ is_host_admin: boolean }>`
+      select exists (
+        select 1 from project where id = ${projectId}::uuid
+          and id in (select app.current_admin_project_ids()) and host_company_id = app.current_company_id()
+      ) as is_host_admin
+    `.execute(trx);
+    if (!host[0]!.is_host_admin) return null;
+    const { rows } = await sql<{
+      step_assignment_id: string;
+      work_item_id: string | null;
+      document_number: string | null;
+      title: string | null;
+      base_role: BaseRole;
+      role_name: BilingualText;
+      vacant_since: Date;
+    }>`select * from app.project_vacancies(${projectId}::uuid)`.execute(trx);
+    return {
+      vacancies: rows.map((r) => ({
+        id: r.step_assignment_id,
+        item: r.work_item_id === null ? null : { id: r.work_item_id, documentNumber: r.document_number, title: r.title! },
+        projectRole: { baseRole: r.base_role, name: r.role_name },
+        vacantSince: r.vacant_since.toISOString(),
+      })),
+    };
   });
 }
 

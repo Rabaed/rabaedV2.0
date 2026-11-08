@@ -100,8 +100,28 @@ export const packageNotification = z.object({
 });
 export type PackageNotification = z.infer<typeof packageNotification>;
 
-/** One in-app notification: about an item, or about a Package Submit. */
-export const notification = z.discriminatedUnion("kind", [itemNotification, packageNotification]);
+/**
+ * The Member's Company was withdrawn from a Project (RP-952, ADR 0028): to its Authorized Person and
+ * its Project Members only. It names the Project and its Host Company, never who withdrew it, and is
+ * read though the Member no longer sees the Project.
+ */
+export const withdrawalNotification = z.object({
+  id: z.uuid(),
+  kind: z.literal("participant_withdrawn"),
+  /** None: it is about the Project (kept so every notification reads the same fields). */
+  workItemId: z.null(),
+  project: notificationProject,
+  step: z.null(),
+  pool: z.null(),
+  event: z.null(),
+  hostCompany: z.object({ legalName: bilingualText }),
+  createdAt: z.iso.datetime(),
+  readAt: z.iso.datetime().nullable(),
+});
+export type WithdrawalNotification = z.infer<typeof withdrawalNotification>;
+
+/** One in-app notification: about an item, a Package Submit, or the Member's Company leaving a Project. */
+export const notification = z.discriminatedUnion("kind", [itemNotification, packageNotification, withdrawalNotification]);
 export type Notification = z.infer<typeof notification>;
 
 /**

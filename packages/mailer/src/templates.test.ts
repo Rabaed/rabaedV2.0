@@ -65,6 +65,11 @@ const examples: EmailTemplateValues = {
     roleName: { en: "Consultant", ar: "الاستشاري" },
     link: "https://rabaed.test/ar/participants",
   },
+  "participant-withdrawn": {
+    projectName: { en: "Riyadh <Gate> Tower", ar: "برج بوابة الرياض" },
+    hostCompanyName: { en: "Test Constructions", ar: "إنشاءات الاختبار" },
+    link: "https://rabaed.test/ar/participants",
+  },
   "notification-step-reached": { ...item, step: { en: "Contractor review", ar: "مراجعة المقاول" } },
   "notification-watched-event": { ...item, event: codeB },
   "notification-sent-back": {
@@ -243,6 +248,32 @@ describe("participant invitation (RP-1072)", () => {
 
   it("refuses a link that is not https or http", () => {
     expect(() => renderEmail("participant-invitation", "en", { ...values, link: "javascript:alert(1)" })).toThrow();
+  });
+});
+
+describe("participant withdrawn (RP-952)", () => {
+  const values = examples["participant-withdrawn"];
+
+  it("names the Project and the Host Company in the reader's language, never a person, and links to the Company's Projects", () => {
+    for (const locale of locales) {
+      const email = renderEmail("participant-withdrawn", locale, values);
+      for (const name of [values.projectName, values.hostCompanyName]) expect(email.text).toContain(name[locale]);
+      expect(email.subject).toContain(values.projectName[locale]);
+      expect(email.text).toContain(values.link);
+    }
+    expect(renderEmail("participant-withdrawn", "ar", values).html).toContain('<bdi dir="ltr"');
+  });
+
+  it("says the Company no longer takes part, and that it comes back only by a new invitation", () => {
+    expect(renderEmail("participant-withdrawn", "en", values).text).toContain("no longer takes part");
+    expect(renderEmail("participant-withdrawn", "en", values).text).toContain("new invitation");
+    expect(renderEmail("participant-withdrawn", "ar", values).text).toContain("دعوة جديدة");
+  });
+
+  it("escapes the names in the HTML body", () => {
+    const { html } = renderEmail("participant-withdrawn", "en", values);
+    expect(html).toContain("Riyadh &lt;Gate&gt; Tower");
+    expect(html).not.toContain("<Gate>");
   });
 });
 
