@@ -282,7 +282,10 @@ export type RegisterImportSummary = z.infer<typeof registerImportSummary>;
  * An import on the Imports page (story 32): with the Packages its Drafts went to, created or
  * added to, by number; each one of the importing Company's own, a discarded one left out.
  */
-export const registerImportListed = registerImportSummary.extend({ packages: z.array(registerImportPackage) });
+export const registerImportListed = registerImportSummary.extend({
+  /** `new`: the import created it ("New"), else it added to it ("Used", RP-1144). */
+  packages: z.array(registerImportPackage.extend({ new: z.boolean() })),
+});
 export type RegisterImportListed = z.infer<typeof registerImportListed>;
 
 export const registerImports = z.object({ imports: z.array(registerImportListed) });

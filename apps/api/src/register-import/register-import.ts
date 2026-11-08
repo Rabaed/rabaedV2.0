@@ -410,19 +410,21 @@ export function listRegisterImports(db: Db, memberId: string, projectId: string)
     if (!project) return null;
     const imports = await importsWhere(trx, { engineer: null }, sql`i.project_id = ${projectId}::uuid and i.status = 'created'`);
     // A confirmed import created a Draft from every good row (all or nothing); the Packages are
-    // the importing Participant's own, by the function (as on the import's page).
-    const { rows } = await sql<{ import_id: string; package_id: string; seq: number; name: BilingualText; status: PackageStatus }>`
-      select distinct r.import_id, k.package_id, k.seq, k.name, k.status
+    // the importing Participant's own, by the function (as on the import's page). A row keeps the
+    // name of a Package the import created (`package_name`): that one is "New", the others "Used" (RP-1144).
+    const { rows } = await sql<{ import_id: string; package_id: string; seq: number; name: BilingualText; status: PackageStatus; created_it: boolean }>`
+      select r.import_id, k.package_id, k.seq, k.name, k.status, bool_or(r.package_name is not null) as created_it
       from submittal_register_import_row r
       join app.register_import_packages(${projectId}::uuid) k on k.package_id = r.package_id
       where r.import_id = any(${imports.map((i) => i.id)}::uuid[]) and cardinality(r.reasons) = 0
+      group by r.import_id, k.package_id, k.seq, k.name, k.status
       order by k.seq
     `.execute(trx);
     return imports.map((i) => ({
       ...toSummary(i),
       packages: rows
         .filter((k) => k.import_id === i.id)
-        .map((k) => ({ id: k.package_id, number: packageNumber(k.seq), name: k.name, status: k.status })),
+        .map((k) => ({ id: k.package_id, number: packageNumber(k.seq), name: k.name, status: k.status, new: k.created_it })),
     }));
   });
 }

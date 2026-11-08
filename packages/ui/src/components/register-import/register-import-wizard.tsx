@@ -30,8 +30,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx
 import type { Translate } from "../workflow/workflow-builder-labels-from.ts";
 import { logDownload, rejectedRowsDownload, sampleRegister, saveDownload, templateDownload } from "./register-import-downloads.ts";
 import { PackagesCard, type PackagesChoice } from "./register-import-packages.tsx";
+import { ImportLog, ImportSummary } from "./register-import-review.tsx";
 import { ErrorRows, ImportRows, PackageCell, within } from "./register-import-rows.tsx";
 import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnLoad, type Suggested } from "./register-import-suggested.ts";
+import { wizardSteps } from "./register-import-summary.ts";
 
 // The Submittal Register Import wizard (RP-637, RP-639; the owner's design RP-634):
 // Upload → Sheet & header row → Map fields (a field suggested for each column from its
@@ -50,7 +52,6 @@ import { confirmSuggestion, suggestedFromMapping, suggestedMapping, suggestedOnL
 // `registerImport` messages (`t`) and its links.
 
 type Step = "upload" | "sheet" | "map" | "values" | "assign" | "validate" | "result";
-const stepper: Step[] = ["upload", "sheet", "map", "values", "assign", "validate"];
 
 /** What a call of the import answered: its body, or the refusal's code (`unavailable` when it couldn't be made). */
 export type RegisterImportCallResult = { ok: true; body: unknown } | { ok: false; error: string };
@@ -168,6 +169,8 @@ export function RegisterImportWizard({
   lead,
   resultActions,
   draftLink,
+  packageLink,
+  initialMapping = null,
   sample = false,
 }: {
   locale: Locale;
@@ -199,6 +202,10 @@ export function RegisterImportWizard({
   resultActions?: (preview: RegisterImport, created: number) => ReactNode;
   /** A link to a Draft on the Validate step's rows, where the reader may open it. */
   draftLink?: (workItemId: string, children: ReactNode) => ReactNode;
+  /** A link to a Package the import created or added to, on the Result step (RP-1144); left out, its number is plain text. */
+  packageLink?: (packageId: string, children: ReactNode) => ReactNode;
+  /** A saved mapping to apply once the register is read ("Use in new import" on the Imports page, RP-1144). */
+  initialMapping?: string | null;
   /**
    * "Use sample register" on Upload (RP-954), so a Member can try the wizard. Off in Rabaed Admin,
    * where confirming it would put made-up Drafts in a Company's Project.
@@ -240,6 +247,8 @@ export function RegisterImportWizard({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  /** The saved mapping still to apply to the first register read (RP-1144). */
+  const pendingMapping = useRef<string | null>(initialMapping);
   const n = (value: number) => formatNumber(value, locale);
   const refusal = (code: string) => t(`errors.${refusals[code] ?? "unavailable"}`, { size: n(registerImportMaxBytes / (1024 * 1024)) });
 
@@ -285,6 +294,10 @@ export function RegisterImportWizard({
     setValues(null);
     setPackagesChoice(Object.values(rest).includes("package") ? { mode: "column" } : { mode: "none" });
     setAppliedMapping(null);
+    // "Use in new import" (RP-1144): the saved mapping chosen on the Imports page, applied once.
+    const pending = savedMappings.find((m) => m.id === pendingMapping.current);
+    pendingMapping.current = null;
+    if (pending) applySaved(pending, read);
     return true;
   }
 
@@ -292,10 +305,10 @@ export function RegisterImportWizard({
    * Applies a saved mapping (RP-644, story 11) to the register as read: its columns (any past the
    * header row's left out), its values matched by hand, its assignees and its Packages.
    */
-  function applySaved(saved: RegisterImportSavedMapping) {
-    if (!sheet) return;
+  function applySaved(saved: RegisterImportSavedMapping, against: RegisterSheet | null = sheet) {
+    if (!against) return;
     const m = saved.mapping;
-    const inSheet = (c: { column: number } | undefined) => (c && c.column < sheet.headers.length ? c.column : null);
+    const inSheet = (c: { column: number } | undefined) => (c && c.column < against.headers.length ? c.column : null);
     setSubject(inSheet(m.subject));
     setType("column" in m.type ? { from: "column", column: inSheet(m.type) } : { from: "value", value: m.type.value });
     setTrade("column" in m.trade ? { from: "column", column: inSheet(m.trade) } : { from: "value", value: m.trade.value });
@@ -687,6 +700,8 @@ export function RegisterImportWizard({
     packagesChoice.mode !== "file" || (packagesChoice.how === "new" ? packagesChoice.name.trim() !== "" : packagesChoice.existing !== null);
   const offerSample = sample && types.length > 0 && trades.length > 0;
   const tickedColumns = Object.entries(ticked).filter(([column, on]) => on && fieldOf(Number(column)) !== "none").length;
+  /** The stepper: Map values only while a column is ticked to match its values (RP-1144). */
+  const stepper = wizardSteps(tickedColumns, step);
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -701,7 +716,7 @@ export function RegisterImportWizard({
             </li>
           )}
           {stepper.map((s, index) => {
-            const at = stepper.indexOf(step);
+            const at = (stepper as string[]).indexOf(step);
             const done = index < at;
             return (
               <li key={s} aria-current={s === step ? "step" : undefined} className="flex items-center gap-2 text-[14px]">
@@ -1377,10 +1392,15 @@ export function RegisterImportWizard({
               <TabsTrigger value="errors" count={n(preview.rowsRejected)}>
                 {t("validate.errors")}
               </TabsTrigger>
+              {/* RP-1144: the log in the page too (the kit's Log tab), with no time. */}
+              <TabsTrigger value="log">{t("log.tab")}</TabsTrigger>
               <TabsTrigger value="imported" count={n(preview.rowsTotal - preview.rowsRejected)}>
                 {t("validate.imported")}
               </TabsTrigger>
             </TabsList>
+            <TabsContent value="log" className="pt-4">
+              <ImportLog imported={preview} t={t} locale={locale} onDownload={() => download(logDownload)} />
+            </TabsContent>
             <TabsContent value="errors" className="pt-4">
               <div className="overflow-hidden rounded-md border border-border bg-surface">
                 <ErrorRows
@@ -1395,7 +1415,9 @@ export function RegisterImportWizard({
                 />
               </div>
             </TabsContent>
-            <TabsContent value="imported" className="pt-4">
+            <TabsContent value="imported" className="flex flex-col gap-4 pt-4">
+              {/* RP-1144: the kit's summary above the rows. */}
+              <ImportSummary imported={preview} t={t} locale={locale} />
               <div className="overflow-x-auto rounded-md border border-border bg-surface">
                 <ImportRows
                   rows={preview.rows.filter((r) => r.reasons.length === 0)}
@@ -1441,9 +1463,15 @@ export function RegisterImportWizard({
                 <dt className="text-muted">{p.newName !== null ? t("result.newPackage") : t("result.addedTo")}</dt>
                 <dd className="flex items-center gap-2 font-bold">
                   {p.package ? (
-                    <bdi dir="ltr" translate="no">
-                      {p.package.number}
-                    </bdi>
+                    // RP-1144: each Package opens from here, where the app gives a link.
+                    (() => {
+                      const number = (
+                        <bdi dir="ltr" translate="no">
+                          {p.package.number}
+                        </bdi>
+                      );
+                      return packageLink ? packageLink(p.package.id, number) : number;
+                    })()
                   ) : (
                     <bdi>{p.newName}</bdi>
                   )}
