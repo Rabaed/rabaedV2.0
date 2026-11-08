@@ -87,7 +87,8 @@ export function SubmittalPanelAttachmentViewer({ locale, labels, files, file, lo
     >
       <div className="flex h-[60px] shrink-0 items-center gap-1 border-b border-on-inverse/10 px-2 @[560px]/sdp:gap-2 @[560px]/sdp:px-3">
         <Button ref={back} variant="ghost" size="sm" onClick={onClose} className={cn(onBar, "shrink-0 gap-1 px-2")}>
-          <Icon name={locale === "ar" ? "chevron-right" : "chevron-left"} size={16} />
+          {/* Points back: Icon turns it round in Arabic itself. */}
+          <Icon name="chevron-left" size={16} />
           {labels.back}
         </Button>
         <AttachmentTile kind={kind} className="hidden h-10 w-[34px] @[560px]/sdp:flex" />
