@@ -57,7 +57,7 @@ describe("RP-1258-1: the app role reads a Member id column only where the allow 
       await sql.raw("create view public.rp1258_probe_view as select id, project_id from work_item_type").execute(trx);
       await sql.raw(`grant select on public.rp1258_probe_view to ${APP_ROLE}`).execute(trx);
       const allow = [...MEMBER_ID_ALLOW, { column: "rp1258_probe_view", reason: "a view of a Type and its Project: no Member id", columns: ["id", "project_id"] }];
-      expect(memberIdGrantProblems(await readableMemberIdColumns(trx, APP_ROLE), allow).filter((p) => p.includes("rp1258_"))).toEqual([]);
+      expect(memberIdGrantProblems(await readableMemberIdColumns(trx, APP_ROLE), allow).filter((p) => p.includes("rp1258_"))).toEqual([]); // not hidden-from: a list of ratchet problems, the pinned view first passing
       // A view may gain columns at its end; the new one carries a Member id under a name that doesn't say so.
       await sql.raw("create or replace view public.rp1258_probe_view as select t.id, t.project_id, m.id as checker from work_item_type t cross join member m").execute(trx);
       expect(memberIdGrantProblems(await readableMemberIdColumns(trx, APP_ROLE), allow).filter((p) => p.includes("rp1258_"))).toEqual([
