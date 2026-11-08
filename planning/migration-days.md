@@ -189,3 +189,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271211 | RP-1251 | 31 | settings_refuse_deactivated_values (20271210 is RP-1252's, lane 32) |
 | 20271215 | RP-952 | 31 | withdraw_participant (20271214 is RP-1139's #705, 20271216 RP-1117's) |
 | 20271214 | RP-1139 | 11 | member_ids_own_company (moved from 20271212, then 20271213: both were RP-1252's #699) |
+| 20271218 | RP-952 | 32 | vacancy_steps |

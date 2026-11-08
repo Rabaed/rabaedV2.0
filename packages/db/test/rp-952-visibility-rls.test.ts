@@ -519,3 +519,79 @@ describe("scenario RP-952-5: after the withdrawal, K1's Members lose the Project
     expect((await preview(c1.ap, participant.k1)).outcome).toBe("not_found");
   });
 });
+
+describe("scenario RP-952-6: the Vacancies list names each Vacancy's Step, and nothing more of an item the Admin doesn't see", () => {
+  const vacancySteps = (as: string) =>
+    call<{ id: string; work_item_id: string | null; document_number: string | null; title: string | null; step_name: { en: string; ar: string } }>(
+      as,
+      sql`select step_assignment_id as id, work_item_id, document_number, title, step_name from app.project_vacancies(${projectId}::uuid)`,
+    );
+  let assignment = "";
+  let stepName: { en: string; ar: string } = { en: "", ar: "" };
+
+  beforeAll(async () => {
+    const { rows } = await migrator.query(
+      "select a.id, s.name from step_assignment a join workflow_step s on s.id = a.step_id where a.work_item_id = $1 and a.status = 'vacant'",
+      [vacantItem],
+    );
+    assignment = rows[0].id as string;
+    stepName = rows[0].name as { en: string; ar: string };
+  });
+
+  it("gives both of C1's Project Admins the Step, and nobody else", async () => {
+    await expectHiddenFrom({
+      read: async (as) => (await vacancySteps(as)).map((v) => ({ id: `${v.id}:${v.step_name.en}` })),
+      target: `${assignment}:${stepName.en}`,
+      seenBy: [c1.ap, c1Admin],
+      hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap],
+      name: nameOf,
+      label: "the Vacancy's Step",
+    });
+  });
+
+  it("gives the Admin who doesn't see the item its Step and role only, never its id, Document Number or Subject", async () => {
+    const [unseen] = (await vacancySteps(c1.ap)).filter((v) => v.id === assignment);
+    expect(unseen).toEqual({ id: assignment, work_item_id: null, document_number: null, title: null, step_name: stepName });
+    const [seen] = (await vacancySteps(c1Admin)).filter((v) => v.id === assignment);
+    expect(seen).toMatchObject({ work_item_id: vacantItem, step_name: stepName });
+  });
+});
+
+describe("scenario RP-952-7: only the Host Company's Project Admins read the withdrawn Participants", () => {
+  const withdrawn = (as: string) =>
+    call<{ participant_id: string; company_id: string; base_role: string; withdrawn_at: Date }>(
+      as,
+      sql`select participant_id, company_id, base_role, withdrawn_at from app.project_withdrawn_participants(${projectId}::uuid)`,
+    );
+  const active = (as: string) => call<{ participant_id: string }>(as, sql`select participant_id from app.project_participants(${projectId}::uuid)`);
+
+  it("lists C2 and K1, with their Company and Project Role, to C1's Project Admins and nobody else", async () => {
+    for (const p of [participant.c2, participant.k1]) {
+      await expectHiddenFrom({
+        read: async (as) => (await withdrawn(as)).map((r) => ({ id: r.participant_id })),
+        target: p,
+        seenBy: [c1.ap, c1Admin],
+        hiddenFrom: [c1.member, c1Pm, c2.ap, k1.ap, other.ap],
+        name: nameOf,
+        label: "the withdrawn Participants",
+      });
+    }
+    const rows = await withdrawn(c1.ap);
+    expect(rows.map((r) => [r.participant_id, r.company_id, r.base_role]).sort()).toEqual(
+      [
+        [participant.c2, c2.id, "contractor"],
+        [participant.k1, k1.id, "consultant"],
+      ].sort(),
+    );
+    for (const r of rows) expect(r.withdrawn_at).toBeInstanceOf(Date);
+  });
+
+  it("never lists them among the Project's active Participants, nor the Host Company among the withdrawn", async () => {
+    // Positive control: the same read lists C1, the Host Company, to its Project Admin.
+    const ids = (await active(c1.ap)).map((r) => r.participant_id);
+    expect(ids).toContain(participant.c1);
+    expect(ids).not.toContain(participant.c2); // not hidden-from: the active list, whose positive control is C1's own row above
+    expect(ids).not.toContain(participant.k1); // not hidden-from: the active list, as above
+    expect((await withdrawn(c1.ap)).map((r) => r.participant_id)).not.toContain(participant.c1); // not hidden-from: C1 is not withdrawn; C2 and K1 are read above
+  });
+});
