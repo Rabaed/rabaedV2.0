@@ -50,7 +50,9 @@ describe("the UAT roles (RP-1248, RP-1249, RP-1250)", () => {
   });
 
   it("put Omar on TMC in every UAT Project, Podium only, as Riyadh Gate Tower narrows him to one Location (RP-1250)", () => {
-    for (const r of UAT_ROLES) expect(uatPeople(r).add, r.n).toEqual([{ who: "omar", company: "saeed", positions: ["engineer"], grant: { locations: ["PD"] } }]);
+    const omar = { who: "omar", company: "saeed", positions: ["engineer"], grant: { locations: ["PD"] } };
+    // On UAT 03 Saeed also covers all of TMC's work, with no Position, so PAR-17's seen item is his to read (RP-1264).
+    for (const r of UAT_ROLES) expect(uatPeople(r).add, r.n).toEqual(r.n === "03" ? [omar, { who: "saeed", company: "saeed", positions: [] }] : [omar]);
   });
 
   it("leave Design Consultants on UAT 06 without Civil, with Ahmed alone on Electrical, so Layla's cases have a Trade it lacks and a gap to warn of (RP-1250)", () => {

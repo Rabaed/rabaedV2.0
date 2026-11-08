@@ -484,8 +484,10 @@ export const UAT_ROLES: UatRole[] = [
     person: "saeed",
     personName: { en: "Saeed", ar: "سعيد" },
     staged: uat03,
-    // Gulf Review Consultants joins UAT 03 alone (RP-1264): PAR-17 withdraws it, so no other case may use it.
-    people: { join: ["tariq"] },
+    // Gulf Review Consultants joins UAT 03 alone (RP-1264): PAR-17 withdraws it, so no other case may use it. Saeed,
+    // a Project Member with no Visibility elsewhere, covers all of TMC's work here, with no Position (so he holds no
+    // Step), so the Vacancies card names PAR-17's seen item to him and only Beta Build's by its Step (RP-952-6).
+    people: { join: ["tariq"], add: [{ who: "saeed", company: "saeed", positions: [] }] },
   },
   {
     n: "04",
