@@ -180,7 +180,6 @@ const vacancies = (as: string) =>
     as,
     sql`select step_assignment_id as id, work_item_id, base_role from app.project_vacancies(${projectId}::uuid)`,
   );
-const participantRows = (as: string) => call<{ id: string }>(as, sql`select participant_id as id from app.project_participants(${projectId}::uuid)`);
 const row = async (id: string) => (await migrator.query("select to_jsonb(p) as row from participant p where p.id = $1", [id])).rows[0].row as Record<string, unknown>;
 const assignment = async (itemId: string) =>
   (await migrator.query("select participant_id, status, assignee_member_id from step_assignment where work_item_id = $1 and status <> 'done'", [itemId]))
@@ -362,15 +361,37 @@ describe("scenario RP-1261-1: a withdrawn Company invited again and accepting is
 });
 
 describe("scenario RP-1261-2: nothing of the earlier participation reopens to the Company that is back", () => {
-  const back = () => [k1.ap, k1.member, k1Lead, c2.ap, c2.member, c2Pm];
+  // Each old item checked against the Members who read it in the earlier participation, so each one is hidden by the rule.
+  const k1s = () => [k1.member, k1Lead];
+  const c2s = () => [c2.member, c2Pm];
+  const back = () => [...k1s(), ...c2s()];
 
   it("its Members read neither the old items it held nor the ones it raised: the Vacancy, the Cancelled items, the Draft", async () => {
-    await expectHiddenFrom({ read: itemRows(vacantItem), target: vacantItem, seenBy: [c1.member, c1Pm], hiddenFrom: back(), name: nameOf, label: "the Vacancy's item" });
-    for (const id of [c2Cancelled, c3Cancelled, c2Draft]) {
-      for (const as of back()) {
-        expect(await itemRows(id)(as), `${nameOf(as)}: an item of the earlier participation`).toEqual([]); // not hidden-from: nobody active reads it since its Companies left; K1's engineer (C2's engineer for the Draft) read it in the setup
+    // K1's Members held C1's item until K1 left; C1's still read it.
+    await expectHiddenFrom({ read: itemRows(vacantItem), target: vacantItem, seenBy: [c1.member, c1Pm], hiddenFrom: k1s(), name: nameOf, label: "the Vacancy's item" });
+    for (const [id, readBefore] of [
+      [c2Cancelled, back()], // C2 raised it, K1 held it
+      [c3Cancelled, k1s()], // K1 held it
+      [c2Draft, c2s()], // C2's own Draft
+    ] as const) {
+      for (const as of readBefore) {
+        expect(await itemRows(id)(as), `${nameOf(as)}: an item of the earlier participation`).toEqual([]); // not hidden-from: nobody active reads it since its Companies left; these Members read it in the setup
       }
     }
+  });
+
+  it("its Cancelled items stay Cancelled: closed, with no open Step, the Draft still discarded", async () => {
+    const state = async (id: string) =>
+      (
+        await migrator.query(
+          `select w.outcome, w.closed_at is not null as closed, w.discarded_at is not null as discarded,
+             (select count(*)::int from step_assignment a where a.work_item_id = w.id and a.status <> 'done') as open_steps
+           from work_item w where w.id = $1`,
+          [id],
+        )
+      ).rows[0] as { outcome: string; closed: boolean; discarded: boolean; open_steps: number };
+    for (const id of [c2Cancelled, c3Cancelled]) expect(await state(id)).toEqual({ outcome: "cancelled", closed: true, discarded: false, open_steps: 0 });
+    expect(await state(c2Draft)).toEqual({ outcome: "cancelled", closed: true, discarded: true, open_steps: 0 });
   });
 
   it("the Vacancy stays where it was: the withdrawn K1's, vacant, listed to C1's Project Admin alone, with no holder", async () => {
@@ -419,14 +440,21 @@ describe("scenario RP-1261-2: nothing of the earlier participation reopens to th
 });
 
 describe("scenario RP-1261-3: a withdrawn Company never invited again still reads nothing", () => {
-  const c3s = () => [c3.ap, c3.member, c3Pm];
+  // C3's Project Members: each read the Project, its Locations and C3's own item while C3 was on it.
+  const c3s = () => [c3.member, c3Pm];
 
-  it("reads no Project, no Participant and no item, old or new", async () => {
+  it("reads no Project, nothing added to it since, and no item of its own", async () => {
     await expectHiddenFrom({ read: myProjects, target: projectId, seenBy: [c1.member, k1.member], hiddenFrom: c3s(), name: nameOf, label: "the Project" });
-    await expectHiddenFrom({ read: participantRows, target: fresh.k1, seenBy: c1.ap, hiddenFrom: c3s(), name: nameOf, label: "the Participants" });
-    await expectHiddenFrom({ read: projectItems, target: c1New, seenBy: [c1.member, k1.member], hiddenFrom: c3s(), name: nameOf, label: "a new item" });
-    await expectHiddenFrom({ read: itemRows(vacantItem), target: vacantItem, seenBy: c1.member, hiddenFrom: c3s(), name: nameOf, label: "the Vacancy's item" });
-    for (const as of c3s()) expect(await itemRows(c3Cancelled)(as), nameOf(as)).toEqual([]); // not hidden-from: nobody active reads it since C3 left; K1's engineer read it in the setup
+    // A Location added after the others came back: every Project Member reads the Project's Locations.
+    const buildingC = (
+      await call<{ value_id: string }>(
+        c1.ap,
+        sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'location', null, 'BC', '{"en": "BC", "ar": "BC"}'::jsonb)`,
+      )
+    )[0]!.value_id;
+    const location = (as: string) => call<{ id: string }>(as, sql`select id from dimension_value where id = ${buildingC}::uuid`);
+    await expectHiddenFrom({ read: location, target: buildingC, seenBy: [c1.member, k1.member], hiddenFrom: c3s(), name: nameOf, label: "a new Location" });
+    for (const as of c3s()) expect(await itemRows(c3Cancelled)(as), nameOf(as)).toEqual([]); // not hidden-from: nobody active reads it since C3 left; C3's and K1's Members read it in the setup
   });
 
   it("has no invitation, and its withdrawn row is as the withdrawal left it", async () => {

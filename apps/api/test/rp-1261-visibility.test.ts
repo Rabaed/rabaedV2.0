@@ -242,15 +242,21 @@ describe("scenario RP-1261-1: a withdrawn Company invited again and accepting is
 });
 
 describe("scenario RP-1261-2: nothing of the earlier participation reopens to the Company that is back", () => {
-  // Its Members on the Project, then its Authorized Persons, who read the Project's items through no List.
-  const members = () => [k1Engineer.caller, k1Lead.caller, c2Engineer.caller, c2Pm.caller];
-  const back = () => [...members(), k1.caller, c2.caller];
+  // Its Members on the Project. Each old item is checked against the Members who read it in the earlier participation.
+  const k1s = () => [k1Engineer.caller, k1Lead.caller];
+  const c2s = () => [c2Engineer.caller, c2Pm.caller];
+  const members = () => [...k1s(), ...c2s()];
 
   it("its Members read neither the old items it held nor the ones it raised: the Vacancy, the Cancelled items, the Draft", async () => {
-    await expectHiddenFrom({ read: readById(`/v1/work-items/${vacantItem}`), target: vacantItem, seenBy: [c1Engineer, c1Pm], hiddenFrom: back(), name: nameOf, label: "the Vacancy's item" });
-    for (const id of [c2Cancelled, c3Cancelled, c2Draft]) {
-      for (const by of back()) {
-        await expectHidden(by.get(`/v1/work-items/${id}`), `${nameOf(by)}: an item of the earlier participation`); // not hidden-from: nobody active reads it since its Companies left; K1's engineer (C2's engineer for the Draft) read it in the setup
+    // K1's Members held C1's item until K1 left; C1's still read it.
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${vacantItem}`), target: vacantItem, seenBy: [c1Engineer, c1Pm], hiddenFrom: k1s(), name: nameOf, label: "the Vacancy's item" });
+    for (const [id, readBefore] of [
+      [c2Cancelled, members()], // C2 raised it, K1 held it
+      [c3Cancelled, k1s()], // K1 held it
+      [c2Draft, c2s()], // C2's own Draft
+    ] as const) {
+      for (const by of readBefore) {
+        await expectHidden(by.get(`/v1/work-items/${id}`), `${nameOf(by)}: an item of the earlier participation`); // not hidden-from: nobody active reads it since its Companies left; these Members read it in the setup
       }
     }
   });
@@ -267,7 +273,7 @@ describe("scenario RP-1261-2: nothing of the earlier participation reopens to th
     const read = async (by: Caller) => (await vacancies(by)).flatMap((v) => v.vacancies.map((x) => ({ ...x, id: x.item?.id ?? x.id })));
     const [row] = (await read(c1.caller)).filter((v) => v.id === vacantItem);
     expect(row).toMatchObject({ item: { id: vacantItem }, projectRole: { baseRole: "consultant" } });
-    await expectHiddenFrom({ read, target: vacantItem, seenBy: c1.caller, hiddenFrom: back(), name: nameOf, label: "the Vacancies list" });
+    await expectHiddenFrom({ read, target: vacantItem, seenBy: c1.caller, hiddenFrom: [...members(), k1.caller, c2.caller], name: nameOf, label: "the Vacancies list" });
   });
 
   it("the List's 'With' filter by the withdrawn K1 finds nothing, for C1 and for the Members back", async () => {
@@ -292,14 +298,17 @@ describe("scenario RP-1261-2: nothing of the earlier participation reopens to th
 });
 
 describe("scenario RP-1261-3: a withdrawn Company never invited again still reads nothing", () => {
-  const c3s = () => [c3.caller, c3Engineer, c3Pm];
+  // C3's Project Members: each read the Project, its Participants, its Locations and C3's own item while C3 was on it.
+  const c3s = () => [c3Engineer, c3Pm];
 
-  it("reads no Project and no item, old or new", async () => {
+  it("reads no Project, nothing added to it since, and no item of its own", async () => {
     await expectHiddenFrom({ read: readById(`/v1/projects/${projectId}`), target: projectId, seenBy: [c1Engineer, k1Engineer.caller], hiddenFrom: c3s(), name: nameOf, label: "the Project" });
-    await expectHiddenFrom({ read: readById(`/v1/projects/${projectId}/participants`), idOf: () => projectId, target: projectId, seenBy: c1.caller, hiddenFrom: c3s(), name: nameOf, label: "the Participants" });
-    await expectHiddenFrom({ read: readById(`/v1/work-items/${c1New}`), target: c1New, seenBy: [c1Engineer, k1Engineer.caller], hiddenFrom: c3s(), name: nameOf, label: "a new item" });
-    await expectHiddenFrom({ read: readById(`/v1/work-items/${vacantItem}`), target: vacantItem, seenBy: c1Engineer, hiddenFrom: c3s(), name: nameOf, label: "the Vacancy's item" });
-    for (const by of c3s()) await expectHidden(by.get(`/v1/work-items/${c3Cancelled}`), `${nameOf(by)}: its own Cancelled item`); // not hidden-from: nobody active reads it since C3 left; K1's engineer read it in the setup
+    await expectHiddenFrom({ read: readById(`/v1/projects/${projectId}/participants`), idOf: () => projectId, target: projectId, seenBy: [c1.caller, k1Engineer.caller], hiddenFrom: c3s(), name: nameOf, label: "the Participants" });
+    // A Location added after the others came back: every Project Member reads the Project's Locations.
+    const buildingC = (await ok(c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BC", name: bilingual("Building C"), parentId: null }), 201)).json().id as string;
+    const locations = async (by: Caller) => (await readById<DimensionValues>(`/v1/projects/${projectId}/dimensions`)(by)).flatMap((d) => d.location);
+    await expectHiddenFrom({ read: locations, target: buildingC, seenBy: [c1Engineer, k1Engineer.caller], hiddenFrom: c3s(), name: nameOf, label: "a new Location" });
+    for (const by of c3s()) await expectHidden(by.get(`/v1/work-items/${c3Cancelled}`), `${nameOf(by)}: its own Cancelled item`); // not hidden-from: nobody active reads it since C3 left; C3's and K1's Members read it in the setup
   });
 
   it("has no invitation", async () => {
