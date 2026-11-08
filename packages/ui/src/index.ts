@@ -250,7 +250,9 @@ export {
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export { type WholeTableLabels } from "./components/views/work-item-export.ts";
 export {
-  ExportMenu,
+  ListMoreMenu,
+  type ListMoreMenuProps,
+  type ExportChoice,
   MoreActionsMenu,
   type MoreAction,
   GroupMenu,
@@ -441,6 +443,7 @@ export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/
 export { workflowBuilderLabels, type Translate } from "./components/workflow/workflow-builder-labels-from.ts";
 export { ErrorRows, ImportRows, PackageCell, RowReasons } from "./components/register-import/register-import-rows.tsx";
 export { logDownload, rejectedRowsDownload, saveDownload } from "./components/register-import/register-import-downloads.ts";
+export { filterImportRows, labelOf, mappedColumns, valuesMatched, type RowsShown } from "./components/register-import/register-import-summary.ts";
 export {
   RegisterImportWizard,
   type RegisterImportCallResult,

@@ -307,6 +307,9 @@ export function getRaisableTypes(projectId: string, module: ModuleKey = "submitt
   return apiGet<RaisableTypes>(raisableTypesPath(projectId, module));
 }
 
+/** Whether the Member may import a submittal register on the Project: they may raise a Submittals Type (story 4, RP-637). */
+export const mayImportRegister = (raisable: RaisableTypes | null): boolean => raisable !== null && raisable.types.length > 0;
+
 /** The route a new item of Type `typeCode` would run for the signed-in Member, before it exists (RP-1152); null when they may not raise it there. */
 export function getNewItemRoutePreview(projectId: string, typeCode: string): Promise<NewItemRoutePreview | null> {
   return apiGet<NewItemRoutePreview>(`/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/route-preview`);

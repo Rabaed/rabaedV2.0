@@ -40,8 +40,7 @@ const actionsOf = (engineerId: string, action: "read_work_item_step" | "reassign
     .select(["target_kind", "target_id", "reason", "before", "after"])
     .where("engineer_id", "=", engineerId)
     .where("action", "=", action)
-    .orderBy("at")
-    .orderBy("id")
+    .orderBy("seq")
     .execute();
 const find = (number: string, why = reason) =>
   engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&documentNumber=${encodeURIComponent(number)}&reason=${encodeURIComponent(why)}`);

@@ -14,6 +14,10 @@ ts.run("order-by-tiebreaker", rabaed.rules["order-by-tiebreaker"], {
     `db.selectFrom("admin_action").orderBy("at").orderBy("id").execute();`,
     `db.selectFrom("admin_action").orderBy("a.at", "desc").orderBy("a.id", "desc").execute();`,
     `db.selectFrom("chat_message").orderBy("created_at").orderBy("seq").execute();`,
+    // A seq, write order (RP-1117): on its own, after the time, or last in the array form.
+    `db.selectFrom("admin_action").orderBy("seq").execute();`,
+    `db.selectFrom("admin_action").orderBy("a.at", "desc").orderBy("a.seq", "desc").execute();`,
+    `db.selectFrom("admin_action").orderBy(["at", "seq"]).execute();`,
     // Not a timestamp: a Document Number, a name, a number.
     `db.selectFrom("work_item").orderBy("document_number").execute();`,
     `db.selectFrom("company").orderBy("c.legal_name").execute();`,
@@ -32,6 +36,7 @@ ts.run("order-by-tiebreaker", rabaed.rules["order-by-tiebreaker"], {
     `db.selectFrom("x").orderBy("at")!.orderBy("id").execute();`,
     // SQL in a string or a template, tie broken or no timestamp last.
     "sql`select a.reason from admin_action a where a.target_id = ${id} order by a.at, a.id`.execute(db);",
+    "sql`select a.reason from admin_action a where a.target_id = ${id} order by a.seq`.execute(db);",
     `migrator.query("select type from setup_event where project_id = $1 order by created_at, id", [id]);`,
     "sql`select id from x order by ${column}`;",
     "sql`select id from x order by document_number collate \"C\"`;",

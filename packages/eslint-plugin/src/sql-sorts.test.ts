@@ -15,6 +15,9 @@ describe("untiedSorts (RP-1105)", () => {
   it("passes a sort a unique column ends", () => {
     expect(keys("select id from admin_action order by at, id;")).toEqual([]);
     expect(keys("select id from chat_message c order by c.created_at desc, c.seq desc;")).toEqual([]);
+    // A seq on its own is write order (RP-1117): admin_action's.
+    expect(keys("select id from admin_action a order by a.seq;")).toEqual([]);
+    expect(keys("select id from admin_action order by at, seq desc;")).toEqual([]);
     expect(keys(`select id from work_item_link l join work_item t on t.id = l.to_id order by l.created_at, t.document_number collate "C", l.id;`)).toEqual([]);
   });
 

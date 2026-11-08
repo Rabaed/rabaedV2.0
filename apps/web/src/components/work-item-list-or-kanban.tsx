@@ -22,7 +22,6 @@ import {
 } from "@rabaed/domain";
 import {
   BoardLayoutMenu,
-  MoreActionsMenu,
   type MoreAction,
   WorkItemBoard,
   WorkItemList,
@@ -86,6 +85,8 @@ function rowKnown(row: Pick<WorkItemRow, "outcome">): Partial<RowPermissions> {
 function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
+  // "42 submittals", or "42 items" for any other Module.
+  const what = (n: string, count: number) => t(module === "submittals" ? "list.submittals" : "list.items", { n, count });
   const locale = useLocale() as Locale;
   const shared = {
     noNumber: l("noNumber"),
@@ -124,14 +125,20 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       clearGrouping: l("clearGrouping"),
       groupNone: l("groupNone"),
       export: l("export"),
-      exportOptions: l("exportOptions"),
+      more: t("moreActions"),
       csv: l("csv"),
       excel: l("excel"),
       exportSelected: l("exportSelected"),
-      exported: (n, count, format) => t("list.exported", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
-      exportedCapped: (n, count, format) => t("list.exportedCapped", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
-      exportShown: l("exportShown"),
-      exportWhole: l("exportWhole"),
+      exported: (n, count, format) => t("list.exported", { what: what(n, count), format }),
+      exportedCapped: (n, count, format) => t("list.exportedCapped", { what: what(n, count), format }),
+      exportHeading: (n, count) => t("list.exportHeading", { what: what(n, count) }),
+      exportHeadingSearch: l(module === "submittals" ? "exportHeadingSearchSubmittals" : "exportHeadingSearchItems"),
+      exportHeadingSelected: (n, count) => t("list.exportHeadingSelected", { n, count }),
+      visibleColumns: l("visibleColumns"),
+      allColumns: l("allColumns"),
+      exportChoice: (format, extension, columns) => t("list.exportChoice", { format, extension, columns }),
+      columnSettingsItem: l("columnSettingsItem"),
+      back: l("back"),
       wholeTable: Object.fromEntries((["typeName", "location", "creationDate", "submissionDate", "project"] as const).map((key) => [key, t(`list.wholeTable.${key}`)])) as WholeTableLabels,
       groupCount: (n, count) => t("list.groupCount", { n, count }),
       rowMenu: {
@@ -157,7 +164,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       page: (page) => t("list.page", { page }),
       pageOf: (page, pages) => t("list.pageOf", { page, pages }),
       // "42 submittals" on the Submittals, as the owner's design has it; "42 items" elsewhere.
-      items: (n, count) => t(module === "submittals" ? "list.submittals" : "list.items", { n, count }),
+      items: (n, count) => what(n, count),
       dashboardFigure: l("dashboardFigure"),
       withinDays: (days, count) => t("list.withinDays", { days, count }),
       level: (n) => t("list.level", { n }),
@@ -201,7 +208,7 @@ export function WorkItemListOrKanban(
     tableLabel: string;
     /** The toolbar's primary action, e.g. "New Submittal". */
     action?: ReactNode;
-    /** The toolbar's ⋯ "More actions" menu (RP-637: Import register, Imports), each link with its locale; none, no menu. */
+    /** The ⋯ menu's links (RP-637: Import register, Imports), each with its locale. The List's menu also holds Export and Column settings (RP-1141). */
     moreActions?: MoreAction[];
     /** The Project and Module of the tab: the board's Card view layout and collapsed groups are kept per board. */
     projectId: string;
@@ -372,7 +379,7 @@ export function WorkItemListOrKanban(
       // No Package field for a Member who sees none, unless the URL already holds one (so it can be cleared).
       packages={props.packages && (props.packages.length > 0 || query.packageId) ? { label: t("list.package"), choices: props.packages } : undefined}
       importFilter={props.importFilter}
-      moreActions={moreActions && moreActions.length > 0 && <MoreActionsMenu actions={moreActions} label={t("moreActions")} linkAs={NextLink} />}
+      moreLinks={moreActions}
       viewSwitch={
         <>
           {props.view === "kanban" && layout && (

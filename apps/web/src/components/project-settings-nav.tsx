@@ -10,7 +10,8 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation";
  * them, only Project Admins change them), Trades & Locations, the Approved Supplier
  * List (RP-592: every Member reads it, Project Admins change it), Required links (RP-82: the
  * same), Modules (RP-652: where Inspections show; the same), Checklist Templates (RP-651: the
- * same), the Documental Record (RP-151: its language and Hijri dates; the same), and for a Project Admin Visibility. The
+ * same), the Documental Record (RP-151: its language and Hijri dates; the same), Bulk Actions (RP-1144: to a
+ * Member who may import a submittal register), and for a Project Admin Visibility. The
  * Authorized Person also reaches their Company's Members' Visibility, which
  * is the Participant's own page. The current page comes from the address.
  */
@@ -18,9 +19,12 @@ export function ProjectSettingsNav({
   projectId,
   isProjectAdmin,
   ownParticipantId,
+  mayImport = false,
 }: {
   projectId: string;
   isProjectAdmin: boolean;
+  /** Whether the viewer may import a submittal register here (may raise a Submittals Type): Bulk Actions shows only to them (RP-1144). */
+  mayImport?: boolean;
   /** The viewer's own Company's Participant, when they are its Authorized Person. */
   ownParticipantId?: string;
 }) {
@@ -32,6 +36,8 @@ export function ProjectSettingsNav({
   const items: SettingsNavItem[] = [
     { key: "numbering", label: t("numbering"), icon: "list", href: `${base}/numbering` },
     { key: "workflows", label: t("workflows"), icon: "refresh", href: `${base}/workflows` },
+    // RP-1144 (the kit's Settings nav): the door to the import wizard and the Imports, for a Member who may import.
+    ...(mayImport ? [{ key: "bulk-imports", label: t("bulkImports"), icon: "upload", href: `${base}/bulk-imports` } satisfies SettingsNavItem] : []),
     { key: "screens", label: t("screens"), icon: "template", href: `${base}/screens` },
     { key: "stages", label: t("stages"), icon: "flag", href: `${base}/stages` },
     { key: "outcomes", label: t("outcomes"), icon: "circle-check", href: `${base}/outcomes` },

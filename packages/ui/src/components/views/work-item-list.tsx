@@ -27,7 +27,7 @@ import { ToastProvider, useToast } from "../overlay/toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
-import { ExportMenu, GroupMenu, RowMenu, type ExportFormat, type ExportScope, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
+import { GroupMenu, ListMoreMenu, MoreActionsMenu, RowMenu, type ExportFormat, type MoreAction, type ExportScope, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 import { exportFile, saveFile, shownColumns, wholeTableColumns, type WholeTableLabels } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
@@ -108,9 +108,10 @@ export type WorkItemListLabels = {
   groupedBy: (by: string) => string;
   clearGrouping: string;
   groupNone: string;
-  /** Export: the button, its arrow's name, the two formats, the bulk bar's button. */
+  /** The toolbar's ⋯ menu, e.g. "More actions" (RP-1141). */
+  more: string;
+  /** Export, in the ⋯ menu: its row, the two formats, the bulk bar's button. */
   export: string;
-  exportOptions: string;
   csv: string;
   excel: string;
   exportSelected: string;
@@ -118,9 +119,19 @@ export type WorkItemListLabels = {
   exported: (n: string, count: number, format: string) => string;
   /** The toast when the Export stopped at its cap: "Exported the first 5,000 submittals (CSV)". */
   exportedCapped: (n: string, count: number, format: string) => string;
-  /** The arrow menu's two kinds: "Export what you see", "Export the whole table". */
-  exportShown: string;
-  exportWhole: string;
+  /** Export's heading: "Export 42 submittals" (the List's total), "Export submittals" under a search (no total), "Export 2 selected". */
+  exportHeading: (n: string, count: number) => string;
+  exportHeadingSearch: string;
+  exportHeadingSelected: (n: string, count: number) => string;
+  /** Export's two kinds (RP-409's "what you see" and "the whole table"): "visible columns", "all columns". */
+  visibleColumns: string;
+  allColumns: string;
+  /** One of Export's choices: "Excel (.xml) — visible columns", from the format's name, its file's extension and the columns. */
+  exportChoice: (format: string, extension: string, columns: string) => string;
+  /** The ⋯ menu's row opening the column settings. */
+  columnSettingsItem: string;
+  /** Back from Export's choices to the menu, where they take its place on a phone. */
+  back: string;
   /** The whole table's fields beyond the List's columns. */
   wholeTable: WholeTableLabels;
   /** A group header's count: "3 on this page". */
@@ -243,8 +254,11 @@ export type WorkItemListProps = {
   action?: ReactNode;
   /** At the toolbar's end: the List / Kanban switch. */
   viewSwitch?: ReactNode;
-  /** After the switch: the ⋯ "More actions" menu (`MoreActionsMenu`), e.g. Import register and Imports (RP-637). */
-  moreActions?: ReactNode;
+  /**
+   * The ⋯ menu's links after the switch, e.g. Import register and Imports (RP-637). On the List the menu
+   * also holds Export and Column settings (RP-1141); on the Kanban only these links.
+   */
+  moreLinks?: MoreAction[];
   /** The link component for items and pages, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
   /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
@@ -356,7 +370,7 @@ function WorkItemListBody({
   onQueryChange,
   action,
   viewSwitch,
-  moreActions,
+  moreLinks = [],
   linkAs: Link = "a",
   board,
   hints,
@@ -417,20 +431,48 @@ function WorkItemListBody({
       setExporting(false);
     }
   };
-  const exportMenu = !board && loadExportRows && (
-    <ExportMenu
-      busy={exporting}
-      onExport={(format, scope) => void exportRows(format, scope, loadExportRows)}
-      labels={{ export: t("export"), options: t("exportOptions"), shown: t("exportShown"), whole: t("exportWhole"), csv: t("csv"), excel: t("excel") }}
-    />
+  const selectedRows = async () => ({ items: list.items.filter((i) => selected.has(i.id)), capped: false });
+  // The ⋯ menu (RP-1141, the kit's `moreMenu()`). Export takes the rows chosen when there are some
+  // (the owner's answer, 2026-11-08); its heading counts what the pager counts, so none under a search.
+  const total = listTotal(list, query);
+  const exportChoices = (allRows: NonNullable<typeof loadExportRows>) =>
+    ([["excel", "shown"], ["excel", "whole"], ["csv", "shown"], ["csv", "whole"]] as const).map(([format, scope]) => ({
+      key: `${format}:${scope}`,
+      label: labels.exportChoice(t(format), format === "csv" ? ".csv" : ".xml", t(scope === "shown" ? "visibleColumns" : "allColumns")),
+      onSelect: () => void exportRows(format, scope, selected.size > 0 ? selectedRows : allRows),
+      // The kit's line between Excel and CSV.
+      separated: format === "csv" && scope === "shown",
+    }));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const moreMenu = board ? (
+    moreLinks.length > 0 && <MoreActionsMenu actions={moreLinks} label={t("more")} linkAs={Link} />
+  ) : (
+    (loadExportRows || onSaveColumns || moreLinks.length > 0) && (
+      <ListMoreMenu
+        label={t("more")}
+        export={
+          loadExportRows && {
+            label: t("export"),
+            hint: selected.size > 0 ? labels.selected(n(selected.size), selected.size) : undefined,
+            heading:
+              selected.size > 0
+                ? labels.exportHeadingSelected(n(selected.size), selected.size)
+                : total === null
+                  ? t("exportHeadingSearch")
+                  : labels.exportHeading(n(total), total),
+            choices: exportChoices(loadExportRows),
+            busy: exporting,
+          }
+        }
+        links={moreLinks}
+        linkAs={Link}
+        columnSettings={onSaveColumns && { label: t("columnSettingsItem"), open: () => setSettingsOpen(true) }}
+        back={t("back")}
+      />
+    )
   );
   const bulkActions: ReactNode = (
-    <Button
-      variant="secondary"
-      size="sm"
-      disabled={exporting}
-      onClick={() => void exportRows("csv", "shown", async () => ({ items: list.items.filter((i) => selected.has(i.id)), capped: false }))}
-    >
+    <Button variant="secondary" size="sm" disabled={exporting} onClick={() => void exportRows("csv", "shown", selectedRows)}>
       <Icon name="file-download" />
       {t("exportSelected")}
     </Button>
@@ -682,9 +724,8 @@ function WorkItemListBody({
         end={
           <>
             {groupMenu}
-            {exportMenu}
             {viewSwitch}
-            {moreActions}
+            {moreMenu}
           </>
         }
         className={board ? "gap-3" : "gap-1.5"}
@@ -700,9 +741,9 @@ function WorkItemListBody({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter, grouping or the ⋯ menu on.
+          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
           hintWide={!board}
-          className={board ? undefined : cn(filtered || groupBy !== null || moreActions ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
+          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -845,6 +886,8 @@ function WorkItemListBody({
                 settings={
                   onSaveColumns && (
                     <ColumnSettings
+                      open={settingsOpen}
+                      onOpenChange={setSettingsOpen}
                       columns={columns}
                       headerOf={headerOf}
                       labels={labels.columnSettings}
@@ -893,6 +936,14 @@ function WorkItemListBody({
 }
 
 /**
+ * How many items the viewer's List holds, from its Stage counts; null under a search, which counts
+ * no more than its page (docs/visibility.md, Search and filters).
+ */
+function listTotal(list: Pick<WorkItemListProps["list"], "stages">, query: Pick<WorkItemQuery, "q">): number | null {
+  return query.q === undefined ? list.stages.reduce((sum, s) => sum + s.count, 0) : null;
+}
+
+/**
  * The List's numbered pager (RP-409): "Page x of y · n submittals" from the Stage counts.
  * Under a search there is no total ("Search and filters": a search counts no more than its
  * page), so the line says the page alone, there is no last page, and the numbers grow as the
@@ -914,7 +965,7 @@ export function WorkItemPager({
   const n = (value: number) => formatNumber(value, locale);
   const page = list.page?.number ?? query.page ?? 1;
   const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
-  const total = query.q === undefined ? list.stages.reduce((sum, s) => sum + s.count, 0) : null;
+  const total = listTotal(list, query);
   const lastPage = total === null ? null : Math.max(1, Math.ceil(total / size));
   const summary = [lastPage === null ? labels.page(n(page)) : labels.pageOf(n(page), n(lastPage)), total === null ? null : labels.items(n(total), total)]
     .filter((p) => p !== null)

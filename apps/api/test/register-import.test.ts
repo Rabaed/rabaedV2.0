@@ -1311,10 +1311,10 @@ describe("The Imports page and its Packages (story 32, RP-657)", () => {
           rowsTotal: 3,
           rowsRejected: 1,
           rowsCreated: 2,
-          // By number: the Open one it added to, then the new one.
+          // By number: the Open one it added to ("Used"), then the one it created ("New", RP-1144).
           packages: [
-            { id: lobby.id, number: lobby.number, name: bilingual("Lobby"), status: "open" },
-            { id: bathrooms.id, number: bathrooms.number, name: bilingual("Bathrooms"), status: "open" },
+            { id: lobby.id, number: lobby.number, name: bilingual("Lobby"), status: "open", new: false },
+            { id: bathrooms.id, number: bathrooms.number, name: bilingual("Bathrooms"), status: "open", new: true },
           ],
         },
       ]);

@@ -136,7 +136,7 @@ describe("the demo seed", () => {
       join rabaed_engineer e on e.id = a.engineer_id
       join company c on c.id = a.target_id
       where e.email = ${DEMO_ENGINEER_EMAIL}
-      order by a.at, a.id
+      order by a.seq
     `.execute(migrator);
     expect(rows.map((r) => r.name)).toEqual(["TMC Constructions", "Beta Build", "Design Consultants LLC", "Al Waha PMC"]);
     expect(rows.every((r) => r.action === "onboard_company" && r.reason.startsWith("Demo seed:"))).toBe(true);

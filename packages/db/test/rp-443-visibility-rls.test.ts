@@ -43,7 +43,7 @@ const versionsOf = (id: string, status: "published" | "draft") => (as: string) =
   readAs(as, sql<{ id: string }>`select id from workflow_version where workflow_definition_id = ${id}::uuid and status = ${status}`);
 const versionId = async (id: string, no: number) => (await migrator.query("select id from workflow_version where workflow_definition_id = $1 and version_no = $2", [id, no])).rows[0].id as string;
 const logged = async () =>
-  (await migrator.query<{ engineer_id: string; action: string; reason: string }>("select engineer_id, action, reason from admin_action where target_id = $1 order by at, id", [rabaedDefault])).rows;
+  (await migrator.query<{ engineer_id: string; action: string; reason: string }>("select engineer_id, action, reason from admin_action where target_id = $1 order by seq", [rabaedDefault])).rows;
 
 /** The Engineer's change, as asEngineer makes it: the write and its admin_action row in one transaction. */
 async function asEngineer(action: "save_workflow_draft" | "publish_workflow", reason: string) {
