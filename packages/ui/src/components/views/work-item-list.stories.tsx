@@ -6,7 +6,6 @@ import { phone } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { viewSwitchLabels, workItemListLabels } from "../../storybook/views.ts";
-import { MoreActionsMenu } from "./list-menus.tsx";
 import { WorkItemViewSwitch } from "./work-item-board.tsx";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
@@ -42,7 +41,6 @@ const copy = {
   settings: b("Table settings", "إعدادات الجدول"),
   group: b("Group", "تجميع"),
   export: b("Export", "تصدير"),
-  exportOptions: b("Export options", "خيارات التصدير"),
 };
 
 const stages = {
@@ -486,17 +484,93 @@ export const GroupMenuOpen: Story = {
   },
 };
 
-/** Export: the rows the viewer reads, saved as a file, then "Exported 7 submittals (CSV)". The arrow offers CSV or Excel. */
+/** The ⋯ More menu (RP-1141, the kit's `moreMenu()`), opened, with its Export row opened. */
+const openExport = async (context: PlayContext) => {
+  await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
+  const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
+  await userEvent.click(within(menu).getByRole("button", { name: new RegExp(`^${storyText(context, copy.export)}`) }));
+  return menu;
+};
+const exportChoices = [
+  b("Excel (.xml) — visible columns", "Excel (.xml) — الأعمدة الظاهرة"),
+  b("Excel (.xml) — all columns", "Excel (.xml) — كل الأعمدة"),
+  b("CSV (.csv) — visible columns", "CSV (.csv) — الأعمدة الظاهرة"),
+  b("CSV (.csv) — all columns", "CSV (.csv) — كل الأعمدة"),
+];
+
+/**
+ * Export (RP-1141): no Export button in the toolbar; the ⋯ menu's Export opens the kit's four choices
+ * under "Export 7 submittals" (the List's own total). CSV of the visible columns saves the rows the
+ * viewer reads, then "Exported 7 submittals (CSV)". Left open for the screenshot.
+ */
 export const Exporting: Story = {
   parameters: overlay,
   play: async (context) => {
-    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.export) }));
+    await expect(context.canvas.queryByRole("button", { name: storyText(context, copy.export) })).toBeNull();
+    const menu = await openExport(context);
+    const choices = within(menu).getByRole("group", { name: storyText(context, b("Export 7 submittals", "تصدير 7 تقديم")) });
+    await expect(within(choices).getAllByRole("button").map((c) => c.textContent)).toEqual(exportChoices.map((c) => storyText(context, c)));
+    await userEvent.click(within(choices).getByRole("button", { name: storyText(context, exportChoices[2]!) }));
     await expect(context.args.loadExportRows).toHaveBeenCalled();
     await waitFor(() => expect(context.canvas.getByText(storyText(context, b("Exported 7 submittals (CSV)", "تم تصدير 7 تقديم (CSV)")))).toBeVisible());
-    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.exportOptions) }));
-    const menu = await screen.findByRole("dialog", { name: storyText(context, copy.exportOptions) });
-    await expect(within(menu).getAllByRole("button")).toHaveLength(4);
-    await expect(within(menu).getByRole("group", { name: storyText(context, b("Export the whole table", "تصدير الجدول كاملًا")) })).toBeVisible();
+    await openExport(context);
+  },
+};
+
+/** With rows selected, Export says so and takes those rows only (the owner's answer, 2026-11-08): nothing more is read. */
+export const ExportingSelected: Story = {
+  parameters: overlay,
+  play: async (context) => {
+    const table = tableOf(context);
+    await userEvent.click(within(table).getByRole("checkbox", { name: storyText(context, b("Select Main LV switchboard", "تحديد Main LV switchboard")) }));
+    await userEvent.click(within(table).getByRole("checkbox", { name: storyText(context, b("Select LED downlights", "تحديد LED downlights")) }));
+    const menu = await openExport(context);
+    await expect(within(menu).getByRole("button", { name: new RegExp(storyText(context, b("2 selected", "2 محدد"))) })).toHaveAttribute("aria-expanded", "true");
+    const choices = within(menu).getByRole("group", { name: storyText(context, b("Export 2 selected", "تصدير 2 محدد")) });
+    await userEvent.click(within(choices).getByRole("button", { name: storyText(context, exportChoices[1]!) }));
+    await expect(context.args.loadExportRows).not.toHaveBeenCalled();
+    await waitFor(() => expect(context.canvas.getByText(storyText(context, b("Exported 2 submittals (Excel)", "تم تصدير 2 تقديم (Excel)")))).toBeVisible());
+  },
+};
+
+/** Under a search the List has no total, so Export names no number either (docs/visibility.md, Search and filters). */
+export const ExportingUnderASearch: Story = {
+  parameters: overlay,
+  args: { query: { ...defaults, q: "cable" } },
+  play: async (context) => {
+    const menu = await openExport(context);
+    await expect(within(menu).getByRole("group", { name: storyText(context, b("Export submittals", "تصدير التقديمات")) })).toBeVisible();
+    await expect(within(menu).queryByText(/\d/)).toBeNull();
+  },
+};
+
+/** By keyboard: an arrow on Export opens its choices on the first; Escape goes back to Export, the menu still open. */
+export const ExportByKeyboard: Story = {
+  parameters: overlay,
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
+    const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
+    const exportRow = within(menu).getByRole("button", { name: storyText(context, copy.export) });
+    exportRow.focus();
+    await userEvent.keyboard(storyLocale(context) === "ar" ? "{ArrowLeft}" : "{ArrowRight}");
+    await waitFor(() => expect(within(menu).getByRole("button", { name: storyText(context, exportChoices[0]!) })).toHaveFocus());
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(exportRow).toHaveFocus());
+    await expect(exportRow).toHaveAttribute("aria-expanded", "false");
+    await expect(menu).toBeVisible();
+  },
+};
+
+/** Column settings from the ⋯ menu opens the same panel as the table's gear. */
+export const ColumnSettingsFromMore: Story = {
+  parameters: overlay,
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
+    const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
+    await userEvent.click(within(menu).getByRole("button", { name: storyText(context, b("Column settings", "إعدادات الأعمدة")) }));
+    const panel = await screen.findByRole("dialog", { name: storyText(context, b("Columns", "الأعمدة")) });
+    await expect(within(panel).getByText(storyText(context, b("12 / 14 shown", "12 / 14 معروض")))).toBeVisible();
+    await expect(screen.queryByRole("dialog", { name: storyText(context, more.label) })).toBeNull();
   },
 };
 
@@ -579,8 +653,9 @@ const more = {
 };
 
 /**
- * The toolbar's ⋯ "More actions" menu after the List / Kanban switch (RP-637, the owner's
- * design): Import register with its line, and Imports, each a link. Left open for the screenshot.
+ * The toolbar's ⋯ "More actions" menu at its end, after the List / Kanban switch (RP-1141, the kit's
+ * `moreMenu()`): Export, Import register with its line and Imports (RP-637, each a link), then Column
+ * settings apart. Left open for the screenshot.
  */
 export const MoreActionsOpen: Story = {
   parameters: overlay,
@@ -589,22 +664,31 @@ export const MoreActionsOpen: Story = {
       {...args}
       locale={storyLocale(context)}
       labels={workItemListLabels[storyLocale(context)]}
-      moreActions={
-        <MoreActionsMenu
-          label={storyText(context, more.label)}
-          actions={[
-            { key: "import", label: storyText(context, more.import), description: storyText(context, more.importHint), icon: "upload", href: "#import" },
-            { key: "imports", label: storyText(context, more.imports), icon: "history", href: "#imports" },
-          ]}
-        />
-      }
+      moreLinks={[
+        { key: "import", label: storyText(context, more.import), description: storyText(context, more.importHint), icon: "upload", href: "#import" },
+        { key: "imports", label: storyText(context, more.imports), icon: "history", href: "#imports" },
+      ]}
     />
   ),
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, more.label) }));
-    const menu = await screen.findByRole("navigation", { name: storyText(context, more.label) });
+    const menu = await screen.findByRole("dialog", { name: storyText(context, more.label) });
+    await expect([...menu.querySelectorAll("a, button")].map((e) => e.textContent)).toEqual([
+      storyText(context, copy.export),
+      `${storyText(context, more.import)}${storyText(context, more.importHint)}`,
+      storyText(context, more.imports),
+      storyText(context, b("Column settings", "إعدادات الأعمدة")),
+    ]);
     await expect(within(menu).getByRole("link", { name: new RegExp(storyText(context, more.import)) })).toHaveAttribute("href", "#import");
     await expect(within(menu).getByRole("link", { name: storyText(context, more.imports) })).toHaveAttribute("href", "#imports");
+  },
+};
+
+/** A List without Export, column settings or links has no ⋯ menu. */
+export const NoMoreMenu: Story = {
+  args: { loadExportRows: undefined, onSaveColumns: undefined },
+  play: async (context) => {
+    await expect(context.canvas.queryByRole("button", { name: storyText(context, more.label) })).toBeNull();
   },
 };
 

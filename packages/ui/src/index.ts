@@ -244,7 +244,9 @@ export {
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export { type WholeTableLabels } from "./components/views/work-item-export.ts";
 export {
-  ExportMenu,
+  ListMoreMenu,
+  type ListMoreMenuProps,
+  type ExportChoice,
   MoreActionsMenu,
   type MoreAction,
   GroupMenu,

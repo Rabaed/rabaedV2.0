@@ -45,6 +45,9 @@ export type ColumnSettingsProps = {
   onSave: () => void;
   /** Opened at first (a story's picture of it). */
   defaultOpen?: boolean;
+  /** Open or not, when the List opens it from elsewhere too (the toolbar's ⋯ menu, RP-1141). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 /** Moves the column at `from` to `to`, never above the locked columns. */
@@ -57,7 +60,7 @@ export function moveColumn(columns: ListColumnLayout, from: number, to: number):
   return next;
 }
 
-export function ColumnSettings({ columns, headerOf, labels, number, onChange, onReset, onSave, defaultOpen }: ColumnSettingsProps) {
+export function ColumnSettings({ columns, headerOf, labels, number, onChange, onReset, onSave, defaultOpen, open, onOpenChange }: ColumnSettingsProps) {
   const id = useId();
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -73,7 +76,7 @@ export function ColumnSettings({ columns, headerOf, labels, number, onChange, on
     requestAnimationFrame(() => document.getElementById(`${id}-move-${next[to]!.key}`)?.focus());
   };
   return (
-    <Popover defaultOpen={defaultOpen}>
+    <Popover defaultOpen={defaultOpen} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
