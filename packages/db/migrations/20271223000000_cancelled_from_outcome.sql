@@ -3,9 +3,9 @@
 -- withdrawal (app.withdraw_participant) and its Workflow Version has no Step in a cancelled Stage, the
 -- item stays at its Step. Every reader still reads it Cancelled:
 --
--- * app.stage_key_as_read: the Stage an item reads as. A cancelled item whose Step's Stage is not a
+-- * app.cancelled_stage_key: the Stage a cancelled item reads as. One whose Step's Stage is not a
 --   cancelled one reads its Module's Cancelled Stage on its Project (the first by order); any other item
---   its Step's own Stage. Definitions only (stage, work_item_type), which every Member of the Project
+--   reads its Step's own Stage. Definitions only (stage, work_item_type), which every Member of the Project
 --   reads (policy member_reads_stages); internal, granted to nobody.
 -- * app.step_as_seen_unchecked and app.work_item_shared_stage give that Stage, so the List, its Stage
 --   counts and its "open" filter, the Kanban's columns, Home's counts, the detail page, the Revisions
@@ -23,23 +23,23 @@
 -- Stages are the platform's, so no project_event is written for them.
 
 -- 1. -------------------------------------------------------------------------------------------------
-create function app.stage_key_as_read(p_project_id uuid, p_work_item_type_id uuid, p_outcome text, p_stage_key text) returns text
-  language sql stable
+-- Asked of a cancelled item only (its callers check the outcome), so every other row costs what it did.
+create function app.cancelled_stage_key(p_project_id uuid, p_work_item_type_id uuid, p_stage_key text) returns text
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
-    select case
-      when p_outcome is distinct from 'cancelled' then p_stage_key
-      -- Its own Stage when that is a cancelled one; else its Module's first Cancelled Stage.
-      else coalesce((
+    begin
+      -- Its own Stage when that is a cancelled one; else its Module's first Cancelled Stage on its Project.
+      return coalesce((
         select c.key from stage c
         join work_item_type t on t.id = p_work_item_type_id
         where c.owner_kind = 'project' and c.project_id = p_project_id and c.module_key = t.module_key and c.category = 'cancelled'
         order by (c.key = p_stage_key) desc, c.sort, c.key
         limit 1
-      ), p_stage_key)
+      ), p_stage_key);
     end
   $$;
-revoke all on function app.stage_key_as_read(uuid, uuid, text, text) from public;
+revoke all on function app.cancelled_stage_key(uuid, uuid, text) from public;
 
 -- 2. -------------------------------------------------------------------------------------------------
 -- From 20271019000000_reads_at_scale.sql.
@@ -54,7 +54,7 @@ create or replace function app.step_as_seen_unchecked(p_work_item_id uuid, p_par
         select s.id,
           -- A cancelled item reads its Module's Cancelled Stage, whatever Step it stopped at (RP-1263). Asked of a
           -- cancelled item only, so the List's read of every other row calls nothing more than before.
-          case when w.outcome = 'cancelled' then app.stage_key_as_read(w.project_id, w.work_item_type_id, w.outcome, s.stage_key)
+          case when w.outcome = 'cancelled' then app.cancelled_stage_key(w.project_id, w.work_item_type_id, s.stage_key)
             else s.stage_key end,
           case
             -- A Draft (never left its Draft Step, so never numbered): its Step began when it
@@ -195,7 +195,9 @@ create or replace function app.work_item_shared_stage(p_work_item_id uuid) retur
     begin
       return (
         -- A cancelled item reads its Module's Cancelled Stage (RP-1263).
-        select app.stage_key_as_read(w.project_id, w.work_item_type_id, w.outcome, s.stage_key) from work_item w
+        select case when w.outcome = 'cancelled' then app.cancelled_stage_key(w.project_id, w.work_item_type_id, s.stage_key)
+          else s.stage_key end
+        from work_item w
         join workflow_step s on s.id = w.participant_entered_step_id
         where w.id = p_work_item_id and app.sees_work_item(w.id) and w.submitted_at is not null
       );
@@ -240,7 +242,8 @@ create or replace function app.delete_stage(p_project_id uuid, p_module_key text
 -- 7. -------------------------------------------------------------------------------------------------
 -- The Rabaed Defaults: a Cancelled Stage, last, for each Module with none (the Snag List). A new Rabaed
 -- Default reaches only Projects created from now on (20270207000000_default_sets_reach_new_projects);
--- step 8 gives the existing ones theirs.
+-- step 8 gives the existing ones theirs. A Module whose Rabaed Default key `cancelled` were another kind
+-- of Stage would be skipped here: none is (the Rabaed Defaults are the platform's own), unlike a Project's.
 insert into stage (owner_kind, module_key, key, name, category, sort)
 select 'rabaed', m.module_key, 'cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', max(m.sort) + 1
 from stage m
