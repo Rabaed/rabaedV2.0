@@ -192,6 +192,8 @@ class Refused extends Error {
 /**
  * Sets every dimension with `setOne` in one transaction: all of them, or none, with
  * the Handovers of the Steps the new Visibility takes Members out of the pool of (RP-108).
+ * `afterAll` runs once every dimension is saved, in the same transaction, before the
+ * Handover check: never on a half-saved change.
  */
 async function setEveryDimension(
   db: Db,
@@ -199,6 +201,7 @@ async function setEveryDimension(
   request: SetVisibilityRequest,
   setOne: (trx: Trx, kind: DimensionKind, grant: SetVisibilityRequest[DimensionKind]) => Promise<string>,
   handover: HandoverChange,
+  afterAll?: (trx: Trx) => Promise<void>,
 ): Promise<SetVisibilityResult | HandoverRefusal> {
   try {
     return await handedOver(db, memberId, handover, async (trx) => {
@@ -206,6 +209,7 @@ async function setEveryDimension(
         const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setVisibilityRefusals]);
         if (outcome !== "set") throw new Refused(outcome);
       }
+      await afterAll?.(trx);
       return { ok: true } as const;
     });
   } catch (error) {
@@ -219,6 +223,8 @@ async function setEveryDimension(
  * a made-up id. A Step one of its Members holds whose pool it takes them out of is
  * handed over first, to `request.handovers`, by the Participant's own Company; another
  * Company's Admin is refused with how many Steps wait (RP-108, scenario RP-108-3).
+ * Once the whole change is saved, a withdrawn Participant's Vacancy that exactly one
+ * Participant of its role now covers passes to it (RP-1262; scenario RP-1262-5).
  */
 export function setParticipantVisibility(
   db: Db,
@@ -239,6 +245,11 @@ export function setParticipantVisibility(
       return rows[0]!.outcome;
     },
     { memberId: null, participantId, because: "visibility", picks: request.handovers, now },
+    // Every change to a Participant's Visibility calls this once, after the whole change is saved, never
+    // per dimension (RP-1262-5); visibility-handoff.test.ts fails for a caller of the setter that forgets it.
+    async (trx) => {
+      await sql`select app.pass_vacancies_after_visibility(${participantId}::uuid, ${now})`.execute(trx);
+    },
   );
 }
 
