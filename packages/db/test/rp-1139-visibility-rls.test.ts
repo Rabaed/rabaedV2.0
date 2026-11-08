@@ -273,8 +273,20 @@ describe("scenario RP-1139-6: \"Items I'm on\" knows the raiser's own items with
     });
   });
 
-  it("the Activity Feed's \"Items I'm on\" holds the raiser's item; not a K1 engineer's who never acted on it", async () => {
+  it("the Activity Feed's \"Items I'm on\" holds an item for its raiser who never acted on it; not for C1's AP, K1 or C2", async () => {
     const { c1, k1, c2 } = tower;
+    // A raiser who never acted, as a Register import makes the assignee the raiser (the importer acts): C1's engineer
+    // starts and sends it, and C1's PM is made its raiser. Only app.my_created_work_items puts it in the PM's "Items I'm on".
+    const [created] = await tower.call<{ outcome: string; work_item_id: string }>(
+      c1.members.engineer,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${tower.projectId}::uuid, ${TYPE}, 'Panels', app.latest_form_version(${TYPE}), ${JSON.stringify({ model: "PN-1" })}::jsonb,
+        ${tower.tradeId}::uuid, ${tower.buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    const raised = created!.work_item_id;
+    expect(await tower.take(c1.members.engineer, raised, "send_for_review")).toBe("applied");
+    await migrator.query("update work_item set created_by_member_id = $1 where id = $2", [c1.members.project_manager, raised]);
     const mine = async (as: string) =>
       (
         await tower.call<{ work_item_id: string; on_item: boolean }>(
@@ -284,7 +296,14 @@ describe("scenario RP-1139-6: \"Items I'm on\" knows the raiser's own items with
       )
         .filter((r) => r.on_item)
         .map((r) => ({ id: r.work_item_id }));
-    await expectHiddenFrom({ read: mine, target: item, seenBy: c1.members.engineer, hiddenFrom: [k1.members.engineer, c2.members.engineer], name: named, label: "C1's raised item in Items I'm on" });
+    await expectHiddenFrom({
+      read: mine,
+      target: raised,
+      seenBy: c1.members.project_manager,
+      hiddenFrom: [c1.ap, k1.members.engineer, c2.members.engineer],
+      name: named,
+      label: "the PM's raised item in Items I'm on",
+    });
   });
 });
 

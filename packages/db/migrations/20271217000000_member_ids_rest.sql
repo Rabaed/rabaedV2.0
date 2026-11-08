@@ -55,6 +55,26 @@ create function app.my_created_work_items(p_project_id uuid)
 revoke all on function app.my_created_work_items(uuid) from public;
 grant execute on function app.my_created_work_items(uuid) to rabaed_app;
 
+-- "Items I'm on" for one item, as the Activity Feed both filters and marks it (CODING_STANDARDS: a block copied in a
+-- function redefined again in the same spec becomes a helper): raised or acted on by the caller's own Member (the set
+-- app.activity_feed reads once), held by them, or watched. Security invoker, as the feed: step_assignment and the Watch
+-- are read through their RLS, the caller's own only.
+create function app.feed_on_item(p_work_item_id uuid, p_raised_or_acted uuid[])
+  returns boolean
+  language plpgsql stable security invoker
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return p_work_item_id = any (p_raised_or_acted)
+        or exists (select 1 from step_assignment a where a.work_item_id = p_work_item_id and a.assignee_member_id = app.current_member_id())
+        -- Watched (RP-354): the caller's own Watch on the item's chain.
+        or coalesce(app.watching_work_item(p_work_item_id), false);
+    end
+  $$;
+revoke all on function app.feed_on_item(uuid, uuid[]) from public;
+-- The feed is security invoker: it runs as the app role, which must run its helper.
+grant execute on function app.feed_on_item(uuid, uuid[]) to rabaed_app;
+
 create or replace function app.activity_feed(
   p_project_id uuid, p_module_key text, p_type_codes text[], p_mine boolean, p_after_event_id uuid, p_limit integer
 )
@@ -71,7 +91,7 @@ create or replace function app.activity_feed(
     declare
       -- The items the caller's own Member raised or acted on (RP-1139: neither the raiser nor the actor
       -- column is the app role's), asked once.
-      v_mine uuid[] := array(select app.my_created_work_items(p_project_id) union select app.my_acted_work_items(p_project_id));
+      v_raised_or_acted uuid[] := array(select app.my_created_work_items(p_project_id) union select app.my_acted_work_items(p_project_id));
     begin
       return query
         with page as (
@@ -84,11 +104,8 @@ create or replace function app.activity_feed(
             and e.type <> 'answers_changed'
             and (p_module_key is null or t.module_key = p_module_key)
             and (cardinality(coalesce(p_type_codes, '{}')) = 0 or t.code = any(p_type_codes))
-            and (not coalesce(p_mine, false)
-              or (w.id = any (v_mine)
-                or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-                -- Watched (RP-354): the caller's own Watch on the item's chain.
-                or app.watching_work_item(w.id)))
+            -- A case, so the rule is asked only when "Items I'm on" is.
+            and (case when coalesce(p_mine, false) then app.feed_on_item(w.id, v_raised_or_acted) else true end)
             and (p_after_event_id is null or (e.created_at, e.work_item_id, e.seq) < (
               select a.created_at, a.work_item_id, a.seq from work_item_event a where a.id = p_after_event_id))
           order by e.created_at desc, e.work_item_id desc, e.seq desc
@@ -99,10 +116,7 @@ create or replace function app.activity_feed(
         select p.id, p.created_at, p.type, p.audience, actor.legal_name, m.full_name, tr.label, p.outcome,
           w.id, w.document_number, w.title, t.code, t.name,
           -- "Items I'm on", the filter's rule above, asked of the page's rows only.
-          (w.id = any (v_mine)
-            or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-            -- Watched (RP-354): the caller's own Watch on the item's chain.
-            or app.watching_work_item(w.id)) is true,
+          app.feed_on_item(w.id, v_raised_or_acted),
           coalesce(ac.actor_member_id = app.current_member_id(), false)
         from page p
         join work_item w on w.id = p.work_item_id

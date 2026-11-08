@@ -8,6 +8,7 @@
 // it. Seam 2: packages/db/test/rp-1139-visibility-rls.test.ts.
 import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
+import { sql } from "kysely";
 import { activityFeedSearchParams, type ActivityFeed, type NumberingSettings, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, uploadDocument, type Caller } from "./support/harness.ts";
@@ -217,12 +218,25 @@ describe("scenario RP-1139-5: the Project's reads answer without the creator, se
 });
 
 describe("scenario RP-1139-6: \"Items I'm on\" holds the raiser's item without the creator column", () => {
-  it("lists C1's item for its raiser, not for K1's engineer who sees it but never acted, nor for C2", async () => {
+  it("lists an item for its raiser who never acted on it; not for C1's AP, K1's engineer or C2", async () => {
+    // A raiser who never acted, as a Register import makes the assignee the raiser (the importer acts): C1's engineer
+    // starts and sends it, and C1's PM is made its raiser. Only the raiser rule puts it in the PM's "Items I'm on".
+    const answers = { model: "Panels", trade: at.electrical, location: at.buildingA };
+    const raised = (await ok(c1Engineer.caller.post(`/v1/projects/${at.projectId}/work-items`, { type: OWNER_TYPE, title: "Panels", answers }), 201)).json().id as string;
+    await take(c1Engineer.caller, raised, "send_for_review");
+    await sql`update work_item set created_by_member_id = ${c1Pm.id}::uuid where id = ${raised}::uuid`.execute(migrator);
     const mine = async (by: Caller) => {
       const res = await by.get(`/v1/projects/${at.projectId}/activity?${activityFeedSearchParams({ mine: true, limit: 100 })}`);
       return res.statusCode === 200 ? (res.json() as ActivityFeed).entries.filter((e) => e.onItem).map((e) => ({ id: e.workItem.id })) : [];
     };
-    await expectHiddenFrom({ read: mine, target: id, seenBy: c1Engineer.caller, hiddenFrom: [k1Engineer.caller, c2Engineer.caller], name: named, label: "C1's raised item in Items I'm on" });
+    await expectHiddenFrom({
+      read: mine,
+      target: raised,
+      seenBy: c1Pm.caller,
+      hiddenFrom: [c1Ap.caller, k1Engineer.caller, c2Engineer.caller],
+      name: named,
+      label: "the PM's raised item in Items I'm on",
+    });
   });
 });
 
