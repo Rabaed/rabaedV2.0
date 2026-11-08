@@ -1,12 +1,15 @@
-// Seam 1 for the Member ids on an item's events and Documents (RP-1139; visibility.md V14; scenarios
-// RP-1139-2 to RP-1139-4): with `work_item_event.actor_member_id` and `document.uploaded_by_member_id`
-// no longer granted, the api still names each viewer's own Company's people (the Documents' uploader,
-// the history's actor, a closed card's closer) and another Company by its name only, and no response
-// carries another Company's Member id. C1's Submittal goes through K1's Recommendation to the Owner's
-// review, which closes it. Seam 2: packages/db/test/rp-1139-visibility-rls.test.ts.
+// Seam 1 for the Member ids another Company could read (RP-1139; visibility.md V14; scenarios
+// RP-1139-1 to RP-1139-8): with `work_item_event.actor_member_id` and `document.uploaded_by_member_id`
+// (PR 1), and the item's creator, the numbering pattern's setter, a Participant's inviter and withdrawer
+// and the Project's creator (PR 2) no longer granted, the api still names each viewer's own Company's
+// people (the Documents' uploader, the history's actor, a closed card's closer, the pattern's setter),
+// another Company by its name only, keeps "Items I'm on" for the raiser, and no response carries another
+// Company's Member id. C1's Submittal goes through K1's Recommendation to the Owner's review, which closes
+// it. Seam 2: packages/db/test/rp-1139-visibility-rls.test.ts.
 import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemBoard, WorkItemHistory } from "@rabaed/domain";
+import { sql } from "kysely";
+import { activityFeedSearchParams, type ActivityFeed, type NumberingSettings, type WorkItemBoard, type WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, uploadDocument, type Caller } from "./support/harness.ts";
 import { addOwnerReviewType } from "./support/owner-review.ts";
@@ -39,6 +42,9 @@ let at: Tower;
 let id = "";
 let c1Document = "";
 type Person = { id: string; caller: Caller; name: string };
+let c2Participant = "";
+let c1Ap: Person;
+let k1Engineer: Person;
 let c1Engineer: Person;
 let c1Pm: Person;
 let k1Manager: Person;
@@ -76,6 +82,9 @@ const responses = async (by: Caller) =>
 beforeAll(async () => {
   await addOwnerReviewType(migrator, OWNER_TYPE, schema);
   const c1 = await api.projectCreator();
+  // C1's AP creates the Project, invites the other Companies and sets the numbering pattern.
+  c1Ap = { id: c1.company.authorizedPerson.id, caller: c1.caller, name: "Test Person" };
+  people.push(c1Ap);
   const onboard = async (name: string): Promise<Company> => {
     const onboarded = await api.onboardCompany({ legalName: bilingual(name) }); // not hidden-from: onboards the Company by its name
     return { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
@@ -87,7 +96,7 @@ beforeAll(async () => {
   const owParticipant = await api.addParticipant(c1.caller, at.projectId, ow.company, "owner");
   await ok(c1.caller.request("PUT", `/v1/participants/${owParticipant}/visibility`, { trade: all, location: all }));
   // C2, a second Contractor, covers Mechanical only: C1's Electrical item is not theirs to see.
-  const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+  c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: only(at.mechanical), location: all }));
   const person = async (company: Pick<Company, "caller">, participant: string, positions: string[], name: string): Promise<Person> => {
     const m = await memberOnProject(api, company, participant, positions, { name });
@@ -98,6 +107,8 @@ beforeAll(async () => {
   c1Engineer = await person(c1, at.c1ParticipantId, ["engineer"], "Hadi Engineer C1");
   c1Pm = await person(c1, at.c1ParticipantId, ["project_manager"], "Rami Manager C1");
   k1Manager = await person(k1, at.k1ParticipantId!, ["manager"], "Sami Manager K1");
+  // K1's engineer sees C1's item but never acts on it.
+  k1Engineer = await person(k1, at.k1ParticipantId!, ["engineer"], "Basel Engineer K1");
   owPm = await person(ow, owParticipant, ["project_manager"], "Nora Manager OW");
   c2Engineer = await person(c2, c2Participant, ["engineer"], "Omar Engineer C2");
 
@@ -181,6 +192,92 @@ describe("scenario RP-1139-4: C2 on C1's item, and no response carries another C
       [owPm, [c1Engineer, c1Pm, k1Manager, c2Engineer]],
     ] as const) {
       for (const by of hiddenFrom) expect(await idsIn(target.id)(by.caller), `${by.name} reads ${target.name}'s id`).toEqual([]); // not hidden-from: these reads give no Member id to anyone, so none can be the control; seam 2's tests prove the ids with one
+    }
+  });
+});
+
+describe("scenario RP-1139-5: the Project's reads answer without the creator, setter and inviter columns, and carry no other Company's Member id", () => {
+  const projectReads = () => [
+    `/v1/projects/${at.projectId}`,
+    `/v1/projects/${at.projectId}/participants`,
+    `/v1/projects/${at.projectId}/numbering`,
+    `/v1/projects/${at.projectId}/activity`,
+    `/v1/work-items/${id}`,
+  ];
+
+  it("answers each read, for C1 and for the Companies C1's AP invited", async () => {
+    for (const by of [c1Ap, c1Engineer, k1Manager, k1Engineer, owPm])
+      for (const url of projectReads()) {
+        // C1's AP holds no Position on the Project, so the item isn't theirs to read: the Project's reads are.
+        if (by === c1Ap && url.startsWith("/v1/work-items/")) continue;
+        expect((await by.caller.get(url)).statusCode, `${by.name} reads ${url}`).toBe(200);
+      }
+  });
+
+  it("gives K1, the Owner and C2 neither C1's AP's id (the Project's creator, the inviter) nor C1's engineer's (the raiser)", async () => {
+    const bodies = async (by: Caller) => (await Promise.all(projectReads().map((url) => by.get(url)))).map((r) => r.body).join("\n");
+    for (const target of [c1Ap, c1Engineer])
+      for (const by of [k1Manager, k1Engineer, owPm, c2Engineer])
+        expect((await bodies(by.caller)).includes(target.id), `${by.name} reads ${target.name}'s id`).toBe(false); // not hidden-from: these reads give no Member id to anyone, so none can be the control; seam 2's tests prove the columns refused
+  });
+});
+
+describe("scenario RP-1139-6: \"Items I'm on\" holds the raiser's item without the creator column", () => {
+  it("lists an item for its raiser who never acted on it; not for C1's AP, K1's engineer or C2", async () => {
+    // A raiser who never acted, as a Register import makes the assignee the raiser (the importer acts): C1's engineer
+    // starts and sends it, and C1's PM is made its raiser. Only the raiser rule puts it in the PM's "Items I'm on".
+    const answers = { model: "Panels", trade: at.electrical, location: at.buildingA };
+    const raised = (await ok(c1Engineer.caller.post(`/v1/projects/${at.projectId}/work-items`, { type: OWNER_TYPE, title: "Panels", answers }), 201)).json().id as string;
+    await take(c1Engineer.caller, raised, "send_for_review");
+    await sql`update work_item set created_by_member_id = ${c1Pm.id}::uuid where id = ${raised}::uuid`.execute(migrator);
+    const mine = async (by: Caller) => {
+      const res = await by.get(`/v1/projects/${at.projectId}/activity?${activityFeedSearchParams({ mine: true, limit: 100 })}`);
+      return res.statusCode === 200 ? (res.json() as ActivityFeed).entries.filter((e) => e.onItem).map((e) => ({ id: e.workItem.id })) : [];
+    };
+    await expectHiddenFrom({
+      read: mine,
+      target: raised,
+      seenBy: c1Pm.caller,
+      hiddenFrom: [c1Ap.caller, k1Engineer.caller, c2Engineer.caller],
+      name: named,
+      label: "the PM's raised item in Items I'm on",
+    });
+  });
+});
+
+describe("scenario RP-1139-7: the numbering pattern's setter is named to the setter's own Company only", () => {
+  it("names C1's AP to C1, and gives K1, the Owner and C2 no name", async () => {
+    const pattern = { segments: [{ kind: "project" }, { kind: "participant" }], countedBy: [0, 1], separator: "-", seqDigits: 4 };
+    await ok(c1Ap.caller.request("PUT", `/v1/projects/${at.projectId}/numbering`, { workItemTypeId: null, sharedCounterAccepted: false, pattern }));
+    const setters = async (by: Caller) => {
+      const res = await by.get(`/v1/projects/${at.projectId}/numbering`);
+      return res.statusCode === 200 ? (res.json() as NumberingSettings).versions.flatMap((v) => (v.savedBy.member ? [{ id: v.savedBy.member.en }] : [])) : [];
+    };
+    await expectHiddenFrom({
+      read: setters,
+      target: c1Ap.name,
+      seenBy: [c1Ap.caller, c1Engineer.caller],
+      hiddenFrom: [k1Manager.caller, k1Engineer.caller, owPm.caller, c2Engineer.caller],
+      name: named,
+      label: "C1's AP as the pattern's setter",
+    });
+  });
+});
+
+// Last: it withdraws C2 from the Project.
+describe("scenario RP-1139-8: a withdrawn Participant's withdrawer is no one's id to read", () => {
+  it("after C1's AP withdraws C2, no read of K1 or the Owner carries the withdrawer's id", async () => {
+    await ok(c1Ap.caller.post(`/v1/participants/${c2Participant}/withdraw`));
+    // The withdrawer is set (the table owner's read), so the searches below look for a real id.
+    const withdrawer = (await sql<{ id: string }>`select withdrawn_by_member_id as id from participant where id = ${c2Participant}::uuid`.execute(migrator)).rows;
+    expect(withdrawer).toEqual([{ id: c1Ap.id }]);
+    // The Participants page still answers C1's AP, with K1 on it (a withdrawn Participant is left off it).
+    const listed = (await ok(c1Ap.caller.get(`/v1/projects/${at.projectId}/participants`), 200)).body;
+    expect(listed.includes(at.k1ParticipantId!)).toBe(true);
+    const reads = [`/v1/projects/${at.projectId}`, `/v1/projects/${at.projectId}/participants`, `/v1/projects/${at.projectId}/activity`];
+    for (const by of [k1Manager, k1Engineer, owPm]) {
+      const bodies = (await Promise.all(reads.map((url) => by.caller.get(url)))).map((r) => r.body).join("\n");
+      expect(bodies.includes(c1Ap.id), `${by.name} reads the withdrawer's id`).toBe(false); // not hidden-from: no api read gives the withdrawer's id to anyone, so none can be the control; seam 2 proves the column refused
     }
   });
 });

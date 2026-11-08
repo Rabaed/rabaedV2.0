@@ -311,9 +311,11 @@ describe("reading the answers as another Company on the item", () => {
       await call(as, sql`select * from app.work_item_history(${a.itemId}::uuid)`),
       await call(
         as,
-        sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
+        sql`select id, project_id, work_item_type_id, raised_by_participant_id, title, workflow_version_id,
           form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
+      // The raiser Member is not the app role's (RP-1139 PR 2): app.my_created_work_items gives the caller's own.
+      await call(as, sql`select app.my_created_work_items(${a.projectId}::uuid) as id`),
       // Every column the app role reads: the hashes are not among them (RP-448 review), nor an event's
       // Transition and the Step it left, which app.event_transitions gives (RP-1140), nor the Step it reached,
       // which app.event_steps_reached gives (RP-1203), nor the Engineer (RP-1162), nor the actor Member,
