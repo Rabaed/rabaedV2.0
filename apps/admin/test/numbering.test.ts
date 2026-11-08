@@ -80,8 +80,7 @@ const actionsOn = (targetId: string) =>
     .selectFrom("admin_action")
     .select(["id", "engineer_id", "action", "target_kind", "reason", "before", "after"])
     .where("target_id", "=", targetId)
-    .orderBy("at")
-    .orderBy("id")
+    .orderBy("seq")
     .execute();
 
 describe("the Numbering Pattern from Rabaed Admin", () => {

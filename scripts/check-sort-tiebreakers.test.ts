@@ -17,6 +17,14 @@ describe("currentUntiedSorts", () => {
     expect(currentUntiedSorts(migrations)).toEqual([{ file: "20260103000000_c.sql", line: 1, function: "app.log", key: "created_at" }]);
   });
 
+  it("takes a seq as the tiebreaker, or as the whole sort (RP-1117)", () => {
+    const migrations = [
+      { name: "20260101000000_a.sql", sql: create("history", "select id from admin_action a order by a.seq") },
+      { name: "20260102000000_b.sql", sql: create("log", "select id from admin_action order by at desc, seq desc") },
+    ];
+    expect(currentUntiedSorts(migrations)).toEqual([]);
+  });
+
   it("brings back a fixed sort a later definition undoes", () => {
     const migrations = [
       { name: "20260101000000_a.sql", sql: create("events", "select id from admin_action order by at, id") },

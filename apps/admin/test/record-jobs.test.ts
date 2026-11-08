@@ -400,6 +400,15 @@ describe("a record's history", { timeout: SLOW_MS }, () => {
     await sql`delete from outbox where id = ${rows[0]!.id}::uuid`.execute(migrator);
   });
 
+  it("lists the requests in the order they were made, even when the database's clock stepped back (RP-1117)", async () => {
+    // The third request's time put before the first's, as a clock that stepped back would have written it.
+    await sql`
+      update admin_action set at = at - interval '1 day'
+      where action = 'reproduce_documental_record' and target_id = ${id}::uuid and reason = 'Third attempt'
+    `.execute(migrator);
+    expect((await history()).requests.map((r) => r.reason)).toEqual(["First attempt, the seal date bug", "Second attempt", "Third attempt"]);
+  });
+
   it("is nothing for an item with no Re-produce, and nothing is invented for an unknown item", async () => {
     const res = await engineer.browser.get(historyUrl("0198f5c0-0000-7000-8000-000000000000"));
     expect(res.statusCode, res.body).toBe(200);

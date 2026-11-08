@@ -70,7 +70,7 @@ const broken = (definition: WorkflowDefinition): WorkflowDefinition => ({
   transitions: definition.transitions.filter((t) => t.key !== "send_for_review"),
 });
 const actionsOn = (targetId: string) =>
-  adminDb.selectFrom("admin_action").select(["engineer_id", "action", "reason"]).where("target_id", "=", targetId).orderBy("at").orderBy("id").execute();
+  adminDb.selectFrom("admin_action").select(["engineer_id", "action", "reason"]).where("target_id", "=", targetId).orderBy("seq").execute();
 
 beforeAll(async () => {
   const existing = await sql<{ workflow_definition_id: string }>`
@@ -325,8 +325,7 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_outcome", "change_default_outcome", "reorder_default_outcomes"])
-      .orderBy("at")
-      .orderBy("id")
+      .orderBy("seq")
       .execute();
     expect(logged).toEqual([
       { action: "add_default_outcome", reason: "Add an outcome" },
@@ -369,8 +368,7 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .select(["action", "reason"])
       .where("engineer_id", "=", engineer.id)
       .where("action", "in", ["add_default_stage", "rename_default_stage", "reorder_default_stages"])
-      .orderBy("at")
-      .orderBy("id")
+      .orderBy("seq")
       .execute();
     expect(logged.map((l) => l.action)).toEqual(["add_default_stage", "rename_default_stage", "reorder_default_stages"]);
   });
@@ -485,9 +483,9 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
   /**
    * The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9),
-   * in no order. Each was its own transaction with its own `at`, and two written one after the other came back swapped
-   * under load (RP-1105; the database's clock, in Docker's VM, is the likely cause), so a test compares them as a set, the
-   * ones it made by id.
+   * in the order they were written. Each was its own transaction with its own `at`, and two written one after the other came
+   * back swapped under `(at, id)` (RP-1105; the database's clock, in Docker's VM, is the likely cause), so they are read by seq
+   * (RP-1117).
    */
   const refusedPublishes = () =>
     adminDb
@@ -495,6 +493,7 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
       .select(["id", "engineer_id", "reason", "after"])
       .where("target_id", "=", definitionId)
       .where("action", "=", "refuse_workflow_publish")
+      .orderBy("seq")
       .execute();
   /** The outcomes and Stages of the Version a new item of the Type on Project `projectId` starts on that the Project's own sets lack. */
   const outsideSets = async (db: Db, projectId: string) =>
@@ -537,13 +536,10 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     });
     // Each refusal is logged with the Engineer's reason, the count and the entries, and nothing else (V9).
     const refusals = (await refusedPublishes()).filter((r) => !earlierRefusals.has(r.id)).map(({ id: _id, ...r }) => r);
-    expect(refusals).toHaveLength(2);
-    expect(refusals).toEqual(
-      expect.arrayContaining([
-        { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
-        { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
-      ]),
-    );
+    expect(refusals).toEqual([
+      { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
+      { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
+    ]);
     expect(await outsideSets(migrator, existing.projectId)).toEqual([]);
 
     const added = await withMember(appDb, existing.memberId, (trx) =>
