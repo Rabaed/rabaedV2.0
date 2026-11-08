@@ -45,6 +45,8 @@ export type KanbanCardOwner =
   | { kind: "person"; name: string; initialsFrom?: string }
   /** My own Company's Step nobody has picked up yet: the Step and "Not picked up". */
   | { kind: "pool"; name: string }
+  /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›", never a Company. */
+  | { kind: "vacancy"; name: string }
   /** Another Company, by its name only. */
   | { kind: "company"; name: string; initialsFrom?: string };
 
@@ -121,12 +123,19 @@ export function TradeChip({ code, name, label }: { code: string; name: string; l
 }
 
 /** The mark of a Step Pool nobody has picked up yet: a dashed circle with a group of people. */
-export function PoolMark() {
+export function PoolMark({ icon = poolIcon }: { icon?: IconName }) {
   return (
     <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
-      <Icon name={poolIcon} size={13} />
+      <Icon name={icon} size={13} />
     </span>
   );
+}
+
+/** A Step nobody holds by name: a Step Pool's mark, or a Vacancy's (RP-952); else the person's or Company's avatar. */
+export function OwnerMark({ owner, solid }: { owner: KanbanCardOwner; solid?: boolean }) {
+  if (owner.kind === "pool") return <PoolMark />;
+  if (owner.kind === "vacancy") return <PoolMark icon={vacancyIcon} />;
+  return <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind} size="sm" solid={solid} decorative />;
 }
 
 const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
@@ -140,6 +149,8 @@ const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
 /** The mark of a Step not picked up: its Step Pool, as a group of people. */
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's own name, not a Member
 export const poolIcon: IconName = "users";
+/** A Vacancy: a Step waiting for a new Participant (RP-952). */
+export const vacancyIcon: IconName = "user-search";
 
 /**
  * One line of the card's text, cut with an ellipsis when it doesn't fit (RP-509; the owner chose a tooltip, so the
@@ -307,11 +318,7 @@ export function KanbanCard({
       <div className="mt-2.5 flex min-h-6 items-center gap-2 text-caption text-text-secondary">
         {owner && (
           <span className="flex min-w-0 items-center gap-2">
-            {owner.kind === "pool" ? (
-              <PoolMark />
-            ) : (
-              <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
-            )}
+            <OwnerMark owner={owner} />
             <CutText text={owner.name} cardLink={linkRef} className="text-sm" />
           </span>
         )}

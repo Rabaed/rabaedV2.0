@@ -218,6 +218,7 @@
       "with": "لدى",
       "withMe": "أنا",
       "notPickedUp": "لم تُستلَم",
+      "waitingFor": "بانتظار {role} الجديد",
       "anyNotPickedUp": "لم تُستلَم",
       "trade": "التخصص",
       "location": "الموقع",

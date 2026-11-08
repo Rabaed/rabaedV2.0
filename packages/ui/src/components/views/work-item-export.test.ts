@@ -25,6 +25,7 @@ const labels = {
   noNumber: "No number yet",
   revisionNoNumber: (r: string) => `Revision ${r}: no number yet`,
   notPickedUp: "Not picked up",
+  waitingFor: (role: string) => `Waiting for a new ${role}`,
   cancelled: "Cancelled",
   code: (c: string) => `Code ${c}`,
   revision: (n: string) => `R${n}`,
@@ -43,6 +44,14 @@ describe("Export (RP-409)", () => {
     expect(file.content).toBe(
       '﻿"Submittal No.","Title","Rev","With"\r\n"TWR-MAR-0003","Cable ""tray"", galvanised","R1","Design Consultants"\r\n',
     );
+  });
+
+  it("writes a Vacancy's With as the role it waits for, never a Company (RP-952)", () => {
+    const vacant: WorkItemRow = { ...row, with: null, vacancy: { projectRole: { baseRole: "consultant", name: b("Consultant", "الاستشاري") } } };
+    for (const locale of ["en", "ar"] as const) {
+      const file = exportFile([vacant], shownColumns(only("owner"), context(locale)), "csv", context(locale));
+      expect(file.content).toContain(locale === "en" ? '"Waiting for a new Consultant"' : '"Waiting for a new الاستشاري"');
+    }
   });
 
   it("never writes a hidden column in what you see; a date in the List's style, Latin digits in Arabic", () => {

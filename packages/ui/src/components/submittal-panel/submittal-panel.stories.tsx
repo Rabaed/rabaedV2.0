@@ -23,6 +23,7 @@ const copy = {
   previous: { en: "Previous submittal", ar: "التقديم السابق" },
   next: { en: "Next submittal", ar: "التقديم التالي" },
   close: { en: "Close", ar: "إغلاق" },
+  waitingForConsultant: { en: "Waiting for a new Consultant", ar: "بانتظار الاستشاري الجديد" },
   hint: { en: "Esc to close · ↑ ↓ to move through the list", ar: "Esc للإغلاق · ↑ ↓ للتنقل في القائمة" },
   with: { en: "With", ar: "لدى" },
   stepAge: { en: "Step Age", ar: "عمر الخطوة" },
@@ -62,7 +63,8 @@ const rows: Row[] = [
   { id: "r3", documentNumber: "TWR-TMC-ME-MAR-077", revisionNo: 0, title: "Fan coil units", heldBy: consultant, stepAgeWeeks: 5 },
 ];
 
-function PanelDemo({ context, start, startOpen = true }: { context: StoryContext; start: string; startOpen?: boolean }) {
+/** `vacant`: the first row's Step is a Vacancy (RP-952), with no holder. */
+function PanelDemo({ context, start, startOpen = true, vacant = false }: { context: StoryContext; start: string; startOpen?: boolean; vacant?: boolean }) {
   const locale = storyLocale(context);
   const [open, setOpen] = useState<string | null>(startOpen ? start : null);
   const ids = useSubmittalPanelIds();
@@ -109,7 +111,7 @@ function PanelDemo({ context, start, startOpen = true }: { context: StoryContext
             <SubmittalPanelFacts
               locale={locale}
               labels={factLabels(locale)}
-              with={submittalPanelWith(row.heldBy, locale)}
+              with={vacant && row.id === "r1" ? submittalPanelWith(null, locale, copy.waitingForConsultant[locale]) : submittalPanelWith(row.heldBy, locale)}
               stepAgeWeeks={row.stepAgeWeeks}
               place={locale === "ar" ? ["المنطقة A", "المبنى 1", "الطابق 3"] : ["Zone A", "Building 1", "Floor 3"]}
             />
@@ -187,6 +189,20 @@ export const AnotherCompanyHolds: Story = {
     await expect(holder.querySelector(".rounded-full, [role=img]")).toBeNull();
     await expect(panelOf(context).querySelector(".sdp-rev")).toBeNull();
     await expect(within(panelOf(context)).getByRole("button", { name: storyText(context, copy.previous) })).toBeDisabled();
+  },
+};
+
+/**
+ * Its Step is a Participant-level Vacancy (RP-952): the Consultant was withdrawn, so the With fact
+ * reads the role it waits for, with a pool's dashed mark, and never a Company.
+ */
+export const VacancyHolds: Story = {
+  render: (_args, context) => <PanelDemo context={context} start="r1" vacant />,
+  play: async (context) => {
+    const holder = factOf(context, "with");
+    await expect(holder.querySelector("dd")).toHaveTextContent(new RegExp(`^${storyText(context, copy.waitingForConsultant)}$`));
+    await expect(holder.querySelector(".border-dashed")).not.toBeNull();
+    await expect(holder).not.toHaveTextContent(storyText(context, { en: "Design Consultants LLC", ar: "ديزاين للاستشارات" }));
   },
 };
 
