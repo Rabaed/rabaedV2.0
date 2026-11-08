@@ -224,7 +224,8 @@ export function KanbanCard({
       data-hovered={hovered ? "" : undefined}
       data-open={open ? "" : undefined}
       className={cn(
-        "group/card relative flex flex-col rounded-md border bg-surface px-3 py-[11px] shadow-xs transition-[box-shadow,translate] duration-150",
+        // `isolate`: what is lifted above the card's link (a cut text, the Package chip, the actions) stays under the board's overlays.
+        "group/card relative isolate flex flex-col rounded-md border bg-surface px-3 py-[11px] shadow-xs transition-[box-shadow,translate] duration-150",
         "hover:-translate-y-px hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
         "data-hovered:-translate-y-px data-hovered:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
         approved ? "border-card-approved-border bg-card-approved-bg" : aged ? "border-card-aged-border" : "border-border",

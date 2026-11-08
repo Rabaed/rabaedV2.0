@@ -306,6 +306,8 @@ export const CutHolder: Story = {
     const c = card(context);
     const holder = within(c).getByText(text.longConsultant[locale]);
     await expect(holder).toHaveAttribute("dir", "auto");
+    // Lifted above the card's link only: the card is its own stacking context, so a board's filter panel still covers it.
+    await expect(getComputedStyle(c).isolation).toBe("isolate");
     await expectCutWithTooltip(holder, text.longConsultant[locale]);
     await expectCutWithTooltip(within(c).getByText(text.longContractor[locale]), text.longContractor[locale]);
     const link = within(c).getByRole("link", { name: text.drainage[locale] });
