@@ -120,9 +120,9 @@ defineCase("WF-02", async (t) => {
   t.check("Design Consultants is one part marked With Design Consultants LLC", /With Design Consultants LLC/.test(map), map.slice(0, 300));
   t.check("Ali's own Steps are shown one by one and no Consultant Step is named", /Contractor Engineer/.test(map) && /Contractor (PM|Project Manager)/.test(map) && !/Consultant Engineer|Consultant PM|Consultant Manager/.test(map), map.slice(0, 300));
   // The drawer's tabs are "Steps" (open first) and "Map" (RP-1188).
-  const listTab = dlg.getByRole("tab", { name: "Map" });
-  if ((await listTab.count()) > 0) {
-    await listTab.click();
+  const mapTab = dlg.getByRole("tab", { name: "Map" });
+  if ((await mapTab.count()) > 0) {
+    await mapTab.click();
     await settle(page, 500);
     await t.shot(page, "workflow-drawer-list");
     t.check("The list view shows the same parts", /With Design Consultants LLC/.test((await dlg.innerText()).replace(/\s+/g, " ")));

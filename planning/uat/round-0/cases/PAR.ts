@@ -57,7 +57,7 @@ defineCase("PAR-01", async (t) => {
     await page.goto(urlOf("/"), { waitUntil: "networkidle" });
     t.check("With the right password (the harness's demo session) sign-in opens Home", /\/en\/?$/.test(page.url()) && (await page.locator("body").innerText()).includes("Hafiz"), page.url());
     const cookies = await signed.cookies();
-    t.check("The session cookie belongs to the lane host, not 127.0.0.1", cookies.length > 0 && cookies.every((c) => c.domain.replace(/^\./, "") === new URL(webUrl).hostname), cookies.map((c) => c.domain).join(","));
+    t.check("The session cookie belongs to the lane host, not 127.0.0.1", cookies.length > 0 && new URL(webUrl).hostname !== "127.0.0.1" && cookies.every((c) => c.domain.replace(/^\./, "") === new URL(webUrl).hostname), cookies.map((c) => c.domain).join(","));
     const crew = await Crew.start();
     await page.getByRole("button", { name: /Hafiz Hamdan/ }).first().click();
     await page.getByRole("menuitem", { name: "Sign out" }).or(page.getByRole("button", { name: "Sign out" })).first().click();
