@@ -305,7 +305,8 @@ defineCase("VIS-59", async (t) => {
     await page.goto(`${webUrl}/en/work-items/${draft}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(700);
     await t.shot(page, "yousef-own-draft");
-    t.check("Yousef's own Draft page holds no name of the TMC item", leaksNames(await page.locator("body").innerText()).length === 0);
+    // The page lands on the List with the Submittal Panel (RP-1237); its Project header names the Host Company, which V15 allows.
+    t.check("Yousef's own Draft page holds no name of the TMC item", leaksNames((await page.locator("body").innerText()).replace("Host Company: TMC Constructions", "")).length === 0);
   } finally {
     await context.close();
   }

@@ -10,13 +10,13 @@ type Transition = { key: string; kind: string; from: string; to: string; [k: str
 type Definition = { steps: Step[]; transitions: Transition[]; [k: string]: unknown };
 type Builder = { workflow: { publishedVersions: number[]; published: { definition: Definition } | null; draft: { definition: Definition } | null } };
 type Copy = { id: string; name: { en: string }; versionNo: number | null; bound: boolean; hasDraft: boolean };
+type RabaedDefault = { id: string; name: { en: string }; isTypeDefault: boolean };
+type MarType = { id: string; code: string; workflow: { id: string }; rabaedDefaults: RabaedDefault[]; copies: Copy[] };
 
 export const variants = [
   { mode: "comment", name: "UAT FX-SB MAR Send Back (Comment only)" },
   { mode: "edit_form", name: "UAT FX-SB MAR Send Back (Edit the Form)" },
 ] as const;
-
-const MAR_DEFAULT = "01a164b3-8cf8-72a8-9622-f16fa9c926c1";
 
 function must<T>(reply: { status: number; body: unknown; text: string }, what: string): T {
   if (reply.status >= 400) throw new Error(`${what} answered ${reply.status}: ${reply.text.slice(0, 400)}`);
@@ -44,10 +44,18 @@ const withSendBack = (definition: Definition, mode: string): Definition => ({
 });
 
 async function settings(api: Api, projectId: string) {
-  const ws = must<{ types: { id: string; code: string; workflow: { id: string }; copies: Copy[] }[] }>(await api.get(`/projects/${projectId}/workflow-settings`), "workflow settings");
+  const ws = must<{ types: MarType[] }>(await api.get(`/projects/${projectId}/workflow-settings`), "workflow settings");
   const mar = ws.types.find((t) => t.code === "MAR");
   if (!mar) throw new Error("The Project has no MAR Type.");
   return mar;
+}
+
+// The MAR Workflow to copy: the Rabaed Default MAR runs by default, read from the Project's
+// settings, since its id changes on every seed.
+function marDefault(mar: MarType): string {
+  const found = mar.rabaedDefaults.find((d) => d.isTypeDefault);
+  if (!found) throw new Error(`MAR has no published Rabaed Default (rabaedDefaults: ${mar.rabaedDefaults.map((d) => d.name.en).join(", ") || "none"}).`);
+  return found.id;
 }
 
 export async function bindSendBack(api: Api, projectId: string, mode: "comment" | "edit_form"): Promise<void> {
@@ -67,7 +75,7 @@ export async function applySendBackWorkflows(): Promise<FixtureRecord> {
     let mar = await settings(api, projectId);
     let copy = mar.copies.find((c) => c.name.en === variant.name);
     if (!copy) {
-      const { id } = must<{ id: string }>(await api.post(`/workflows/${MAR_DEFAULT}/duplicate`, { projectId, name: { en: variant.name, ar: variant.name } }), "duplicate MAR");
+      const { id } = must<{ id: string }>(await api.post(`/workflows/${marDefault(mar)}/duplicate`, { projectId, name: { en: variant.name, ar: variant.name } }), "duplicate MAR");
       mar = await settings(api, projectId);
       copy = mar.copies.find((c) => c.id === id)!;
       done.push(`copied MAR as "${variant.name}"`);

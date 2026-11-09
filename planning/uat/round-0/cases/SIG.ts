@@ -82,8 +82,11 @@ defineCase("SIG-01", async (t) => {
   const history = (await ali.get(`/work-items/${id}/history`)).body as { events: { type: string; at: string; by: { companyName: { en: string }; memberName: { en: string } } | null; transition: { en: string } | null }[] };
   const submit = history.events.find((e) => e.transition?.en === "Submit");
   c.check("after the confirm the history records who, from which Participant and when", !!submit && submit.by?.memberName.en === "Ali Sonour" && submit.by.companyName.en === "TMC Constructions" && !Number.isNaN(Date.parse(submit.at)), JSON.stringify(submit?.by));
+  // Reload: the panel refreshes after the confirm, which a dev server can be slow to do.
+  await page.reload({ waitUntil: "networkidle" });
   const text = (await page.getByRole("main").innerText()).replace(/\s+/g, " ");
-  c.check("the item page shows the entry with Ali Sonour and TMC Constructions", /Submit/.test(text) && /Ali Sonour · TMC Constructions/.test(text));
+  // The entry carries Ali's Positions between his name and the Company ("Ali Sonour · Project Manager · TMC Constructions").
+  c.check("the item page shows the entry with Ali Sonour and TMC Constructions", /Submit/.test(text) && /Ali Sonour · (?:[^·]+ · )?TMC Constructions/.test(text));
   await t.shot(page, "history-after-confirm");
   // The api without confirmed true is refused.
   const id2 = await makeMar(hafiz, ctx, `UAT SIG-01 not confirmed ${stamp()}`);
@@ -147,7 +150,7 @@ defineCase("SIG-03", async (t) => {
   const num = /TWR-MAR-01-\d{4}/.exec(text)?.[0];
   const hist = (await team.ali.get(`/work-items/${id}/history`)).body as { events: { type: string; at: string }[] };
   c.check("title block: Type name and code, Subject, Project, Document Number", /Material Approval Request/.test(text) && /\bMAR\b/.test(text) && text.includes(title) && /Riyadh Gate Tower/.test(text) && !!num, num);
-  c.check("the outcome with its date", /Approved/.test(text) && /\bA\b/.test(text) && /Oct 22, 2026|Oct 2\d, 2026/.test(text));
+  c.check("the outcome with its date", /Approved/.test(text) && /\bA\b/.test(text) && text.includes(new Date(hist.events.filter((e) => e.type === "transition").at(-1)!.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Riyadh" })));
   const code = /\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/.exec(pages[0]!)?.[0];
   c.check("the Verification Code and the verification link", !!code && /\/verify\/[A-Za-z0-9_-]+/.test(text), String(code));
   for (const label of ["Prepared", "Submit", "Send to Manager", "Approve"]) c.check(`the approval flow lists ${label}`, text.includes(label));
@@ -338,7 +341,7 @@ defineCase("SIG-08", async (t) => {
   for (const [item, ok] of [
     ["1 Companies and logos (both Companies by name)", p1.includes("TMC Constructions") && p1.includes("Design Consultants LLC")],
     ["2 title block (Type, Subject, Document Number)", /Material Approval Request/.test(p1) && /Subject/.test(p1) && /TWR-MAR-01-\d{4}/.test(p1)],
-    ["3 parties and Project", /Parties/.test(p1) && /Riyadh Gate Tower/.test(p1)],
+    ["3 Participants and Project", /Participants/.test(p1) && /Riyadh Gate Tower/.test(p1)],
     ["4 classification (Trade, Location)", /Classification/.test(p1) && /Electrical Works/.test(p1) && /Tower 2 Floor 01/.test(p1)],
     ["5 final decision chips A B C D", /Final decision/.test(p1) && /A\s+B\s+C\s+D/.test(p1)],
     ["6 verification code and link (QR)", /\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/.test(p1) && /verify\//.test(p1)],

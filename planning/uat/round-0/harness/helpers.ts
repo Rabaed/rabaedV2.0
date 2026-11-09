@@ -167,11 +167,13 @@ export async function itemSubject(page: Page): Promise<string> {
  */
 export async function takeTransition(page: Page, name: string | RegExp, options: { note?: string; fill?: (dialog: Locator) => Promise<void> } = {}): Promise<void> {
   await page.getByRole("main").getByRole("button", { name, exact: typeof name === "string" }).first().click();
-  const dialog = page.getByRole("dialog");
+  // The pop-up, not the Submittal Panel (RP-1237) the item opens in: both are dialogs.
+  const dialog = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
   await dialog.waitFor({ state: "visible" });
   if (options.note) await dialog.getByRole("textbox").first().fill(options.note);
   if (options.fill) await options.fill(dialog);
-  await dialog.getByRole("button", { name, exact: typeof name === "string" }).click();
+  // The confirm button is the pop-up's last; a Transition named Cancel shares its name with the close icon and the footer's Cancel.
+  await dialog.getByRole("button", { name, exact: typeof name === "string" }).last().click();
   await dialog.waitFor({ state: "hidden" });
   await settle(page, 600);
 }

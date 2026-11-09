@@ -121,8 +121,13 @@ defineCase("J7", async (t) => {
   saveState({ tradeA: (tradeA.body as any).id, tradeB: (tradeB.body as any).id });
   const dims = (await saeed.get(`/projects/${projectId}/dimensions`)).body as any;
   t.check("[PAR-05] Names read in English and Arabic; the Locations nest Zone > Building > Floor", dims.trade.every((x: any) => x.name.en && x.name.ar) && dims.location.map((x: any) => x.depth).sort().join() === "1,2,3", JSON.stringify(dims.location.map((x: any) => x.depth)));
-  const tl = await lookClosed(t, "saeed", `/projects/${projectId}/settings/trades-locations`, "2-trades-locations");
-  t.check("[PAR-05] Hand-over 2: the Trades and Locations page shows what Saeed added", tl.text.includes(`UAT J7 Trade A ${tag}`) && tl.text.includes(`UAT J7 Zone ${tag}`), tl.text.slice(0, 160));
+  // The page has a Trades tab and a Locations tab; only the open tab's tree is rendered.
+  const tl = await look(t, "saeed", `/projects/${projectId}/settings/trades-locations`, "2-trades-locations");
+  await tl.page.getByRole("main").getByRole("tab", { name: /^Locations/ }).click();
+  await settle(tl.page, 400);
+  const locs = (await tl.page.getByRole("main").getByRole("tree", { name: "Locations" }).innerText()).replace(/\s+/g, " ");
+  await tl.close();
+  t.check("[PAR-05] Hand-over 2: the Trades and Locations page shows what Saeed added", tl.text.includes(`UAT J7 Trade A ${tag}`) && locs.includes(`UAT J7 Zone ${tag}`), `${tl.text.slice(0, 120)} | ${locs.slice(0, 120)}`);
 
   // 3. Saeed invites Beta Build by CR number.
   const inv = await saeed.post(`/projects/${projectId}/participants`, { crNumber: "9999000002", role: "contractor" });
