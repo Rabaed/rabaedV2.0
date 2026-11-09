@@ -133,14 +133,14 @@ describe("a Submittal Rabaed cancels at its raiser's withdrawal, on a Workflow w
     expect(rows.stages.find((s) => s.key === "cancelled")?.count).toBe(1);
     expect(rows.stages.find((s) => s.key === oldStage)?.count ?? 0).toBe(0);
     // Open work: the Step Age filter (every open item with a Step Age) and Home's "waiting with others".
-    expect((await list(k1Engineer, projectId, "submittals", { stepAgeMin: 1 })).items.map((r) => r.id)).not.toContain(item);
-    expect((await list(k1Manager, projectId, "submittals", { heldBy: "others" })).items.map((r) => r.id)).not.toContain(item);
+    expect((await list(k1Engineer, projectId, "submittals", { stepAgeMin: 1 })).items.map((r) => r.id)).not.toContain(item); // not hidden-from: a filter of open work; the same reader reads the row unfiltered just above
+    expect((await list(k1Manager, projectId, "submittals", { heldBy: "others" })).items.map((r) => r.id)).not.toContain(item); // not hidden-from: a filter of open work; K1 reads the row unfiltered (detail test)
   });
 
   it("the Kanban: in the Cancelled column, not its last Step's", async () => {
     const b = await board(k1Engineer, projectId, "submittals");
     expect(cardsIn(b, "cancelled")).toContain(item);
-    expect(cardsIn(b, oldStage)).not.toContain(item);
+    expect(cardsIn(b, oldStage)).not.toContain(item); // not hidden-from: which column it sits in; the same board shows it in Cancelled just above
   });
 
   it("the shared download reads it in the Cancelled Stage", async () => {
@@ -149,8 +149,8 @@ describe("a Submittal Rabaed cancels at its raiser's withdrawal, on a Workflow w
   });
 
   it("is no open work: gone from the holder's Need My Action", async () => {
-    expect((await home(k1Engineer)).needsMyAction.map((w) => w.id)).not.toContain(item);
-    expect((await list(k1Engineer, projectId, "submittals", { needMyAction: true })).items.map((r) => r.id)).not.toContain(item);
+    expect((await home(k1Engineer)).needsMyAction.map((w) => w.id)).not.toContain(item); // not hidden-from: Need My Action; the beforeAll read it there before the cancel
+    expect((await list(k1Engineer, projectId, "submittals", { needMyAction: true })).items.map((r) => r.id)).not.toContain(item); // not hidden-from: Need My Action; the beforeAll read it there before the cancel
   });
 });
 
@@ -230,7 +230,7 @@ describe("a Snag Rabaed cancels at its raiser's withdrawal: the Snag List has a 
       name: nameOf,
       label: "the Cancelled column",
     });
-    expect((await list(at.c1Pm, at.projectId, "snag_list", { stepAgeMin: 1 })).items.map((r) => r.id)).not.toContain(snag);
+    expect((await list(at.c1Pm, at.projectId, "snag_list", { stepAgeMin: 1 })).items.map((r) => r.id)).not.toContain(snag); // not hidden-from: a filter of open work; the C1 PM reads it in the Cancelled column just above
   });
 
   it("the Project Admin can't delete the Module's last Cancelled Stage, but may delete one of two", async () => {
