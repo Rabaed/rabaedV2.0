@@ -274,6 +274,30 @@ export const Wide: Story = {
   },
 };
 
+const cancelledStage = { key: "cancelled", name: b("Cancelled", "ملغى"), category: "cancelled" as const };
+
+/**
+ * RP-1263 (RP-952 Q4 (a)): an item Rabaed cancelled at its raiser's withdrawal reads Cancelled, from its
+ * outcome, though it stopped at a Step weeks ago: its Status is the Cancelled Stage, its Step Age is
+ * empty (it no longer ages), and it is with nobody.
+ */
+export const CancelledRow: Story = {
+  args: {
+    list: {
+      ...list,
+      stages: [...list.stages, { ...cancelledStage, count: 1 }],
+      items: [row(8, { title: "Cable glands", stage: cancelledStage, outcome: "cancelled", stepAgeWeeks: 3 })],
+      columnLayout: listColumns(null).map((c) => ({ ...c, shown: true })),
+    },
+  },
+  play: async (context) => {
+    await expect(cellOf(context, "Cable glands", b("Status", "الحالة"))).toHaveTextContent(storyText(context, cancelledStage.name));
+    await expect(cellOf(context, "Cable glands", b("Step Age", "عمر الخطوة"))).toHaveTextContent("—");
+    await expect(cellOf(context, "Cable glands", b("Step Age", "عمر الخطوة")).querySelector("[role=img]")).toBeNull();
+    await expect(cellOf(context, "Cable glands", copy.withColumn)).toHaveTextContent("—");
+  },
+};
+
 /**
  * Created is the Creation Date on my own Company's items, else the Submission
  * Date; a Draft with no number has neither. Latin digits in Arabic too.

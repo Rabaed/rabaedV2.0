@@ -326,14 +326,15 @@ describe("scenario RP-952-1: C1's Project Admin withdraws C2, which has an item 
     expect(seen!.stage_key).toBe("cancelled");
   });
 
-  // Pinned as built, an open question for the owner (RP-952 PR 1): a Version with no Cancelled Step leaves the item
-  // Cancelled at the Step it was at, so the List reads its Stage there. Whichever fix is picked changes this test.
-  it("leaves an item whose Version has no Cancelled Step Cancelled at the Step it was at", async () => {
+  // A Version with no Cancelled Step leaves the item at the Step it was at. The owner's answer (RP-952 Q4 (a),
+  // RP-1263): Cancelled is read from its outcome, so every reader reads it in its Module's Cancelled Stage, never at
+  // that Step.
+  it("leaves an item whose Version has no Cancelled Step at its Step, read Cancelled from its outcome (RP-1263)", async () => {
     const state = await itemState(noCancelStep);
     expect([state.outcome, state.closed_at !== null, await recordQueued(noCancelStep)]).toEqual(["cancelled", true, true]);
     expect((await migrator.query("select current_step_id from work_item where id = $1", [noCancelStep])).rows[0].current_step_id).toBe(noCancelStepAt);
-    const [seen] = await call<{ stage_key: string }>(k1.member, sql`select stage_key from app.step_as_seen(${noCancelStep}::uuid)`);
-    expect(seen!.stage_key).not.toBe("cancelled");
+    const [seen] = await call<{ step_id: string | null; stage_key: string }>(k1.member, sql`select step_id, stage_key from app.step_as_seen(${noCancelStep}::uuid)`);
+    expect(seen).toEqual({ step_id: null, stage_key: "cancelled" });
   });
 
   it("cancels the Draft and the Draft Revision with no Record, and nobody reads them", async () => {

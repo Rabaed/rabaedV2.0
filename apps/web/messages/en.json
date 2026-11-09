@@ -2732,7 +2732,8 @@
         "invalidStage": "That Stage is not valid.",
         "exists": "This Module already has a Stage with that key.",
         "invalidOrder": "The order could not be saved. Reload the page.",
-        "inUse": "A Step of one of this Project's Workflows uses this Stage."
+        "inUse": "A Step of one of this Project's Workflows uses this Stage.",
+        "lastCancelled": "Cancelled items show in this Stage. Add another Cancelled Stage before you delete this one."
       }
     },
     "outcomes": {
