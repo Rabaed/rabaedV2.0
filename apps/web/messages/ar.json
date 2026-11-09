@@ -1528,6 +1528,7 @@
       "reassignedByRabaed": "أعادت ربائد الإسناد من {from} إلى {to}",
       "assignedByRabaed": "أسندت ربائد الخطوة إلى {to}",
       "returnedToPoolByRabaed": "أعادت ربائد الخطوة إلى المجموعة",
+      "vacancyPassed": "نقلت ربائد الخطوة",
       "other": "تحديث",
       "numbered": "رقم المستند",
       "internalNote": "ملاحظة داخلية",
