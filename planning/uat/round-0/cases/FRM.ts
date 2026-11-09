@@ -271,7 +271,9 @@ defineCase("FRM-08", async (t) => {
   const popup = (await dlg.innerText()).replace(/\s+/g, " ");
   await t.shot(page, "ahmed-send-to-manager-popup");
   t.check("Ahmed's pop-up holds the verification, the Recommended Code and the Internal Note", /Sample checked/.test(popup) && /Matches specification/.test(popup) && /Verification note/.test(popup) && /Recommended Code/.test(popup) && /Internal Note/.test(popup), popup.slice(0, 300));
-  await dlg.getByRole("button", { name: "Cancel" }).click();
+  // The pop-up has two buttons named Cancel: the close icon in its header and the footer's; take the footer's.
+  await dlg.getByRole("button", { name: "Cancel" }).last().click();
+  await dlg.waitFor({ state: "hidden" });
   const ver = { sample_checked: true, matches_specification: false, verification_note: "UAT internal verification text" };
   await H.must(tm.api.ahmed!, id, "send_to_manager", { answers: ver, recommendedCode: "C", internalNote: "UAT FRM-08 internal" });
   await H.pickUp(tm.api.mohammed!, id);
@@ -284,7 +286,8 @@ defineCase("FRM-08", async (t) => {
   const code = (await md.innerText()).replace(/\s+/g, " ");
   await t.shot(mp, "mohammed-code-popup");
   t.check("Mohammed's Code pop-up holds the final verification and Remarks", /Final verification/.test(code) && /Remarks/.test(code), code.slice(0, 300));
-  await md.getByRole("button", { name: "Cancel" }).click();
+  await md.getByRole("button", { name: "Cancel" }).last().click();
+  await md.waitFor({ state: "hidden" });
   const consultant = await H.detail(tm.api.mohammed!, id);
   t.check("No Form field is editable by the Consultant", consultant.actions.saveAnswers === false);
   const { text } = await H.viewItem(t, "mohammed", id);

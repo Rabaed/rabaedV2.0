@@ -46,4 +46,4 @@ Locators are role and name, scoped to a region. Wait for a dialog to close befor
 
 ## Fixtures
 
-`FX-C2`, `FX-K1M`, `FX-OR`, `FX-SB` are applied through the api as the seeded people and are idempotent. `FX-OW` is manual (Rabaed Admin needs the Engineer's password and an emailed code). `FX-SB` makes two Project copies of the MAR Workflow; the Comment only copy is bound to MAR. For the Edit the Form one, call `bindSendBack(api, projectId, "edit_form")` from `fixtures-sb.ts` (and back to `"comment"`).
+`FX-C2`, `FX-K1M`, `FX-OR`, `FX-SB` are applied through the api as the seeded people and are idempotent. `FX-OW` is manual (Rabaed Admin needs the Engineer's password and an emailed code). `FX-SB` makes two Project copies of MAR's Rabaed Default Workflow, read from the Project's workflow settings (`isTypeDefault`), so it runs on any fresh seed (RP-1270); the Comment only copy is bound to MAR. For the Edit the Form one, call `bindSendBack(api, projectId, "edit_form")` from `fixtures-sb.ts` (and back to `"comment"`).
