@@ -1,6 +1,6 @@
 # Rabaed UAT test sheet: System UAT with Ahmed
 
-Built 2026-11-08. 262 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
+Built 2026-11-08. 263 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
 
 ## How to use this file
 
@@ -33,6 +33,7 @@ Riyadh Gate Tower – Phase 2. Trades: Electrical (EL), Mechanical (ME), Civil (
 | Faisal Al Otaibi | `faisal.alotaibi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative, Electrical, everywhere | Engineer (uses Arabic) | EL · all towers | The Arabic cases |
 | Noura Al Harbi | `noura.alharbi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Project Manager (uses Arabic) | EL · all towers | Holds the Owner's review; Arabic cases |
 | Hind Al Mutairi | `hind.almutairi@alwaha.demo.rabaed.test` | Al Waha PMC | Owner Representative | Authorized Person | Company profile | Al Waha's Company Profile and Members |
+| Tariq Al Shehri | `tariq.alshehri@gulfreview.demo.rabaed.test` | Gulf Review Consultants | A second Consultant, on UAT 03 only | Authorized Person | UAT 03 only, not here | PAR-17: Saeed withdraws his Company from UAT 03 (a demo person, not you) |
 | Rabaed Engineer | `engineer@rabaed.demo.rabaed.test` | Rabaed | Rabaed Admin | Rabaed Engineer | Rabaed Admin, UAT owner only | Rabaed Admin cases (ADM): the UAT owner runs these |
 
 ## 1. Sign in as Hafiz · open UAT 01 · Contractor Engineer (Hafiz) (58 cases)
@@ -679,8 +680,8 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals List: Export > what you see > CSV, then Excel.
-  2. Export the whole table.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals List: ⋯ More actions > Export > CSV (.csv) — visible columns, then Excel the same way.
+  2. Export the whole table: ⋯ More actions > Export — all columns.
   3. Search "Code" first, then export.
   4. Find the Draft "=1+1 SUB-24 Subject that looks like a formula" in the export.
 - **Expected result:** Rows and columns equal the screen; the whole table adds every List field; under a search only the rows read so far; the Draft's Subject "=1+1 SUB-24 Subject that looks like a formula" is written as text, never worked out as a formula. Nothing of Beta Build's is in any export.
@@ -1089,7 +1090,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
   2. Search Submittals for "Beta Build", UAT02-MAR-02-0001 and UAT02-MAR-02-0002.
 - **Expected result:** Ali sees TMC's people by name and Design Consultants by Company name only: no person of theirs, Pick up, Send to Manager, Internal Note, Recommended Code, answers_changed or Document upload (V5, V14). Nothing of Beta Build's appears in the feed, a List, a count or a search: not its Draft "Beta Build – standby generator, Draft", nor UAT02-MAR-02-0001 (with Beta Build's PM) or UAT02-MAR-02-0002 (Submitted) (V1, V3). No setup changes appear.
 
-## 3. Sign in as Saeed · open UAT 03 · Project Admin (Saeed) (24 cases)
+## 3. Sign in as Saeed · open UAT 03 · Project Admin (Saeed) (25 cases)
 
 Every case here is run in **UAT 03 · Project Admin (Saeed)**, as the one person named above: open it from Projects, not from Home.
 
@@ -1258,6 +1259,21 @@ Every case here is run in **UAT 03 · Project Admin (Saeed)**, as the one person
 - **Steps:**
   1. Projects > UAT 03 · Project Admin (Saeed) > Settings > Approved Supplier List: add a supplier for Mechanical Works; withdraw "Eastern Province Building Materials" (Civil Works).
 - **Expected result:** Entries show name, Trade, Scope and status; the withdrawn one stays listed as withdrawn. No source, person or time shows (V10). Only a Project Admin adds or withdraws.
+
+### PAR-17 Withdraw a Participant: counts only, then its Steps wait as Vacancies
+
+- **Key:** `RP-1265` · **Part:** PAR · **Round:** 0
+- **Sign in as:** Saeed (Project Admin)
+- **Once per Reset UAT:** what it does can't be undone, so it runs once after each Reset UAT.
+- **Start at:** https://rabaed-uat-web.vercel.app/en
+- **Steps:**
+  1. Projects > UAT 03 · Project Admin (Saeed): read the Participants card.
+  2. Withdraw on Gulf Review Consultants' row and read the confirmation.
+  3. Confirm.
+  4. Read the Vacancies card.
+  5. Open the Submittals List, the Kanban and UAT03-MAR-01-0002 "PAR-17 Exit signs – at the second Consultant", in English, then in Arabic.
+  6. Must-not-see, run by the harness as Hafiz (a TMC Member who is not a Project Admin): the same Project page.
+- **Expected result:** Withdraw shows on every Participant's row but TMC's own. The confirmation gives counts only, "0 items it raised will be Cancelled by Rabaed" and "2 Steps it holds will wait for a new Consultant"; it says the counts include items you may not see and that this can't be undone, and names no item. After Confirm, Gulf Review Consultants is under Withdrawn with its Withdrawn badge and the date, and no actions. The Vacancies card lists two Steps: UAT03-MAR-01-0002 "PAR-17 Exit signs – at the second Consultant" as a link with its number and Subject, and "An item at Consultant Engineer on UAT 03 · Project Admin (Saeed)" with no number, Subject or Company: Beta Build's UAT03-MAR-02-0001 is never named. Each shows Step Age dots only, never a date. The List row, the Kanban card and the item read "Waiting for a new Consultant" ("بانتظار الاستشاري الجديد") and name no Company. Hafiz sees no Withdraw button, no Withdrawn section and no Vacancies card. Gulf Review Consultants is on no other UAT Project and no other case uses it.
 
 ### INS-01 Checklist Templates: create, edit into Version 2, retire
 
@@ -1614,6 +1630,7 @@ Every case here is run in **UAT 06 · Consultant Authorized Person (Layla)**, as
 
 - **Key:** `RP-864` · **Part:** PAR · **Round:** 0
 - **Sign in as:** Layla (DCL Authorized Person)
+- **Once per Reset UAT:** what it does can't be undone, so it runs once after each Reset UAT.
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Participants > UAT 06 · Consultant Authorized Person (Layla): add Mohammed, who is on every other UAT Project but not this one, with Position Manager.
@@ -1676,6 +1693,7 @@ Every case here is run in **UAT 07 · Owner Representative (Noura)**, as the one
 
 - **Key:** `RP-741` · **Part:** SUB · **Round:** 0
 - **Sign in as:** Noura (Al Waha PM)
+- **Once per Reset UAT:** what it does can't be undone, so it runs once after each Reset UAT.
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-DAR-01-0001 "SUB-21 Cable schedule – recommended Code A", which Hafiz raised, Ali Submitted and Mohammed recommended at Code A; it waits at your Owner's review, With you.
@@ -1740,6 +1758,7 @@ Every case here is run in **UAT 07 · Owner Representative (Noura)**, as the one
 
 - **Key:** `RP-807` · **Part:** VIS · **Round:** 0
 - **Sign in as:** Noura (Al Waha PM)
+- **Once per Reset UAT:** what it does can't be undone, so it runs once after each Reset UAT.
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 07 · Owner Representative (Noura) > Submittals: open UAT07-DAR-01-0002 "VIS-24 Lighting calculation – recommended Code B", waiting at your Owner's review.

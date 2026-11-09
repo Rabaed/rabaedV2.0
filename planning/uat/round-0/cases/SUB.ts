@@ -747,7 +747,7 @@ defineCase("SUB-23", async (t) => {
 });
 
 defineCase("SUB-24", async (t) => {
-  t.manual("Needs a person to open downloaded CSV and Excel files. Steps: as Ali, Submittals List > Export > what you see > CSV, then Excel; Export the whole table; search first, then export; put =1+1 in the Subject of a Draft and export. Expected: rows and columns equal the screen; the whole table adds every List field; under a search only the rows read so far; a formula-looking cell is written as text. (The export api, GET /v1/projects/:id/work-items/export, answers 200 with the same rows as the List; the files were not opened.)");
+  t.manual("Needs a person to open downloaded CSV and Excel files. Steps: as Ali, Submittals List > ⋯ More actions > Export > CSV (.csv) — visible columns, then Excel the same way; Export the whole table (⋯ More actions > Export — all columns); search first, then export; put =1+1 in the Subject of a Draft and export. Expected: rows and columns equal the screen; the whole table adds every List field; under a search only the rows read so far; a formula-looking cell is written as text. (The export api, GET /v1/projects/:id/work-items/export, answers 200 with the same rows as the List; the files were not opened.)");
 });
 
 defineCase("SUB-25", async (t) => {

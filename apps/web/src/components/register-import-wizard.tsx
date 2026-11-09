@@ -287,7 +287,7 @@ export function RegisterImportBody({ record, locale }: { record: RegisterImport;
                         <bdi>{header || "—"}</bdi>
                       </TableCell>
                       <TableCell aria-hidden className="text-muted">
-                        <Icon name="arrow-right" size={14} className="rtl:rotate-180" />
+                        <Icon name="arrow-right" size={14} />
                       </TableCell>
                       <TableCell className={cn(!field && "text-muted")}>{field ? fieldLabel(field) : t("review.notMapped")}</TableCell>
                     </TableRow>

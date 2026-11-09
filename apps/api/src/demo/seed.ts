@@ -242,6 +242,14 @@ export async function seedDemo(
     bi("Al Waha PMC", "الواحة لإدارة المشاريع"),
     authorizedPerson("waha-authorized-person", "hind.almutairi", bi("Hind Al Mutairi", "هند المطيري"), "ar"),
   );
+  // A second Consultant, on UAT 03 only (RP-1264): PAR-17 withdraws it there, so it is on no other Project and no
+  // other case uses it. Its Authorized Person is its one Member. CR 9999000005 is left for ADM-02's UAT Owner Co.
+  await onboard(
+    6,
+    "gulfreview",
+    bi("Gulf Review Consultants", "الخليج للمراجعة الاستشارية"),
+    authorizedPerson("grc-authorized-person", "tariq.alshehri", bi("Tariq Al Shehri", "طارق الشهري")),
+  );
 
   // TMC's Authorized Person may create Projects, and creates this one: TMC is its Project Admin.
   await tmc.caller("PATCH", `/v1/members/${tmc.authorizedPersonId}`, { canCreateProjects: true });
