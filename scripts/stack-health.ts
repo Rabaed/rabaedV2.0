@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { connect } from "node:net";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isValidLane, lanePorts } from "./lanes.ts";
 
@@ -174,6 +174,38 @@ export function keepShots(paths: readonly string[], { staging, round }: ShotFold
 export function dropShots(paths: readonly string[], { staging }: Pick<ShotFolders, "staging">): void {
   const files = paths.map((path) => pathInside(staging, path));
   for (const file of files) rmSync(file, { force: true });
+}
+
+/** A run's staging folder's name (`shotStaging` in the harness's case.ts): one per process. */
+const STAGING_NAME = /^rabaed-uat-shots-\d+$/;
+
+/**
+ * Removes a run's staging folder with anything left in it, when the run ends (RP-1266); quiet when there is none.
+ * Refuses a folder not named `rabaed-uat-shots-<pid>`, so a wrong path never deletes evidence/ or results/.
+ */
+export function removeShotStaging(staging: string): void {
+  if (!STAGING_NAME.test(basename(staging))) throw new Error(`${staging} is not a shot staging folder (rabaed-uat-shots-<pid>); nothing was removed.`);
+  rmSync(staging, { recursive: true, force: true });
+}
+
+/** Playwright's error for a page that navigated, or reloaded, while a script ran in it. */
+const RELOADED = /Execution context was destroyed/;
+
+/**
+ * Runs `read`, and runs it again when a page reload cut it short (RP-1268): under `next dev` a file change in the
+ * worktree reloads every open page. `between` runs before each retry (the harness waits for the page to load). Any
+ * other error is thrown at once; after `tries` the last reload error is thrown. Only for reads: a cut-off write may
+ * have reached the api already.
+ */
+export async function retryReloadedRead<T>(read: () => Promise<T>, { tries = 3, between = async () => {} }: { tries?: number; between?: () => Promise<void> } = {}): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      if (attempt >= tries || !RELOADED.test((error as Error)?.message ?? "")) throw error;
+      await between();
+    }
+  }
 }
 
 /**

@@ -4,7 +4,7 @@ import { createServer, type AddressInfo, type Server, type Socket } from "node:n
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { alertCommand, dropShots, keepShots, parseHealthArgs, runWhileUp, stackProblems, stagedShot, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
+import { alertCommand, dropShots, keepShots, parseHealthArgs, removeShotStaging, retryReloadedRead, runWhileUp, stackProblems, stagedShot, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
 
 // RP-1099: lane 7 sat at Exited (255) for over 2 hours after a Docker Desktop update, and the
 // UAT harness wrote Fail results against the dead stack.
@@ -330,6 +330,80 @@ describe("staged shots (RP-1161)", () => {
     expect(readFileSync(outsider, "utf8")).toBe("keep");
     expect(readFileSync(staged, "utf8")).toBe("new shot");
     expect(readFileSync(committed, "utf8")).toBe("committed shot");
+  });
+});
+
+describe("retryReloadedRead (RP-1268)", () => {
+  // Under `next dev` a file change in the worktree reloads every open page; an api read made from a page that
+  // reloads under it fails with Playwright's "Execution context was destroyed".
+  const destroyed = () => new Error("page.evaluate: Execution context was destroyed, most likely because of a navigation");
+
+  /** A read that fails with `failures` in turn, then answers "read". Counts its tries and the waits between them. */
+  function flaky(failures: Error[]) {
+    const log: string[] = [];
+    const read = async () => {
+      log.push("try");
+      const failure = failures.shift();
+      if (failure) throw failure;
+      return "read";
+    };
+    const between = async () => void log.push("wait");
+    return { read, between, log };
+  }
+
+  it("retries a read cut short by a reload, waiting for the page between tries, and returns what it read", async () => {
+    const { read, between, log } = flaky([destroyed(), destroyed()]);
+    expect(await retryReloadedRead(read, { between })).toBe("read");
+    expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
+  });
+
+  it("does not retry a different error", async () => {
+    const { read, between, log } = flaky([new Error("page.evaluate: TypeError: Failed to fetch")]);
+    await expect(retryReloadedRead(read, { between })).rejects.toThrow("Failed to fetch");
+    expect(log).toEqual(["try"]);
+  });
+
+  it("gives up after its tries and throws the last reload error", async () => {
+    const { read, between, log } = flaky([destroyed(), destroyed(), destroyed(), destroyed()]);
+    await expect(retryReloadedRead(read, { tries: 3, between })).rejects.toThrow("Execution context was destroyed");
+    expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
+  });
+});
+
+describe("removeShotStaging (RP-1266)", () => {
+  // RP-1161's staging folder outlived every run as an empty rabaed-uat-shots-<pid>/evidence/ in the OS temp folder.
+  const made: string[] = [];
+  afterEach(() => {
+    for (const f of made.splice(0)) rmSync(f, { recursive: true, force: true });
+  });
+
+  it("removes a run's staging folder with what is left in it", () => {
+    const parent = mkdtempSync(join(tmpdir(), "rp-1266-"));
+    made.push(parent);
+    const staging = join(parent, "rabaed-uat-shots-4242");
+    mkdirSync(join(staging, "evidence"), { recursive: true });
+    writeFileSync(join(staging, "evidence", "VIS-01-1-list.jpg"), "left over");
+    removeShotStaging(staging);
+    expect(existsSync(staging)).toBe(false);
+    expect(existsSync(parent)).toBe(true);
+  });
+
+  it("is quiet when the run took no shot, so there is no folder", () => {
+    const parent = mkdtempSync(join(tmpdir(), "rp-1266-"));
+    made.push(parent);
+    expect(() => removeShotStaging(join(parent, "rabaed-uat-shots-4242"))).not.toThrow();
+  });
+
+  it("refuses a folder that is not a staging folder, so a wrong path never deletes evidence/ or results/", () => {
+    const round = mkdtempSync(join(tmpdir(), "rp-1266-"));
+    made.push(round);
+    for (const name of ["evidence", "results", "rabaed-uat-shots-", "rabaed-uat-shots-12x"]) {
+      const folder = join(round, name);
+      mkdirSync(folder);
+      writeFileSync(join(folder, "keep.txt"), "keep");
+      expect(() => removeShotStaging(folder)).toThrow(/not a shot staging folder/);
+      expect(readFileSync(join(folder, "keep.txt"), "utf8")).toBe("keep");
+    }
   });
 });
 

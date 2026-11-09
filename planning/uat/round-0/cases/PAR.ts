@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineCase } from "../harness/case.ts";
 import { getBrowser, pageAs, root, sessionsDir, urlOf, webUrl } from "../harness/browser.ts";
-import { Api, type ApiReply } from "../harness/helpers.ts";
+import { Api } from "../harness/helpers.ts";
 import {
   Crew, emailOf, listAll, mailsWith, memberIdOf, memberVisibility, must, myParticipantId, pageIsNotFound, participantIdByName, participantVisibility, sameGrant, setMemberVisibility, setParticipantVisibility, sleep,
 } from "../harness/helpers-vis.ts";
@@ -492,42 +492,15 @@ const DATE = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b(?:Jan|Feb|M
 /** What a page part reads, its spaces folded: "" when it is not there. */
 const flat = async (part: import("playwright").Locator) => ((await part.first().innerText().catch(() => "")) ?? "").replace(/\s+/g, " ");
 /** The List row of the item with this Document Number, as `by` reads it; undefined when they don't see it. */
-/** The api, read as `person` from the Projects page: every read PAR-17 makes is a GET. */
-type Reader = { get(path: string): Promise<ApiReply> };
-/**
- * A reader of the api as `person`, from the Projects page. Api.as reads from a blank page a dev server can keep
- * reloading, which cuts every read short ("Execution context was destroyed"); a real page stays put.
- */
-async function readerAs(person: string): Promise<Reader> {
-  const { page } = await pageAs(person);
-  await page.goto(urlOf("/projects"), { waitUntil: "networkidle" });
-  return {
-    async get(path) {
-      const url = path.startsWith("/v1/") ? path : `/v1${path}`;
-      const reply = await page.evaluate(async (u) => {
-        const res = await fetch(`/api${u}`);
-        return { status: res.status, text: await res.text() };
-      }, url);
-      const parse = (): unknown => {
-        try {
-          return reply.text ? JSON.parse(reply.text) : null;
-        } catch {
-          return null;
-        }
-      };
-      return { status: reply.status, body: parse(), text: reply.text };
-    },
-  };
-}
-const itemByNumber = async (by: Reader, pid: string, number: string): Promise<any> =>
+const itemByNumber = async (by: Api, pid: string, number: string): Promise<any> =>
   (((await by.get(`/projects/${pid}/work-items?q=${number}`)).body as any)?.items as any[] | undefined)?.find((i) => i.documentNumber === number);
 /** The Company holding an item, as `by` reads it. */
-const holderOf = async (by: Reader, id: string): Promise<string | undefined> => ((await by.get(`/work-items/${id}`)).body as any)?.heldBy?.companyName?.en;
+const holderOf = async (by: Api, id: string): Promise<string | undefined> => ((await by.get(`/work-items/${id}`)).body as any)?.heldBy?.companyName?.en;
 
 defineCase("PAR-17", async (t) => {
-  const saeed = await readerAs("saeed");
-  const tariq = await readerAs("tariq");
-  const hafiz = await readerAs("hafiz");
+  const saeed = await Api.as("saeed");
+  const tariq = await Api.as("tariq");
+  const hafiz = await Api.as("hafiz");
   const project = (((await saeed.get("/projects")).body as any).projects as any[]).find((p) => p.code === "UAT03");
   if (!project) throw new Error("Saeed does not see UAT 03: seed the demo with the UAT Projects (pnpm demo).");
   const pid = project.id as string;
