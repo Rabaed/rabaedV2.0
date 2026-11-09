@@ -696,8 +696,12 @@ defineCase("J12", async (t) => {
   await confirm.waitFor({ state: "hidden", timeout: 30000 }).catch(() => undefined);
   await settle(ap, 1500);
   const numbered = [];
-  for (const id of ids) numbered.push(await H.detail(ali, id));
-  t.check("[PKG-05] One confirm Submits all three: each gets its own Document Number and reaches the Consultant Engineer Step", numbered.every((d) => /^TWR-MAR-\d\d-\d{4}$/.test(d.documentNumber ?? "") && d.step.key === "consultant_engineer"), JSON.stringify(numbered.map((d) => [d.documentNumber, d.step.key])));
+  // The Step is read as Ahmed: another Company's Step reaches no one outside it (V14, RP-1192).
+  for (const id of ids) numbered.push(await H.detail(ahmed, id));
+  t.check("[PKG-05] One confirm Submits all three: each gets its own Document Number and reaches the Consultant Engineer Step", numbered.every((d) => /^TWR-MAR-\d\d-\d{4}$/.test(d.documentNumber ?? "") && d.step?.key === "consultant_engineer"), JSON.stringify(numbered.map((d) => [d.documentNumber, d.step?.key])));
+  const aliReads = [];
+  for (const id of ids) aliReads.push(await H.detail(ali, id));
+  t.check("[PKG-05] Ali's own read shows no Step, and the item With Design Consultants LLC with no person named", aliReads.every((d) => d.step === null && d.heldBy?.companyName?.en === "Design Consultants LLC" && d.heldBy?.memberName === null), JSON.stringify(aliReads.map((d) => [d.step, d.heldBy?.companyName?.en, d.heldBy?.memberName])));
   t.check("[PKG-06] The Package is In Progress as soon as anything is Submitted", (await pkg(ali, packageId)).status === "in_progress");
 
   // 4. Design Consultants: one grouped notification and the items.
@@ -800,6 +804,9 @@ defineCase("J14", async (t) => {
   await t.shot(hp, "1-hafiz-phone-projects");
   const mar = await H.createItem(hafiz, tm, "MAR", `UAT J14 panel board photo ${tag}`, await H.marAnswers(tm));
   await c.show(t, hp, `/work-items/${mar}`);
+  // A Draft opens read-only in the Submittal Panel; its Form fields show after Edit (RP-1237).
+  await hp.locator("[data-submittal-panel]").getByRole("button", { name: "Edit", exact: true }).click();
+  await settle(hp, 800);
   const photoInput = hp.locator("#answer-sample_photo");
   await photoInput.setInputFiles({ name: "site-photo.jpg", mimeType: "image/jpeg", buffer: H.exifJpeg() });
   await hp.getByText(/Taken /).first().waitFor({ timeout: 15000 }).catch(() => undefined);

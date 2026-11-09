@@ -107,18 +107,20 @@ defineCase("WF-02", async (t) => {
   const id = await H.submittedMar(tm, `UAT WF-02 pinned ${H.stamp()}`);
   const d = await H.detail(tm.api.ali!, id);
   const before = (await tm.api.ali!.get(`/work-items/${id}/workflow`)).text;
-  const { page, text } = await H.viewItem(t, "ali", id);
-  t.check("The item page names the Workflow and its Version", new RegExp(`Workflow: .*Version ${d.workflow.versionNo}`).test(text), text.match(/Workflow:[^\n]*/)?.[0]);
+  const { page } = await H.viewItem(t, "ali", id);
   await page.getByRole("main").getByRole("button", { name: /View workflow/ }).first().click();
   const dlg = page.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await settle(page, 800);
   const map = (await dlg.innerText()).replace(/\s+/g, " ");
   await t.shot(page, "workflow-drawer-map");
+  // The Submittal Panel (RP-1237) names the Workflow and its Version in the drawer's header ("Workflow <name> · Version n").
+  t.check("The item page names the Workflow and its Version", map.includes(`${d.workflow.name.en} · Version ${d.workflow.versionNo}`), map.slice(0, 160));
   t.check("The drawer shows the Version the item is pinned to", new RegExp(`Version ${d.workflow.versionNo}`).test(map), map.slice(0, 200));
   t.check("Design Consultants is one part marked With Design Consultants LLC", /With Design Consultants LLC/.test(map), map.slice(0, 300));
   t.check("Ali's own Steps are shown one by one and no Consultant Step is named", /Contractor Engineer/.test(map) && /Contractor (PM|Project Manager)/.test(map) && !/Consultant Engineer|Consultant PM|Consultant Manager/.test(map), map.slice(0, 300));
-  const listTab = dlg.getByRole("tab", { name: /List/ }).or(dlg.getByRole("button", { name: /List/ })).first();
+  // The drawer's tabs are "Steps" (open first) and "Map" (RP-1188).
+  const listTab = dlg.getByRole("tab", { name: "Map" });
   if ((await listTab.count()) > 0) {
     await listTab.click();
     await settle(page, 500);
@@ -459,7 +461,7 @@ defineCase("WF-16", async (t) => {
   await go(page, `/work-items/${draft}`);
   await settle(page);
   await page.getByRole("main").getByRole("button", { name: "Cancel" }).first().click();
-  const dlg = page.getByRole("dialog");
+  const dlg = page.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
   await t.shot(page, "cancel-confirm");
   t.check("Cancel at the Draft asks for confirmation", (await dlg.innerText()).includes("Cancel"));
@@ -475,7 +477,7 @@ defineCase("WF-16", async (t) => {
   await go(ap, `/work-items/${second}`);
   await settle(ap);
   await ap.getByRole("main").getByRole("button", { name: "Cancel" }).first().click();
-  const dlg2 = ap.getByRole("dialog");
+  const dlg2 = ap.locator(POP_UP);
   await dlg2.waitFor({ state: "visible" });
   await dlg2.getByRole("button", { name: "Cancel" }).last().click();
   await dlg2.waitFor({ state: "hidden" });

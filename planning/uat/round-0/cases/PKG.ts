@@ -252,8 +252,11 @@ defineCase("PKG-05", async (t) => {
   await t.shot(page, "submit-confirm");
   await dlg.getByRole("button", { name: /^Submit Package/ }).click();
   await settle(page, 2000);
-  const done = await H.detail(ali!, good);
-  t.check("One confirm Submits the item and it gets its own Document Number", /^TWR-MAR-\d\d-\d{4}$/.test(done.documentNumber ?? "") && done.step.key === "consultant_engineer", `${done.documentNumber} ${done.step.key}`);
+  // The Step is read as Ahmed: another Company's Step reaches no one outside it (V14, RP-1192).
+  const done = await H.detail(tm.api.ahmed!, good);
+  t.check("One confirm Submits the item and it gets its own Document Number", /^TWR-MAR-\d\d-\d{4}$/.test(done.documentNumber ?? "") && done.step?.key === "consultant_engineer", `${done.documentNumber} ${done.step?.key}`);
+  const aliRead = await H.detail(ali!, good);
+  t.check("Ali's own read shows no Step, and the item With Design Consultants LLC with no person named", aliRead.step === null && aliRead.heldBy?.companyName?.en === "Design Consultants LLC" && aliRead.heldBy?.memberName === null, JSON.stringify([aliRead.step, aliRead.heldBy?.companyName?.en, aliRead.heldBy?.memberName]));
   t.note("Judged against RP-638/RP-974: a Draft not yet sent for review is 'cannot_submit' (it waits at a Step where Ali cannot Submit it); a Draft cannot hold a missing required field past Send for Review, so 'required field Supplier missing' does not arise at Submit Package.");
 });
 

@@ -187,11 +187,15 @@ defineCase("FRM-05", async (t) => {
   const d = await H.createItem(hafiz, tm, "MAR", `UAT FRM-05 form ${tag}`, await H.marAnswers(tm));
   await go(page, `/work-items/${d}`);
   await settle(page);
-  const box = page.getByRole("main").getByRole("combobox", { name: /Related submittals/ }).or(page.getByRole("main").getByLabel("Related submittals")).first();
+  // A Draft opens read-only in the Submittal Panel; its Form fields show after Edit (RP-1237). Nothing is saved here.
+  const panel = page.locator("[data-submittal-panel]");
+  await panel.getByRole("button", { name: "Edit", exact: true }).click();
+  await settle(page, 600);
+  const box = panel.getByRole("searchbox", { name: "Related submittals" });
   await box.fill("control panel");
   await settle(page, 1000);
   await t.shot(page, "related-submittals-search");
-  const listText = await page.getByRole("main").innerText();
+  const listText = await panel.getByRole("list", { name: "Search results" }).innerText();
   t.check("The Form's picker offers the same: no own Draft, internal or Beta Build item", /control panel/i.test(listText) && !listText.includes(`own draft ${tag}`) && !listText.includes(`beta ${tag}`));
   const detail = await H.detail(hafiz, d);
   const putBad = await hafiz.put(`/work-items/${d}/answers`, { answers: { ...detail.answers, related_submittals: [own] } });
@@ -208,8 +212,11 @@ defineCase("FRM-06", async (t) => {
   const { page } = await pageAs("hafiz", { phone: true });
   await go(page, `/work-items/${id}`);
   await settle(page);
+  // A Draft opens read-only in the Submittal Panel; its Form fields show after Edit (RP-1237).
+  await page.locator("[data-submittal-panel]").getByRole("button", { name: "Edit", exact: true }).click();
+  await settle(page, 600);
   // "Take photo" since RP-1179 (the owner's Screen Board), "Take a photo" before.
-  const take = page.getByRole("main").getByRole("button", { name: /Take (a )?photo/ });
+  const take = page.locator("[data-submittal-panel]").getByRole("button", { name: /Take (a )?photo/ });
   await take.scrollIntoViewIfNeeded();
   t.check("On a phone Take a photo is offered beside Upload", (await take.count()) > 0 && (await page.getByRole("main").locator("input[type=file]").count()) > 0);
   await t.shot(page, "phone-sample-photo");

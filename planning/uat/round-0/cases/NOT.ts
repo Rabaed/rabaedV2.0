@@ -45,7 +45,8 @@ async function restoreSettings(api: Api, before: Settings): Promise<void> {
 }
 
 async function bellCount(page: Page): Promise<number> {
-  const name = (await page.getByRole("link", { name: /^Notifications/ }).first().getAttribute("aria-label")) ?? "";
+  // The bell is a menu button (RP-1153): "Notifications" or "Notifications · N unread".
+  const name = (await page.getByTestId("notification-bell").getByRole("button", { name: /^Notifications/ }).getAttribute("aria-label")) ?? "";
   return Number(/(\d+)\s+unread/.exec(name)?.[1] ?? 0);
 }
 
@@ -69,18 +70,19 @@ defineCase("NOT-01", async (t) => {
   c.check("the bell badge counts the unread entries", badge > 0 && Math.abs(badge - api) <= 8, `badge ${badge}, api ${api} (others work on the lane at the same time)`);
   await t.shot(page, "home-with-bell-badge");
 
-  await go(page, "/notifications");
+  await go(page, "/notifications?show=all");
   await settle(page);
-  const row = page.getByRole("main").locator("li").filter({ hasText: title }).first();
+  const row = page.getByTestId("notification-list").getByRole("link").filter({ hasText: title }).first();
   const rowText = (await row.innerText()).replace(/\s+/g, " ");
   c.check("the entry reads 'Reached you at <Step>'", /Reached you at Contractor PM/.test(rowText), rowText);
   c.check("the entry shows the Document Number", /TWR-MAR-01-\d{4}/.test(rowText), rowText);
   await t.shot(page, "notifications-page");
-  await row.getByRole("link").first().click();
-  await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/);
+  await row.click();
+  // A Submittal opens in the Submittal Panel on the List (?open=<id>, RP-1237).
+  await page.waitForURL((u) => u.searchParams.get("open") === id || u.pathname.includes(id));
   c.check("opening the entry opens the item", page.url().includes(id), page.url());
 
-  await go(page, "/notifications");
+  await go(page, "/notifications?show=all");
   await settle(page);
   const before = await bellCount(page);
   await page.getByRole("button", { name: "Mark all as read" }).click();
@@ -120,9 +122,9 @@ defineCase("NOT-02", async (t) => {
   t.note(`Sara covers Mechanical only after fixture FX-K1M, so the Electrical MAR is not hers: she sees it ${saraSees}; her entries ${s.length}. The case text ("Ahmed and Sara, the pool") assumed both cover Electrical.`);
 
   const { page } = await pageAs("ahmed");
-  await go(page, "/notifications");
+  await go(page, "/notifications?show=all");
   await settle(page);
-  const row = page.getByRole("main").locator("li").filter({ hasText: title }).first();
+  const row = page.getByTestId("notification-list").getByRole("link").filter({ hasText: title }).first();
   const text = (await row.innerText()).replace(/\s+/g, " ");
   c.check("the text names no TMC person", !TMC_PEOPLE.some((n) => text.includes(n)), text);
   c.check("the text says Reached you at the Step", /Reached you at Consultant Engineer/.test(text), text);
@@ -163,7 +165,8 @@ defineCase("NOT-03", async (t) => {
   const { page } = await pageAs("ahmed");
   await page.goto(link!, { waitUntil: "networkidle" });
   await settle(page);
-  const h1 = (await page.getByRole("heading", { level: 1 }).first().innerText()).trim();
+  // The link opens the Submittal Panel over the List (RP-1237); its heading is the Subject.
+  const h1 = (await page.locator("[data-submittal-panel]").getByRole("heading", { level: 2 }).first().innerText()).trim();
   c.check("the link opens the item for Ahmed", h1 === title, h1);
   await t.shot(page, "item-from-email-link");
   c.check("Ali, who received it first (Contractor PM), has his own email", !!ali1?.length, ali1?.[0]?.subject);
@@ -349,9 +352,9 @@ defineCase("NOT-09", async (t) => {
   const tmcNotes = await Promise.all([hafiz, ali].map((a) => notificationsFor(a, id)));
   t.note(`Sent Back notices: Hafiz ${tmcNotes[0].filter((n) => n.kind === "sent_back").length}, Ali ${tmcNotes[1].filter((n) => n.kind === "sent_back").length}. The Send Back is at the Consultant Engineer Step (Ahmed), not Mohammed's Step: Mohammed has "Return to Engineer" only.`);
   const { page } = await pageAs("hafiz");
-  await go(page, "/notifications");
+  await go(page, "/notifications?show=all");
   await settle(page);
-  const row = page.getByRole("main").locator("li").filter({ hasText: title }).filter({ hasText: /Sent Back/ }).first();
+  const row = page.getByTestId("notification-list").getByRole("link").filter({ hasText: title }).filter({ hasText: /Sent Back/ }).first();
   const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ");
   c.check("the notice names Design Consultants LLC as a Company, no person", /Design Consultants LLC/.test(text) && !/Ahmed|Mohammed/.test(text), text);
   await t.shot(page, "hafiz-sent-back-notice");
@@ -385,9 +388,9 @@ defineCase("NOT-10", async (t) => {
     c.check("the email has Latin digits only", !ARABIC_INDIC.test(mail.subject + mail.text), mail.subject);
     c.check("the Document Number is isolated left to right in the email", /<bdi dir="ltr">TWR-MAR-01-\d{4}/.test(mail.html) && /\u2066TWR-MAR-01-\d{4}\u2069/.test(mail.subject), mail.subject);
     const { page } = await pageAs("faisal", { locale: "ar" });
-    await go(page, "/notifications", "ar");
+    await go(page, "/notifications?show=all", "ar");
     await settle(page);
-    const row = page.getByRole("main").locator("li").filter({ hasText: title }).first();
+    const row = page.getByTestId("notification-list").getByRole("link").filter({ hasText: title }).first();
     const text = (await row.innerText()).replace(/\s+/g, " ");
     c.check("the bell entry is Arabic with Latin digits", /[؀-ۿ]/.test(text) && !ARABIC_INDIC.test(text) && /TWR-MAR-01-\d{4}/.test(text), text);
     c.check("the page is right to left", (await page.evaluate(() => document.documentElement.dir)) === "rtl");

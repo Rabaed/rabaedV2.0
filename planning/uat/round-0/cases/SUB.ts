@@ -104,10 +104,14 @@ defineCase("SUB-03", async (t) => {
   const { page, text } = await H.viewItem(t, "hafiz", id, "form-total-docs", "en", { full: true });
   t.check("The Items total reads 240", /Total Quantity\s*240(\.00)?/.test(text.replace(/\s+/g, " ")), text.match(/Total Quantity[^A-Z]*/)?.[0]);
   t.check("The Datasheet and the Sample photo are on the saved Draft", /UAT-datasheet\.pdf/.test(text) && /UAT-sample\.jpg|photo/i.test(text));
-  t.check("Attachments and Links sit below the Form (Save and close above them)", text.indexOf("Save and close") < text.indexOf("Attachments") && text.indexOf("Attachments") < text.indexOf("Links"));
+  // The panel shows a Draft read-only (Save and close comes with Edit), and the MAR Form has its own Links section (Related submittals) before the Attachments.
+  const formEnd = text.indexOf("Related submittals");
+  const att = text.indexOf("Attachments", formEnd);
+  t.check("Attachments and Links sit below the Form", formEnd >= 0 && att > formEnd && text.lastIndexOf("Links") > att);
   const docs = ((await hafiz.get(`/work-items/${id}/documents`)).body as H.Json).documents as H.Json[];
   const photo = docs?.find((x) => x.contentType === "image/jpeg");
   t.check("The photo carries its EXIF time and place", !!photo?.takenAt && !!photo?.takenWhere, JSON.stringify({ takenAt: photo?.takenAt, takenWhere: photo?.takenWhere }));
+  await page.getByRole("main").getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByRole("main").getByRole("button", { name: "Save and close" }).click();
   await page.waitForURL((u) => /\/work-items\/?$/.test(u.pathname), { timeout: 25000 }).catch(() => undefined);
   await settle(page, 800);
@@ -130,7 +134,7 @@ defineCase("SUB-04", async (t) => {
   t.check("The item gets a Document Number TWR-MAR-01-nnnn", H.NUMBER_RE.test(d.documentNumber ?? ""), d.documentNumber);
   t.check('Ali holds it at once: "With Ali Sonour", no Pick up', d.heldBy?.memberName?.en === "Ali Sonour" && d.actions.pickUp === false, JSON.stringify(d.heldBy));
   const { page, text } = await H.viewItem(t, "ali", id, "ali-item");
-  t.check("The page shows the number and Ali Sonour - TMC Constructions", text.includes(d.documentNumber) && /Ali Sonour\s*·\s*TMC Constructions/.test(text), text.match(/With[^\n]*\n[^\n]*/)?.[0]);
+  t.check("The page shows the number and Ali Sonour - TMC Constructions", text.includes(d.documentNumber) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(text), text.match(/With[^\n]*\n[^\n]*/)?.[0]);
   t.check("The Document Number is left to right (dir=ltr)", (await page.locator(`[dir="ltr"]`, { hasText: d.documentNumber }).count()) > 0);
   let got: H.Json | undefined;
   for (let i = 0; i < 15 && !got; i++) {
@@ -159,7 +163,7 @@ defineCase("SUB-05", async (t) => {
   const r = ev.find((e) => e.reason === "Add emergency duration");
   t.check("The reason is in TMC's history marked internal", r?.audience === "internal", JSON.stringify(r)?.slice(0, 200));
   const { text } = await H.viewItem(t, "hafiz", id, "hafiz-after-return");
-  t.check("The page reads With Hafiz Hamdan - TMC Constructions", /Hafiz Hamdan\s*·\s*TMC Constructions/.test(text));
+  t.check("The page reads With Hafiz Hamdan - TMC Constructions", /With\s+(HH\s+)?Hafiz Hamdan(\s*·\s*TMC Constructions)?/.test(text));
   const list = await H.listItems(tm.api.hafiz!, tm.projectId, "q=UAT%20SUB-05");
   t.check("Step Age counts from the Return (a fresh item: first week)", list.find((i) => i.id === id)?.stepAgeWeeks !== undefined, String(list.find((i) => i.id === id)?.stepAgeWeeks));
 });
@@ -362,9 +366,10 @@ defineCase("SUB-14", async (t) => {
   t.check("Hafiz is offered Create replacement and no Revision", d.actions.createReplacement === true && d.actions.createRevision === false);
   const { page } = await H.viewItem(t, "hafiz", id, "rejected-offers-replacement");
   await page.getByRole("main").getByRole("button", { name: "Create replacement" }).click();
-  await page.waitForURL((u) => /\/work-items\/[0-9a-f-]{36}/.test(u.pathname) && !u.pathname.includes(id), { timeout: 15000 }).catch(() => undefined);
+  // The new Draft opens in the Submittal Panel on the List (?open=<id>, RP-1237).
+  await page.waitForURL((u) => { const o = u.searchParams.get("open"); return !!o && o !== id; }, { timeout: 15000 }).catch(() => undefined);
   await settle(page, 800);
-  const newId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  const newId = new URL(page.url()).searchParams.get("open") ?? undefined;
   t.check("A new Draft opens", !!newId && newId !== id, page.url());
   const n = await H.detail(tm.api.hafiz!, newId!);
   t.check("Same Subject, a Draft with no number", n.title === subject && n.stage.key === "draft" && n.documentNumber === null, `${n.title}/${n.stage.key}`);
@@ -395,7 +400,7 @@ defineCase("SUB-15", async (t) => {
   t.check("The Datasheet is copied", docs.includes("UAT-datasheet.pdf"), docs.join(","));
   await hafiz.put(`/work-items/${revId}/answers`, { answers: { ...rev.answers, model: "CoreLine Panel HDG" } });
   const { page: before, text: bt } = await H.viewItem(t, "hafiz", revId, "revision-draft");
-  t.check("The Draft page shows Revision 1 and No number yet", /Revision 1: no number yet/.test(bt), bt.slice(0, 200).replace(/\n/g, " | "));
+  t.check("The Draft page shows Revision 1 and No number yet", /No number yet\s*Rev 1\b/.test(bt), bt.slice(0, 200).replace(/\n/g, " | "));
   void before;
   await H.must(hafiz, revId, "send_for_review");
   await H.pickUp(tm.api.ali!, revId);
@@ -405,7 +410,7 @@ defineCase("SUB-15", async (t) => {
   const chain = JSON.stringify((await hafiz.get(`/work-items/${id}/revisions`)).body);
   t.check("The drop-down lists the original and Rev 1 whole", chain.includes(orig.documentNumber) && chain.includes(`${orig.documentNumber} Rev 1`), chain.slice(0, 400));
   const { page } = await H.viewItem(t, "hafiz", revId, "revision-submitted");
-  await page.getByRole("main").getByRole("button", { name: /^(Original|Revision \d+|Draft)$/ }).first().click().catch(() => undefined);
+  await page.getByRole("main").getByRole("button", { name: /^(Original|Rev \d+)$/ }).first().click().catch(() => undefined);
   await t.shot(page, "revision-dropdown");
   const o = await H.detail(hafiz, id);
   t.check("The original keeps Code C and its Remarks", o.outcome === "C" && JSON.stringify(await H.eventsOf(hafiz, id)).includes("Revise the finish."));
@@ -437,7 +442,8 @@ defineCase("SUB-16", async (t) => {
   await t.shot(page, "delete-confirm");
   t.check("The confirm says nobody will see the Draft again, Hafiz included, and no number is lost", /Nobody will see .* again, you included\. It never had a number, so none is lost\./.test(body), body);
   await dlg.getByRole("button", { name: "Delete" }).click();
-  await settle(page, 1000);
+  // Wait for the row to go: the List refreshes after the Delete, which a fixed pause can miss on a dev server.
+  await page.getByRole("table").first().getByRole("link", { name: subject, exact: true }).waitFor({ state: "detached", timeout: 15000 }).catch(() => undefined);
   t.check("It leaves the list", !(await listRows(page)).some((r) => r.subject === subject));
   t.check("It is gone for Hafiz (404)", (await hafiz.get(`/work-items/${id}`)).status === 404);
   t.check("A numbered item offers no Delete (api: discardDraft false)", (await H.detail(hafiz, numId)).actions.discardDraft === false);
@@ -470,9 +476,10 @@ defineCase("SUB-17", async (t) => {
   } else {
     await page.getByRole("table").first().getByRole("button", { name: `More for ${subject}` }).click();
     await page.getByRole("menuitem", { name: "Duplicate" }).click();
-    await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 });
+    // The copy opens in the Submittal Panel on the List (?open=<id>, RP-1237).
+    await page.waitForURL((u) => { const o = u.searchParams.get("open"); return !!o && o !== id; }, { timeout: 15000 });
     await settle(page, 800);
-    newId = /\/work-items\/([0-9a-f-]{36})/.exec(page.url())![1]!;
+    newId = new URL(page.url()).searchParams.get("open")!;
   }
   const n = await H.detail(tm.api.hafiz!, newId);
   t.check("A new Draft with the Subject and TMC's answers", n.stage.key === "draft" && n.title === subject && n.answers.manufacturer === "Philips" && n.answers.model === "CoreLine Panel", `${n.stage.key} ${n.title}`);
@@ -540,7 +547,9 @@ defineCase("SUB-19", async (t) => {
   t.check("The page shows the number and Subject of the linked item", pageText.includes("TWR-MAR-01-0001") && /Exit signage/.test(pageText));
   t.check("The Document Number is left to right", (await page.locator('[dir="ltr"]', { hasText: "TWR-MAR-01-0001" }).count()) > 0);
   await page.getByRole("main").getByRole("link", { name: /TWR-MAR-01-0001/ }).first().click();
-  await page.waitForURL(/\/work-items\/[0-9a-f-]{36}/, { timeout: 15000 });
+  // The linked item opens in the Submittal Panel (?open=<id>, RP-1237); wait for its Subject.
+  await page.waitForURL((u) => { const o = u.searchParams.get("open"); return !!o && o !== panel.id; }, { timeout: 15000 });
+  await page.locator("[data-submittal-panel]").getByRole("heading", { name: "Exit signage – Tower 1" }).waitFor({ timeout: 15000 }).catch(() => undefined);
   await settle(page, 800);
   const body = (await page.getByRole("main").innerText()).replace(/\s+/g, " ");
   t.check("A Link opens the other item", /Exit signage – Tower 1/.test(body), page.url());

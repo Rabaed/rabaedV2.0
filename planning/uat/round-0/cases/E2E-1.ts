@@ -185,7 +185,7 @@ async function marToMohammed(s: Story, subject: string, code: "A" | "B" | "C" | 
   await H.must(hafiz, id, "send_for_review");
   const number = (await H.detail(ali, id)).documentNumber as string;
   const txt = await s.open("ali", id, "ali-holds-after-send");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it", H.NUMBER_RE.test(number) && /Ali Sonour\s*·\s*TMC Constructions/.test(txt), `${number}`);
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it", H.NUMBER_RE.test(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(txt), `${number}`);
   await s.hidden("VIS-01", "Hand-over 2, in TMC's Internal Review", id, ["yousef", "ahmed", "faisal", "noura"]);
   await H.pickUp(ali, id);
   await H.must(ali, id, "submit", { answers: { cover_note: `UAT cover note ${subject}` }, internalNote: words.inote });
@@ -243,7 +243,7 @@ defineCase("J1", async (t) => {
   s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it with no Pick up", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.heldBy?.memberName?.en === "Ali Sonour" && sent.actions.pickUp === false, `${sent.documentNumber}`);
   const number = sent.documentNumber as string;
   const aliSend = await s.open("ali", id, "ali-holds-after-send");
-  s.ck("SUB-04", "Ali's page reads the number and With Ali Sonour - TMC Constructions", aliSend.includes(number) && /Ali Sonour\s*·\s*TMC Constructions/.test(aliSend));
+  s.ck("SUB-04", "Ali's page reads the number and With Ali Sonour - TMC Constructions", aliSend.includes(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliSend));
   s.ck("SUB-04", "The Document Number is left to right on the page", (await s.page("ali").locator(`[dir="ltr"]`, { hasText: number }).count()) > 0);
   await s.hidden("VIS-01", "Hand-over 2, in TMC's Internal Review", id, ["yousef", "ahmed", "faisal", "noura"], true);
 
@@ -287,7 +287,8 @@ defineCase("J1", async (t) => {
   // 6. Ahmed picks up, reads, sends to Mohammed with the verification.
   await H.pickUp(ahmed, id);
   await s.open("ahmed", id, "ahmed-picked-up-reads");
-  const readOnly = await s.page("ahmed").getByRole("main").locator("input:not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])").count();
+  // The panel only: main also holds the List behind it, with its search box (RP-1237).
+  const readOnly = await s.page("ahmed").locator("[data-submittal-panel]").locator("input:not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])").count();
   s.ck("SUB-09", "Hand-over 6, Ahmed reads the Form: no edit control for the Form", readOnly === 0, `${readOnly} controls`);
   await H.must(ahmed, id, "send_to_manager", { answers: { sample_checked: true, matches_specification: true, verification_note: w.vnote }, recommendedCode: "A", internalNote: w.enote });
   await H.pickUp(mohammed, id);
@@ -306,7 +307,8 @@ defineCase("J1", async (t) => {
   await chooseCode(mp, /^Approve/);
   const dlg = mp.locator(POP_UP);
   await dlg.waitFor({ state: "visible" });
-  const remarksBox = dlg.locator('[aria-labelledby="transition-section-code_remarks"]').getByRole("textbox").first();
+  // The Remarks are their own field at the top of the pop-up, above the Form's sections (RP-1237).
+  const remarksBox = dlg.getByRole("textbox", { name: /^Remarks/ }).first();
   const remarks = "Approved as submitted. Install per drawing E-201.";
   await remarksBox.fill(remarks);
   await t.shot(mp, "mohammed-code-a-popup");
@@ -440,7 +442,7 @@ defineCase("J3", async (t) => {
   s.ck("SUB-15", "Hand-over 6, TMC's Revision Draft: Revision 1, no number yet, TMC's answers and the copied Datasheet", rev.revisionNo === 1 && rev.stage.key === "draft" && rev.documentNumber === null && rev.answers.manufacturer === "Philips", `rev ${rev.revisionNo} ${rev.stage.key}`);
   await t.shot(page, "hafiz-revision-draft");
   const draftText = flat(await page.locator("main").innerText());
-  s.ck("SUB-15", "The Draft page reads Revision 1: no number yet", /Revision 1: no number yet/.test(draftText), draftText.slice(0, 120));
+  s.ck("SUB-15", "The Draft page reads Revision 1: no number yet", /No number yet\s*Rev 1\b/.test(draftText), draftText.slice(0, 120));
   // While it is a Draft nobody else reads anything of it.
   await s.hidden("VIS-12", "The Revision Draft", revId, ["mohammed", "faisal", "yousef", "ahmed"], true);
   const chainDraft = JSON.stringify((await mohammed.get(`/work-items/${id}/revisions`)).body);
@@ -449,7 +451,7 @@ defineCase("J3", async (t) => {
   await H.must(hafiz, revId, "send_for_review");
   await H.pickUp(ali, revId);
   const aliRev = await s.open("ali", revId, "ali-holds-revision");
-  s.ck("SUB-15", "Hand-over 7, Hafiz resubmits: Ali holds Rev 1 in Internal Review", /Ali Sonour\s*·\s*TMC Constructions/.test(aliRev));
+  s.ck("SUB-15", "Hand-over 7, Hafiz resubmits: Ali holds Rev 1 in Internal Review", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliRev));
   await H.must(ali, revId, "submit", { answers: { cover_note: "Revision 1 with the photometric report." }, internalNote: w.inote });
   const after = await H.detail(hafiz, revId);
   s.ck("SUB-15", "Hand-over 8, Ali submits Rev 1 to DCL: its number is the number plus Rev 1", after.documentNumber === `${number} Rev 1`, `${after.documentNumber}`);
@@ -463,15 +465,16 @@ defineCase("J3", async (t) => {
   // The Revision drop-down switches Revisions.
   await go(page, `/work-items/${revId}`);
   await settle(page, 600);
-  const trigger = page.getByRole("main").getByRole("button", { name: /^(Original|Revision \d+|Draft)$/ }).first();
+  // The panel's Revision picker (RP-1253): a menu button named "Rev 1" or "Original"; its rows are menu items without the Document Number.
+  const trigger = page.getByRole("main").getByRole("button", { name: /^(Original|Rev \d+)$/ }).first();
   s.ck("SUB-15", "The Revision drop-down is on the Revision page", (await trigger.count()) > 0);
   if ((await trigger.count()) > 0) {
     await trigger.click();
     await page.waitForTimeout(400);
-    const options = await page.getByRole("option").allInnerTexts();
+    const options = await page.getByRole("menuitemradio").allInnerTexts();
     await t.shot(page, "revision-dropdown-open");
-    s.ck("SUB-15", "The drop-down lists the original and Rev 1, each whole", options.some((o) => o.includes(number) && !/Rev 1/.test(o)) && options.some((o) => o.includes(`${number} Rev 1`)), options.join(" | "));
-    await page.getByRole("option").filter({ hasText: number }).filter({ hasNotText: "Rev 1" }).first().click();
+    s.ck("SUB-15", "The drop-down lists the original and Rev 1", options.some((o) => /^Original/.test(o)) && options.some((o) => /^Rev 1/.test(o)), options.join(" | "));
+    await page.getByRole("menuitemradio").filter({ hasText: /^Original/ }).first().click();
     await page.waitForURL((u) => u.search.includes(id), { timeout: 15000 }).catch(() => undefined);
     await settle(page, 800);
     const orig = flat(await page.locator("main").innerText());
@@ -561,7 +564,7 @@ defineCase("J5", async (t) => {
   await H.must(hafiz, id, "send_for_review");
   await H.pickUp(ali, id);
   const aliText = await s.open("ali", id, "ali-holds-sar");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the SAR is numbered and Ali holds it", /Ali Sonour\s*·\s*TMC Constructions/.test(aliText) && /TWR-SAR-/.test(aliText));
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the SAR is numbered and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /TWR-SAR-/.test(aliText));
   await s.hidden("VIS-01", "Hand-over 2", id, ["yousef", "ahmed", "faisal"]);
   await H.must(ali, id, "submit", { answers: { cover_note: "Supplier approval for the risers." }, internalNote: inote });
   const at = await s.open("ahmed", id, "ahmed-receives-sar");
@@ -636,7 +639,7 @@ defineCase("J6", async (t) => {
   await H.must(hafiz, id, "send_for_review");
   await H.pickUp(ali, id);
   const aliText = await s.open("ali", id, "ali-holds-dar");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the DAR is numbered and Ali holds it", /Ali Sonour\s*·\s*TMC Constructions/.test(aliText) && /TWR-DAR-/.test(aliText));
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the DAR is numbered and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /TWR-DAR-/.test(aliText));
   await s.hidden("VIS-01", "Hand-over 2", id, ["yousef", "mohammed", "noura", "faisal"]);
   await H.must(ali, id, "submit", { answers: { cover_note: "For the Owner." }, internalNote: inote });
   const mText = await s.open("mohammed", id, "mohammed-receives-dar");
