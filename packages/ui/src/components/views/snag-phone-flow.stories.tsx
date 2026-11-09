@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
+import { expectAlongTheFlow } from "../../storybook/mirror.ts";
 import {
   SnagCameraStep,
   SnagFlowBack,
@@ -166,6 +167,8 @@ export const Location: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: text.location.allZones }));
     await expect(onPick).toHaveBeenLastCalledWith(null);
     await expect(within(context.canvas.getByRole("navigation", { name: text.location.heading })).getByRole("button", { current: "location" })).toHaveTextContent(zone.name[storyLocale(context)]);
+    // RP-1256: the crumb chevron points along the reading flow (left in Arabic, right in English), not mirrored twice.
+    await expectAlongTheFlow([...context.canvas.getByRole("navigation", { name: text.location.heading }).querySelectorAll("svg")], storyLocale(context));
   },
 };
 

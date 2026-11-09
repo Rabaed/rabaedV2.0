@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
+import { expectAlongTheFlow } from "../../storybook/mirror.ts";
 import { packageCommentsLabels } from "../../storybook/package-comments.ts";
 import { PackageComments } from "./package-comments.tsx";
 
@@ -76,6 +77,8 @@ export const Folded: Story = {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await userEvent.click(toggle);
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // RP-1256: the folded chevron points along the reading flow (left in Arabic, right in English), not mirrored twice.
+    await expectAlongTheFlow([...toggle.querySelectorAll("svg")].filter((svg) => /chevron/.test(svg.getAttribute("class") ?? "")), storyLocale(context));
     await expect(context.canvas.queryByRole("link", { name: /TWR-CMT-DC-001/ })).toBeNull();
     await userEvent.click(toggle);
     await expect(context.canvas.getByRole("link", { name: /TWR-CMT-DC-001/ })).toBeVisible();

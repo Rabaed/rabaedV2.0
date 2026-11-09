@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bulkOffer } from "./bulk-transition.ts";
-import { packageItem, packageNotReadyReason, packageSummary } from "./package.ts";
+import { packageItem, packageItemState, packageNotReadyReason, packageSummary } from "./package.ts";
 import { workItemList, workItemRow } from "./work-item.ts";
 
 // Apart from package.ts, which work-item.ts imports (its rows' Package chip): this
@@ -27,6 +27,10 @@ export const packageDetailItem = workItemRow.extend({
    * the Submit (an incomplete Form, a missing Signature) still comes back from the attempt.
    */
   notReady: packageNotReadyReason.nullable(),
+  /** Where it stands (RP-1143): its row's colour and the page's tabs. */
+  state: packageItemState,
+  /** Whether it waits on the viewer now (Need My Action's `waiting`): the "Waiting for you" tab. */
+  waiting: z.boolean(),
 });
 export type PackageDetailItem = z.infer<typeof packageDetailItem>;
 

@@ -153,7 +153,7 @@ defineCase("PKG-03", async (t) => {
   const { page } = await pageAs("ali");
   await go(page, `/packages/${p.id}`);
   await settle(page);
-  await page.getByRole("button", { name: /Add items/ }).first().click();
+  await page.getByRole("button", { name: /Add submittals/ }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor({ state: "visible" });
   await dialog.getByPlaceholder(/Number, Subject/).fill(tag);

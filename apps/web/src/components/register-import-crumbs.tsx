@@ -10,7 +10,7 @@ export function RegisterImportCrumbs({ label, parts }: { label: string; parts: {
     <nav aria-label={label} className="flex min-w-0 items-center gap-2 text-[13px] text-muted">
       {parts.map((part, index) => (
         <span key={index} className="flex min-w-0 items-center gap-2">
-          {index > 0 && <Icon name="chevron-right" size={14} className="shrink-0 rtl:rotate-180" />}
+          {index > 0 && <Icon name="chevron-right" size={14} className="shrink-0" />}
           {part.href ? (
             <Link href={part.href} className="hover:text-text hover:underline">
               {part.text}

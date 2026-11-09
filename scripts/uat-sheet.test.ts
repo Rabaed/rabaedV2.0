@@ -213,6 +213,11 @@ describe("the Who's who panel (RP-1204)", () => {
     expect(new Set(DEMO_PEOPLE.map((p) => p.key)).size).toBe(DEMO_PEOPLE.length);
   });
 
+  it("lists Tariq, Gulf Review Consultants' person, as outside Riyadh Gate Tower: he is on UAT 03 only, for PAR-17 (RP-1264)", () => {
+    expect(DEMO_PEOPLE.find((p) => p.key === "tariq")?.email).toBe("tariq.alshehri@gulfreview.demo.rabaed.test");
+    expect(PEOPLE_MAP.outside).toContain("tariq");
+  });
+
   it("holds sign-in emails only, never a password", () => {
     for (const p of DEMO_PEOPLE) expect(Object.keys(p).some((k) => /pass|secret|token/i.test(k))).toBe(false);
     const html = renderSheet({ round: "R", cases: [], built: "x" });
@@ -282,6 +287,23 @@ describe("sections and the Markdown for an AI (RP-1204)", () => {
     const html = renderSheet({ round: "R", cases: casesFromScenarios(JSON.stringify([row]), "https://uat.example"), built: "x" });
     expect(html).toContain('"sections":[{"id":"s-UAT01","n":1,"part":"UAT01"');
     expect(html).not.toMatch(/const SECTIONS = \(\(\) =>/);
+  });
+
+  it("marks a case that can't be run twice, once per Reset UAT, in the page and the Markdown (RP-1264)", () => {
+    const row = { id: "PAR-17", jira: "RP-1265", part: "PAR", title: "Withdraw", role: "03", once: true };
+    const [c, other] = casesFromScenarios(JSON.stringify([row, { ...row, id: "PAR-10", jira: "RP-870", once: undefined }]), "https://uat.example");
+    expect(c!.once).toBe(true);
+    expect(other!.once).toBeUndefined();
+    const md = renderMarkdown({ round: "R", cases: [c!, other!], built: "x" });
+    expect(md.match(/- \*\*Once per Reset UAT:\*\*/g)).toHaveLength(1);
+    expect(md).toContain("- **Once per Reset UAT:** what it does can't be undone, so it runs once after each Reset UAT.");
+    const html = renderSheet({ round: "R", cases: [c!], built: "x" });
+    expect(html).toContain('"once":true');
+    expect(html).toContain("Once per Reset UAT");
+    expect(html).toContain("مرة واحدة بعد كل إعادة تهيئة");
+    // The test cases mark each one-shot case: those whose seeded item or Participant a run uses up.
+    const scenarios = JSON.parse(readFileSync(resolve(import.meta.dirname, "../planning/uat/round-0/test-cases.json"), "utf8")) as ScenarioRow[];
+    expect(scenarios.filter((s) => s.once).map((s) => s.id).sort()).toEqual(["PAR-08", "PAR-17", "SUB-21", "VIS-24"]);
   });
 
   it("tells the tester to open a UAT Project from Projects, never Home, in English and Arabic and in the Markdown", () => {

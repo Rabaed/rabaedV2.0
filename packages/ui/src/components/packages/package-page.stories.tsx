@@ -1,4 +1,4 @@
-import { defaultOutcomeSets, type PackageDetail, type PackageNotReadyReason, type WorkItemRow } from "@rabaed/domain";
+import { defaultOutcomeSets, type PackageDetail, type PackageItemState, type PackageNotReadyReason, type PackageTypeCounts, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -90,6 +90,8 @@ const openPkg: PackageDetail = {
   owner: { participantId: "00000000-0000-4000-8000-0000000000a1", companyName: ownCompany },
   trades: [],
   counts: { total: 3, open: 3, codes: {} },
+  byType: [],
+  waiting: 0,
   items: [],
   owned: true,
   othersNotReady: false,
@@ -117,11 +119,33 @@ const filters: PackageDetail["filters"] = {
  * viewer owns it and it was never Submitted nor closed (the API's rule), with the table's filters;
  * those in `notReady` stop Submit Package, with why (RP-974).
  */
-const withItems = (pkg: PackageDetail, rows: WorkItemRow[], notReady: Record<string, PackageNotReadyReason> = {}): PackageDetail => ({
-  ...pkg,
-  filters,
-  items: rows.map((r) => ({ ...r, bulkTransitions: [], toSubmit: pkg.owned && r.submissionDate === null && r.outcome === null, notReady: notReady[r.id] ?? null })),
-});
+const withItems = (pkg: PackageDetail, rows: WorkItemRow[], notReady: Record<string, PackageNotReadyReason> = {}): PackageDetail => {
+  const items = rows.map((r) => ({
+    ...r,
+    bulkTransitions: [],
+    toSubmit: pkg.owned && r.submissionDate === null && r.outcome === null,
+    notReady: notReady[r.id] ?? null,
+    state: stateOf(r),
+    waiting: false,
+  }));
+  return { ...pkg, filters, items, byType: byTypeOf(items), waiting: 0 };
+};
+
+/** Where a row stands, as the API reads it from its Type's outcome set: the default Review Codes here (C a Revision, D a replacement). */
+function stateOf(r: WorkItemRow): PackageItemState {
+  if (r.outcome === null) return "open";
+  return r.outcome === "C" ? "revise" : r.outcome === "D" ? "replace" : "done";
+}
+
+/** The API's counts by Type, from the items given, by code. */
+function byTypeOf(items: { type: WorkItemRow["type"]; state: PackageItemState }[]): PackageTypeCounts[] {
+  const codes = [...new Set(items.map((i) => i.type.code))].sort();
+  return codes.map((code, i) => {
+    const of = items.filter((t) => t.type.code === code);
+    const count = (state: PackageItemState) => of.filter((t) => t.state === state).length;
+    return { typeId: `00000000-0000-4000-8000-0000000000d${i}`, code, name: of[0]!.type.name, total: of.length, done: count("done"), replace: count("replace"), revise: count("revise"), open: count("open") };
+  });
+}
 
 const ok = async () => ({ ok: true as const });
 const found: WorkItemRow[] = [
@@ -184,7 +208,7 @@ export const OpenPackage: Story = {
     await expect(within(table).getAllByRole("row")).toHaveLength(4);
     await expect(within(table).getByRole("columnheader", { name: new RegExp(l.with) })).toBeVisible();
     await expect(canvas.getByText(l.closedOf("0", "3"))).toBeInTheDocument();
-    await expect(context.canvasElement.querySelector('[data-code="open"]')).toHaveTextContent("3");
+    await expect(context.canvasElement.querySelector('button[data-state="open"]')).toHaveTextContent("3");
   },
 };
 
@@ -207,7 +231,7 @@ export const InProgress: Story = {
     await expect(context.canvas.queryByRole("button", { name: l.remove(tiles.title) })).toBeNull();
     // Two still to Submit (the Draft and the one at internal review): Submit Package stays.
     await expect(actions.getByRole("button", { name: l.submit.trigger })).toBeVisible();
-    await expect(context.canvasElement.querySelector('[data-code="A"]')).toHaveTextContent("1");
+    await expect(context.canvasElement.querySelector('button[data-state="done"]')).toHaveTextContent("1");
     await expect(context.canvas.getByText(l.closedOf("1", "4"))).toBeInTheDocument();
   },
 };
@@ -290,28 +314,45 @@ export const ItemTable: Story = {
   },
 };
 
+const revised = row(17, { title: "Shower mixers", stage: stages.approved, outcome: "C", stepAgeWeeks: null, with: null });
+const rejected = row(18, { title: "Towel rails", type: sar, stage: stages.approved, outcome: "D", stepAgeWeeks: null, with: null });
+const states = withItems(asConsultant, [lights, fans, mixer, revised, rejected]);
+// The Consultant's PM: "Mirror lights" waits on them.
+const statesPkg: PackageDetail = { ...states, waiting: 1, items: states.items.map((i) => (i.id === lights.id ? { ...i, waiting: true } : i)) };
+
 /**
- * The counts name the codes of its submittals' Types on the Project, as the API's outcome set gives them,
- * never a fixed A to D: here the Project's MAR has no Code D, and a Code E of its own.
+ * Where each submittal stands (RP-1143, the kit's Progress box, tabs and Type tiles): closed at
+ * Code A or B, at Code D (both count towards Done), at Code C (waiting for its Revision) or still
+ * open, each its tile and tab with its count, and a coloured edge on its row. The page opens on
+ * what waits on the viewer; a Type's tile shows only its rows, and Clear shows them all again.
  */
-export const CodesOfItsOutcomeSet: Story = {
-  args: {
-    pkg: {
-      ...withItems(done, [fans]),
-      counts: { total: 2, open: 0, codes: { A: 1, E: 1 } },
-      filters: {
-        ...filters,
-        outcomes: [
-          ...defaultOutcomeSets.review_code.filter((o) => o.code !== "D").map((o) => ({ ...o, type: mar.code })),
-          { ...defaultOutcomeSets.review_code[0]!, code: "E", type: mar.code },
-        ],
-      },
-    },
-  },
+export const StatesAndTabs: Story = {
+  args: { pkg: statesPkg },
   play: async (context) => {
-    const tiles = [...context.canvasElement.querySelectorAll("[data-code]")].map((t) => t.getAttribute("data-code"));
-    await expect(tiles).toEqual(["A", "B", "C", "E", "open"]);
-    await expect(context.canvasElement.querySelector('[data-code="E"]')).toHaveTextContent("1");
+    const l = labelsOf(context);
+    const tabs = within(context.canvas.getByRole("group", { name: l.tabs.label }));
+    const shown = () => within(context.canvas.getByRole("table", { name: l.table.table })).queryAllByRole("link").map((a) => a.textContent);
+    await expect(tabs.getByRole("button", { name: new RegExp(escaped(l.tabs.waiting)) })).toHaveAttribute("aria-pressed", "true");
+    await expect(shown()).toEqual([lights.title]);
+    await userEvent.click(tabs.getByRole("button", { name: new RegExp(`^${escaped(l.tabs.all)}`) }));
+    await expect(shown()).toHaveLength(5);
+    // Closed (A, B and D) of all: 2 of 5.
+    await expect(context.canvas.getByTestId("package-closed")).toHaveTextContent(l.closedOf("2", "5"));
+    for (const [state, count] of [["done", "1"], ["replace", "1"], ["revise", "1"], ["open", "2"]] as const) {
+      await expect(context.canvasElement.querySelector(`button[data-state="${state}"]`)).toHaveTextContent(count);
+    }
+    // The Code C tile shows its row, with its orange edge.
+    await userEvent.click(context.canvasElement.querySelector<HTMLElement>('button[data-state="revise"]')!);
+    await expect(shown()).toEqual([revised.title]);
+    await expect(tabs.getByRole("button", { name: new RegExp(escaped(l.state.revise)) })).toHaveAttribute("aria-pressed", "true");
+    const edge = context.canvas.getByRole("link", { name: revised.title }).closest("tr")!.querySelector("td")!;
+    await expect(getComputedStyle(edge).boxShadow).not.toBe("none");
+    // The SAR tile: only the SAR rows of the tab shown.
+    await userEvent.click(tabs.getByRole("button", { name: new RegExp(`^${escaped(l.tabs.all)}`) }));
+    await userEvent.click(context.canvasElement.querySelector<HTMLElement>('button[data-type="SAR"]')!);
+    await expect(shown()).toEqual([mixer.title, rejected.title]);
+    await userEvent.click(context.canvas.getAllByRole("button", { name: l.clearType })[0]!);
+    await expect(shown()).toHaveLength(5);
   },
 };
 

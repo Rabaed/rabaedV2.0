@@ -10,7 +10,7 @@ const arabicSubmittals = (n: string, count: number) =>
 export const packageBulkLabels: Record<Locale, PackageBulkLabels> = {
   en: {
     bar: "Take a Transition on the selected submittals",
-    hint: "Select the submittals waiting on you to take one Transition on them all.",
+    waiting: (n, count) => (count === 1 ? "1 submittal is waiting for you" : `${n} submittals are waiting for you`),
     selected: (n) => `${n} selected`,
     transitions: "Transitions they share",
     noneShared: "These don't share a Transition. Select ones at the same Step.",
@@ -50,7 +50,7 @@ export const packageBulkLabels: Record<Locale, PackageBulkLabels> = {
   },
   ar: {
     bar: "تنفيذ انتقال على الاعتمادات المحددة",
-    hint: "حدّد الاعتمادات التي تنتظرك لتنفّذ انتقالًا واحدًا عليها جميعًا.",
+    waiting: (n, count) => (count === 1 ? "تقديم واحد ينتظرك" : `${n} تقديمات تنتظرك`),
     selected: (n) => `${n} محدد`,
     transitions: "الانتقالات المشتركة بينها",
     noneShared: "لا تشترك هذه في انتقال واحد. حدّد اعتمادات في الخطوة نفسها.",

@@ -9,7 +9,9 @@ import {
   type PackageNotReadyReason,
   type PackageStatus,
   type PackageSummary,
+  type PackageItemState,
   type PackageTrade,
+  type PackageTypeCounts,
   type SubmitPackageRequest,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
@@ -63,7 +65,20 @@ type SummaryRow = {
   /** Whether the viewer is of the owning Participant: only they may change it. */
   owned: boolean;
   trades: PackageTrade[];
+  by_type: PackageTypeCounts[];
+  waiting: number;
 };
+
+/**
+ * Where the latest item `w` of a Package stands (RP-1143, PackageItemState): open until closed
+ * with an outcome; closed, by what its Type's outcome on the Project offers (app.outcome_offers),
+ * as app.recompute_package_status reads Done, never by fixed codes.
+ */
+const itemState = sql`case
+  when w.closed_at is null or w.outcome is null then 'open'
+  when app.outcome_offers(w.project_id, w.work_item_type_id, w.outcome, 'offer_revision') then 'revise'
+  when app.outcome_offers(w.project_id, w.work_item_type_id, w.outcome, 'offer_replacement') then 'replace'
+  else 'done' end`;
 
 /**
  * The Packages the viewer sees (RLS, app.sees_package), as rows: one Project's, or
@@ -77,7 +92,7 @@ async function summaryRows(trx: Trx, where: { projectId: string } | { packageId:
   const { rows } = await sql<SummaryRow>`
     select k.id, k.project_id, k.participant_id, k.seq, k.name, k.status, o.name as company_name,
       coalesce(s.total, 0) as total, coalesce(s.open, 0) as open, coalesce(s.codes, '{}'::jsonb) as codes,
-      app.owns_package(k.id) as owned, tr.trades
+      app.owns_package(k.id) as owned, tr.trades, bt.by_type, bt.waiting
     from package k
     -- The owning Participant's Company by name only (V14).
     cross join lateral (select app.package_owner_name(k.id) as name) o
@@ -94,6 +109,30 @@ async function summaryRows(trx: Trx, where: { projectId: string } | { packageId:
         join dimension_value tv on tv.id = tdv.dimension_value_id
       ) t
     ) tr
+    -- The same counted items by Type and state (RP-1143, the card's Type ledger), and how many wait on
+    -- the viewer: the latest of each chain the viewer sees, as app.package_summary counts them (RP-641).
+    cross join lateral (
+      select
+        coalesce(jsonb_agg(jsonb_build_object(
+          'typeId', g.type_id, 'code', g.code, 'name', g.name, 'total', g.total,
+          'done', g.done, 'replace', g.replace, 'revise', g.revise, 'open', g.open
+        ) order by g.code, g.type_id), '[]'::jsonb) as by_type,
+        coalesce(sum(g.waiting), 0)::integer as waiting
+      from (
+        select t.id as type_id, t.code, t.name, count(*)::integer as total,
+          count(*) filter (where s.state = 'done')::integer as done,
+          count(*) filter (where s.state = 'replace')::integer as replace,
+          count(*) filter (where s.state = 'revise')::integer as revise,
+          count(*) filter (where s.state = 'open')::integer as open,
+          count(*) filter (where s.waiting)::integer as waiting
+        from app.package_latest_items(k.id) l
+        join work_item w on w.id = l.work_item_id
+        join work_item_type t on t.id = w.work_item_type_id
+        cross join lateral (select ${itemState} as state, coalesce(app.need_my_action(w.id) = 'waiting', false) as waiting) s
+        where l.counted
+        group by t.id, t.code, t.name
+      ) g
+    ) bt
     where ${condition}
     order by o.name ->> 'en', k.participant_id, k.seq, k.id
   `.execute(trx);
@@ -109,6 +148,8 @@ const toSummary = (r: SummaryRow): PackageSummary => ({
   owner: { participantId: r.participant_id, companyName: r.company_name },
   trades: r.trades,
   counts: { total: r.total, open: r.open, codes: r.codes },
+  byType: r.by_type,
+  waiting: r.waiting,
 });
 
 /** A Project's Packages the Member sees; null when it isn't one of their Projects. */
@@ -130,8 +171,9 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
     const [row] = await summaryRows(trx, { packageId });
     if (!row) return null;
     // The latest Revision of each chain the viewer sees (spec story 30, app.package_latest_items).
-    const { rows: ids } = await sql<{ id: string }>`
-      select w.id
+    // With where each stands and whether it waits on the viewer (RP-1143: the rows' colours and the page's tabs).
+    const { rows: ids } = await sql<{ id: string; state: PackageItemState; waiting: boolean }>`
+      select w.id, ${itemState} as state, coalesce(app.need_my_action(w.id) = 'waiting', false) as waiting
       from app.package_latest_items(${packageId}::uuid) l
       join work_item w on w.id = l.work_item_id
       order by w.document_number nulls last, w.title, w.id
@@ -153,11 +195,11 @@ export function getPackage(db: Db, memberId: string, packageId: string, now: Dat
     // only while it can be offered, on an active Project: a closed one offers no Submit Package at all.
     const readiness = row.owned ? await submitReadiness(trx, packageId) : null;
     const stillToSubmit = new Map(readiness?.items.map((i) => [i.id, i]) ?? []);
-    const items = ids.flatMap(({ id }) => {
+    const items = ids.flatMap(({ id, state, waiting }) => {
       const r = seen.get(id);
       const pending = stillToSubmit.get(id);
       const notReady = active && pending ? notReadyBefore(pending) : null;
-      return r ? [{ ...r, bulkTransitions: offers.get(id) ?? [], toSubmit: pending !== undefined, notReady }] : [];
+      return r ? [{ ...r, bulkTransitions: offers.get(id) ?? [], toSubmit: pending !== undefined, notReady, state, waiting }] : [];
     });
     const open = row.status === "open";
     const submit = active && readiness !== null && readiness.ready;

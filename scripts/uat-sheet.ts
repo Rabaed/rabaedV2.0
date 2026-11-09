@@ -51,6 +51,8 @@ export interface SheetCase {
   role?: string;
   /** Why a case is in its Part's section, not a role's (RP-1250): the owner decides where it goes. */
   leftover?: string;
+  /** What it does can't be undone, so it runs once after each Reset UAT (RP-1264): a withdrawal, a Code issued. */
+  once?: true;
   url: string;
 }
 
@@ -142,6 +144,8 @@ export interface ScenarioRow {
   role?: string;
   /** Why the case is in no role's section yet (RP-1250): it needs two people, or a fixture, for the owner to decide. */
   leftover?: string;
+  /** What it does can't be undone, so it runs once after each Reset UAT (RP-1264): a withdrawal, a Code issued. */
+  once?: true;
 }
 
 /* eslint-disable rabaed/no-avoid-terms -- the test sheet's own sections and its UAT roles (UAT_ROLES), not product terms. */
@@ -234,6 +238,7 @@ export function casesFromScenarios(text: string, uatUrl: string): SheetCase[] {
       needs,
       ...(p.role ? { role: p.role } : {}),
       ...(p.leftover?.trim() ? { leftover: p.leftover.trim() } : {}),
+      ...(p.once ? { once: true as const } : {}),
       url: startUrl(p.part, uatUrl),
     };
   });
@@ -304,6 +309,9 @@ export interface DemoPerson {
   narrowed?: boolean;
 }
 
+/** A one-shot case's line (RP-1264), in the Markdown and on the page. */
+export const ONCE = { en: "what it does can't be undone, so it runs once after each Reset UAT.", ar: "لا يمكن التراجع عمّا تفعله، لذا تُنفَّذ مرة واحدة بعد كل إعادة تهيئة لبيئة الاختبار." };
+
 const EL_ALL = { en: "EL · all towers", ar: "كهرباء · كل الأبراج" };
 const ELME_ALL = { en: "EL, ME · all towers", ar: "كهرباء وميكانيكا · كل الأبراج" };
 const PROFILE = { en: "Company profile", ar: "ملف الشركة" };
@@ -349,6 +357,8 @@ const PEOPLE_LIST: Omit<DemoPerson, "covers" | "mapRole" | "narrowed">[] = [
     usedFor: { en: "Holds the Owner's review; Arabic cases", ar: "تتولى مراجعة المالك؛ حالات اللغة العربية" } },
   { key: "hind", name: "Hind Al Mutairi", email: "hind.almutairi@alwaha.demo.rabaed.test", company: WAHA, role: { en: "Owner Representative", ar: "ممثل المالك" }, position: AP,
     usedFor: { en: "Al Waha's Company Profile and Members", ar: "ملف شركة الواحة وأعضاؤها" } },
+  { key: "tariq", name: "Tariq Al Shehri", email: "tariq.alshehri@gulfreview.demo.rabaed.test", company: { en: "Gulf Review Consultants", ar: "الخليج للمراجعة الاستشارية" }, role: { en: "A second Consultant, on UAT 03 only", ar: "استشاري ثانٍ، في UAT 03 فقط" }, position: AP,
+    usedFor: { en: "PAR-17: Saeed withdraws his Company from UAT 03 (a demo person, not you)", ar: "PAR-17: يسحب سعيد شركته من UAT 03 (شخص تجريبي، ليس أنت)" } },
   { key: "engineer", name: "Rabaed Engineer", email: "engineer@rabaed.demo.rabaed.test", company: { en: "Rabaed", ar: "رابض" }, role: { en: "Rabaed Admin", ar: "Rabaed Admin" }, position: { en: "Rabaed Engineer", ar: "مهندس رابض" },
     usedFor: { en: "Rabaed Admin cases (ADM): the UAT owner runs these", ar: "حالات Rabaed Admin (ADM): يشغّلها مسؤول الاختبار" } },
 ];
@@ -369,6 +379,7 @@ const ON_MAP: Record<string, Pick<DemoPerson, "covers" | "mapRole" | "narrowed">
   noura: { covers: EL_ALL, mapRole: { en: "PM, Owner's review", ar: "مديرة المشروع، مراجعة المالك" } },
   hind: { covers: PROFILE },
   engineer: { covers: { en: "Rabaed Admin, UAT owner only", ar: "Rabaed Admin، لمسؤول الاختبار فقط" } },
+  tariq: { covers: { en: "UAT 03 only, not here", ar: "UAT 03 فقط، ليس هنا" } },
 };
 export const DEMO_PEOPLE: DemoPerson[] = PEOPLE_LIST.map((p) => ({ ...p, ...(ON_MAP[p.key] ?? { covers: { en: "", ar: "" } }) }));
 
@@ -389,7 +400,7 @@ export const PEOPLE_MAP = {
   ],
   /** Submittals travel: TMC submits to the Consultant, who passes them to the Owner's review. */
   flow: [["tmc", "dcl"], ["dcl", "waha"]],
-  outside: ["engineer", "nasser"],
+  outside: ["engineer", "nasser", "tariq"],
   note: { en: "Thick border = covers less than their Company. Civil (CV) is covered by no Company.", ar: "الإطار السميك = يغطي أقل من شركته. لا تغطي أي شركة الأعمال المدنية (CV)." },
 };
 /* eslint-enable rabaed/no-avoid-terms */
@@ -506,6 +517,7 @@ export function renderMarkdown({ round, cases, built, uatUrl = DEFAULT_UAT_URL }
       out.push(`### ${c.id} ${c.title}`, "", `- **Key:** \`${c.key}\` · **Part:** ${c.part}${c.round ? ` · **Round:** ${c.round}` : ""}${c.needs.length ? ` · **Needs:** ${c.needs.join(", ")}` : ""}`);
       if (c.who) out.push(`- **Sign in as:** ${c.who}`);
       if (c.leftover) out.push(`- **Left for the owner:** ${c.leftover}`);
+      if (c.once) out.push(`- **Once per Reset UAT:** ${ONCE.en}`);
       out.push(`- **Start at:** ${c.url}`);
       if (c.steps.length) out.push("- **Steps:**", ...c.steps.map((st, i) => `  ${i + 1}. ${st}`));
       if (c.expected) out.push(`- **Expected result:** ${c.expected}`);
@@ -550,7 +562,7 @@ export function renderSheet({ round, cases, built, uatUrl = DEFAULT_UAT_URL }: {
     .replace("/*__FFLATE__*/", () => findFflate())
     .replace("/*__XLSX__*/", () => writer)
     .replace("/*__WORK__*/", () => work)
-    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), people: DEMO_PEOPLE, peopleMap: PEOPLE_MAP, parts: PART_NAMES, projectsNotHome: PROJECTS_NOT_HOME, sections: pageSections(cases), markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
+    .replace("/*__DATA__*/null", () => scriptJson({ round, built, uatUrl: uatUrl.replace(/\/+$/, ""), once: ONCE, people: DEMO_PEOPLE, peopleMap: PEOPLE_MAP, parts: PART_NAMES, projectsNotHome: PROJECTS_NOT_HOME, sections: pageSections(cases), markdown: renderMarkdown({ round, cases, built, uatUrl }), cases }))
     .replaceAll("__ROUND__", round.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!));
 }
 

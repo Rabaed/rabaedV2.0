@@ -1,6 +1,6 @@
 import type { Db } from "@rabaed/db";
 import type { FastifyInstance } from "fastify";
-import { buildSampleProject, inParallel, sampleProjectId, signInAll, withSampleLock, type SampleLog, type SampleProjectResult } from "./sample-project.ts";
+import { buildSampleProject, inParallel, joiningPeople, sampleProjectId, signInAll, withSampleLock, type SampleLog, type SampleProjectResult } from "./sample-project.ts";
 import { secondsSince } from "./demo-api.ts";
 import { UAT_ROLES, uatPeople, uatRecords, type UatRole } from "./uat-projects-plan.ts";
 
@@ -28,7 +28,8 @@ export async function addUatProjects(
   const start = performance.now();
   const results: Record<string, SampleProjectResult> = {};
   await withSampleLock(migrator, async (connection) => {
-    const as = await signInAll(app, password);
+    // With the people of the Companies some of these Projects join (UAT 03's Gulf Review Consultants, RP-1264).
+    const as = await signInAll(app, password, [...new Set(roles.flatMap((role) => joiningPeople(uatPeople(role))))]);
     // Each Project first, one at a time in the plan's order: TMC numbers its Projects as it creates them
     // (company_project_counter), so UAT 01 keeps the number it had when they were built one after another.
     for (const role of roles) await sampleProjectId(as, connection, { code: role.code, name: role.name });

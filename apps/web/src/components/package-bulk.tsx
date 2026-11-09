@@ -15,7 +15,7 @@ function useBulkLabels(): PackageBulkLabels {
   const keys = messageKeys((key) => t(key));
   return {
     bar: t("bar"),
-    hint: t("hint"),
+    waiting: (n, count) => t("waiting", { n, count }),
     selected: (n) => t("selected", { n }),
     transitions: t("transitions"),
     noneShared: t("noneShared"),
