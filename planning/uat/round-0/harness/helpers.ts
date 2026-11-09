@@ -1,4 +1,5 @@
 import type { BrowserContext, Locator, Page } from "playwright";
+import { retryReloadedRead } from "../../../../scripts/stack-health.ts";
 import { mailpitUrl, pageAs, urlOf, type ContextOptions, type Locale } from "./browser.ts";
 
 // Page and API helpers for cases. Locators are role and name, scoped to a region; a dialog is
@@ -36,25 +37,29 @@ export class Api {
 
   static async as(person: string): Promise<Api> {
     const { context, page } = await pageAs(person);
-    // Any page of the web app's origin will do for its /api proxy; not Home, whose reads are the slowest (RP-1050).
-    await page.goto(urlOf("/uat-api-origin"), { waitUntil: "domcontentloaded" });
+    // A real page of the web app's origin, for its /api proxy: Projects, as PAR-17 did (RP-1268). Not Home, whose
+    // reads are the slowest (RP-1050), and never an address that 404s: `next dev` kept reloading that one.
+    await page.goto(urlOf("/projects"), { waitUntil: "networkidle" });
     return new Api(person, context, page);
   }
 
-  /** `path` starts at `/v1/...` or without `/v1`; the web app proxies `/api/v1`. */
+  /** `path` starts at `/v1/...` or without `/v1`; the web app proxies `/api/v1`. A GET a page reload cuts short is retried. */
   async request(method: string, path: string, body?: unknown): Promise<ApiReply> {
     const url = path.startsWith("/v1/") ? path : `/v1${path}`;
-    const reply = await this.page.evaluate(
-      async ({ method, url, body }) => {
-        const res = await fetch(`/api${url}`, {
-          method,
-          headers: body === undefined ? {} : { "content-type": "application/json" },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        return { status: res.status, text: await res.text() };
-      },
-      { method, url, body },
-    );
+    const send = () =>
+      this.page.evaluate(
+        async ({ method, url, body }) => {
+          const res = await fetch(`/api${url}`, {
+            method,
+            headers: body === undefined ? {} : { "content-type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          });
+          return { status: res.status, text: await res.text() };
+        },
+        { method, url, body },
+      );
+    const beforeRetry = () => this.page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    const reply = method.toUpperCase() === "GET" ? await retryReloadedRead(send, { beforeRetry }) : await send();
     const parse = (): unknown => {
       try {
         return reply.text ? JSON.parse(reply.text) : null;

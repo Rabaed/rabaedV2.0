@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { connect } from "node:net";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isValidLane, lanePorts } from "./lanes.ts";
 
@@ -17,6 +18,9 @@ import { isValidLane, lanePorts } from "./lanes.ts";
 // node scripts/stack-health.ts [--lane <n>] [--alert]
 // Without --lane it reads API_URL and POSTGRES_PORT from the worktree's .env (lane 7's when unset).
 // Exit code 0 when the stack is up, 1 when it is down, 2 for a bad argument.
+//
+// It also holds the UAT harness's small helpers, so the unit suite reaches them: the case loop (runWhileUp), the
+// staged screenshots (RP-1161, RP-1266) and the retry of an api read a page reload cut short (RP-1268).
 
 export type StackTarget = { apiUrl: string; dbHost: string; dbPort: number };
 export type CheckOptions = { timeoutMs?: number };
@@ -174,6 +178,42 @@ export function keepShots(paths: readonly string[], { staging, round }: ShotFold
 export function dropShots(paths: readonly string[], { staging }: Pick<ShotFolders, "staging">): void {
   const files = paths.map((path) => pathInside(staging, path));
   for (const file of files) rmSync(file, { force: true });
+}
+
+/** A run's staging folder's name (`shotStaging` in the harness's case.ts): one per process. */
+const STAGING_NAME = /^rabaed-uat-shots-\d+$/;
+
+/**
+ * Removes a run's staging folder with anything left in it, when the run ends (RP-1266); quiet when there is none.
+ * Refuses any folder but a `rabaed-uat-shots-<pid>` straight in the OS temp folder (`tmp`), so a wrong path never
+ * deletes evidence/ or results/.
+ */
+export function removeShotStaging(staging: string, { tmp = tmpdir() }: { tmp?: string } = {}): void {
+  const full = resolve(staging);
+  if (dirname(full) !== resolve(tmp) || !STAGING_NAME.test(basename(full))) {
+    throw new Error(`${staging} is not a shot staging folder (rabaed-uat-shots-<pid> in ${tmp}); nothing was removed.`);
+  }
+  rmSync(full, { recursive: true, force: true });
+}
+
+/** Playwright's error for a page that navigated, or reloaded, while a script ran in it. */
+const RELOADED = /Execution context was destroyed/;
+
+/**
+ * Runs `read`, and runs it again when a page reload cut it short (RP-1268): under `next dev` a file change in the
+ * worktree reloads every open page. `beforeRetry` runs before each retry (the harness waits for the page to load). Any
+ * other error is thrown at once; after `tries` the last reload error is thrown. Only for reads: a cut-off write may
+ * have reached the api already.
+ */
+export async function retryReloadedRead<T>(read: () => Promise<T>, { tries = 3, beforeRetry = async () => {} }: { tries?: number; beforeRetry?: () => Promise<void> } = {}): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      if (attempt >= tries || !RELOADED.test((error as Error)?.message ?? "")) throw error;
+      await beforeRetry();
+    }
+  }
 }
 
 /**

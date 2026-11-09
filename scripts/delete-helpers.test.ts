@@ -61,6 +61,7 @@ const REMOVES_NOTHING: Record<string, string> = {
   "queue-stack-stop.ts:stopAfterEnqueue": "calls stopQueuedStack",
   "stack-health.ts:keepShots": "the UAT harness's staged shot files it moved into evidence/ (RP-1161); refuses a path outside its staging or round folder",
   "stack-health.ts:dropShots": "the UAT harness's staged shot files of a cut-off case (RP-1161); refuses a path outside its staging folder",
+  "stack-health.ts:removeShotStaging": "the UAT harness run's own shot staging folder at the end of the run (RP-1266); refuses any folder but a rabaed-uat-shots-<pid> straight in the OS tmpdir",
 };
 
 /**

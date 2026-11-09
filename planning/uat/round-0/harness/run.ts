@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
 import { CaseRun, registry, shotStaging, type CaseResult, type Status } from "./case.ts";
-import { dropShots, keepShots, runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
+import { dropShots, keepShots, removeShotStaging, runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
@@ -130,6 +130,13 @@ async function main() {
     });
   } finally {
     await closeBrowser();
+    // Every shot is in evidence/ or dropped by now; what is left is this run's folder (RP-1266). A failed clean-up
+    // only warns, so it never hides the run's own outcome.
+    try {
+      removeShotStaging(shotStaging);
+    } catch (error) {
+      console.warn(`Warning: could not remove ${shotStaging}: ${(error as Error).message}`);
+    }
   }
   if (outcome.stopped) {
     console.error(outcome.stopped);
