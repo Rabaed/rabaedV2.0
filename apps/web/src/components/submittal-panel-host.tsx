@@ -1,6 +1,6 @@
 "use client";
 
-import { directionOf, isOpenStageCategory, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
+import { directionOf, shownStepAgeWeeks, watchOutcomeNames, type Locale, type WorkItemDetail, type WorkItemList as WorkItemListData } from "@rabaed/domain";
 import {
   Button,
   DocNo,
@@ -276,7 +276,7 @@ export function SubmittalPanelHost({
               locale={locale}
               labels={{ with: t("with"), stepAge: t("stepAge"), location: t("location"), more: (n) => t("more", { n }), none: "—" }}
               with={submittalPanelWith(item.heldBy, locale, item.vacancy ? tList("waitingFor", { role: item.vacancy.projectRole.name[locale] }) : null)}
-              stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
+              stepAgeWeeks={shownStepAgeWeeks(item)}
               // Each level's code, "BLK-A · TWR-A · A06" (row 10); the Location section names the path.
               place={placeCodes.length > 0 ? [placeCodes.join(" · ")] : place}
             />

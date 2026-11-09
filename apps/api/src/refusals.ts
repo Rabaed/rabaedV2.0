@@ -125,6 +125,8 @@ const answers = {
   stage_exists: () => new HttpError(409, "stage_exists"),
   invalid_order: () => new HttpError(422, "invalid_order"),
   stage_in_use: () => new HttpError(409, "stage_in_use"),
+  // A Module's only cancelled Stage, which a cancelled item reads (RP-1263).
+  last_cancelled_stage: () => new HttpError(409, "last_cancelled_stage"),
   // A Type's outcome set on a Project (RP-429). The shapes are checked by the request schemas first.
   invalid_outcome: () => new HttpError(422, "invalid_outcome"),
   outcome_exists: () => new HttpError(409, "outcome_exists"),
