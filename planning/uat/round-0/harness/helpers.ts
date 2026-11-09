@@ -58,8 +58,8 @@ export class Api {
         },
         { method, url, body },
       );
-    const between = () => this.page.waitForLoadState("domcontentloaded").catch(() => undefined);
-    const reply = method.toUpperCase() === "GET" ? await retryReloadedRead(send, { between }) : await send();
+    const beforeRetry = () => this.page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    const reply = method.toUpperCase() === "GET" ? await retryReloadedRead(send, { beforeRetry }) : await send();
     const parse = (): unknown => {
       try {
         return reply.text ? JSON.parse(reply.text) : null;

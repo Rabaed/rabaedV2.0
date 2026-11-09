@@ -40,7 +40,7 @@ defineCase("VIS-99", async (t) => {
 
 ## Helpers (`helpers.ts`)
 
-`Api.as(person)` (get/put/post/transition from inside a signed-in Projects page; a GET that a `next dev` page reload cuts short, "Execution context was destroyed", is tried again up to 3 times, RP-1268), `apiStatus(person, path)`, `projectIdOf`, `openProject`, `openList`, `openKanban`, `openModule`, `listRows`, `openItem(page, projectId, numberOrSubject)`, `takeTransition(page, name, { note })` (confirm pop-up, waits for it to close), `readNotFound` / `notFoundFor(person, path)` (the plain 404 page: `data-testid="not-found"`), `mailTo(address)` (Mailpit).
+`Api.as(person)` (get/put/post/transition from inside a signed-in Projects page; a GET that a `next dev` page reload cuts short, "Execution context was destroyed", gets up to 3 tries in all, RP-1268), `apiStatus(person, path)`, `projectIdOf`, `openProject`, `openList`, `openKanban`, `openModule`, `listRows`, `openItem(page, projectId, numberOrSubject)`, `takeTransition(page, name, { note })` (confirm pop-up, waits for it to close), `readNotFound` / `notFoundFor(person, path)` (the plain 404 page: `data-testid="not-found"`), `mailTo(address)` (Mailpit).
 
 Locators are role and name, scoped to a region. Wait for a dialog to close before the next step.
 

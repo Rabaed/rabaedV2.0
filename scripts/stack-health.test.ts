@@ -347,25 +347,25 @@ describe("retryReloadedRead (RP-1268)", () => {
       if (failure) throw failure;
       return "read";
     };
-    const between = async () => void log.push("wait");
-    return { read, between, log };
+    const beforeRetry = async () => void log.push("wait");
+    return { read, beforeRetry, log };
   }
 
   it("retries a read cut short by a reload, waiting for the page between tries, and returns what it read", async () => {
-    const { read, between, log } = flaky([destroyed(), destroyed()]);
-    expect(await retryReloadedRead(read, { between })).toBe("read");
+    const { read, beforeRetry, log } = flaky([destroyed(), destroyed()]);
+    expect(await retryReloadedRead(read, { beforeRetry })).toBe("read");
     expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
   });
 
   it("does not retry a different error", async () => {
-    const { read, between, log } = flaky([new Error("page.evaluate: TypeError: Failed to fetch")]);
-    await expect(retryReloadedRead(read, { between })).rejects.toThrow("Failed to fetch");
+    const { read, beforeRetry, log } = flaky([new Error("page.evaluate: TypeError: Failed to fetch")]);
+    await expect(retryReloadedRead(read, { beforeRetry })).rejects.toThrow("Failed to fetch");
     expect(log).toEqual(["try"]);
   });
 
   it("gives up after its tries and throws the last reload error", async () => {
-    const { read, between, log } = flaky([destroyed(), destroyed(), destroyed(), destroyed()]);
-    await expect(retryReloadedRead(read, { tries: 3, between })).rejects.toThrow("Execution context was destroyed");
+    const { read, beforeRetry, log } = flaky([destroyed(), destroyed(), destroyed(), destroyed()]);
+    await expect(retryReloadedRead(read, { tries: 3, beforeRetry })).rejects.toThrow("Execution context was destroyed");
     expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
   });
 });
@@ -377,31 +377,46 @@ describe("removeShotStaging (RP-1266)", () => {
     for (const f of made.splice(0)) rmSync(f, { recursive: true, force: true });
   });
 
+  /** A stand-in for the OS temp folder. */
+  const tempFolder = () => {
+    const tmp = mkdtempSync(join(tmpdir(), "rp-1266-"));
+    made.push(tmp);
+    return tmp;
+  };
+
   it("removes a run's staging folder with what is left in it", () => {
-    const parent = mkdtempSync(join(tmpdir(), "rp-1266-"));
-    made.push(parent);
-    const staging = join(parent, "rabaed-uat-shots-4242");
+    const tmp = tempFolder();
+    const staging = join(tmp, "rabaed-uat-shots-4242");
     mkdirSync(join(staging, "evidence"), { recursive: true });
     writeFileSync(join(staging, "evidence", "VIS-01-1-list.jpg"), "left over");
-    removeShotStaging(staging);
+    removeShotStaging(staging, { tmp });
     expect(existsSync(staging)).toBe(false);
-    expect(existsSync(parent)).toBe(true);
+    expect(existsSync(tmp)).toBe(true);
   });
 
   it("is quiet when the run took no shot, so there is no folder", () => {
-    const parent = mkdtempSync(join(tmpdir(), "rp-1266-"));
-    made.push(parent);
-    expect(() => removeShotStaging(join(parent, "rabaed-uat-shots-4242"))).not.toThrow();
+    const tmp = tempFolder();
+    expect(() => removeShotStaging(join(tmp, "rabaed-uat-shots-4242"), { tmp })).not.toThrow();
   });
 
   it("refuses a folder that is not a staging folder, so a wrong path never deletes evidence/ or results/", () => {
-    const round = mkdtempSync(join(tmpdir(), "rp-1266-"));
-    made.push(round);
+    const tmp = tempFolder();
     for (const name of ["evidence", "results", "rabaed-uat-shots-", "rabaed-uat-shots-12x"]) {
-      const folder = join(round, name);
+      const folder = join(tmp, name);
       mkdirSync(folder);
       writeFileSync(join(folder, "keep.txt"), "keep");
-      expect(() => removeShotStaging(folder)).toThrow(/not a shot staging folder/);
+      expect(() => removeShotStaging(folder, { tmp })).toThrow(/not a shot staging folder/);
+      expect(readFileSync(join(folder, "keep.txt"), "utf8")).toBe("keep");
+    }
+  });
+
+  it("refuses a folder with a staging folder's name anywhere but straight in the OS temp folder, such as inside evidence/", () => {
+    const tmp = tempFolder();
+    const round = tempFolder();
+    for (const folder of [join(round, "evidence", "rabaed-uat-shots-4242"), join(tmp, "evidence", "rabaed-uat-shots-4242")]) {
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(join(folder, "keep.txt"), "keep");
+      expect(() => removeShotStaging(folder, { tmp })).toThrow(/not a shot staging folder/);
       expect(readFileSync(join(folder, "keep.txt"), "utf8")).toBe("keep");
     }
   });

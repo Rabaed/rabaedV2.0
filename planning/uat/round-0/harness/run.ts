@@ -130,8 +130,13 @@ async function main() {
     });
   } finally {
     await closeBrowser();
-    // Every shot is in evidence/ or dropped by now; what is left is this run's folder (RP-1266).
-    removeShotStaging(shotStaging);
+    // Every shot is in evidence/ or dropped by now; what is left is this run's folder (RP-1266). A failed clean-up
+    // only warns, so it never hides the run's own outcome.
+    try {
+      removeShotStaging(shotStaging);
+    } catch (error) {
+      console.warn(`Warning: could not remove ${shotStaging}: ${(error as Error).message}`);
+    }
   }
   if (outcome.stopped) {
     console.error(outcome.stopped);
