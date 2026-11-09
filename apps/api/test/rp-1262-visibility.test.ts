@@ -1,6 +1,6 @@
 // Seam 1 for passing a withdrawn Participant's Vacancies to the replacement Participant's Step Pool
 // (RP-1262; ADR 0028; GLOSSARY › Vacancy; workflow-engine.md §9; visibility.md "A Participant's
-// withdrawal"; scenarios RP-1262-1 to RP-1262-6). C1's Project Admin withdraws K1 while K1 holds C1's
+// withdrawal"; scenarios RP-1262-1 to RP-1262-7). C1's Project Admin withdraws K1 while K1 holds C1's
 // item, then invites K2 as the new Consultant. K2 accepts, and the Vacancy passes to its Step Pool once
 // its Visibility covers the item: only K2 gains the item, C1 reads it as held by K2 with no "Waiting for
 // a new Consultant", the Vacancies card lists it no more, and K1, which left, reads nothing.
@@ -87,6 +87,7 @@ async function consultant(name: string, covering = true): Promise<Joined> {
 }
 let k3: Joined; // RP-1262-4: overlaps K4, then holds C1's items, then is withdrawn (RP-1262-5).
 let k4: Joined; // RP-1262-4: narrowed; RP-1262-5: given Building A only; RP-1262-6: withdrawn.
+let k5: Joined; // RP-1262-6: takes K4's items; RP-1262-7: withdrawn, then invited again.
 let items: string[] = []; // C1's two items at Building A (RP-1262-4 on).
 
 const itemById = (id: string) => readById<WorkItemDetail>(`/v1/work-items/${id}`);
@@ -285,7 +286,7 @@ describe("scenario RP-1262-5: a Visibility change of several values that passes 
 
 describe("scenario RP-1262-6: a withdrawal passes a Vacancy at once to the one other Participant of the role covering it", () => {
   it("gives K4's items to K5 as K4 is withdrawn, and nobody else gains them", async () => {
-    const k5 = await consultant("K5");
+    k5 = await consultant("K5");
     // Building B's Vacancy was K5's alone to cover: it passed as K5 was given Visibility.
     expect((await itemById(third)(k5.engineer))[0]!.heldBy?.memberName).not.toBeNull();
     await ok(c1.caller.post(`/v1/participants/${k4.id}/withdraw`));
@@ -302,5 +303,24 @@ describe("scenario RP-1262-6: a withdrawal passes a Vacancy at once to the one o
       });
     }
     expect((await vacancies(c1.caller))[0]!.vacancies).toEqual([]); // not hidden-from: the same Admin's list held three Vacancies in RP-1262-5
+  });
+});
+
+describe("scenario RP-1262-7: a withdrawn Company invited again never takes back its own old Vacancies", () => {
+  it("leaves K5's Steps vacant when K5 comes back as a fresh Consultant covering every item, the only one", async () => {
+    await ok(c1.caller.post(`/v1/participants/${k5.id}/withdraw`));
+    // RP-1261: invited again and accepting, K5 is a new Participant of the same Company, given every Visibility.
+    const again = await api.addParticipant(c1.caller, projectId, k5.company.company, "consultant");
+    expect(again).not.toBe(k5.id);
+    const engineer = await projectMember(api, k5.company, again, ["engineer"]);
+    names.set(engineer, "K5's new engineer");
+    await ok(c1.caller.request("PUT", `/v1/participants/${again}/visibility`, { trade: all, location: all }));
+    const all3 = [...items, third];
+    expect((await vacancyItems(c1.caller)).map((v) => v.id).sort()).toEqual([...all3].sort());
+    for (const id of all3) {
+      const [d] = await itemById(id)(c1Engineer);
+      expect(d!.vacancy?.projectRole.baseRole, "still Waiting for a new Consultant").toBe("consultant");
+      await expectHiddenFrom({ read: itemById(id), target: id, seenBy: c1Engineer, hiddenFrom: [k5.company.caller, k5.engineer, engineer], name: nameOf, label: "K5 invited again" });
+    }
   });
 });

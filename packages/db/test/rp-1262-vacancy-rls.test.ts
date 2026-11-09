@@ -1,5 +1,5 @@
 // Seam 2 for passing a withdrawn Participant's Vacancies to the replacement Participant's Step Pool
-// (RP-1262; ADR 0028; GLOSSARY › Vacancy; workflow-engine.md §9; scenarios RP-1262-1 to RP-1262-4),
+// (RP-1262; ADR 0028; GLOSSARY › Vacancy; workflow-engine.md §9; scenarios RP-1262-1 to RP-1262-7),
 // as the app role, with app.pass_vacancies called directly for the overlap. The replacement is the one
 // active Participant of the withdrawn Participant's Project Role whose Visibility covers the item; it
 // takes the Step when it accepts or when its Visibility is set, and nobody else gains the item.
@@ -374,5 +374,23 @@ describe("scenario RP-1262-6: a withdrawal passes a Vacancy at once to the one o
       await expectHiddenFrom({ read: itemRows(id), target: id, seenBy: [k5.member, c1.member], hiddenFrom: [k4.ap, k4.member, k3.member, k2.member, c2.member], name: nameOf, label: "after K4's withdrawal" });
     }
     expect(await vacancies(c1.ap)).toEqual([]); // not hidden-from: the same Admin's read listed Vacancies in RP-1262-4
+  });
+});
+
+describe("scenario RP-1262-7: a withdrawn Company invited again never takes back its own old Vacancies", () => {
+  it("leaves K5's Steps vacant when K5 comes back as a fresh Consultant covering every item, the only one", async () => {
+    const old = participant.k5;
+    expect(await withdraw(old)).toBe("withdrawn");
+    for (const id of [itemA, itemB, itemC]) expect((await openStep(id))?.status, "no Consultant left").toBe("vacant");
+    // RP-1261: invited again, K5 is a new Participant row of the same Company.
+    const again = await joinProject(app, projectId, { adminId: c1.ap, crNumber: k5.cr, role: "consultant" }, k5.ap);
+    expect(again).not.toBe(old);
+    await onProject(k5, again);
+    await coverAll(again);
+    for (const id of [itemA, itemB, itemC]) {
+      expect(await openStep(id), "still the withdrawn K5's Vacancy").toEqual({ participant_id: old, assignee_member_id: null, status: "vacant" });
+      await expectHiddenFrom({ read: itemRows(id), target: id, seenBy: c1.member, hiddenFrom: [k5.ap, k5.member], name: nameOf, label: "K5 invited again" });
+    }
+    expect((await vacancies(c1.ap)).map((v) => v.work_item_id).sort()).toEqual([itemA, itemB, itemC].sort());
   });
 });

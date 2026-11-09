@@ -1,5 +1,5 @@
 -- RP-1262 (follow-up to RP-952; ADR 0028; GLOSSARY › Vacancy; workflow-engine.md §9; visibility.md
--- "A Participant's withdrawal"; scenarios RP-1262-1 to RP-1262-6): a withdrawn Participant's
+-- "A Participant's withdrawal"; scenarios RP-1262-1 to RP-1262-7): a withdrawn Participant's
 -- Participant-level Vacancies pass to the replacement Participant's Step Pool.
 --
 -- * Who the replacement is (§3.1, decided 2026-11-09 by the product owner, from lane B's proposal):
