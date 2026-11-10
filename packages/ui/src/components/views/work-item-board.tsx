@@ -180,6 +180,10 @@ export function WorkItemBoard({
   // A card lifted by a finger (RP-1274): the same targets and the same `onMove` as a mouse drag.
   const region = useRef<HTMLElement>(null);
   const [touchDrag, setTouchDrag] = useState(false);
+  // The card a finger carries, read on the drop without waiting for a render.
+  const lifted = useRef<Dragging | null>(null);
+  // On a phone the cards' Move menus come up as a sheet; asked once for the board.
+  const phone = useMediaQuery(PHONE, false);
   const stageUnder = (under: Element | null) => {
     const column = under?.closest<HTMLElement>("[data-stage]");
     return column && region.current?.contains(column) ? (column.dataset.stage ?? null) : null;
@@ -187,14 +191,17 @@ export function WorkItemBoard({
   const touch = useLongPressDrag<Dragging>({
     region,
     onLift: (d) => {
+      lifted.current = d;
       setDragging(d);
       setTouchDrag(true);
     },
     onOver: (under) => setOver(stageUnder(under)),
     onDrop: (under) => {
+      const carried = lifted.current;
+      lifted.current = null;
       const key = stageUnder(under);
-      const move = key === null ? undefined : dragging?.targets.get(key);
-      if (dragging && move) onMove?.(dragging.card, move);
+      const move = key === null ? undefined : carried?.targets.get(key);
+      if (carried && move) onMove?.(carried.card, move);
       setDragging(null);
       setOver(null);
       setTouchDrag(false);
@@ -343,6 +350,7 @@ export function WorkItemBoard({
                           if (!d) setOver(null);
                         }}
                         touch={{ pressProps: touch.pressProps, lifted: touch.lifted, active: touchDrag }}
+                        sheet={phone}
                       />
                     );
                   })
@@ -496,6 +504,7 @@ function Lane({
   dragging,
   onDragChange,
   touch,
+  sheet,
 }: {
   lane: WorkItemBoardLane;
   index: number;
@@ -520,6 +529,8 @@ function Lane({
   onDragChange: (dragging: Dragging | null) => void;
   /** The long touch press that lifts a card (RP-1274); `active` while a finger carries one. */
   touch: { pressProps: ReturnType<typeof useLongPressDrag<Dragging>>["pressProps"]; lifted: () => boolean; active: boolean };
+  /** A phone: the Move menu comes up as a bottom sheet. */
+  sheet: boolean;
 }) {
   const name =
     lane.kind === "role"
@@ -574,7 +585,8 @@ function Lane({
                 movable && "cursor-grab active:cursor-grabbing",
                 // A long press lifts the card, so it opens no text selection or link menu on touch.
                 movable && "pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]",
-                lifted && "relative z-10 scale-[1.02] rounded-lg shadow-xl",
+                // Lifted: a small rise and shadow that stay inside the column's padding, which clips what scrolls.
+                lifted && "relative z-10 -translate-y-0.5 rounded-lg shadow-md",
               )}
               draggable={movable || undefined}
               {...(movable ? touch.pressProps({ card, targets }) : {})}
@@ -601,7 +613,7 @@ function Lane({
                 selected={dragging === card.id || openId === card.id}
                 open={openId === card.id}
                 opener={onOpen && { id: card.id, onOpen: () => onOpen(card) }}
-                actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} /> : undefined}
+                actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} sheet={sheet} /> : undefined}
               />
             </li>
           );
@@ -624,6 +636,7 @@ function MoveMenu({
   locale,
   labels,
   onMove,
+  sheet,
 }: {
   card: WorkItemRow;
   targets: Map<string, WorkItemMove>;
@@ -631,8 +644,8 @@ function MoveMenu({
   locale: Locale;
   labels: WorkItemBoardLabels;
   onMove: (card: WorkItemRow, move: WorkItemMove) => void;
+  sheet: boolean;
 }) {
-  const sheet = useMediaQuery(PHONE, false);
   const name = labels.moveItem(card.title);
   // 24 px, with a 44 × 44 box on touch (RP-1158 row 52).
   const trigger = (

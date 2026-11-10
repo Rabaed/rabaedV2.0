@@ -933,6 +933,13 @@ export const LongPressOnATablet: Story = {
     await expect(item).not.toHaveAttribute("data-lifted");
     fingerUp({ x: at.x, y: at.y - 30 });
 
+    // A long press on the card's ✥ button is for the button: nothing lifts.
+    const moveButton = within(item).getByRole("button", { name: storyText(context, copy.moveItem).replace("#", cards.fire.title) });
+    const onButton = fingerDown(moveButton);
+    await hold(400);
+    await expect(item).not.toHaveAttribute("data-lifted");
+    fingerUp(onButton);
+
     // Held still for 300 ms, it lifts: the same targets as a mouse drag.
     fingerDown(link);
     await hold(150);

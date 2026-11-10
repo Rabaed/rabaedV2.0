@@ -87,6 +87,9 @@ export function useLongPressDrag<T>({ region, onLift, onOver, onDrop }: LongPres
   const pressProps = (payload: T) => ({
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
       if (event.pointerType !== "touch" || !event.isPrimary) return;
+      // A press on the card's own controls (its ✥ button, its Package chip) is for them, not a drag.
+      if ((event.target as Element).closest("button, [data-package-chip]")) return;
+      const card = event.currentTarget;
       end();
       const p: Press<T> = {
         payload,
@@ -116,12 +119,14 @@ export function useLongPressDrag<T>({ region, onLift, onOver, onDrop }: LongPres
         if (e.pointerId !== p.pointerId) return;
         if (p.lifted) {
           handlers.current.onDrop(document.elementFromPoint(e.clientX, e.clientY));
-          // The click a lifted finger may still send opens nothing.
+          // The click a lifted finger may still send on the card opens nothing; a tap elsewhere is the person's.
           const swallow = (click: MouseEvent) => {
+            if (!(click.target instanceof Node && card.contains(click.target))) return;
             click.preventDefault();
             click.stopPropagation();
+            window.removeEventListener("click", swallow, { capture: true });
           };
-          window.addEventListener("click", swallow, { capture: true, once: true });
+          window.addEventListener("click", swallow, { capture: true });
           setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 400);
         }
         end();

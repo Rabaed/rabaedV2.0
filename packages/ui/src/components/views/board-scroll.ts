@@ -4,11 +4,11 @@
 
 /**
  * The board's region. At 1024 and below it scrolls sideways only, snapping to each column's start in
- * the reading direction, and leaves scrolling down to its columns. A size container, so a phone column
- * can be the board's width less 40 px. While a card is dragged on touch (`data-touch-drag`) the snap is
- * off, so the board can scroll smoothly at its edges.
+ * the reading direction, and leaves scrolling down to its columns. On a phone a size container, so a
+ * column can be the board's width less 40 px. While a card is dragged on touch (`data-touch-drag`) the
+ * snap is off, so the board can scroll smoothly at its edges.
  */
-export const boardScroller = "@container tablet:overflow-y-hidden tablet:snap-x tablet:snap-mandatory data-touch-drag:snap-none";
+export const boardScroller = "phone:@container tablet:overflow-y-hidden tablet:snap-x tablet:snap-mandatory data-touch-drag:snap-none";
 
 /** With `boardScroller`, a region whose columns sit in a row of their own (`boardRow`): that row gets its height. */
 export const boardOfRow = "tablet:flex tablet:flex-col";
