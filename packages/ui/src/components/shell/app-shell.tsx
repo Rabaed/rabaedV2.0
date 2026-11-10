@@ -123,7 +123,7 @@ export function AppShell({ sidebar, topBar, tabs, menuLabel, closeLabel, childre
         </div>
         {/* On a tablet and desktop they scroll away with the page, as before. */}
         {!isPhone && tabs}
-        <ActionBarContext.Provider value={isPhone ? actionBar : null}>
+        <ActionBarContext.Provider value={{ bar: isPhone ? actionBar : null }}>
           <main className="flex min-w-0 flex-1 flex-col fills-window:min-h-0">{children}</main>
         </ActionBarContext.Provider>
         {isPhone && (

@@ -75,8 +75,8 @@ const statusClasses: Record<MemberStatus, string> = {
   deactivated: "bg-neutral-tint text-neutral-fg",
 };
 
-// Below `sm` the menu column stays at the row's end while the table scrolls sideways, as the List's last column.
-const pinned = "max-sm:sticky max-sm:end-0 max-sm:border-s max-sm:border-border-subtle";
+// On a phone the menu column stays at the row's end while the table scrolls sideways, as the List's last column.
+const pinned = "phone:sticky phone:end-0 phone:border-s phone:border-border-subtle";
 // On a phone each Member's name stays at the row's start too (RP-1273, gap-table row 65), a shadow on its edge as the List's pinned number has.
 const pinnedName =
   "phone:sticky phone:start-0 phone:z-[1] phone:shadow-[6px_0_6px_-6px_var(--color-overlay)] phone:rtl:shadow-[-6px_0_6px_-6px_var(--color-overlay)]";
