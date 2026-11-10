@@ -1271,6 +1271,8 @@ export const OnAPhone: Story = {
 
     const add = await waitFor(() => within(context.canvasElement.querySelector<HTMLElement>("[data-action-bar]")!).getByRole("button", { name: storyText(context, copy.addSubmittal) }));
     await expect(toolbar).not.toContainElement(add);
+    // The Subject keeps to 112 on a phone, so an English one in the Arabic List shows its start beside the pinned number.
+    await expect(context.canvas.getByRole("link", { name: "Cable tray support brackets" }).getBoundingClientRect().width).toBeLessThanOrEqual(112);
 
     await expectNumberPinned(context);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
