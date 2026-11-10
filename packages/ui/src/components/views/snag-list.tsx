@@ -927,7 +927,14 @@ function SnagBoard({
       // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
       // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", boardScroller, focusRing, "focus-visible:-outline-offset-2")}
+      className={cn(
+        "flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2",
+        boardScroller,
+        // At 1024 and below it reaches the screen's edges, as the other boards do, so the next column peeks about 40 px on a phone.
+        "tablet:-mx-4 tablet:px-4 tablet:scroll-px-4",
+        focusRing,
+        "focus-visible:-outline-offset-2",
+      )}
     >
       {board.stages
         .filter((s) => s.category !== "draft")

@@ -71,7 +71,7 @@ export async function expectOneColumnAndAPeek(region: HTMLElement, columns: HTML
   await expect(first.right).toBeLessThanOrEqual(box.right);
   const next = columns[1]!.getBoundingClientRect();
   const peek = style.direction === "rtl" ? next.right - box.left : box.right - next.left;
-  await expect(peek).toBeGreaterThanOrEqual(24);
+  await expect(peek).toBeGreaterThanOrEqual(32);
   await expect(peek).toBeLessThanOrEqual(48);
   const page = document.scrollingElement!;
   await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth);
