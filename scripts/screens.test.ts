@@ -20,8 +20,10 @@ import {
   markdownTable,
   parseArgs,
   parseScreens,
+  PHONE,
   plannedShots,
   rawUrl,
+  TABLET,
   repoSlug,
   runActions,
   screensBranch,
@@ -92,7 +94,7 @@ describe("parseArgs", () => {
   });
 
   it("refuses --publish-dir with anything that shoots", () => {
-    for (const extra of [["/home"], ["--as", "ali"], ["--setup", "s.ts"], ["--steps", "f.ts"], ["--phone"], ["--out", "x"]]) {
+    for (const extra of [["/home"], ["--as", "ali"], ["--setup", "s.ts"], ["--steps", "f.ts"], ["--phone"], ["--tablet"], ["--out", "x"]]) {
       expect(() => parseArgs(["--publish-dir", "shots", ...extra], at)).toThrow(/--publish-dir publishes PNGs already on disk/);
     }
   });
@@ -406,12 +408,28 @@ describe("plannedShots", () => {
     expect(() => plannedShots(["/submit-dialog", dialog])).toThrow('Route /submit-dialog and screen "submit-dialog" would be saved as the same file');
   });
 
-  it("with --phone, is every route at 375 only, in English and Arabic (RP-630)", () => {
+  it("with --phone, is every route at the owner's phone, 402, only, in English and Arabic (RP-630, RP-1271)", () => {
     expect(parseArgs(["/home", "--as", "ali"], at).phone).toBe(false);
     expect(parseArgs(["/home", "--as", "ali", "--phone"], at).phone).toBe(true);
-    expect(plannedShots(["/home"], { phone: true }).map((s) => s.file)).toEqual(["home-375-en.png", "home-375-ar.png"]);
-    expect(markdownTable(plannedShots(["/home"], { phone: true }), (file) => file).split("\n")[0]).toBe("| Page | English 375 | Arabic 375 |");
-    expect(plannedShots([{ name: "bulk", route: "/p", actions: [] }], { phone: true }).map((s) => s.file)).toEqual(["bulk-375-en.png", "bulk-375-ar.png"]);
+    expect(plannedShots(["/home"], { phone: true }).map((s) => s.file)).toEqual(["home-402-en.png", "home-402-ar.png"]);
+    expect(markdownTable(plannedShots(["/home"], { phone: true }), (file) => file).split("\n")[0]).toBe("| Page | English 402 | Arabic 402 |");
+    expect(plannedShots([{ name: "bulk", route: "/p", actions: [] }], { phone: true }).map((s) => s.file)).toEqual(["bulk-402-en.png", "bulk-402-ar.png"]);
+  });
+
+  it("with --tablet, is every route at the owner's iPad Air portrait, 820, only (RP-1271)", () => {
+    expect(parseArgs(["/home", "--as", "ali"], at).tablet).toBe(false);
+    expect(parseArgs(["/home", "--as", "ali", "--tablet"], at).tablet).toBe(true);
+    expect(plannedShots(["/home"], { tablet: true }).map((s) => s.file)).toEqual(["home-820-en.png", "home-820-ar.png"]);
+    expect(markdownTable(plannedShots(["/home"], { tablet: true }), (file) => file).split("\n")[0]).toBe("| Page | English 820 | Arabic 820 |");
+  });
+
+  it("refuses --phone and --tablet together: one size per run (RP-1271)", () => {
+    expect(() => parseArgs(["/home", "--as", "ali", "--phone", "--tablet"], at)).toThrow(/--phone and --tablet/);
+  });
+
+  it("knows the reference devices' frames: 402 × 874 and 820 × 1180 (RP-1271)", () => {
+    expect(PHONE).toEqual({ width: 402, height: 874 });
+    expect(TABLET).toEqual({ width: 820, height: 1180 });
   });
 
   // Review fix 15: Windows file names ignore case, so /A and /a would overwrite each other.
