@@ -10,8 +10,10 @@
  *      links are exempt; anything else needs `parameters.touchTargets.exempt` with a reason,
  *      see src/storybook/touch-target.ts),
  *   6. match its committed screenshot (Linux only; see vitest.config.ts) exactly.
- * Stories with `parameters.phone` render 390px wide on a touch screen
- * (pointer: coarse), so they can check 44px touch targets. Stories with
+ * Stories with `parameters.phone` render 402 × 874 on a touch screen
+ * (pointer: coarse), so they can check 44px touch targets; `parameters.tablet`
+ * renders 820 × 1180, also touch, and `parameters.wide` 1366 × 900, past the
+ * tablet tier, where the desktop sidebar shows (RP-1272). Stories with
  * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
  * are screenshotted as a 1024 × 768 page, portals included. Motion is reduced,
  * so animations never reach a screenshot, and every font is loaded before the
@@ -56,9 +58,21 @@ const viewports = {
   desktop: { width: 1024, height: 2400 },
   // A screen-sized page, for overlays screenshotted with the page behind them.
   overlay: { width: 1024, height: 768 },
-  // A phone with a touch screen (coarse pointer).
-  phone: { width: 390, height: 844 },
+  // A phone with a touch screen (coarse pointer): the owner's iPhone (RP-1158).
+  phone: { width: 402, height: 874 },
+  // A tablet with a touch screen: the owner's iPad Air, portrait (RP-1158).
+  tablet: { width: 820, height: 1180 },
+  // A laptop screen, wider than the tablet tier (up to 1024), for what only a desktop shows (the sidebar).
+  wide: { width: 1366, height: 900 },
 };
+
+/** The size a story renders at: `parameters.phone`, `tablet` or `wide`, else a desktop page (or screen, for an overlay). */
+function sizeOf(parameters: Record<string, unknown>): keyof typeof viewports {
+  if (parameters.phone === true) return "phone";
+  if (parameters.tablet === true) return "tablet";
+  if (parameters.wide === true) return "wide";
+  return parameters.overlay === true ? "overlay" : "desktop";
+}
 
 async function emulate(kind: keyof typeof viewports) {
   const { width, height } = viewports[kind];
@@ -68,7 +82,7 @@ async function emulate(kind: keyof typeof viewports) {
     await page.viewport(width, height);
     await resized;
   }
-  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: kind === "phone", maxTouchPoints: 5 });
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: kind === "phone" || kind === "tablet", maxTouchPoints: 5 });
 }
 
 for (const locale of locales) {
@@ -79,7 +93,7 @@ for (const locale of locales) {
       describe(file.replace("../src/", ""), () => {
         test.each(stories.map((story) => [story.storyName, story] as const))("%s", async (_name, Story) => {
           const overlay = Story.parameters.overlay === true;
-          await emulate(Story.parameters.phone === true ? "phone" : overlay ? "overlay" : "desktop");
+          await emulate(sizeOf(Story.parameters));
           const canvasElement = document.createElement("div");
           canvasElement.dataset.testid = "story";
           document.body.append(canvasElement);

@@ -142,8 +142,13 @@ export function storyTopBar(context: Context) {
 /** A Project's Module tab as the app lays it out: the shell, the Project tabs, then `children` in the page's content area. */
 export function StoryProjectPage({ context, current, children }: { context: Context; current: ProjectTabKey; children: ReactNode }) {
   return (
-    <AppShell sidebar={storySidebar(context)} topBar={storyTopBar(context)} menuLabel={storyText(context, shellCopy.menu)} closeLabel={storyText(context, shellCopy.close)}>
-      <TabsBar>{storyProjectTabs(context, current, ["submittals", "inspections", "snag_list"])}</TabsBar>
+    <AppShell
+      sidebar={storySidebar(context)}
+      topBar={storyTopBar(context)}
+      tabs={<TabsBar>{storyProjectTabs(context, current, ["submittals", "inspections", "snag_list"])}</TabsBar>}
+      menuLabel={storyText(context, shellCopy.menu)}
+      closeLabel={storyText(context, shellCopy.close)}
+    >
       <PageContent>{children}</PageContent>
     </AppShell>
   );

@@ -19,6 +19,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { saveMemberLanguage } from "@/lib/member-language";
 import { sidebarCookie, sidebarItemOf } from "@/lib/shell";
+import { paintThemeColor } from "@/lib/theme-color";
 import { NotificationBell } from "./notification-bell";
 
 export type AppFrameProps = {
@@ -60,10 +61,11 @@ function mirror(value: Appearance) {
   document.cookie = `${appearanceCookie}=${appearanceCookieValue(value)}; path=/; max-age=31536000; samesite=lax${secure}`;
 }
 
-/** Paints the page in a Theme and Mode, as the layout does on the server. */
+/** Paints the page in a Theme and Mode, as the layout does on the server, the browser's bar included. */
 function paint(value: Appearance) {
   document.documentElement.dataset.theme = value.theme;
   document.documentElement.dataset.mode = value.mode;
+  paintThemeColor(value);
 }
 
 function Frame({ locale, memberName, companyName, notifications, defaultCollapsed, appearance: kept, heading, tabs, children }: AppFrameProps) {
@@ -188,10 +190,11 @@ function Frame({ locale, memberName, companyName, notifications, defaultCollapse
         notifications: notifications ? <NotificationBell initial={notifications} /> : undefined,
         member: memberMenu("topBar"),
       }}
+      // A Project's tabs: they stay with the top bar, and hide and come back with it on a phone.
+      tabs={tabs}
       menuLabel={t("menu")}
       closeLabel={t("close")}
     >
-      {tabs}
       <PageContent>{children}</PageContent>
     </AppShell>
   );

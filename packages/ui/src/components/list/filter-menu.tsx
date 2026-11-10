@@ -310,7 +310,8 @@ export function FilterValues({ label, hint, values, multiple = true, choices, on
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={labels.search}
-            className="h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
+            // 16px on a phone, so iPhone Safari doesn't zoom into it (RP-1272).
+            className="h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted phone:text-lg"
           />
         </label>
       )}

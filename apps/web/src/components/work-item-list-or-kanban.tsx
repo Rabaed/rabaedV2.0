@@ -26,6 +26,7 @@ import {
   WorkItemBoard,
   WorkItemList,
   WorkItemViewSwitch,
+  pageBleed,
   type BoardLayoutMenuLabels,
   type RowAction,
   type WholeTableLabels,
@@ -419,7 +420,7 @@ export function WorkItemListOrKanban(
               layout={layout ?? props.board.layout}
               storageKey={`${projectId}:${module}`}
               // The canvas reaches the page's edges (PageContent's padding), as the anatomy draws it.
-              className="-mx-4 px-4 sm:-mx-7 sm:px-7"
+              className={pageBleed}
               listHrefFor={(q) => hrefIn("list", q)}
               itemHref={itemHref}
               // A card's Package chip, where the API gives the item's Package (RP-659).

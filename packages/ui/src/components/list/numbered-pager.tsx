@@ -79,7 +79,7 @@ export function NumberedPager({ page, lastPage, hasNext, pageSize, pageSizes, su
           id={id}
           value={pageSize}
           onChange={(event) => onPageSize(Number(event.target.value))}
-          className={cn("h-[30px] rounded-xs border border-control-border bg-surface px-2 text-[13px] text-text pointer-coarse:min-h-11", focusRing)}
+          className={cn("h-[30px] rounded-xs border border-control-border bg-surface px-2 text-[13px] text-text pointer-coarse:min-h-11 phone:text-lg", focusRing)}
         >
           {pageSizes.map((size) => (
             <option key={size} value={size}>

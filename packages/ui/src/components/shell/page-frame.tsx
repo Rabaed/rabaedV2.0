@@ -29,8 +29,9 @@ export function TopBarTitle({ title, subtitle, mark, back, linkAs: Link = "a" }:
           aria-label={back.label}
           title={back.label}
           className={cn(
-            "hidden size-9 shrink-0 items-center justify-center rounded-sm text-text-secondary hover:bg-hover sm:inline-flex",
-            "pointer-coarse:size-11",
+            // On a phone too, 44 × 44 there (RP-1272).
+            "inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-text-secondary hover:bg-hover",
+            "pointer-coarse:size-11 phone:size-11",
             focusRing,
           )}
         >
@@ -47,13 +48,14 @@ export function TopBarTitle({ title, subtitle, mark, back, linkAs: Link = "a" }:
   );
 }
 
-/** A Project's mark: the first letter of its name on a tile. Decorative: the name is always beside it. */
+/** A Project's mark: the first letter of its name on a tile. Decorative: the name is always beside it. Not on a phone, where the name needs the room. */
 export function ProjectMark({ name, className }: { name: string; className?: string }) {
   return (
     <span
       aria-hidden="true"
+      data-project-mark=""
       className={cn(
-        "hidden size-10 shrink-0 items-center justify-center rounded-md bg-primary font-display text-h6 font-extrabold text-on-primary sm:inline-flex",
+        "inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-primary font-display text-h6 font-extrabold text-on-primary phone:hidden",
         className,
       )}
     >
@@ -65,12 +67,18 @@ export function ProjectMark({ name, className }: { name: string; className?: str
 /** The band under the top bar holding a page's tabs, e.g. `ProjectTabs`, edge to edge. */
 export function TabsBar({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("shrink-0 border-b border-border bg-surface px-4 sm:px-7", className)}>
+    <div className={cn("shrink-0 border-b border-border bg-surface px-7 tablet:px-4", className)}>
       {/* The tabs' own bottom border sits on the band's. */}
       <div className="-mb-px">{children}</div>
     </div>
   );
 }
+
+/**
+ * Classes that take an element out to the page's edges through `PageContent`'s side padding, keeping
+ * that padding inside it, e.g. a board's canvas whose sideways scroll should reach the window's edge.
+ */
+export const pageBleed = "-mx-7 px-7 tablet:-mx-4 tablet:px-4";
 
 export type PageContentProps = {
   children: ReactNode;
@@ -83,13 +91,16 @@ export type PageContentProps = {
 };
 
 /**
- * The page's content area inside AppShell: side padding, full width unless `narrow`. Holding a
- * board that fills the window (RP-1092), it passes the board the rest of the window, with no
- * bottom padding, so the board reaches the window's bottom edge.
+ * The page's content area inside AppShell: side padding (28 on a desktop, 16 on a tablet or phone,
+ * RP-1272), full width unless `narrow`. Holding a board that fills the window (RP-1092), it passes
+ * the board the rest of the window, with no bottom padding, so the board reaches the window's bottom edge.
  */
 export function PageContent({ children, narrow = false, className }: PageContentProps) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-7 sm:py-7 fills-window:min-h-0 fills-window:pb-0", className)}>
+    <div
+      data-page-content=""
+      className={cn("flex min-w-0 flex-1 flex-col px-7 py-7 tablet:px-4 phone:py-6 fills-window:min-h-0 fills-window:pb-0", className)}
+    >
       <div className={cn("w-full min-w-0 fills-window:flex fills-window:min-h-0 fills-window:flex-1 fills-window:flex-col", narrow && "max-w-3xl")}>{children}</div>
     </div>
   );
