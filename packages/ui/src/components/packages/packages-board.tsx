@@ -29,6 +29,7 @@ import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
 import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
 import { PackageStatusPill, StateMiniBar, TypeIconTile } from "./package-states.tsx";
 import { PackagesList, type PackagesListLabels } from "./packages-list.tsx";
+import { boardColumn, boardOfRow, boardRow, boardScroller, columnCards } from "../views/board-scroll.ts";
 
 // The Packages view of the Submittals (RP-660, spec RP-616 stories 24, 29–33): the Packages the
 // viewer sees as a Kanban of Open, In Progress and Done, or as the List of Packages (RP-1143).
@@ -325,15 +326,29 @@ function PackageColumns({
       // The page gives it the rest of the window (`fills-window`, RP-1135); it scrolls itself, so the page doesn't.
       // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("relative min-h-64 flex-1 overflow-auto bg-canvas pt-1 pb-[40px]", pageBleed, focusRing, "focus-visible:-outline-offset-2")}
+      className={cn(
+        "relative min-h-64 flex-1 overflow-auto bg-canvas pt-1 pb-[40px]",
+        pageBleed,
+        // At 1024 and below it snaps to each column, inside the page's 16 px gutter, and its columns scroll down (RP-1274, row 67).
+        boardScroller,
+        boardOfRow,
+        "tablet:scroll-px-4 tablet:pb-4",
+        focusRing,
+        "focus-visible:-outline-offset-2",
+      )}
     >
-      <ol className="flex w-max items-start gap-[18px]">
+      <ol className={cn("flex w-max items-start gap-[18px]", boardRow)}>
         {packageStatuses.map((status) => {
           const cards = packages.filter((p) => p.status === status);
           const headingId = `packages-column-${status}`;
           return (
-            // The kit's `.pkcol`: 330 px.
-            <li key={status} aria-labelledby={headingId} data-package-column={status} className="flex w-[330px] shrink-0 flex-col rounded-lg border border-border bg-surface">
+            // The kit's `.pkcol`: 330 px; on a phone the board's width less 40 px.
+            <li
+              key={status}
+              aria-labelledby={headingId}
+              data-package-column={status}
+              className={cn("flex w-[330px] shrink-0 flex-col rounded-lg border border-border bg-surface", boardColumn)}
+            >
               <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-[11px]">
                 <h2 id={headingId} className="flex min-w-0 flex-1 items-center gap-2.5 py-[3px] text-lg leading-6 font-bold text-text">
                   <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", statusDot[status])} />
@@ -359,7 +374,7 @@ function PackageColumns({
               {cards.length === 0 ? (
                 <p className="px-3 py-6 text-center text-caption text-muted">{labels.noPackages}</p>
               ) : (
-                <ul className="flex flex-col gap-[14px] px-2.5 py-2.5">
+                <ul className={cn("flex flex-col gap-[14px] px-2.5 py-2.5", columnCards)}>
                   {cards.map((p) => (
                     <li key={p.id}>
                       <PackageCard pkg={p} locale={locale} labels={labels} href={packageHref(p.id)} linkAs={Link} />

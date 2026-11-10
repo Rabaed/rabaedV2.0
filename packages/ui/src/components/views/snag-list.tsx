@@ -31,6 +31,7 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overla
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot, StagePill } from "../status/stage-pill.tsx";
+import { boardColumn, boardScroller, columnCards } from "./board-scroll.ts";
 import { HeaderBadge, OwnerMark, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
@@ -897,6 +898,8 @@ function SnagTable({
  * The Kanban: a column per Stage (Drafts left out, as on every board), each with its count and its cards.
  * On its page it fills the window (RP-1092) and scrolls down and sideways in its own region, its
  * scrollbar on the window's bottom edge; a column reaches the board's foot and grows with its cards.
+ * At 1024 and below it snaps to each column and each column scrolls its own cards; on a phone a
+ * column is the board's width less 40 px, so the next one peeks (RP-1274).
  */
 function SnagBoard({
   board,
@@ -924,21 +927,25 @@ function SnagBoard({
       // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
       // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", focusRing, "focus-visible:-outline-offset-2")}
+      className={cn("flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2", boardScroller, focusRing, "focus-visible:-outline-offset-2")}
     >
       {board.stages
         .filter((s) => s.category !== "draft")
         .map((stage) => {
           const cards = (columns.get(stage.key)?.lanes ?? []).flatMap((l) => l.cards);
           return (
-            // Stretched to the board's height, and never shorter than its cards.
-            <section key={stage.key} aria-label={stage.name[locale]} className="flex min-h-fit w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle">
-              <h2 className="flex h-11 items-center gap-2 px-3 text-[13.5px] font-semibold text-text">
+            // Stretched to the board's height, and never shorter than its cards; at 1024 and below, the board's height and no more.
+            <section
+              key={stage.key}
+              aria-label={stage.name[locale]}
+              className={cn("flex min-h-fit w-[272px] shrink-0 flex-col rounded-md bg-surface-subtle", boardColumn)}
+            >
+              <h2 className="flex h-11 shrink-0 items-center gap-2 px-3 text-[13.5px] font-semibold text-text">
                 <StageDot stage={stageColour(stage)} />
                 {stage.name[locale]}
                 <span className="ms-auto rounded-full bg-surface px-2 text-caption font-semibold text-muted tabular-nums">{n(stage.count)}</span>
               </h2>
-              <ul className="flex flex-col gap-2 px-2 pb-2">
+              <ul className={cn("flex flex-col gap-2 px-2 pb-2", columnCards)}>
                 {cards.length === 0 ? (
                   <li className="rounded-sm border border-dashed border-border px-3 py-6 text-center text-caption text-faint">{labels.noItems}</li>
                 ) : (

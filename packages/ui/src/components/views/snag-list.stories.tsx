@@ -2,7 +2,9 @@ import { workItemQuery, workItemSearchParams, type Locale, type WorkItemBoard as
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { expectColumnScrollsOnItsOwn, expectOneColumnAndAPeek, expectSnapsByColumn } from "../../storybook/board.ts";
 import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
+import { phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
@@ -491,7 +493,8 @@ const crowded = boardOf([...items, ...manyOpen]);
  * inside itself, and the page doesn't scroll.
  */
 export const KanbanFillsTheWindow: Story = {
-  parameters: { ...overlay, layout: "fullscreen" },
+  // Above the tablet width: at 1024 and below the columns scroll instead (KanbanOnATablet, RP-1274).
+  parameters: { ...overlay, ...wide, layout: "fullscreen" },
   args: { data: { view: "kanban", board: crowded } },
   render: (args, context) => (
     <StoryProjectPage context={context} current="snag_list">
@@ -507,6 +510,43 @@ export const KanbanFillsTheWindow: Story = {
     const closed = within(region).getByRole("region", { name: stages.closed.name[locale] });
     await expect(open.scrollHeight).toBe(open.clientHeight);
     await expect(closed.getBoundingClientRect().height).toBeGreaterThanOrEqual(region.clientHeight - 8);
+  },
+};
+
+const snagColumns = (region: HTMLElement) => within(region).getAllByRole("region");
+
+/**
+ * The Snag list board on a tablet (820, RP-1274, RP-1158 row 48): the board snaps to each column, right to
+ * left in Arabic, and no longer scrolls down: the Open column, taller than the board, scrolls its own
+ * cards under its 44 px header.
+ */
+export const KanbanOnATablet: Story = {
+  ...KanbanFillsTheWindow,
+  parameters: { ...tablet, layout: "fullscreen" },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const region = context.canvas.getByRole("region", { name: labels[locale].board });
+    const columns = snagColumns(region);
+    await expectSnapsByColumn(region, columns);
+    const open = within(region).getByRole("region", { name: stages.open.name[locale] });
+    const header = within(open).getByRole("heading", { level: 2 });
+    await expect(header.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expectColumnScrollsOnItsOwn(region, open, header);
+  },
+};
+
+/** On a phone (402, row 49): one column, the board's width less 40 px, with the next one peeking. */
+export const KanbanOnAPhone: Story = {
+  ...KanbanFillsTheWindow,
+  parameters: { ...phone, layout: "fullscreen" },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const region = context.canvas.getByRole("region", { name: labels[locale].board });
+    const columns = snagColumns(region);
+    await expectOneColumnAndAPeek(region, columns);
+    await expectSnapsByColumn(region, columns);
+    const open = within(region).getByRole("region", { name: stages.open.name[locale] });
+    await expectColumnScrollsOnItsOwn(region, open, within(open).getByRole("heading", { level: 2 }));
   },
 };
 

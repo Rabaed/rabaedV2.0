@@ -181,6 +181,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       showAllIn: (stage) => t("board.showAllIn", { stage }),
       move: t("board.move"),
       moveItem: (subject) => t("board.moveItem", { subject }),
+      close: t("list.close"),
       moveTo: (stage) => t("board.moveTo", { stage }),
       dragging: t("board.dragging"),
       showOnlyStep: (step) => t("board.showOnlyStep", { step }),
