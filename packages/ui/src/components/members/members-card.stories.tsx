@@ -201,6 +201,8 @@ export const Phone: Story = {
     await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
     const ar = storyLocale(context) === "ar";
     const name = within(region).getAllByRole("cell")[0]!;
+    // About 180 wide at most, so the other columns have the rest of the card to scroll in.
+    await expect(name.getBoundingClientRect().width).toBeLessThanOrEqual(185);
     const start = () => (ar ? region.getBoundingClientRect().right - name.getBoundingClientRect().right : name.getBoundingClientRect().left - region.getBoundingClientRect().left);
     await expect(Math.abs(start())).toBeLessThanOrEqual(1);
     region.scrollBy({ left: ar ? -region.scrollWidth : region.scrollWidth });

@@ -388,8 +388,9 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           dir="auto"
           title={row.title}
           // A fitting table under 1600 wide: 112px at most (RP-1177, the owner's answers), the whole Subject in the tooltip.
-          // Up to the tablet width the table scrolls sideways past the pinned number instead, so it may take 240 (RP-1273).
-          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg list-narrow:min-[1025px]:max-w-[112px] tablet:max-w-[240px]", focusRing, touchBox)}
+          // A tablet scrolls the table sideways past the pinned number instead, so it may take 240 (RP-1273); a phone keeps 112, so
+          // an English Subject in the Arabic List still shows its start in the narrow strip between the pinned columns.
+          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg list-narrow:min-[1025px]:max-w-[112px] min-[768px]:tablet:max-w-[240px] phone:max-w-[112px]", focusRing, touchBox)}
         >
           {row.title}
         </Link>
