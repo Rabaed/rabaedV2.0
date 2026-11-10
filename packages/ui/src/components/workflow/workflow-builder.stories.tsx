@@ -240,6 +240,8 @@ export const PhoneReadOnly: Story = {
     await expect(canvas.getByRole("link", { name: labels.back })).toHaveAttribute("href", "#workflows");
     // The draft as it stands, read-only: no palette, no editing bar, no Publish.
     await ready(canvas, locale);
+    // Its Steps listed under the diagram, readable at a phone's width.
+    await expect(within(canvas.getByRole("list", { name: labels.map.list })).getByText(step("consultant_qa").name[locale])).toBeVisible();
     await expect(canvas.queryByRole("button", { name: labels.publish })).toBeNull();
     await expect(canvas.queryByRole("button", { name: labels.undo })).toBeNull();
     await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();

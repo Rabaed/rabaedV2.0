@@ -53,7 +53,8 @@ export function ProjectSettingsNav({
       : []),
   ];
   // The builder takes the whole width: its page reaches under this column, so no navigation is drawn there.
-  if (/\/settings\/workflows\/[^/]+$/.test(pathname)) return <div aria-hidden="true" />;
+  // On a tablet and a phone there is no column (RP-1275), so nothing is kept for it either.
+  if (/\/settings\/workflows\/[^/]+$/.test(pathname)) return <div aria-hidden="true" className="tablet:hidden" />;
   const current = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.key;
 
   return (

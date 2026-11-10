@@ -46,6 +46,7 @@ import { defaultSample, offeredWith, sampledFields, TestRunBar, type Sample, typ
 import { canvasDragType, WorkflowCanvas, type ArrowStyle, type CanvasMark, type CanvasMove, type CanvasSelection } from "./workflow-canvas.tsx";
 import { WorkflowChangeList } from "./workflow-changes.tsx";
 import { arrangedLayout, placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
+import { WorkflowStepList } from "./workflow-step-list.tsx";
 import { referenceModal, referenceModalBody, referenceModalFooter, stageVars, typographic } from "./workflow-parts.tsx";
 
 /** Where the draft's saving stands, as the page saving it through WF-4's API knows it; `opened` until the first save. */
@@ -193,9 +194,11 @@ function ReadOnlyBuilder({ name, versionNo, definition, stages, locale, labels, 
         </span>
       </div>
       {largerScreen}
-      <div className="h-[28rem] overflow-hidden rounded-md border border-border bg-surface">
+      {/* The diagram (it pans and zooms), then its Steps as a list, readable at a phone's width. */}
+      <div className="h-80 overflow-hidden rounded-md border border-border bg-surface">
         <WorkflowCanvas definition={definition} stages={stages} locale={locale} labels={labels.map} className="h-full" />
       </div>
+      <WorkflowStepList definition={definition} stages={stages} locale={locale} labels={labels.map} />
     </div>
   );
 }
