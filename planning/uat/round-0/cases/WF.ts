@@ -107,18 +107,42 @@ defineCase("WF-02", async (t) => {
   const id = await H.submittedMar(tm, `UAT WF-02 pinned ${H.stamp()}`);
   const d = await H.detail(tm.api.ali!, id);
   const before = (await tm.api.ali!.get(`/work-items/${id}/workflow`)).text;
+  // V14: the Workflow's map is shown whole, every Company's Steps by name (Main 7's ruling on RP-1281).
+  // What Ali must not see of Design Consultants is who works there, its Recommended Code, and which of
+  // its Steps holds the item: only "With Design Consultants LLC". DCL's people are read from DCL's own list.
+  const dclNames = (((await tm.api.ahmed!.get("/members")).body as H.Json).members as H.Json[]).map((m) => m.fullName.en as string);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const { page } = await H.viewItem(t, "ali", id);
-  await page.getByRole("main").getByRole("button", { name: /View workflow/ }).first().click();
   const dlg = page.locator(POP_UP);
-  await dlg.waitFor({ state: "visible" });
-  await settle(page, 800);
+  const openDrawer = async () => {
+    await page.getByRole("main").getByRole("button", { name: /View workflow/ }).first().click();
+    await dlg.waitFor({ state: "visible" });
+    await settle(page, 800);
+  };
+  const noDclLeak = async (where: string) => {
+    const text = (await dlg.innerText()).replace(/\s+/g, " ");
+    const named = dclNames.filter((n) => new RegExp(`(^|[^\\p{L}])${esc(n)}($|[^\\p{L}])`, "u").test(text));
+    t.check(`${where}: no Design Consultants person is named`, dclNames.length > 0 && named.length === 0, named.length ? `named: ${named.join(", ")}` : `none of DCL's ${dclNames.length} Members is named`);
+    const code = /Recommended|\bCode\s*:?\s*[A-E]\b/i.exec(text);
+    t.check(`${where}: no Recommended Code shows`, !code, code ? `shows "${text.slice(Math.max(0, code.index - 40), code.index + 40)}"` : "no Recommended Code in the drawer");
+    // A Step's "Here now" / "You are here" and aria-current, or a holder's chip, would say which Step holds it.
+    const marked = await dlg.locator("[data-step][aria-current], [data-map-step][aria-current], [data-holder]").allInnerTexts();
+    const here = /Here now|You are here/.exec(text);
+    t.check(
+      `${where}: nothing marks which Design Consultants Step holds the item; only "With Design Consultants LLC" shows`,
+      marked.length === 0 && !here && /With Design Consultants LLC/.test(text),
+      marked.length || here ? `marked: ${[...marked.map((m) => m.replace(/\s+/g, " ")), here?.[0]].filter(Boolean).join(" | ")}` : "no Step marked; With Design Consultants LLC",
+    );
+  };
+  await openDrawer();
   const map = (await dlg.innerText()).replace(/\s+/g, " ");
   await t.shot(page, "workflow-drawer-map");
   // The Submittal Panel (RP-1237) names the Workflow and its Version in the drawer's header ("Workflow <name> · Version n").
   t.check("The item page names the Workflow and its Version", map.includes(`${d.workflow.name.en} · Version ${d.workflow.versionNo}`), map.slice(0, 160));
   t.check("The drawer shows the Version the item is pinned to", new RegExp(`Version ${d.workflow.versionNo}`).test(map), map.slice(0, 200));
   t.check("Design Consultants is one part marked With Design Consultants LLC", /With Design Consultants LLC/.test(map), map.slice(0, 300));
-  t.check("Ali's own Steps are shown one by one and no Consultant Step is named", /Contractor Engineer/.test(map) && /Contractor (PM|Project Manager)/.test(map) && !/Consultant Engineer|Consultant PM|Consultant Manager/.test(map), map.slice(0, 300));
+  t.check("Ali's own Steps are shown one by one", /Contractor Engineer/.test(map) && /Contractor (PM|Project Manager)/.test(map), map.slice(0, 300));
+  await noDclLeak("Steps");
   // The drawer's tabs are "Steps" (open first) and "Map" (RP-1188).
   const mapTab = dlg.getByRole("tab", { name: "Map" });
   if ((await mapTab.count()) > 0) {
@@ -126,11 +150,23 @@ defineCase("WF-02", async (t) => {
     await settle(page, 500);
     await t.shot(page, "workflow-drawer-list");
     t.check("The list view shows the same parts", /With Design Consultants LLC/.test((await dlg.innerText()).replace(/\s+/g, " ")));
+    await noDclLeak("Map");
   } else t.note("No map/list switch control found by role in the drawer.");
   await H.pickUp(tm.api.ahmed!, id);
   await H.must(tm.api.ahmed!, id, "send_to_manager", { answers: { sample_checked: true, matches_specification: true }, recommendedCode: "A" });
   const after = (await tm.api.ali!.get(`/work-items/${id}/workflow`)).text;
   t.check("Ahmed sending to Mohammed changes nothing Ali reads (the workflow read is identical)", before === after);
+  // Now a DCL Step holds it with Recommended Code A: the drawer still shows none of it.
+  await page.reload();
+  await settle(page);
+  await openDrawer();
+  await t.shot(page, "workflow-drawer-after-recommend");
+  await noDclLeak("After Ahmed recommends Code A, Steps");
+  if ((await mapTab.count()) > 0) {
+    await mapTab.click();
+    await settle(page, 500);
+    await noDclLeak("After Ahmed recommends Code A, Map");
+  }
 });
 
 defineCase("WF-03", async (t) => {

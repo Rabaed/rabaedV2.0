@@ -266,8 +266,11 @@ defineCase("NOT-05", async (t) => {
     await mustTake(hafiz, id, "send_for_review");
     // Hafiz is not muted: he is the control that the worker has run.
     await new Promise((r) => setTimeout(r, 14_000));
-    c.check("no bell entry for Ali", (await notificationsFor(ali, id)).length === 0);
-    c.check("no email for Ali", (await mailsAbout(emailOf.ali!, title)).length === 0);
+    // RP-1238: a Project mute stops email only; the bell still gets its entry (Main 7's ruling on RP-1281).
+    const bell = await notificationsFor(ali, id);
+    c.check("Ali's bell still gets one entry (a mute stops email only, RP-1238)", bell.length === 1, `${bell.length} entries: ${bell.map((n) => n.kind).join(", ")}`);
+    const mails = await mailsAbout(emailOf.ali!, title);
+    c.check("no email for Ali", mails.length === 0, `${mails.length} emails`);
     const need = (await ali.get(`/projects/${ctx.projectId}/work-items?needMyAction=true`)).body as { items: { id: string }[] };
     const mine = (await ali.get(`/work-items/${id}`)).body as { heldBy?: { memberName?: { en: string } } | null };
     c.check("the item still shows as Ali's under Need My Action", need.items.some((i) => i.id === id) || mine.heldBy?.memberName?.en === "Ali Sonour", `held by ${mine.heldBy?.memberName?.en}`);
