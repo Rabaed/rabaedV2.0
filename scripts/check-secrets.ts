@@ -77,6 +77,9 @@ export const SECRET_RULES: SecretRule[] = [
   // reader, a doc): a key is the header with its base64 body. Here the body follows on the same line, as in an env value
   // or JSON string with "\n" escapes; a block over several lines is read by scanLines.
   { id: "private-key", description: "private key", pattern: new RegExp(String.raw`${PEM_HEADER.source}(?:\s|\\r|\\n|["'\`+,])*[A-Za-z0-9+/]{40,}`, "g") },
+  // RP-1180: a JWT (a bearer token, as in the curl the Atlassian MCP's upload hands back): header.payload.signature in
+  // base64url. The header and payload are JSON objects, so each starts "eyJ" ('{"'); an unsigned pair is no token.
+  { id: "jwt", description: "JSON Web Token", pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{16,}/g },
 ];
 /* eslint-enable rabaed/no-avoid-terms */
 
