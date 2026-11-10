@@ -407,8 +407,10 @@ async function expectPhoneToolbar(context: Parameters<NonNullable<Story["play"]>
   await expect(topOf(filter)).toBe(topOf(search));
   await expect(Math.abs(middleOf(show) - middleOf(mine))).toBeLessThanOrEqual(1);
   await expect(topOf(mine)).toBeGreaterThan(topOf(filter));
-  await expect(topOf(views)).toBeGreaterThan(topOf(show));
+  // The View switch on a row of its own, under Cards / Table: the toolbar's last control, wholly below the row above.
+  await expect(views.getBoundingClientRect().top).toBeGreaterThanOrEqual(show.getBoundingClientRect().bottom);
   for (const control of [search, filter, mine]) await expect(control.getBoundingClientRect().height).toBe(44);
+  for (const control of [show, views]) await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   await expectTouchTarget(toolbar.getByRole("switch", { name: l.filter.mine }));
   // In the window's width: nothing pushed past its edge.
   for (const control of [search, filter, mine, show, views]) {
@@ -444,6 +446,14 @@ export const OnAPhone: Story = {
   render: (args, context) => <OnItsPage args={args} context={context} />,
   play: async (context) => {
     await expectPhoneToolbar(context);
+    // Row 67: the first column on screen whole, the next one peeking in from the inline end.
+    const first = columnOf(context, "open").getBoundingClientRect();
+    const next = columnOf(context, "in_progress").getBoundingClientRect();
+    await expect(first.left).toBeGreaterThanOrEqual(0);
+    await expect(first.right).toBeLessThanOrEqual(innerWidth);
+    const peek = storyLocale(context) === "ar" ? next.right : innerWidth - next.left;
+    await expect(peek).toBeGreaterThan(0);
+    await expect(peek).toBeLessThan(next.width);
     await expectNoSidewaysPage();
   },
 };
