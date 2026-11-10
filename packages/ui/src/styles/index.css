@@ -36,6 +36,11 @@
  */
 @custom-variant fills-window (&:has([data-fills-window]));
 
+/* A phone (below 768) and a tablet or narrower (up to 1024): RP-1158's tiers, the same widths as PHONE and TABLET in
+   src/lib/widths.ts (RP-1271). */
+@custom-variant phone (@media (max-width: 767.98px));
+@custom-variant tablet (@media (max-width: 1024px));
+
 /* A List's table under 1600 wide (RP-1177): its columns fit 1366. Only a table marked `data-fit` (the List's and the
    Package page's, RP-1164); the same width as LIST_NARROW in src/lib/widths.ts. */
 @custom-variant list-narrow {

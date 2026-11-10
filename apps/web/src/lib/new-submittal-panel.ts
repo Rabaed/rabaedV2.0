@@ -83,10 +83,6 @@ export function savedClock(at: string, locale: Locale): string {
   return formatDate(new Date(at), locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-/** The media queries the layout follows: a phone below 768px, a tablet from 768px to 1023px; from 1024px the slide-over (decision 1). */
-export const phoneQuery = "(max-width: 767px)";
-export const tabletQuery = "(max-width: 1023px)";
-
 /** The read of the Types a Module (the Submittals by default) lets the viewer raise on a Project: one rule for the server's read and the browser's. */
 export function raisableTypesPath(projectId: string, module: ModuleKey = "submittals"): string {
   const query = module === "submittals" ? "" : `?module=${module}`;

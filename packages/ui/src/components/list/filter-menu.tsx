@@ -5,6 +5,7 @@ import { matchesSearch } from "@rabaed/domain";
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { Button } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
@@ -61,7 +62,7 @@ export type FilterMenuProps = {
 
 /** The Filter button with the number of fields filtered, opening the filter panel. */
 export function FilterMenu({ fields, labels, onClearAll, initialField, triggerClassName }: FilterMenuProps) {
-  const wide = useMediaQuery("(min-width: 48rem)");
+  const wide = !useMediaQuery(PHONE, false);
   const applied = fields.filter((f) => f.count > 0).length;
   const trigger = (
     <button

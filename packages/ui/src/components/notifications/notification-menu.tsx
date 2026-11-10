@@ -5,6 +5,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { forwardRef, type ComponentProps, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { Button, IconButton, buttonVariants } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 
@@ -12,8 +13,7 @@ import { Icon } from "../icon/icon.tsx";
 export const notificationOutlinedButton = "bg-surface shadow-[inset_0_0_0_1px_var(--border)] hover:bg-hover";
 const outlined = notificationOutlinedButton;
 
-/** Under this width the bell opens a full-screen sheet instead of a dropdown (the design's phone, 402 px). */
-export const notificationSheetQuery = "(max-width: 559px)";
+// On a phone (PHONE, below 768: the design's phone is 402) the bell opens a full-screen sheet instead of a dropdown (RP-1271).
 
 export type NotificationMenuProps = {
   open: boolean;
@@ -71,7 +71,7 @@ const BellButton = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { la
  * notifications, and View all. Escape or a click outside closes it, and focus goes back to the bell.
  */
 export function NotificationMenu(props: NotificationMenuProps) {
-  const sheet = useMediaQuery(notificationSheetQuery, false);
+  const sheet = useMediaQuery(PHONE, false);
   const { open, onOpenChange, label, count, title } = props;
   if (sheet)
     return (

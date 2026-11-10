@@ -14,7 +14,7 @@ import {
   type WorkItemQuery,
   type WorkItemView,
 } from "@rabaed/domain";
-import { SnagList, WorkItemViewSwitch, useMediaQuery, type SnagBulk, type SnagBulkLabels, type SnagListLabels, type SnagNewType } from "@rabaed/ui";
+import { PHONE, SnagList, WorkItemViewSwitch, useMediaQuery, type SnagBulk, type SnagBulkLabels, type SnagListLabels, type SnagNewType } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect } from "react";
@@ -25,7 +25,6 @@ import { useSnagSwipe } from "@/components/snag-swipe";
 import { usePhotoUrls } from "@/components/use-documents";
 import { listSearchParams, snagListSort } from "@/lib/list-url";
 import { newItemHref } from "@/lib/new-item-route";
-import { phoneQuery } from "@/lib/new-submittal-panel";
 import { givenLocation } from "@/lib/submittal-panel-url";
 import { NewSubmittalPanelHost, useOpenNewSubmittal, type NewSubmittalPanelHooks } from "@/components/new-submittal-panel-host";
 
@@ -323,7 +322,7 @@ function useNewSnag({
   const router = useRouter();
   const raising = useOpenNewSubmittal();
   const location = givenLocation(useSearchParams());
-  const phone = useMediaQuery(phoneQuery, false);
+  const phone = useMediaQuery(PHONE, false);
   const newItem = raising.newItem;
   // The Type the panel opens on: the link's when the viewer may raise it, else the Snag where they may, else their first.
   // (A link naming another Type, such as a Comment, opens what they may raise, as the panel itself does.)

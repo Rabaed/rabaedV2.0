@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 
-// pnpm screens [<route>...] --as <person> [--setup <file>] [--steps <file>] [--folder <name>] [--out <dir>] [--phone] [--publish] (RP-531)
+// pnpm screens [<route>...] --as <person> [--setup <file>] [--steps <file>] [--folder <name>] [--out <dir>] [--phone | --tablet] [--publish] (RP-531)
 // pnpm screens --publish-dir <dir> [--folder <name>]                                                                     (RP-991)
 //
 // Full-page screenshots of the running app for a PR (CODING_STANDARDS.md › UI): every
@@ -61,7 +61,7 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // --steps <file> (RP-991): a flow the actions above cannot reach (a wizard, an upload, a page that
 // needs what the last one made). Its default export drives the signed-in Playwright page, which
 // starts on the locale's home page, and names each shot; it runs once per language at each width
-// (and at 375 with --phone), after the routes and screens, with the setup's values:
+// (or only at 402 with --phone, 820 with --tablet), after the routes and screens, with the setup's values:
 //
 //   export default async ({ page, goto, shot, inLocale, values }) => {
 //     await goto(`/projects/${values.projectId}/work-items/import`);   // as a route: no locale
@@ -80,7 +80,9 @@ import { resolvePerson, signIn, webUrlFromEnv } from "./demo-session.ts";
 // Only the web app's demo persons sign in, so Rabaed Admin's pages (its own origin and Engineer
 // sign-in) are not shot this way.
 //
-// --phone: a phone instead (RP-630): 375 × 812, touch, as a phone's browser says it is.
+// --phone: a phone instead (RP-630, RP-1271): 402 × 874, the owner's iPhone Pro frame, touch, as a phone's browser
+// says it is. --tablet: the owner's iPad Air portrait instead, 820 × 1180, touch (RP-1158's two reference sizes).
+// One size per run: --phone and --tablet together are refused.
 //
 // --publish: commits the PNGs under <folder>/ to `screens-<branch>` on origin (an orphan
 // branch the first time, "not for merging"; later runs add to it), without touching this
@@ -100,8 +102,10 @@ export const LOCALES = ["en", "ar"] as const;
 const LOCALE_NAMES: Record<(typeof LOCALES)[number], string> = { en: "English", ar: "Arabic" };
 /** Viewport height: shots are full-page, so it only decides what is "above the fold" while the page loads. */
 const HEIGHT = 900;
-/** `--phone`'s one size (RP-630): the design's phone frame. */
-export const PHONE = { width: 375, height: 812 } as const;
+/** `--phone`'s one size (RP-630, RP-1271): the owner's iPhone Pro frame (Rabaed Responsive Review). */
+export const PHONE = { width: 402, height: 874 } as const;
+/** `--tablet`'s one size (RP-1271): the owner's iPad Air 11″ portrait (Rabaed Tablet Flow). */
+export const TABLET = { width: 820, height: 1180 } as const;
 
 export type ScreensArgs = {
   routes: string[];
@@ -115,6 +119,7 @@ export type ScreensArgs = {
   out: string;
   publish: boolean;
   phone: boolean;
+  tablet: boolean;
 };
 
 /** Reads the command line. `at` gives the repository root and current branch for the defaults. Throws a plain message on bad input. */
@@ -130,6 +135,7 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
   };
   let publish = false;
   let phone = false;
+  let tablet = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "--publish") {
@@ -138,6 +144,10 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
     }
     if (arg === "--phone") {
       phone = true;
+      continue;
+    }
+    if (arg === "--tablet") {
+      tablet = true;
       continue;
     }
     const option = /^--(as|setup|steps|publish-dir|folder|out)(?:=(.*))?$/.exec(arg);
@@ -156,18 +166,19 @@ export function parseArgs(argv: string[], at: { root: string; branch: string }):
   }
   const folder = values.folder ?? (/^RP-\d+/.exec(at.branch)?.[0] ?? at.branch.replace(/[^A-Za-z0-9._-]/g, "-"));
   if (!/^[A-Za-z0-9._-]+$/.test(folder) || folder.startsWith(".")) throw new Error(`--folder must be a plain name (letters, digits, . _ -): got "${folder}".`);
+  if (phone && tablet) throw new Error("Give --phone and --tablet in separate runs: one size per run.");
   const publishDir = values["publish-dir"];
   if (publishDir !== undefined) {
-    const shooting = [routes.length > 0 && "routes", values.as && "--as", values.setup && "--setup", values.steps && "--steps", phone && "--phone", values.out && "--out"].filter(Boolean);
+    const shooting = [routes.length > 0 && "routes", values.as && "--as", values.setup && "--setup", values.steps && "--steps", phone && "--phone", tablet && "--tablet", values.out && "--out"].filter(Boolean);
     if (shooting.length > 0) throw new Error(`--publish-dir publishes PNGs already on disk and shoots nothing: drop ${shooting.join(", ")}.`);
     const dir = resolve(publishDir);
-    return { routes, email: "", short: "", publishDir: dir, folder, out: dir, publish: true, phone };
+    return { routes, email: "", short: "", publishDir: dir, folder, out: dir, publish: true, phone, tablet };
   }
   if (routes.length === 0 && !values.setup && !values.steps)
     throw new Error("Give at least one route, such as /work-items/<id>, a --setup that exports screens, or --steps.");
   if (!values.as) throw new Error("Name the demo person with --as: an email or a short name such as hafiz.");
   const { email, short } = resolvePerson(values.as);
-  return { routes, email, short, setup: values.setup, steps: values.steps, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone };
+  return { routes, email, short, setup: values.setup, steps: values.steps, folder, out: resolve(values.out ?? resolve(at.root, ".screens", folder)), publish, phone, tablet };
 }
 
 /** `route` with each `{name}` replaced by the setup's value for it. */
@@ -450,14 +461,15 @@ export async function finishAnimations(timeoutMs: number, animations: Animation[
  */
 export type Shot = { route: string; screen?: Screen; page?: string; width: number; locale: Locale; file: string };
 
-const widthsOf = (phone: boolean): readonly number[] => (phone ? [PHONE.width] : WIDTHS);
+type Size = { phone?: boolean; tablet?: boolean };
+const widthsOf = ({ phone = false, tablet = false }: Size): readonly number[] => (phone ? [PHONE.width] : tablet ? [TABLET.width] : WIDTHS);
 
 /**
  * Every shot to take, locale by locale, then width: a route from the command line as it loads, a
- * Screen after its actions, saved under its name; at the phone's one width with `phone`. Refuses two
+ * Screen after its actions, saved under its name; at the phone's one width with `phone`, the tablet's with `tablet`. Refuses two
  * that would be saved as the same file, case aside (Windows file names ignore it).
  */
-export function plannedShots(items: readonly (string | Screen)[], { phone = false }: { phone?: boolean } = {}): Shot[] {
+export function plannedShots(items: readonly (string | Screen)[], size: Size = {}): Shot[] {
   const seen = new Map<string, string | Screen>();
   const unique: (string | Screen)[] = [];
   const said = (item: string | Screen) => (typeof item === "string" ? item : `"${item.name}"`);
@@ -479,7 +491,7 @@ export function plannedShots(items: readonly (string | Screen)[], { phone = fals
   }
   return unique.flatMap((item) =>
     LOCALES.flatMap((locale) =>
-      widthsOf(phone).map((width) =>
+      widthsOf(size).map((width) =>
         typeof item === "string"
           ? { route: item, width, locale, file: shotName(item, width, locale) }
           : { route: item.route, screen: item, width, locale, file: shotName(item.name, width, locale) },
@@ -793,13 +805,18 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
     const shots = plannedShots([
       ...args.routes.map((route) => fillRoute(route, placeholders)),
       ...screens.map((screen) => ({ ...screen, route: fillRoute(screen.route, placeholders) })),
-    ], { phone: args.phone });
+    ], { phone: args.phone, tablet: args.tablet });
     const taken = new Set(shots.map((shot) => shot.file.toLowerCase()));
     mkdirSync(args.out, { recursive: true });
-    for (const width of widthsOf(args.phone)) {
+    for (const width of widthsOf(args)) {
       const context = await browser.newContext({
         storageState,
-        ...(args.phone ? { viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width, height: HEIGHT } }),
+        ...(args.phone
+          ? { viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
+          : args.tablet
+            ? // An iPad's Safari says it is a desktop browser, with touch: not a mobile device.
+              { viewport: TABLET, isMobile: false, hasTouch: true, deviceScaleFactor: 2 }
+            : { viewport: { width, height: HEIGHT } }),
       });
       const page = await context.newPage();
       for (const shot of shots.filter((s) => s.width === width)) {

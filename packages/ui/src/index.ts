@@ -113,7 +113,7 @@ export { revisionPicker } from "./components/revision/revision-picker-model.ts";
 export { ProfileSettings, type ProfileSettingsLabels, type ProfileSettingsProps, type SettingsCall } from "./components/profile/profile-settings.tsx";
 export { NotificationRow, type NotificationRowProps, type NotificationTone } from "./components/notifications/notification-row.tsx";
 export { NotificationCard, NotificationEmpty, NotificationGroup, type NotificationGroupProps } from "./components/notifications/notification-list.tsx";
-export { NotificationMenu, notificationOutlinedButton, notificationSheetQuery, type NotificationMenuProps } from "./components/notifications/notification-menu.tsx";
+export { NotificationMenu, notificationOutlinedButton, type NotificationMenuProps } from "./components/notifications/notification-menu.tsx";
 export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
 export type { SignatureCardPerson } from "./components/signature/signature-card.tsx";
 export { SignatureEditor, type SaveSignatureCall, type SignatureEditorLabels, type SignatureEditorProps } from "./components/signature/signature-editor.tsx";
@@ -180,6 +180,7 @@ export {
 export { WatermarkSetting, type WatermarkSettingLabels, type WatermarkSettingProps, type WatermarkText } from "./components/settings/watermark-setting.tsx";
 export { cn } from "./lib/cn.ts";
 export { useMediaQuery } from "./lib/use-media-query.ts";
+export { PHONE, TABLET } from "./lib/widths.ts";
 export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,
