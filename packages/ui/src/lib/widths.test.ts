@@ -14,7 +14,9 @@ describe("the phone and tablet widths", () => {
 
   it("has CSS variants at the same widths, so a class and a hook switch together", () => {
     const css = readFileSync(new URL("../styles/index.css", import.meta.url), "utf8");
-    expect(css).toMatch(/@custom-variant phone \(@media \(max-width: 767\.98px\)\);/);
-    expect(css).toMatch(/@custom-variant tablet \(@media \(max-width: 1024px\)\);/);
+    // The variant's media query, however the rule is laid out (one line or a block with @slot).
+    const variantQuery = (name: string) => /@media\s*(\([^)]*\))/.exec(css.split(`@custom-variant ${name} `)[1] ?? "")?.[1];
+    expect(variantQuery("phone")).toBe(PHONE);
+    expect(variantQuery("tablet")).toBe(TABLET);
   });
 });

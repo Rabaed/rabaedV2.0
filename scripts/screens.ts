@@ -814,7 +814,8 @@ async function shoot(args: ScreensArgs, webUrl: string): Promise<Shot[]> {
         ...(args.phone
           ? { viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
           : args.tablet
-            ? { viewport: TABLET, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
+            ? // An iPad's Safari says it is a desktop browser, with touch: not a mobile device.
+              { viewport: TABLET, isMobile: false, hasTouch: true, deviceScaleFactor: 2 }
             : { viewport: { width, height: HEIGHT } }),
       });
       const page = await context.newPage();
