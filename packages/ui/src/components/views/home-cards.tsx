@@ -152,7 +152,7 @@ export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, lin
                     <Icon name="file-text" size={18} />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-body font-semibold phone:line-clamp-2 phone:whitespace-normal">{item.title}</span>
+                    <span className="truncate text-body font-semibold phone:line-clamp-2 phone:break-words phone:whitespace-normal">{item.title}</span>
                     <span className="text-[12.5px] text-muted sm:truncate">
                       <span className="whitespace-nowrap">
                         {number ? <DocNo value={number} className="font-normal" /> : labels.noNumber}

@@ -251,15 +251,18 @@ export const Phone: Story = {
     await expectTouchTarget(canvas.getByRole("switch", { name: storyText(context, copy.pauseAll) }));
     await expectTouchTarget(canvas.getAllByRole("radio", { name: storyText(context, copy.digest) })[0]!);
     await expectTouchTarget(canvas.getByRole("button", { name: new RegExp(storyText(context, copy.watched)) }));
-    const { title, choices } = emailRow(context);
+    const { title, choices, row } = emailRow(context);
     await expect(choices.top).toBeGreaterThanOrEqual(title.bottom);
+    // Full width of the row, inside its 14 px padding.
+    await expect(Math.round(choices.width)).toBe(Math.round(row.width) - 28);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   },
 };
 
 /**
- * A tablet (820, touch): the cards stacked, each email choice beside its row, as the Tablet Flow draws
- * it; every control 44 across on the touch screen (row 62: 13 were under 44).
+ * A tablet (820, touch): the cards stacked, each email choice still beside its row (the approved row 62
+ * drops them under only on a phone; the page is wider here than the Tablet Flow's column); every
+ * control 44 across on the touch screen (row 62: 13 were under 44 by their own boxes).
  */
 export const Tablet: Story = {
   parameters: tablet,

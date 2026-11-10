@@ -8,7 +8,7 @@ import { HomeCountTiles } from "./home-cards.tsx";
 
 // Home's four counts (RP-407) at each width (RP-1276, gap-table rows 30 and 34): on a phone a strip
 // that swipes a tile at a time, the first two whole (the owner's Responsive Anatomy, screenshot 11);
-// 2 × 2 on a tablet; four across from 1100. The app's own tiles: no overdue or payment counts (CLAUDE.md).
+// 2 × 2 on a tablet; four across from 1100. The app's own tiles: no due-date or payment counts (CLAUDE.md).
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   counts: b("Across your Projects", "في مشاريعك"),
@@ -96,6 +96,9 @@ export const Phone: Story = {
       await expect(tile.right).toBeLessThanOrEqual(box.right + 1);
     }
     await expect(rtl ? third!.left < box.left : third!.right > box.right).toBe(true);
+    // 158 wide, as the Anatomy's cards; the third shows enough to say there is more.
+    for (const tile of [first!, second!]) await expect(Math.round(tile.width)).toBe(158);
+    await expect(rtl ? third!.right - box.left : box.right - third!.left).toBeGreaterThanOrEqual(24);
     // Snaps a tile at a time.
     await expect(getComputedStyle(strip).scrollSnapType).toBe("x mandatory");
     for (const tile of tiles) await expect(getComputedStyle(tile).scrollSnapAlign).toBe("start");
