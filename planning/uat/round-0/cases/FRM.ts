@@ -187,11 +187,15 @@ defineCase("FRM-05", async (t) => {
   const d = await H.createItem(hafiz, tm, "MAR", `UAT FRM-05 form ${tag}`, await H.marAnswers(tm));
   await go(page, `/work-items/${d}`);
   await settle(page);
-  const box = page.getByRole("main").getByRole("combobox", { name: /Related submittals/ }).or(page.getByRole("main").getByLabel("Related submittals")).first();
+  // A Draft opens read-only in the Submittal Panel; its Form fields show after Edit (RP-1237). Nothing is saved here.
+  const panel = page.locator("[data-submittal-panel]");
+  await panel.getByRole("button", { name: "Edit", exact: true }).click();
+  await settle(page, 600);
+  const box = panel.getByRole("searchbox", { name: "Related submittals" });
   await box.fill("control panel");
   await settle(page, 1000);
   await t.shot(page, "related-submittals-search");
-  const listText = await page.getByRole("main").innerText();
+  const listText = await panel.getByRole("list", { name: "Search results" }).innerText();
   t.check("The Form's picker offers the same: no own Draft, internal or Beta Build item", /control panel/i.test(listText) && !listText.includes(`own draft ${tag}`) && !listText.includes(`beta ${tag}`));
   const detail = await H.detail(hafiz, d);
   const putBad = await hafiz.put(`/work-items/${d}/answers`, { answers: { ...detail.answers, related_submittals: [own] } });
@@ -208,8 +212,11 @@ defineCase("FRM-06", async (t) => {
   const { page } = await pageAs("hafiz", { phone: true });
   await go(page, `/work-items/${id}`);
   await settle(page);
+  // A Draft opens read-only in the Submittal Panel; its Form fields show after Edit (RP-1237).
+  await page.locator("[data-submittal-panel]").getByRole("button", { name: "Edit", exact: true }).click();
+  await settle(page, 600);
   // "Take photo" since RP-1179 (the owner's Screen Board), "Take a photo" before.
-  const take = page.getByRole("main").getByRole("button", { name: /Take (a )?photo/ });
+  const take = page.locator("[data-submittal-panel]").getByRole("button", { name: /Take (a )?photo/ });
   await take.scrollIntoViewIfNeeded();
   t.check("On a phone Take a photo is offered beside Upload", (await take.count()) > 0 && (await page.getByRole("main").locator("input[type=file]").count()) > 0);
   await t.shot(page, "phone-sample-photo");
@@ -271,7 +278,9 @@ defineCase("FRM-08", async (t) => {
   const popup = (await dlg.innerText()).replace(/\s+/g, " ");
   await t.shot(page, "ahmed-send-to-manager-popup");
   t.check("Ahmed's pop-up holds the verification, the Recommended Code and the Internal Note", /Sample checked/.test(popup) && /Matches specification/.test(popup) && /Verification note/.test(popup) && /Recommended Code/.test(popup) && /Internal Note/.test(popup), popup.slice(0, 300));
-  await dlg.getByRole("button", { name: "Cancel" }).click();
+  // The pop-up has two buttons named Cancel: the close icon in its header and the footer's; take the footer's.
+  await dlg.getByRole("button", { name: "Cancel" }).last().click();
+  await dlg.waitFor({ state: "hidden" });
   const ver = { sample_checked: true, matches_specification: false, verification_note: "UAT internal verification text" };
   await H.must(tm.api.ahmed!, id, "send_to_manager", { answers: ver, recommendedCode: "C", internalNote: "UAT FRM-08 internal" });
   await H.pickUp(tm.api.mohammed!, id);
@@ -284,7 +293,8 @@ defineCase("FRM-08", async (t) => {
   const code = (await md.innerText()).replace(/\s+/g, " ");
   await t.shot(mp, "mohammed-code-popup");
   t.check("Mohammed's Code pop-up holds the final verification and Remarks", /Final verification/.test(code) && /Remarks/.test(code), code.slice(0, 300));
-  await md.getByRole("button", { name: "Cancel" }).click();
+  await md.getByRole("button", { name: "Cancel" }).last().click();
+  await md.waitFor({ state: "hidden" });
   const consultant = await H.detail(tm.api.mohammed!, id);
   t.check("No Form field is editable by the Consultant", consultant.actions.saveAnswers === false);
   const { text } = await H.viewItem(t, "mohammed", id);

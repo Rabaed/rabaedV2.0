@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { closeBrowser, closeContexts, round } from "./browser.ts";
-import { CaseRun, registry, type CaseResult, type Status } from "./case.ts";
-import { runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
+import { CaseRun, registry, shotStaging, type CaseResult, type Status } from "./case.ts";
+import { dropShots, keepShots, removeShotStaging, runWhileUp, type WhileUpOutcome } from "../../../../scripts/stack-health.ts";
 import { stackDown } from "./stack.ts";
 
 // node planning/uat/round-0/harness/run.ts [--part VIS[,SUB]] [--id VIS-01,VIS-02] [--fixtures]
@@ -108,6 +108,7 @@ async function main() {
   if (ids) for (const id of ids) if (!registry.some((c) => c.id === id)) console.warn(`No case ${id} in the loaded files.`);
   const counts: Record<string, number> = {};
   let outcome: WhileUpOutcome;
+  const shotFolders = { staging: shotStaging, round };
   try {
     // A case the stack went down under is not saved, so its earlier result in results/ stays.
     outcome = await runWhileUp(todo, {
@@ -116,16 +117,26 @@ async function main() {
         if (!known.has(c.id) && !c.id.startsWith("SMOKE")) console.warn(`Warning: ${c.id} is not in test-cases.json.`);
         return runCase(c.id, c.body as (t: CaseRun) => Promise<void>);
       },
+      // A case's shots wait in shotStaging (RP-1161): evidence/ gets them only with the saved result.
       save: (c, result) => {
+        keepShots(result.screenshots, shotFolders);
         saveResult(c.id, result);
         counts[result.status] = (counts[result.status] ?? 0) + 1;
         const failed = result.checks.filter((k) => !k.ok).length;
         const why = result.status === "pass" ? "" : ` ${result.notes.split("\n").pop() ?? ""}`;
         console.log(`${c.id.padEnd(10)} ${result.status.toUpperCase().padEnd(8)} ${result.checks.length - failed}/${result.checks.length} checks, ${result.screenshots.length} shots${why}`);
       },
+      drop: (_c, result) => dropShots(result.screenshots, shotFolders),
     });
   } finally {
     await closeBrowser();
+    // Every shot is in evidence/ or dropped by now; what is left is this run's folder (RP-1266). A failed clean-up
+    // only warns, so it never hides the run's own outcome.
+    try {
+      removeShotStaging(shotStaging);
+    } catch (error) {
+      console.warn(`Warning: could not remove ${shotStaging}: ${(error as Error).message}`);
+    }
   }
   if (outcome.stopped) {
     console.error(outcome.stopped);

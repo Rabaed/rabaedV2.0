@@ -73,12 +73,29 @@ export interface RecordJob {
   readonly nextTryAt: string | null;
 }
 
+/** A record-job kind: the outbox kinds app.record_job_kinds() lists (RP-1086). */
+export type RecordJobKind = "documental_record" | "documental_record_reproduce";
+
+/** The Monitor's label for each record-job kind. record-jobs.test.ts ties its keys to app.record_job_kinds() (RP-1106). */
+export const RECORD_JOB_LABELS: Readonly<Record<RecordJobKind, RecordJob["kind"]>> = {
+  documental_record: "record",
+  documental_record_reproduce: "reproduce",
+};
+
+/** The Monitor's label for a kind; a kind with no label throws, so it never shows as a Re-produce. */
+export function recordJobLabel(kind: string): RecordJob["kind"] {
+  if (!Object.hasOwn(RECORD_JOB_LABELS, kind)) {
+    throw new Error(`The Record Job Monitor has no label for the record-job kind "${kind}": add it to RECORD_JOB_LABELS`);
+  }
+  return RECORD_JOB_LABELS[kind as RecordJobKind];
+}
+
 /** The failing and dead record jobs, oldest first. */
 export function listRecordJobs(adminDb: Db, engineerId: string, reason: string): Promise<RecordJob[]> {
   return asEngineer(adminDb, { engineerId, action: "read_record_jobs", reason }, async (trx) => {
     const { rows } = await sql<{
       outbox_id: string;
-      kind: "documental_record" | "documental_record_reproduce";
+      kind: string;
       work_item_id: string;
       project_id: string;
       project_name: BilingualText;
@@ -93,7 +110,7 @@ export function listRecordJobs(adminDb: Db, engineerId: string, reason: string):
       target: { kind: "documental_record", id: null },
       result: rows.map((r) => ({
         outboxId: r.outbox_id,
-        kind: r.kind === "documental_record" ? ("record" as const) : ("reproduce" as const),
+        kind: recordJobLabel(r.kind),
         workItemId: r.work_item_id,
         projectId: r.project_id,
         projectName: r.project_name,

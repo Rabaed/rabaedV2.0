@@ -41,6 +41,8 @@ export const people: Record<string, string> = {
   layla: "layla.mansour@designconsultants.demo.rabaed.test",
   noura: "noura.alharbi@alwaha.demo.rabaed.test",
   hind: "hind.almutairi@alwaha.demo.rabaed.test",
+  // Gulf Review Consultants' Authorized Person, on UAT 03 only: PAR-17 withdraws his Company (RP-1264).
+  tariq: "tariq.alshehri@gulfreview.demo.rabaed.test",
 };
 
 function loadPlaywright(): typeof import("playwright") {

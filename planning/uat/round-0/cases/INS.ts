@@ -305,7 +305,8 @@ defineCase("INS-06", async (t) => {
   await settle(page);
   const buttons = (await page.getByRole("button").evaluateAll((bs) => bs.map((x) => (x.getAttribute("aria-label") || x.textContent || "").trim()))).filter(Boolean);
   t.note("Buttons on the Draft: " + buttons.join(" | "));
-  const tool = page.getByRole("button", { name: /full size|annotat|draw|mark/i }).first();
+  // "draw" also matched the hidden file input of the WIR's "Drawings and documents" field.
+  const tool = page.getByRole("main").getByRole("button", { name: /^Open .+ full size$|annotat/i }).first();
   const hasTool = (await tool.count()) > 0;
   if (hasTool) { await tool.click(); await settle(page, 700); }
   t.note("UI: clicking Open full size on the Draft photo showed no annotate screen to the script (hasTool=" + hasTool + "); the annotate and Annotated/Original switch need a person.");

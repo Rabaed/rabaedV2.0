@@ -1,4 +1,5 @@
 import type { BrowserContext, Locator, Page } from "playwright";
+import { retryReloadedRead } from "../../../../scripts/stack-health.ts";
 import { mailpitUrl, pageAs, urlOf, type ContextOptions, type Locale } from "./browser.ts";
 
 // Page and API helpers for cases. Locators are role and name, scoped to a region; a dialog is
@@ -36,25 +37,29 @@ export class Api {
 
   static async as(person: string): Promise<Api> {
     const { context, page } = await pageAs(person);
-    // Any page of the web app's origin will do for its /api proxy; not Home, whose reads are the slowest (RP-1050).
-    await page.goto(urlOf("/uat-api-origin"), { waitUntil: "domcontentloaded" });
+    // A real page of the web app's origin, for its /api proxy: Projects, as PAR-17 did (RP-1268). Not Home, whose
+    // reads are the slowest (RP-1050), and never an address that 404s: `next dev` kept reloading that one.
+    await page.goto(urlOf("/projects"), { waitUntil: "networkidle" });
     return new Api(person, context, page);
   }
 
-  /** `path` starts at `/v1/...` or without `/v1`; the web app proxies `/api/v1`. */
+  /** `path` starts at `/v1/...` or without `/v1`; the web app proxies `/api/v1`. A GET a page reload cuts short is retried. */
   async request(method: string, path: string, body?: unknown): Promise<ApiReply> {
     const url = path.startsWith("/v1/") ? path : `/v1${path}`;
-    const reply = await this.page.evaluate(
-      async ({ method, url, body }) => {
-        const res = await fetch(`/api${url}`, {
-          method,
-          headers: body === undefined ? {} : { "content-type": "application/json" },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        return { status: res.status, text: await res.text() };
-      },
-      { method, url, body },
-    );
+    const send = () =>
+      this.page.evaluate(
+        async ({ method, url, body }) => {
+          const res = await fetch(`/api${url}`, {
+            method,
+            headers: body === undefined ? {} : { "content-type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          });
+          return { status: res.status, text: await res.text() };
+        },
+        { method, url, body },
+      );
+    const beforeRetry = () => this.page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    const reply = method.toUpperCase() === "GET" ? await retryReloadedRead(send, { beforeRetry }) : await send();
     const parse = (): unknown => {
       try {
         return reply.text ? JSON.parse(reply.text) : null;
@@ -162,11 +167,13 @@ export async function itemSubject(page: Page): Promise<string> {
  */
 export async function takeTransition(page: Page, name: string | RegExp, options: { note?: string; fill?: (dialog: Locator) => Promise<void> } = {}): Promise<void> {
   await page.getByRole("main").getByRole("button", { name, exact: typeof name === "string" }).first().click();
-  const dialog = page.getByRole("dialog");
+  // The pop-up, not the Submittal Panel (RP-1237) the item opens in: both are dialogs.
+  const dialog = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
   await dialog.waitFor({ state: "visible" });
   if (options.note) await dialog.getByRole("textbox").first().fill(options.note);
   if (options.fill) await options.fill(dialog);
-  await dialog.getByRole("button", { name, exact: typeof name === "string" }).click();
+  // The confirm button is the pop-up's last; a Transition named Cancel shares its name with the close icon and the footer's Cancel.
+  await dialog.getByRole("button", { name, exact: typeof name === "string" }).last().click();
   await dialog.waitFor({ state: "hidden" });
   await settle(page, 600);
 }

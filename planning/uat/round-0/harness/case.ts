@@ -1,6 +1,8 @@
 import { mkdirSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import type { Page } from "playwright";
+import { stagedShot } from "../../../../scripts/stack-health.ts";
 import { round } from "./browser.ts";
 
 // The tiny case API: defineCase(id, async (t) => { ... }). run.ts loads case files and runs them.
@@ -14,7 +16,10 @@ export type CaseApi = {
   id: string;
   /** Records one check of the Expected result. Returns `ok` so a case can stop early on it. */
   check(text: string, ok: boolean, detail?: string): boolean;
-  /** Saves `evidence/<ID>-<n>-<what>.jpg` (JPEG, viewport only unless `fullPage`) and returns its relative path. */
+  /**
+   * Takes `evidence/<ID>-<n>-<what>.jpg` (JPEG, viewport only unless `fullPage`) and returns its relative path. The file
+   * waits in `shotStaging` and reaches evidence/ only when run.ts saves the case (RP-1161).
+   */
   shot(page: Page, what: string, options?: { fullPage?: boolean }): Promise<string>;
   /** Free text kept with the result. */
   note(text: string): void;
@@ -37,6 +42,8 @@ export function defineCase(id: string, body: CaseBody): void {
 }
 
 export const evidenceDir = resolve(round, "evidence");
+/** Where this run's shots wait, outside the repo, until their case is saved (RP-1161). One folder per process. */
+export const shotStaging = join(tmpdir(), `rabaed-uat-shots-${process.pid}`);
 
 /** The state of one running case; run.ts turns it into a result. */
 export class CaseRun implements CaseApi {
@@ -59,11 +66,11 @@ export class CaseRun implements CaseApi {
   }
 
   async shot(page: Page, what: string, options: { fullPage?: boolean } = {}): Promise<string> {
-    mkdirSync(evidenceDir, { recursive: true });
     const slug = what.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "shot";
-    const file = resolve(evidenceDir, `${this.id}-${++this.shots}-${slug}.jpg`);
+    const path = relative(round, resolve(evidenceDir, `${this.id}-${++this.shots}-${slug}.jpg`)).replaceAll("\\", "/");
+    const file = stagedShot(shotStaging, path);
+    mkdirSync(dirname(file), { recursive: true });
     await page.screenshot({ path: file, type: "jpeg", quality: 60, fullPage: options.fullPage ?? false });
-    const path = relative(round, file).replaceAll("\\", "/");
     this.screenshots.push(path);
     return path;
   }

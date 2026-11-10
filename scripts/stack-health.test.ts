@@ -1,7 +1,10 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer, type AddressInfo, type Server, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { alertCommand, parseHealthArgs, runWhileUp, stackProblems, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
+import { alertCommand, dropShots, keepShots, parseHealthArgs, removeShotStaging, retryReloadedRead, runWhileUp, stackProblems, stagedShot, stoppedMessage, targetOfEnv, targetOfLane } from "./stack-health.ts";
 
 // RP-1099: lane 7 sat at Exited (255) for over 2 hours after a Docker Desktop update, and the
 // UAT harness wrote Fail results against the dead stack.
@@ -236,6 +239,186 @@ describe("runWhileUp", () => {
     });
     expect(asked).toEqual(["before FX-C2", "after FX-C2"]);
     expect(outcome).toEqual({ saved: 0, stopped: "FX-C2 may be partial" });
+  });
+
+  it("hands a cut-off item's result to drop, and a saved one's to save only", async () => {
+    const log: string[] = [];
+    let checks = 0;
+    // Checks: 1 before A, 2 after A, 3 before B, 4 after B (down).
+    await runWhileUp(["A", "B"], {
+      down: async () => (++checks === 4 ? "api down" : undefined),
+      run: async (item) => `result ${item}`,
+      save: (item, result) => void log.push(`save ${item}: ${result}`),
+      drop: (item, result) => void log.push(`drop ${item}: ${result}`),
+    });
+    expect(log).toEqual(["save A: result A", "drop B: result B"]);
+  });
+});
+
+describe("staged shots (RP-1161)", () => {
+  // A case's shots wait in a folder outside the repo; evidence/ gets them only when the case is saved, so a case the
+  // stack went down under cannot overwrite the shots its kept result points to.
+  const folders: string[] = [];
+  afterEach(() => {
+    for (const f of folders.splice(0)) rmSync(f, { recursive: true, force: true });
+  });
+  const folder = () => {
+    const f = mkdtempSync(join(tmpdir(), "rp-1161-"));
+    folders.push(f);
+    return f;
+  };
+
+  /** A round folder with a committed evidence/VIS-01-1-list.jpg, a staging folder, and a case that shoots it again. */
+  function setUp() {
+    const round = folder();
+    const staging = folder();
+    mkdirSync(join(round, "evidence"));
+    const committed = join(round, "evidence", "VIS-01-1-list.jpg");
+    writeFileSync(committed, "committed shot");
+    const path = "evidence/VIS-01-1-list.jpg";
+    const staged = stagedShot(staging, path);
+    const run = async () => {
+      mkdirSync(dirname(staged), { recursive: true });
+      writeFileSync(staged, "new shot");
+      return { screenshots: [path] };
+    };
+    return { round, staging, committed, staged, run };
+  }
+
+  it("leaves evidence/ unchanged and removes the staged shots when the stack is down after the case", async () => {
+    const { round, staging, committed, staged, run } = setUp();
+    const outcome = await runWhileUp(["VIS-01"], {
+      down: async (_id, when) => (when === "after" ? "db down" : undefined),
+      run,
+      save: (_id, result) => keepShots(result.screenshots, { staging, round }),
+      drop: (_id, result) => dropShots(result.screenshots, { staging }),
+    });
+    expect(outcome).toEqual({ saved: 0, stopped: "db down" });
+    expect(readFileSync(committed, "utf8")).toBe("committed shot");
+    expect(existsSync(staged)).toBe(false);
+  });
+
+  it("moves a saved case's shots into evidence/ at the path its result records", async () => {
+    const { round, staging, committed, staged, run } = setUp();
+    const outcome = await runWhileUp(["VIS-01"], {
+      down: async () => undefined,
+      run,
+      save: (_id, result) => keepShots(result.screenshots, { staging, round }),
+      drop: (_id, result) => dropShots(result.screenshots, { staging }),
+    });
+    expect(outcome).toEqual({ saved: 1, stopped: undefined });
+    expect(readFileSync(committed, "utf8")).toBe("new shot");
+    expect(existsSync(staged)).toBe(false);
+  });
+
+  it("stages a shot under the staging folder at its evidence path", () => {
+    expect(stagedShot(join("T", "s"), "evidence/VIS-01-1-list.jpg")).toBe(resolve("T", "s", "evidence", "VIS-01-1-list.jpg"));
+  });
+
+  it("refuses a path that leaves the staging or round folder, before touching any file", () => {
+    const { round, staging, committed, staged } = setUp();
+    mkdirSync(dirname(staged), { recursive: true });
+    writeFileSync(staged, "new shot");
+    const outsider = join(folder(), "keep.txt");
+    writeFileSync(outsider, "keep");
+    // "evidence/.." is the folder itself; on Windows a path on another drive resolves to no path inside it at all.
+    const others = process.platform === "win32" ? [`${outsider.startsWith("Z") ? "Y" : "Z"}:\\keep.txt`] : [];
+    for (const bad of [outsider, "../keep.txt", "evidence/../../keep.txt", "evidence/..", ...others]) {
+      expect(() => dropShots(["evidence/VIS-01-1-list.jpg", bad], { staging })).toThrow(/outside/);
+      expect(() => keepShots(["evidence/VIS-01-1-list.jpg", bad], { staging, round })).toThrow(/outside/);
+    }
+    expect(readFileSync(outsider, "utf8")).toBe("keep");
+    expect(readFileSync(staged, "utf8")).toBe("new shot");
+    expect(readFileSync(committed, "utf8")).toBe("committed shot");
+  });
+});
+
+describe("retryReloadedRead (RP-1268)", () => {
+  // Under `next dev` a file change in the worktree reloads every open page; an api read made from a page that
+  // reloads under it fails with Playwright's "Execution context was destroyed".
+  const destroyed = () => new Error("page.evaluate: Execution context was destroyed, most likely because of a navigation");
+
+  /** A read that fails with `failures` in turn, then answers "read". Counts its tries and the waits between them. */
+  function flaky(failures: Error[]) {
+    const log: string[] = [];
+    const read = async () => {
+      log.push("try");
+      const failure = failures.shift();
+      if (failure) throw failure;
+      return "read";
+    };
+    const beforeRetry = async () => void log.push("wait");
+    return { read, beforeRetry, log };
+  }
+
+  it("retries a read cut short by a reload, waiting for the page between tries, and returns what it read", async () => {
+    const { read, beforeRetry, log } = flaky([destroyed(), destroyed()]);
+    expect(await retryReloadedRead(read, { beforeRetry })).toBe("read");
+    expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
+  });
+
+  it("does not retry a different error", async () => {
+    const { read, beforeRetry, log } = flaky([new Error("page.evaluate: TypeError: Failed to fetch")]);
+    await expect(retryReloadedRead(read, { beforeRetry })).rejects.toThrow("Failed to fetch");
+    expect(log).toEqual(["try"]);
+  });
+
+  it("gives up after its tries and throws the last reload error", async () => {
+    const { read, beforeRetry, log } = flaky([destroyed(), destroyed(), destroyed(), destroyed()]);
+    await expect(retryReloadedRead(read, { tries: 3, beforeRetry })).rejects.toThrow("Execution context was destroyed");
+    expect(log).toEqual(["try", "wait", "try", "wait", "try"]);
+  });
+});
+
+describe("removeShotStaging (RP-1266)", () => {
+  // RP-1161's staging folder outlived every run as an empty rabaed-uat-shots-<pid>/evidence/ in the OS temp folder.
+  const made: string[] = [];
+  afterEach(() => {
+    for (const f of made.splice(0)) rmSync(f, { recursive: true, force: true });
+  });
+
+  /** A stand-in for the OS temp folder. */
+  const tempFolder = () => {
+    const tmp = mkdtempSync(join(tmpdir(), "rp-1266-"));
+    made.push(tmp);
+    return tmp;
+  };
+
+  it("removes a run's staging folder with what is left in it", () => {
+    const tmp = tempFolder();
+    const staging = join(tmp, "rabaed-uat-shots-4242");
+    mkdirSync(join(staging, "evidence"), { recursive: true });
+    writeFileSync(join(staging, "evidence", "VIS-01-1-list.jpg"), "left over");
+    removeShotStaging(staging, { tmp });
+    expect(existsSync(staging)).toBe(false);
+    expect(existsSync(tmp)).toBe(true);
+  });
+
+  it("is quiet when the run took no shot, so there is no folder", () => {
+    const tmp = tempFolder();
+    expect(() => removeShotStaging(join(tmp, "rabaed-uat-shots-4242"), { tmp })).not.toThrow();
+  });
+
+  it("refuses a folder that is not a staging folder, so a wrong path never deletes evidence/ or results/", () => {
+    const tmp = tempFolder();
+    for (const name of ["evidence", "results", "rabaed-uat-shots-", "rabaed-uat-shots-12x"]) {
+      const folder = join(tmp, name);
+      mkdirSync(folder);
+      writeFileSync(join(folder, "keep.txt"), "keep");
+      expect(() => removeShotStaging(folder, { tmp })).toThrow(/not a shot staging folder/);
+      expect(readFileSync(join(folder, "keep.txt"), "utf8")).toBe("keep");
+    }
+  });
+
+  it("refuses a folder with a staging folder's name anywhere but straight in the OS temp folder, such as inside evidence/", () => {
+    const tmp = tempFolder();
+    const round = tempFolder();
+    for (const folder of [join(round, "evidence", "rabaed-uat-shots-4242"), join(tmp, "evidence", "rabaed-uat-shots-4242")]) {
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(join(folder, "keep.txt"), "keep");
+      expect(() => removeShotStaging(folder, { tmp })).toThrow(/not a shot staging folder/);
+      expect(readFileSync(join(folder, "keep.txt"), "utf8")).toBe("keep");
+    }
   });
 });
 

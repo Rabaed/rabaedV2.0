@@ -42,7 +42,7 @@ export const reorderStagesRequest = z.object({
 export type ReorderStagesRequest = z.infer<typeof reorderStagesRequest>;
 
 /** The refusals of the Stage commands (app.rename_stage, add_stage, reorder_stages, delete_stage). */
-export const stageRefusals = ["not_found", "project_closed", "invalid_name", "invalid_stage", "stage_exists", "invalid_order", "stage_in_use"] as const;
+export const stageRefusals = ["not_found", "project_closed", "invalid_name", "invalid_stage", "stage_exists", "invalid_order", "stage_in_use", "last_cancelled_stage"] as const;
 
 /** A Stage the Workflow uses that the Project's Module doesn't have, with a Step in it. */
 export type StageCopyProblem = { code: "stage_missing"; stage: string; step: string; message: BilingualText };

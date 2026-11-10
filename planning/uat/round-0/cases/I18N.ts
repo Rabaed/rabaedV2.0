@@ -26,8 +26,9 @@ const overflowOf = (page: Page) => page.evaluate(() => ({ scroll: document.docum
 
 /** Opens the person menu and picks the other language, as a Member does. Returns once the new locale is loaded. */
 async function switchLanguage(page: Page, to: "ar" | "en", nameRe: RegExp): Promise<void> {
-  await page.getByRole("button").filter({ hasText: nameRe }).last().click();
-  const dialog = page.getByRole("dialog");
+  // The sidebar's member card: an open Submittal Panel (RP-1237) covers the top bar's. On a phone the sidebar is hidden, so the top bar's is the visible one.
+  await page.locator('button[aria-haspopup="dialog"]:visible').filter({ hasText: nameRe }).first().click();
+  const dialog = page.getByRole("dialog", { name: /^(Your menu|قائمتك)$/ });
   await dialog.waitFor({ state: "visible" });
   await dialog.getByText(to === "ar" ? /^العربية$/ : /^English$/).first().click();
   await page.waitForURL(new RegExp(`/${to}(/|$|\\?)`));
@@ -174,9 +175,10 @@ defineCase("I18N-02", async (t) => {
     if (name === "Dashboard") await t.shot(page, "dashboard-ar");
   }
   // Times are Riyadh time: a notification's shown time against its own instant.
-  await go(page, "/notifications", "ar");
+  await go(page, "/notifications?show=all", "ar");
   await settle(page);
-  const entry = await page.getByRole("main").locator("li time").first().evaluate((el) => ({ at: el.getAttribute("datetime"), text: el.textContent ?? "" }));
+  // A row shows a short time ("5 min", RP-1153); its full date and time is the title.
+  const entry = await page.getByTestId("notification-list").getByRole("link").locator("time").first().evaluate((el) => ({ at: el.getAttribute("datetime"), text: el.getAttribute("title") ?? "" }));
   const riyadh = new Date(entry.at!).toLocaleString("en-US", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit", hour12: true });
   const hm = riyadh.replace(/\s?(AM|PM)/, "");
   c.check("a time is shown in Riyadh time, a date is Gregorian", entry.text.includes(hm) && /2026/.test(entry.text) && /\/(9|10|11)\//.test(entry.text.replace(/[\u200E\u200F]/g, "")), `${entry.text} for ${entry.at} (Riyadh ${riyadh})`);
@@ -278,7 +280,8 @@ defineCase("I18N-04", async (t) => {
   await t.shot(page, "form-ar");
   await main.getByRole("button", { name: "إرسال للمراجعة" }).first().click();
   await page.waitForTimeout(1500);
-  const dlg = page.getByRole("dialog");
+  // The pop-up, not the Submittal Panel the item opens in (RP-1237).
+  const dlg = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
   const open = (await dlg.count()) > 0;
   if (open) {
     const fill = await dlg.innerText();

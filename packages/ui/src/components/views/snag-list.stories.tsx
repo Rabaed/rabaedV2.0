@@ -436,6 +436,51 @@ export const Kanban: Story = {
   },
 };
 
+// RP-1263 (RP-952 Q4 (a)): a Snag Rabaed cancelled at its raiser's withdrawal, at Open five weeks ago.
+const cancelledStage = { key: "cancelled", name: b("Cancelled", "ملغى"), category: "cancelled" as const };
+const cancelledSnag = row(9, { title: "Exposed cable at the riser", stage: cancelledStage, outcome: "cancelled", stepAgeWeeks: 5, with: null });
+const withCancelled = [...items, cancelledSnag];
+const cancelledCounts = [...counts(withCancelled), { ...cancelledStage, count: 1 }];
+const rowOf = (context: { canvasElement: HTMLElement }, id: string) => context.canvasElement.querySelector<HTMLElement>(`a[href="#${id}"]`)!.closest<HTMLElement>("tr, li")!;
+
+/** The List: the cancelled Snag under the Cancelled Stage, read from its outcome, with no Step Age dots. */
+export const CancelledSnagInTheList: Story = {
+  args: { data: { view: "list", list: { ...list, items: withCancelled, stages: cancelledCounts } } },
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: labels[storyLocale(context)].table });
+    await expect(within(table).getByRole("button", { name: labels[storyLocale(context)].hideGroup(cancelledStage.name[storyLocale(context)]) })).toBeVisible();
+    const found = rowOf(context, cancelledSnag.id);
+    // The Step Age dots (a span; the Type's icon is an svg).
+    await expect(found.querySelector('span[role="img"]')).toBeNull();
+    // The open Snag beside it still shows its dots.
+    await expect(rowOf(context, items[1]!.id).querySelector('span[role="img"]')).not.toBeNull();
+  },
+};
+
+/** The Kanban: the cancelled Snag in the Cancelled column, never at Open, with no Step Age dots. */
+export const CancelledSnagOnTheKanban: Story = {
+  args: {
+    data: {
+      view: "kanban",
+      board: {
+        ...board,
+        stages: cancelledCounts,
+        columns: [...board.columns, { stageKey: "cancelled", shown: 1, steps: [], lanes: [{ kind: "closed" as const, count: 1, cards: [cancelledSnag] }] }],
+      },
+    },
+  },
+  play: async (context) => {
+    const kanban = context.canvas.getByRole("region", { name: labels[storyLocale(context)].board });
+    const cancelled = within(kanban).getByRole("region", { name: cancelledStage.name[storyLocale(context)] });
+    const open = within(kanban).getByRole("region", { name: stages.open.name[storyLocale(context)] });
+    const found = rowOf(context, cancelledSnag.id);
+    await expect(cancelled).toContainElement(found);
+    await expect(open).not.toContainElement(found);
+    // The Step Age dots (a span; the Type's icon is an svg).
+    await expect(found.querySelector('span[role="img"]')).toBeNull();
+  },
+};
+
 // Twelve open snags: a column taller than the window.
 const manyOpen = Array.from({ length: 12 }, (_, i) => row(7 + i, { id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, title: `Cable tray not bonded, bay ${i + 1}`, documentNumber: `TWR-DCL-EL-SNG-1${String(i).padStart(2, "0")}` }));
 const crowded = boardOf([...items, ...manyOpen]);

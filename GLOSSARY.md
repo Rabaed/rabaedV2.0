@@ -297,7 +297,7 @@ How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as d
 _Avoid_: Overdue, SLA, deadline
 
 **Vacancy**:
-A Workflow step held by a Participant that was withdrawn from the Project. The step waits until a replacement Participant covering the Work Item is added, and passes to its Step Pool. A Member never leaves a Vacancy: their Steps are handed over first (Handover).
+A Workflow step held by a Participant that was withdrawn from the Project. It passes to the replacement Participant's Step Pool: the one active Participant in the withdrawn Participant's Project Role, of another Company, whose Visibility covers the Work Item. While none covers it, or two or more do, the step stays a Vacancy. The withdrawn Company, invited again in the same role, is not its replacement (ADR 0028; decided 2026-11-09, RP-1262 comment 15760). A Member never leaves a Vacancy: their Steps are handed over first (Handover).
 _Avoid_: Orphaned task, unassigned
 
 **Handover**:

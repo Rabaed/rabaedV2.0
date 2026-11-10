@@ -382,6 +382,30 @@ export const ClosedColumns: Story = {
   },
 };
 
+const cancelledCard = card(50, { title: "Cable Glands", stage: stages.cancelled, outcome: "cancelled", stepAgeWeeks: 5 });
+
+/**
+ * RP-1263 (RP-952 Q4 (a)): an item Rabaed cancelled at its raiser's withdrawal sits in the Cancelled
+ * column, from its outcome, though it stopped at a Step five weeks ago. Its card reads Cancelled, with
+ * no Step Age dots and no 4+ weeks look: it no longer ages.
+ */
+export const CancelledCard: Story = {
+  args: {
+    board: {
+      ...board,
+      columns: board.columns.map((c) => (c.stageKey === "cancelled" ? column("cancelled", 1, [{ kind: "closed", count: 1, cards: [cancelledCard] }]) : c)),
+    },
+  },
+  play: async (context) => {
+    const cancelled = columnOf(context, stages.cancelled);
+    const found = cardOf(context, cancelledCard);
+    await expect(cancelled).toContainElement(found);
+    await expect(found.querySelector('[data-outcome="cancelled"]')).toHaveTextContent(storyText(context, b("Cancelled", "ملغى")));
+    await expect(within(found).queryByRole("img", { hidden: true })).toBeNull();
+    await expect(found).not.toHaveAttribute("data-aged");
+  },
+};
+
 /**
  * Under a search, a closed column gives no total: a search counts only what it
  * shows. "Show all" still opens the List with the same search and that Stage.
