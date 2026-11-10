@@ -130,6 +130,13 @@ const head =
   "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 list-narrow:px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
+/**
+ * Up to the tablet width, where the table scrolls sideways in its area, the Document Number stays pinned beside the
+ * checkboxes (RP-1273, the Review's decision): 44px in, 64 on a touch screen, as wide as the checkbox column.
+ */
+const pinnedAfterCheckbox = "tablet:sticky tablet:start-11 tablet:pointer-coarse:start-16";
+/** A shadow on the pinned column's inline-end edge, up to the tablet width: the rows read as sliding under it. */
+const pinnedEdge = "tablet:shadow-[6px_0_6px_-6px_var(--color-overlay)] tablet:rtl:shadow-[-6px_0_6px_-6px_var(--color-overlay)]";
 const dash = <span className="text-faint">—</span>;
 
 export function WorkItemTable({
@@ -217,7 +224,8 @@ export function WorkItemTable({
                 }}
                 className={cn(
                   head,
-                  i === 0 && pinnedFirst && cn(pinnedFirst, "z-[4]"),
+                  i === 0 && (pinnedFirst ? cn(pinnedFirst, "z-[4]") : cn(pinnedAfterCheckbox, "tablet:z-[4]")),
+                  i === 0 && pinnedEdge,
                   dragging === key && "opacity-40",
                   over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
                 )}
@@ -306,7 +314,7 @@ export function WorkItemTable({
                         </td>
                       )}
                       {shown.map((key, i) => (
-                        <td key={key} className={cn(cell, i === 0 && pinnedFirst, i === 0 && !selection && rowStartClassName?.(row))}>
+                        <td key={key} className={cn(cell, i === 0 && (pinnedFirst ?? cn(pinnedAfterCheckbox, "tablet:z-[2]")), i === 0 && pinnedEdge, i === 0 && !selection && rowStartClassName?.(row))}>
                           <Cell column={key === "stage" && stageShowsCode && row.outcome !== null ? "outcome" : key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} onOpen={onOpen} />
                         </td>
                       ))}
@@ -380,7 +388,8 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           dir="auto"
           title={row.title}
           // A fitting table under 1600 wide: 112px at most (RP-1177, the owner's answers), the whole Subject in the tooltip.
-          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg list-narrow:max-w-[112px]", focusRing, touchBox)}
+          // Up to the tablet width the table scrolls sideways past the pinned number instead, so it may take 240 (RP-1273).
+          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg list-narrow:min-[1025px]:max-w-[112px] tablet:max-w-[240px]", focusRing, touchBox)}
         >
           {row.title}
         </Link>
