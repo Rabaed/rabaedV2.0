@@ -2287,7 +2287,12 @@
     "modules": "Modules",
     "requiredLinks": "Required links",
     "record": "Documental Record",
-    "checklistTemplates": "Checklist Templates"
+    "checklistTemplates": "Checklist Templates",
+    "largerScreen": {
+      "title": "Continue on a larger screen",
+      "workflowBuilder": "The Workflow builder is read-only on a phone. Your draft is kept: open it on a tablet or a computer to change it.",
+      "mapping": "Mapping columns is read-only on a phone. Open the import on a tablet or a computer to map the register's columns."
+    }
   },
   "projectSettings": {
     "record": {

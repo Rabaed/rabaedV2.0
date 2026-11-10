@@ -3,6 +3,8 @@ import { useCallback, useRef, useState } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import type { WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
 import { actionFormLabels } from "../../storybook/form-engine.ts";
+import { phone } from "../../storybook/form.ts";
+import { LargerScreenBanner } from "../settings/settings-layout.tsx";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
   builderDraft,
@@ -201,6 +203,59 @@ export const Draft: Story = {
     // The Steps with an error wear a badge; the overview carries no attribution.
     await expect(canvas.getAllByRole("img", { name: labels.map.error! }).length).toBeGreaterThan(0);
     await expect(canvas.queryByText("React Flow")).toBeNull();
+  },
+};
+
+const largerScreen = {
+  title: { en: "Continue on a larger screen", ar: "تابع على شاشة أكبر" },
+  body: {
+    en: "The Workflow builder is read-only on a phone. Your draft is kept: open it on a tablet or a computer to change it.",
+    ar: "محرر سير العمل للقراءة فقط على الهاتف. تبقى مسودتك محفوظة: افتحه على جهاز لوحي أو حاسوب لتغييره.",
+  },
+};
+
+/**
+ * RP-1275 (gap-table row 59, the owner's answer (a); Responsive Anatomy screenshot 18): on a phone the builder
+ * opens read-only, the draft as a map with a "Continue on a larger screen" banner. Nothing is edited or saved,
+ * so the draft stays as it is.
+ */
+export const PhoneReadOnly: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: (args, context) => {
+    const locale = storyLocale(context);
+    return render(
+      {
+        ...args,
+        largerScreen: <LargerScreenBanner title={largerScreen.title[locale]}>{largerScreen.body[locale]}</LargerScreenBanner>,
+      },
+      context,
+    );
+  },
+  play: async ({ canvas, args, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await expect(canvas.getByRole("note")).toHaveTextContent(largerScreen.title[locale]);
+    await expect(canvas.getByRole("heading", { level: 1, name: workflowName[locale] })).toBeVisible();
+    await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: labels.back })).toHaveAttribute("href", "#workflows");
+    // The draft as it stands, read-only: no palette, no editing bar, no Publish.
+    await ready(canvas, locale);
+    await expect(canvas.queryByRole("button", { name: labels.publish })).toBeNull();
+    await expect(canvas.queryByRole("button", { name: labels.undo })).toBeNull();
+    await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
+    await expect(args.onChange).not.toHaveBeenCalled();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** Wider than a phone (here 1024, a tablet in landscape) the same page edits as ever: the banner is for a phone only. */
+export const TabletEdits: Story = {
+  render: PhoneReadOnly.render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    await ready(canvas, locale);
+    await expect(canvas.queryByRole("note")).toBeNull();
+    await expect(canvas.getByRole("button", { name: workflowBuilderLabels(locale).publish })).toBeVisible();
   },
 };
 

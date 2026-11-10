@@ -123,6 +123,7 @@ import {
   IconTemplate,
   IconMail,
   IconDeviceMobile,
+  IconDeviceDesktop,
   IconArrowUpRight,
   IconCircle,
   IconPoint,
@@ -268,6 +269,8 @@ const icons = {
   template: IconTemplate,
   mail: IconMail,
   "device-mobile": IconDeviceMobile,
+  // "Continue on a larger screen" (RP-1275).
+  "device-desktop": IconDeviceDesktop,
   // The annotate view's tools (RP-656).
   "arrow-up-right": IconArrowUpRight,
   circle: IconCircle,

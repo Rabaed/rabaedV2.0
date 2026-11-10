@@ -151,6 +151,30 @@ export function SettingsLayout({ nav, children, className }: SettingsLayoutProps
   );
 }
 
+export type LargerScreenBannerProps = {
+  /** E.g. "Continue on a larger screen". */
+  title: ReactNode;
+  /** A line under it, e.g. what can't be done here and that nothing is lost. */
+  children?: ReactNode;
+  className?: string;
+};
+
+/**
+ * Over a page that needs room to edit (the Workflow builder, the import's column mapping), opened on a phone
+ * read-only (RP-1275, gap-table row 59; the owner's Responsive Anatomy): it says to carry on on a larger screen.
+ */
+export function LargerScreenBanner({ title, children, className }: LargerScreenBannerProps) {
+  return (
+    <div role="note" className={cn("flex items-start gap-3 rounded-[14px] bg-info-tint px-4 py-3 text-info-fg", className)}>
+      <Icon name="device-desktop" size={20} className="mt-0.5 shrink-0" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="m-0 text-sm font-bold">{title}</p>
+        {children !== undefined && <p className="m-0 text-[13px] leading-normal">{children}</p>}
+      </div>
+    </div>
+  );
+}
+
 export type SettingsHeaderProps = {
   /** The page's one `h1`. */
   title: ReactNode;

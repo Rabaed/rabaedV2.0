@@ -49,7 +49,7 @@ const many = {
   modules: { en: "Modules", ar: "الوحدات" },
   links: { en: "Required links", ar: "الروابط المطلوبة" },
   checklists: { en: "Checklist Templates", ar: "قوالب قوائم التحقق" },
-  record: { en: "Documental Record", ar: "السجل المستندي" },
+  record: { en: "Documental Record", ar: "السجل التوثيقي" },
 };
 const allItems = (context: { globals: Record<string, unknown> }): SettingsNavItem[] => {
   const [numbering, trades, visibility] = items(context);

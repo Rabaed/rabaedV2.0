@@ -169,10 +169,12 @@ export {
 } from "./components/shell/sidebar.tsx";
 export { MemberMenu, type MemberMenuProps } from "./components/shell/member-menu.tsx";
 export {
+  LargerScreenBanner,
   SettingsHeader,
   SettingsLayout,
   SettingsNav,
   SettingsSection,
+  type LargerScreenBannerProps,
   type SettingsHeaderProps,
   type SettingsLayoutProps,
   type SettingsNavItem,
