@@ -66,12 +66,13 @@ export function ProjectTabs({ label, labels, modules, href, current, linkAs: Lin
     update();
     list.addEventListener("scroll", update, { passive: true });
     const resize = new ResizeObserver(update);
-    resize.observe(list);
+    // The tabs too: their width changes without the row's when a font arrives late.
+    for (const item of [list, ...list.children]) resize.observe(item);
     return () => {
       list.removeEventListener("scroll", update);
       resize.disconnect();
     };
-  }, []);
+  }, [modules]);
   // Scroll the current tab into view sideways only; scrollIntoView could scroll the page too.
   useEffect(() => {
     const list = listRef.current;

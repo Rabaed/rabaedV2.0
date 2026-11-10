@@ -199,6 +199,8 @@ export const Tablet: Story = {
     await waitFor(() => expect(scrollY).toBe(600));
     await new Promise((resolve) => setTimeout(resolve, 100));
     await expect(banner.getBoundingClientRect().top).toBe(0);
+    // The Project tabs scroll away with the page, as on a desktop: only a phone keeps them under the top bar.
+    await expect(projectTabs(context).getBoundingClientRect().bottom).toBeLessThanOrEqual(0);
     window.scrollTo(0, 0);
 
     await expect(context.canvas.getByRole("main").querySelector("[data-page-header]")).toContainElement(

@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { ModalContent } from "../overlay/modal.tsx";
@@ -31,7 +33,8 @@ export type PageHeaderProps = {
  * the actions move out of the title row: the primary one to the bottom bar, the rest behind ⋯ (RP-1272).
  */
 export function PageHeader({ title, eyebrow, description, primaryAction, actions, more, tabs, className }: PageHeaderProps) {
-  const folded = actions !== undefined && more !== undefined;
+  // On a phone the other actions live only in the ⋯ sheet: mounted once, so a dialog they open isn't doubled.
+  const folded = useMediaQuery(PHONE, false) && actions !== undefined && more !== undefined;
   return (
     // A div, not <header>: the TopBar is the page's one banner.
     <div data-page-header="" className={cn("flex flex-col gap-4 border-b border-border bg-surface px-4 pt-5 sm:px-6", !tabs && "pb-5", className)}>
@@ -42,9 +45,15 @@ export function PageHeader({ title, eyebrow, description, primaryAction, actions
           {description !== undefined && <p className="text-body text-muted">{description}</p>}
         </div>
         {(actions !== undefined || primaryAction !== undefined) && (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {actions !== undefined && <div className={cn("flex flex-wrap gap-2", folded && "phone:hidden")}>{actions}</div>}
-            {folded && <MoreActions label={more.label} closeLabel={more.closeLabel}>{actions}</MoreActions>}
+          // Empty on a phone when the primary action has gone to the bottom bar.
+          <div className="flex shrink-0 flex-wrap gap-2 empty:hidden">
+            {folded && more ? (
+              <MoreActions label={more.label} closeLabel={more.closeLabel}>
+                {actions}
+              </MoreActions>
+            ) : (
+              actions
+            )}
             {primaryAction !== undefined && <PrimaryAction>{primaryAction}</PrimaryAction>}
           </div>
         )}
@@ -60,7 +69,7 @@ function MoreActions({ label, closeLabel, children }: { label: string; closeLabe
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <IconButton label={label} variant="secondary" className="hidden phone:inline-flex">
+        <IconButton label={label} variant="secondary">
           <Icon name="dots" />
         </IconButton>
       </SheetTrigger>

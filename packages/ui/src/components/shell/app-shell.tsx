@@ -53,7 +53,7 @@ export type AppShellProps = {
   sidebar: SidebarProps;
   /** The top bar's slots. */
   topBar: Omit<TopBarProps, "menu" | "className">;
-  /** The band under the top bar, e.g. a Project's `TabsBar`: it stays with the top bar as the page scrolls. */
+  /** The band under the top bar, e.g. a Project's `TabsBar`. On a phone it stays (and hides) with the top bar; wider, it scrolls with the page. */
   tabs?: ReactNode;
   /** The menu button's name, e.g. "Menu", and the drawer's close button's, e.g. "Close". */
   menuLabel: string;
@@ -118,8 +118,11 @@ export function AppShell({ sidebar, topBar, tabs, menuLabel, closeLabel, childre
           onFocus={showBars}
         >
           <TopBar menu={menu} {...topBar} />
-          {tabs}
+          {/* On a phone the tabs stay with the top bar, hiding and coming back with it (the Anatomy's sticky tabs row). */}
+          {isPhone && tabs}
         </div>
+        {/* On a tablet and desktop they scroll away with the page, as before. */}
+        {!isPhone && tabs}
         <ActionBarContext.Provider value={isPhone ? actionBar : null}>
           <main className="flex min-w-0 flex-1 flex-col fills-window:min-h-0">{children}</main>
         </ActionBarContext.Provider>

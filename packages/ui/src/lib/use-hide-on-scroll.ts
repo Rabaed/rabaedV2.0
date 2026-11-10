@@ -24,7 +24,11 @@ export function useHideOnScroll(enabled: boolean): [hidden: boolean, show: () =>
       last = y;
     };
     addEventListener("scroll", onScroll, { passive: true });
-    return () => removeEventListener("scroll", onScroll);
+    return () => {
+      removeEventListener("scroll", onScroll);
+      // Shown again when next enabled (a phone turned to a tablet's width and back), whatever the page did meanwhile.
+      setHidden(false);
+    };
   }, [enabled]);
   return [enabled && hidden, () => setHidden(false)];
 }

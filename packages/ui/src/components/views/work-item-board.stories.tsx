@@ -681,8 +681,14 @@ export const ForAConsultant: Story = {
   },
 };
 
-/** The toolbar and the board on a phone. */
-export const WithToolbarNarrow: Story = { ...WithToolbar, parameters: phone, play: undefined };
+/** The toolbar and the board on a phone. The search box's text is 16px, so iPhone Safari doesn't zoom into it (RP-1272). */
+export const WithToolbarNarrow: Story = {
+  ...WithToolbar,
+  parameters: phone,
+  play: async (context) => {
+    await expect(getComputedStyle(context.canvas.getByRole("searchbox")).fontSize).toBe("16px");
+  },
+};
 
 /**
  * On its page (RP-1092), the board fills the window from under its toolbar to the bottom edge,

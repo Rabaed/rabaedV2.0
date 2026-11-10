@@ -115,7 +115,7 @@ export function ToolbarSearch({
           placeholder={placeholder}
           maxLength={maxLength}
           aria-describedby={description === undefined ? undefined : `${id}-help`}
-          className={cn("h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted", inputClassName)}
+          className={cn("h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted phone:text-lg", inputClassName)}
         />
         {!hideHint && (
           <kbd
