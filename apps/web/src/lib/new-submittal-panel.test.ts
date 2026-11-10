@@ -7,12 +7,10 @@ import {
   createSubmittalPanelLayout,
   draftStepKey,
   lockedDocumentSections,
-  phoneQuery,
   raisableTypesPath,
   requiredItems,
   resumableDraft,
   savedClock,
-  tabletQuery,
   typedSomething,
 } from "./new-submittal-panel.ts";
 
@@ -105,11 +103,7 @@ describe("the layout by screen width (decision 1)", () => {
     expect(createSubmittalPanelLayout({ phone: false, tablet: true })).toBe("tablet-full");
     expect(createSubmittalPanelLayout({ phone: false, tablet: false })).toBe("slide-over");
   });
-
-  it("is the tablet's full width from 768px to 1023px; from 1024px it is the slide-over", () => {
-    expect(phoneQuery).toBe("(max-width: 767px)");
-    expect(tabletQuery).toBe("(max-width: 1023px)");
-  });
+  // The widths themselves are the app's PHONE and TABLET (@rabaed/ui, widths.test.ts, RP-1271).
 });
 
 describe("the raisable Types' read", () => {

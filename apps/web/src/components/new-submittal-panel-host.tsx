@@ -53,6 +53,8 @@ import {
   submittalPanelNormalWidth,
   submittalPanelStorage,
   submittalRoute,
+  PHONE,
+  TABLET,
   useMediaQuery,
   useSubmittalPanelIds,
   useSubmittalPanelSize,
@@ -80,12 +82,10 @@ import {
   createSubmittalPanelLayout,
   draftStepKey,
   lockedDocumentSections,
-  phoneQuery,
   raisableTypesPath,
   requiredItems,
   resumableDraft,
   savedClock,
-  tabletQuery,
   typedSomething,
 } from "@/lib/new-submittal-panel";
 import { draftRoute, pickedDocuments, saveThenUpload, startAnswers, type PickedFile } from "@/lib/new-panel-hooks";
@@ -284,7 +284,7 @@ function NewSubmittalPanel({
   const form = resumed ? itemForm : typeForm;
   const route = useApiRead<RoutePreviewData>(`${typePath}/route-preview`, chosen !== undefined, attempt);
 
-  const layout = createSubmittalPanelLayout({ phone: useMediaQuery(phoneQuery, false), tablet: useMediaQuery(tabletQuery, false) });
+  const layout = createSubmittalPanelLayout({ phone: useMediaQuery(PHONE, false), tablet: useMediaQuery(TABLET, false) });
   // The link's size, never kept as the viewer's own (README §2); otherwise the kept width.
   const linkSize = sizeFrom(useSearchParams());
   const kept = useSyncExternalStore(noStorageEvents, keptWidth, () => null);

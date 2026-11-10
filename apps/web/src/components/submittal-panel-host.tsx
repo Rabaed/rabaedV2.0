@@ -21,6 +21,7 @@ import {
   readSubmittalPanelPreferences,
   revisionPicker,
   stageColour,
+  PHONE,
   useSubmittalPanelIds,
   useMediaQuery,
   useSubmittalPanelSize,
@@ -38,7 +39,6 @@ import { useSubmittalPanelLog } from "@/components/submittal-panel-log";
 import { SubmittalPanelNumber } from "@/components/submittal-panel-number";
 import { useSubmittalPanelRoute } from "@/components/submittal-panel-route";
 import { WorkItemRevisionBanner, WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
-import { phoneQuery } from "@/lib/new-submittal-panel";
 import { useRouter } from "@/i18n/navigation";
 import { submittalPanelPlace } from "@/lib/submittal-panel-place";
 import { openIdFrom, sizeFrom, submittalPanelHref, withoutLinkSize } from "@/lib/submittal-panel-url";
@@ -199,7 +199,7 @@ export function SubmittalPanelHost({
   };
   const tNew = useTranslations("newSubmittal");
   // On a phone the item is a page with a back arrow, as the create panel is (RP-1152 row 7; RP-1237 row 43).
-  const phone = useMediaQuery(phoneQuery, false);
+  const phone = useMediaQuery(PHONE, false);
 
   return (
     <SubmittalPanelForm item={item} reads={reads} editing={editing !== null && editing === item?.id} locale={locale}>
