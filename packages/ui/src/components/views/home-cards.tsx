@@ -153,13 +153,14 @@ export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, lin
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-body font-semibold phone:line-clamp-2 phone:break-words phone:whitespace-normal">{item.title}</span>
-                    <span className="text-[12.5px] text-muted sm:truncate">
+                    {/* On a phone the Project takes a line of its own; wider, one line after the number. */}
+                    <span className="truncate text-[12.5px] text-muted phone:overflow-visible phone:whitespace-normal">
                       <span className="whitespace-nowrap">
                         {number ? <DocNo value={number} className="font-normal" /> : labels.noNumber}
                         {item.revisionNo > 0 && ` · ${labels.revision(item.revisionNo)}`}
                       </span>
-                      <span className="hidden sm:inline"> · </span>
-                      <span className="block break-words sm:inline">{item.project.name[locale]}</span>
+                      <span className="phone:hidden"> · </span>
+                      <span className="phone:block phone:break-words">{item.project.name[locale]}</span>
                     </span>
                   </span>
                   <StagePill
