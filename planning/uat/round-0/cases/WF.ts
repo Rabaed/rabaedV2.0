@@ -110,7 +110,9 @@ defineCase("WF-02", async (t) => {
   // V14: the Workflow's map is shown whole, every Company's Steps by name (Main 7's ruling on RP-1281).
   // What Ali must not see of Design Consultants is who works there, its Recommended Code, and which of
   // its Steps holds the item: only "With Design Consultants LLC". DCL's people are read from DCL's own list.
-  const dclNames = (((await tm.api.ahmed!.get("/members")).body as H.Json).members as H.Json[]).map((m) => m.fullName.en as string);
+  const dclNames = ((((await tm.api.ahmed!.get("/members")).body as H.Json)?.members ?? []) as H.Json[]).flatMap((m) => [m.fullName.en as string, m.fullName.ar as string]).filter(Boolean);
+  // A Recommended Code by letter ("Code A", "Recommended: A") or by a Review Code's name (outcome.ts defaults).
+  const CODE = /\b(?:Recommended|Code)\s*:?\s*[A-D]\b|\bApproved\b|Revise and Resubmit|\bRejected\b/;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const { page } = await H.viewItem(t, "ali", id);
   const dlg = page.locator(POP_UP);
@@ -122,8 +124,8 @@ defineCase("WF-02", async (t) => {
   const noDclLeak = async (where: string) => {
     const text = (await dlg.innerText()).replace(/\s+/g, " ");
     const named = dclNames.filter((n) => new RegExp(`(^|[^\\p{L}])${esc(n)}($|[^\\p{L}])`, "u").test(text));
-    t.check(`${where}: no Design Consultants person is named`, dclNames.length > 0 && named.length === 0, named.length ? `named: ${named.join(", ")}` : `none of DCL's ${dclNames.length} Members is named`);
-    const code = /Recommended|\bCode\s*:?\s*[A-E]\b/i.exec(text);
+    t.check(`${where}: no Design Consultants person is named`, dclNames.length > 0 && named.length === 0, named.length ? `named: ${named.join(", ")}` : `none of DCL's ${dclNames.length} Member names (en and ar) is shown`);
+    const code = CODE.exec(text);
     t.check(`${where}: no Recommended Code shows`, !code, code ? `shows "${text.slice(Math.max(0, code.index - 40), code.index + 40)}"` : "no Recommended Code in the drawer");
     // A Step's "Here now" / "You are here" and aria-current, or a holder's chip, would say which Step holds it.
     const marked = await dlg.locator("[data-step][aria-current], [data-map-step][aria-current], [data-holder]").allInnerTexts();
