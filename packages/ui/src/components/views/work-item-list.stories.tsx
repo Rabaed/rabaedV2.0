@@ -1239,7 +1239,8 @@ async function expectNumberPinned(context: PlayContext) {
   await expect(cell.left).toBeGreaterThanOrEqual(box.left - 1);
   await expect(cell.right).toBeLessThanOrEqual(box.right + 1);
   // A shadow on the pinned edge, so the rows read as sliding under it.
-  await expect(getComputedStyle(number).boxShadow).not.toBe("none");
+  // Cast towards the rows: right of the number in English, left of it in Arabic.
+  await expect(getComputedStyle(number).boxShadow).toMatch(ar ? / -6px 0px 6px -6px/ : / 6px 0px 6px -6px/);
   region.scrollTo({ left: 0 });
 }
 
@@ -1270,6 +1271,8 @@ export const OnAPhone: Story = {
 
     const add = await waitFor(() => within(context.canvasElement.querySelector<HTMLElement>("[data-action-bar]")!).getByRole("button", { name: storyText(context, copy.addSubmittal) }));
     await expect(toolbar).not.toContainElement(add);
+    // The Subject keeps to 112 on a phone, so an English one in the Arabic List shows its start beside the pinned number.
+    await expect(context.canvas.getByRole("link", { name: "Cable tray support brackets" }).getBoundingClientRect().width).toBeLessThanOrEqual(112);
 
     await expectNumberPinned(context);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
