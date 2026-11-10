@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDayMonthYear, formatNumber, relativeAge, workItemListHref, type Home, type Locale } from "@rabaed/domain";
-import { NeedsMyActionCard, ProjectCard, projectTileIndexes, RecentActivityCard, StatTile } from "@rabaed/ui";
+import { HomeCountTiles, NeedsMyActionCard, ProjectCard, projectTileIndexes, RecentActivityCard, StatTile } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { NewProjectDialog } from "./new-project-dialog";
@@ -74,13 +74,14 @@ export function HomeView({
         )}
       </div>
 
-      <section aria-label={t("counts")} className="mb-[18px] grid grid-cols-1 gap-[18px] min-[560px]:grid-cols-2 min-[1100px]:grid-cols-4">
+      {/* On a phone a strip that swipes a tile at a time (RP-1276); Needs my action's list follows it. */}
+      <HomeCountTiles label={t("counts")} className="mb-[18px]">
         <StatTile icon="buildings" tone="brand" value={home.counts.activeProjects} label={t("activeProjects")} locale={locale} />
         {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy */}
         <StatTile icon="user-circle" tone="info" value={home.counts.needMyAction} label={t("needMyAction")} locale={locale} />
         <StatTile icon="clock" tone="danger" value={home.counts.longAtStep} label={t("longAtStep")} locale={locale} />
         <StatTile icon="hourglass" tone="warning" value={home.counts.waitingWithOthers} label={t("waitingWithOthers")} locale={locale} />
-      </section>
+      </HomeCountTiles>
 
       <div className="grid items-stretch gap-[18px] min-[1101px]:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
         <NeedsMyActionCard
@@ -121,7 +122,7 @@ export function HomeView({
           {home.projects.length > 0 && (
             <Link
               href="/projects"
-              className="ms-auto inline-flex h-[34px] items-center rounded-[9px] border border-control-border bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover"
+              className="ms-auto inline-flex h-[34px] items-center rounded-[9px] pointer-coarse:h-11 border border-control-border bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover"
             >
               {t("viewAll")}
             </Link>
