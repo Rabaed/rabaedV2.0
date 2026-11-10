@@ -3,7 +3,8 @@ export const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2
 
 /** Shared look of text boxes: Input, Textarea and the Select trigger. */
 export const textBox = [
-  "w-full rounded-sm border border-control-border bg-surface px-3 text-body text-text",
+  // 16px on a phone (RP-1272): iPhone Safari zooms into a field whose text is smaller when it takes focus.
+  "w-full rounded-sm border border-control-border bg-surface px-3 text-body text-text phone:text-lg",
   "placeholder:text-muted hover:border-control-border-hover",
   focusRing,
   "aria-invalid:border-danger-fg aria-invalid:hover:border-danger-fg",

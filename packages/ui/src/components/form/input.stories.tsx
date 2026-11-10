@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
-import { expectTabFocusRing, expectTouchTarget, phone } from "../../storybook/form.ts";
+import { expectTabFocusRing, expectTouchTarget, phone, wide } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
 import { Field } from "./field.tsx";
 import { Input } from "./input.tsx";
@@ -98,10 +98,22 @@ export const ReadOnly: Story = {
   },
 };
 
-/** On a phone: at least 44px tall for gloved hands. */
+/**
+ * On a phone: at least 44px tall for gloved hands, and its text 16px, so iPhone Safari doesn't zoom into it
+ * when it takes focus (RP-1272).
+ */
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {
     await expectTouchTarget(textbox(context));
+    await expect(getComputedStyle(textbox(context)).fontSize).toBe("16px");
+  },
+};
+
+/** On a desktop (1366 wide) the text is 14px, as everywhere above the phone width. */
+export const Desktop: Story = {
+  parameters: wide,
+  play: async (context) => {
+    await expect(getComputedStyle(textbox(context)).fontSize).toBe("14px");
   },
 };

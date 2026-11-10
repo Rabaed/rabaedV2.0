@@ -28,5 +28,14 @@ export async function press(key: string) {
   await userEvent.keyboard(`{/${key}}`);
 }
 
-/** Story parameters for a phone-sized story: the harness renders it 390px wide with a touch screen. */
+/** Story parameters for a phone-sized story: the harness renders it 402 × 874 with a touch screen. */
 export const phone = { phone: true } as const;
+
+/** Story parameters for a tablet-sized story: the harness renders it 820 × 1180 with a touch screen (an iPad, portrait). */
+export const tablet = { tablet: true } as const;
+
+/**
+ * Story parameters for a desktop-sized story wider than the tablet tier: the harness renders it 1366 × 900.
+ * The default desktop page is 1024 wide, which is still a tablet (`TABLET`), so the shell shows its drawer there.
+ */
+export const wide = { wide: true } as const;

@@ -144,11 +144,13 @@ export { WithChip, type WithChipHolder, type WithChipProps } from "./components/
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
 export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
 export { PageHeader, type PageHeaderProps } from "./components/shell/page-header.tsx";
+export { PrimaryAction } from "./components/shell/action-bar.tsx";
 export {
   PageContent,
   ProjectMark,
   TabsBar,
   TopBarTitle,
+  pageBleed,
   type PageContentProps,
   type TopBarTitleProps,
 } from "./components/shell/page-frame.tsx";
@@ -185,6 +187,7 @@ export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,
   defaultTheme,
+  resolveRole,
   stageKeys,
   reviewCodes,
   toneKeys,

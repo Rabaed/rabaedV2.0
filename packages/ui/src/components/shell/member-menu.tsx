@@ -39,7 +39,7 @@ export type MemberMenuProps = {
   /** More items, e.g. a Sign out button. */
   children?: ReactNode;
   /**
-   * Where the button sits: in the top bar (avatar, name, chevron; the default),
+   * Where the button sits: in the top bar (avatar, name, chevron; the avatar only up to the tablet width; the default),
    * or at the bottom of the sidebar (a card with the name and Company, opening upwards).
    */
   placement?: "topBar" | "sidebar";
@@ -89,15 +89,15 @@ export function MemberMenu({
       ) : (
         <PopoverTrigger
           className={cn(
-            "inline-flex h-10 items-center gap-2 rounded-full px-1 text-body font-medium text-text hover:bg-hover sm:pe-3",
+            "inline-flex h-10 items-center gap-2 rounded-full px-1 pe-3 text-body font-medium text-text hover:bg-hover tablet:pe-1",
             "justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11",
             focusRing,
           )}
         >
           <Avatar name={name} src={photoSrc} decorative />
-          {/* Hidden on a phone, but still the button's name. */}
-          <span className="sr-only sm:not-sr-only">{name}</span>
-          <Icon name="chevron-down" size={16} className="hidden text-muted sm:block" />
+          {/* The avatar only from the tablet width down (RP-1272): the name is in the menu, and still the button's name. */}
+          <span className="tablet:sr-only">{name}</span>
+          <Icon name="chevron-down" size={16} className="text-muted tablet:hidden" />
         </PopoverTrigger>
       )}
       <PopoverContent

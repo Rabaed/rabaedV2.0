@@ -18,6 +18,7 @@ import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
+import { pageBleed } from "../shell/page-frame.tsx";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { boardLayoutMenuLabels, viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
 import { BoardLayoutMenu } from "./board-layout-menu.tsx";
@@ -694,7 +695,7 @@ export const FillsTheWindow: Story = {
   render: (args, context) => (
     <StoryProjectPage context={context} current="submittals">
       {/* The canvas reaches the page's edges, as the Submittals tab passes it (work-item-list-or-kanban.tsx). */}
-      <Toolbar args={args} locale={storyLocale(context)} boardClassName="-mx-4 px-4 sm:-mx-7 sm:px-7" />
+      <Toolbar args={args} locale={storyLocale(context)} boardClassName={pageBleed} />
     </StoryProjectPage>
   ),
   play: async (context) => {

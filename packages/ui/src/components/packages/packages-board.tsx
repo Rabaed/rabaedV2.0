@@ -22,6 +22,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Switch } from "../form/switch.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { pageBleed } from "../shell/page-frame.tsx";
 import { companyFilterChoice, filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
@@ -324,7 +325,7 @@ function PackageColumns({
       // The page gives it the rest of the window (`fills-window`, RP-1135); it scrolls itself, so the page doesn't.
       // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("relative -mx-4 min-h-64 flex-1 overflow-auto bg-canvas px-4 pt-1 pb-[40px] sm:-mx-7 sm:px-7", focusRing, "focus-visible:-outline-offset-2")}
+      className={cn("relative min-h-64 flex-1 overflow-auto bg-canvas pt-1 pb-[40px]", pageBleed, focusRing, "focus-visible:-outline-offset-2")}
     >
       <ol className="flex w-max items-start gap-[18px]">
         {packageStatuses.map((status) => {
