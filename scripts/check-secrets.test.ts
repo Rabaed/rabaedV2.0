@@ -23,6 +23,8 @@ const tokens = {
   basicAuth: join2("Authorization: ", "Basic ", chars(40)),
   // A key in one string, its lines joined by "\n" escapes, as in an env value or a JSON file.
   privateKey: join2("-----BEGIN ", "RSA PRIVATE", " KEY-----", "\\n", chars(64)),
+  // RP-1180: header.payload.signature, each base64url; the header and payload are JSON, so both start "eyJ".
+  jwt: join2("ey", "J", chars(20), ".", "ey", "J", chars(60), ".", chars(43, "aB3-dE5_gH7")),
 };
 
 // RP-1185. A key block over several lines: the header, then the body (64 characters a line). Built at run time too.
@@ -41,6 +43,7 @@ const expectedRule: Record<keyof typeof tokens, string> = {
   sendgrid: "sendgrid-api-key",
   basicAuth: "basic-auth-header",
   privateKey: "private-key",
+  jwt: "jwt",
 };
 
 describe("findSecrets", () => {
@@ -77,6 +80,16 @@ describe("findSecrets", () => {
   it("finds the token inside the curl Jira's upload hands back (the RP-1100 incident)", () => {
     const curl = join2("curl -", "u someone@example.com:", tokens.atlassian, " -X POST -H 'X-Atlassian-Token: no-check' -F file=@shot.png https://example.atlassian.net/rest/api/3/issue/RP-1/attachments");
     expect(findSecrets(curl)).toEqual(["atlassian-api-token"]);
+  });
+
+  it("finds a JWT as a bearer header, as the MCP upload's curl carries one (RP-1180)", () => {
+    expect(findSecrets(join2("curl -H 'Authorization: ", "Bearer ", tokens.jwt, "' -F file=@shot.png https://example.com/upload"))).toEqual(["jwt"]);
+  });
+
+  it("lets JWT-like text through that has no signature or no second eyJ part", () => {
+    expect(findSecrets(join2("ey", "J", chars(20), ".", "ey", "J", chars(60)))).toEqual([]);
+    expect(findSecrets(join2("ey", "J", chars(20), ".", chars(60), ".", chars(43)))).toEqual([]);
+    expect(findSecrets("const prefix = 'ey" + "J';")).toEqual([]);
   });
 
   it("finds a Jira token assigned in an env file", () => {
@@ -232,6 +245,11 @@ describe("the not-a-secret comment", () => {
     expect(scanText("a.ts", `const key = "${tokens.github}"; ${exempt(" documented example in the Jira guide")}`)).toEqual([]);
     expect(scanText("a.sh", `export KEY=${tokens.github} ${exempt(" test value").replace("//", "#")}`)).toEqual([]);
     expect(scanText("a.md", `${tokens.github} <!-- ${exempt(" shown in the docs").slice(3)} -->`)).toEqual([]);
+  });
+
+  it("skips a JWT on a marked line and finds the same JWT unmarked (RP-1180)", () => {
+    expect(scanText("a.ts", `const sample = "${tokens.jwt}"; ${exempt(" a decoder test's fixture, signed with no key")}`)).toEqual([]);
+    expect(scanText("a.ts", `const sample = "${tokens.jwt}";`)).toEqual([{ file: "a.ts", line: 1, rule: "jwt" }]);
   });
 
   it("skips the marked line of a CRLF file, as --tree reads one on Windows", () => {
