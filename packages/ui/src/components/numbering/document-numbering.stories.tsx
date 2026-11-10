@@ -1,7 +1,10 @@
 import type { NumberingCounter, NumberingPattern } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import { useState, type ReactNode } from "react";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
+import { phone } from "../../storybook/form.ts";
+import { ActionBarContext } from "../shell/action-bar.tsx";
 import { storyLocale } from "../../storybook/locale.ts";
 import { numberingText } from "../../storybook/numbering.ts";
 import { expectFocusTrapped, overlay } from "../../storybook/overlay.ts";
@@ -111,6 +114,60 @@ export const NoCompanyWarning: Story = {
     await userEvent.click(within(warning).getByRole("button", { name: t("companySegment") }));
     await expect(canvas.queryByTestId("shared-counter-warning")).toBeNull();
     await userEvent.click(canvas.getByRole("button", { name: t("remove", { segment: t("kinds.participant") }) }));
+  },
+};
+
+/** A phone's page with AppShell's bottom action bar under it (RP-1272), as the app gives it to the page. */
+function WithActionBar({ children }: { children: ReactNode }) {
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <ActionBarContext.Provider value={bar}>
+        <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+      </ActionBarContext.Provider>
+      <div ref={setBar} data-action-bar="" className="sticky bottom-0 z-20 border-t border-border bg-surface px-4 pt-3 pb-3 empty:hidden" />
+    </div>
+  );
+}
+
+/**
+ * On a phone (RP-1275) the unsaved changes' Discard and Review & save sit in the bottom action bar, across its
+ * width, in place of the bar floating over the page (the Responsive Review: "the save bar spans the width").
+ */
+export const PhoneSaveInActionBar: Story = {
+  parameters: {
+    ...phone,
+    layout: "fullscreen",
+    touchTargets: {
+      exempt: [
+        {
+          // The segment chips, Add segment, and the Sequence card's counter-scope toggles (34 high).
+          selector: "[data-testid=numbering-project-pattern] :is(button, input), [role=group] label > input[type=checkbox].sr-only",
+          reason: "the pattern editor's phone layout (vertical segment cards, Responsive Anatomy 18) is not part of RP-1275; this story checks the save bar",
+        },
+      ],
+    },
+  },
+  render: (args, context) => (
+    <WithActionBar>
+      <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
+    </WithActionBar>
+  ),
+  play: async (context) => {
+    const { canvas, canvasElement } = context;
+    const t = text(context);
+    const bar = canvasElement.querySelector<HTMLElement>("[data-action-bar]")!;
+    await expect(bar.childElementCount).toBe(0);
+    await userEvent.click(canvas.getByRole("button", { name: t("remove", { segment: t("kinds.participant") }) }));
+    const unsaved = canvas.getByRole("region", { name: t("unsaved") });
+    await expect(bar).toContainElement(unsaved);
+    const save = within(unsaved).getByRole("button", { name: t("reviewSave") });
+    await expect(within(unsaved).getByRole("button", { name: t("discard") })).toBeVisible();
+    // Across the bar, inside its 16 at each side; nothing floats over the page.
+    await expect(unsaved.getBoundingClientRect().width).toBe(innerWidth - 32);
+    await expect(getComputedStyle(unsaved).position).not.toBe("fixed");
+    await expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   },
 };
 
