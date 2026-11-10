@@ -25,7 +25,8 @@ import { Icon } from "../icon/icon.tsx";
 import { pageBleed } from "../shell/page-frame.tsx";
 import { companyFilterChoice, filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
-import { ListToolbar, ToolbarSearch } from "../list/list-toolbar.tsx";
+import { ListToolbar, ToolbarRowBreak, ToolbarSearch } from "../list/list-toolbar.tsx";
+import { PrimaryAction } from "../shell/action-bar.tsx";
 import { NewPackageDialog, type NewPackageLabels } from "./package-dialogs.tsx";
 import { PackageStatusPill, StateMiniBar, TypeIconTile } from "./package-states.tsx";
 import { PackagesList, type PackagesListLabels } from "./packages-list.tsx";
@@ -161,6 +162,8 @@ export function PackagesBoard({
             ]}
           />
         )}
+        {/* On a phone the View switch takes a row of its own (RP-1277). */}
+        <ToolbarRowBreak />
         {viewSwitch}
       </>
     ) : undefined;
@@ -169,7 +172,12 @@ export function PackagesBoard({
     <div className="flex min-w-0 flex-col gap-4 fills-window:min-h-0 fills-window:flex-1">
       {toolbar && (
         <ListToolbar label={labels.toolbar} end={end}>
-          {onCreate && <NewPackageDialog labels={labels.create} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onCreate={onCreate} />}
+          {/* On a phone in the bottom action bar (RP-1272), not the toolbar (RP-1277, as the List's: RP-1273). */}
+          {onCreate && (
+            <PrimaryAction>
+              <NewPackageDialog labels={labels.create} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onCreate={onCreate} />
+            </PrimaryAction>
+          )}
           {onFilterChange && (
             <PackagesFilterControls packages={all} filter={filter} narrowed={narrowed} locale={locale} labels={labels.filter} close={labels.close} onChange={onFilterChange} />
           )}
@@ -256,8 +264,8 @@ function PackagesFilterControls({
         description={labels.searchHelp}
         maxLength={100}
         onSearch={(q) => onChange({ ...filter, q })}
-        // Wide enough for its placeholder beside the "/" hint at 1366.
-        className="sm:w-[272px]"
+        // Wide enough for its placeholder beside the "/" hint at 1366; on a phone it shares its row with Filter (RP-1277).
+        className="sm:w-[272px] phone:w-auto phone:min-w-0 phone:flex-1"
       />
       <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -289,8 +297,10 @@ function PackagesFilterControls({
           </button>
         )}
       </span>
-      {/* The kit's "Need my action" (`.tgl`): the Packages with a submittal waiting on the viewer. */}
-      <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 px-1 text-sm font-semibold text-text">
+      {/* On a phone Need My Action starts the second row, with Cards / Table beside it (RP-1277). */}
+      <ToolbarRowBreak />
+      {/* The kit's "Need my action" (`.tgl`): the Packages with a submittal waiting on the viewer. 44 high on a touch screen. */}
+      <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 px-1 text-sm font-semibold text-text pointer-coarse:min-h-11">
         <Switch checked={filter.mine === true} onCheckedChange={(on) => onChange(on ? { ...filter, mine: true } : notMine)} />
         {labels.mine}
       </label>

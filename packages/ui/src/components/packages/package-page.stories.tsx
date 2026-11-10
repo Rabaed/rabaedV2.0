@@ -3,8 +3,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
+import { phone, tablet } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { packagePageLabels } from "../../storybook/packages.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { PackagePage } from "./package-page.tsx";
 import type { PackageItemSearch } from "./add-package-items-dialog.tsx";
 import type { SubmitPackageCall } from "./submit-package-dialog.tsx";
@@ -173,7 +175,8 @@ const meta = {
     onSubmit: fn<SubmitPackageCall>(async () => ({ ok: true, submitted: 3 })),
   },
   render: (args, context) => <PackagePage {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
-  decorators: [(Story) => <div className="max-w-[1100px] bg-canvas p-6">{Story()}</div>],
+  // A full-screen story lays out the whole page itself, in the shell (OnAPhone, OnATablet).
+  decorators: [(Story, context) => (context.parameters.layout === "fullscreen" ? Story() : <div className="max-w-[1100px] bg-canvas p-6">{Story()}</div>)],
 } satisfies Meta<typeof PackagePage>;
 
 export default meta;
@@ -564,4 +567,43 @@ export const AddItemsTaken: Story = {
     await expect(context.args.onAdd).toHaveBeenCalledWith([found[0]!.id]);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   },
+};
+
+/**
+ * The Package page as the app lays it out, in the shell (RP-1277): one full page with Back at
+ * every width, never a list of Packages beside it (gap-table rows 68 and 69, the owner's answer (a)).
+ * The page never scrolls sideways; the item table scrolls inside its own box.
+ */
+async function expectFullPage(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const l = labelsOf(context);
+  await expect(context.canvas.getByRole("link", { name: l.back })).toBeVisible();
+  await expect(context.canvas.getByRole("heading", { level: 1 })).toHaveTextContent(name[storyLocale(context)]);
+  // The page's content takes the window's width, less the shell's gutters: no master–detail.
+  const content = context.canvasElement.querySelector("main")!.getBoundingClientRect();
+  const table = context.canvasElement.querySelector<HTMLElement>("[data-package-table]")!;
+  await expect(table.getBoundingClientRect().width).toBeGreaterThan(content.width * 0.8);
+  await expect(getComputedStyle(table).overflowX).toBe("auto");
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+}
+
+const onItsPage: Story["render"] = (args, context) => (
+  <StoryProjectPage context={context} current="submittals">
+    <PackagePage {...args} locale={storyLocale(context)} labels={labelsOf(context)} />
+  </StoryProjectPage>
+);
+
+/** On a phone (402): its own page with Back (row 68). */
+export const OnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
+  render: onItsPage,
+  play: expectFullPage,
+};
+
+/** At 820: still the full page, no list of Packages beside it (row 69 (a)). */
+export const OnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
+  render: onItsPage,
+  play: expectFullPage,
 };
