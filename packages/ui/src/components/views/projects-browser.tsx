@@ -110,7 +110,8 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, submit
               aria-pressed={filter === chip.value}
               onClick={() => setFilter(chip.value)}
               className={cn(
-                "h-[34px] rounded-full border px-[14px] text-[13px] font-semibold transition-colors duration-150",
+                // 44 high on a touch screen (row 38); the desktop keeps the kit's 34.
+                "h-[34px] rounded-full border px-[14px] text-[13px] font-semibold transition-colors duration-150 pointer-coarse:h-11 pointer-coarse:px-4",
                 filter === chip.value
                   ? "border-inverse bg-inverse text-on-inverse"
                   : "border-control-border bg-surface text-muted hover:border-control-border-hover hover:bg-hover",
