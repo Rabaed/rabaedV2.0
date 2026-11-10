@@ -908,6 +908,8 @@ export function RegisterImportWizard({
                 <Select
                   className="w-full sm:w-72 sm:flex-none"
                   aria-label={t("mappings.label")}
+                  // Radix opens on a mouse's pointerdown, which a disabled fieldset doesn't stop.
+                  disabled={mapReadOnly}
                   value={appliedMapping ?? "none"}
                   onValueChange={(id) => {
                     setMappingSaved(false);
@@ -1036,6 +1038,7 @@ export function RegisterImportWizard({
                           <Select
                             className="min-w-0 flex-1"
                             aria-label={t("map.fieldFor", { column: name })}
+                            disabled={mapReadOnly}
                             value={field}
                             onValueChange={(value) => mapColumn(column, value)}
                             options={fieldOptions}
@@ -1091,6 +1094,7 @@ export function RegisterImportWizard({
                 sameForEvery={t("map.sameForEvery")}
                 choose={t("map.choose")}
                 options={types.map((ty) => ({ value: ty.code, label: `${ty.code} · ${ty.name[locale]}` }))}
+                disabled={mapReadOnly}
               />
               <FixedChoice
                 label={t("fields.trade")}
@@ -1101,6 +1105,7 @@ export function RegisterImportWizard({
                 sameForEvery={t("map.sameForEvery")}
                 choose={t("map.choose")}
                 options={trades.map((tr) => ({ value: tr.id, label: tr.name[locale] }))}
+                disabled={mapReadOnly}
               />
             </div>
           </section>
@@ -1745,6 +1750,7 @@ function FixedChoice({
   sameForEvery,
   choose,
   options,
+  disabled = false,
 }: {
   label: string;
   source: Source;
@@ -1754,6 +1760,8 @@ function FixedChoice({
   sameForEvery: string;
   choose: string;
   options: { value: string; label: string }[];
+  /** Read-only on a phone (RP-1275): Radix opens on a mouse's pointerdown, which a disabled fieldset doesn't stop. */
+  disabled?: boolean;
 }) {
   const column = source.from === "column" && source.column !== null ? headers[source.column] || columnLetter(source.column) : null;
   return (
@@ -1769,7 +1777,7 @@ function FixedChoice({
         ]}
       />
       {source.from === "value" && (
-        <Select aria-label={label} placeholder={choose} value={source.value ?? undefined} onValueChange={(value) => onChange({ from: "value", value })} options={options} />
+        <Select aria-label={label} disabled={disabled} placeholder={choose} value={source.value ?? undefined} onValueChange={(value) => onChange({ from: "value", value })} options={options} />
       )}
     </div>
   );

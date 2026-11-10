@@ -108,7 +108,8 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
   // The phone's bottom action bar, while AppShell shows one (RP-1272); null wider.
   const actionBar = useContext(ActionBarContext);
   // Room under the page while the floating bar shows, so it never covers the last card (the kit's padding under the page).
-  const floating = dirty || done;
+  // On a phone the buttons sit in the bottom action bar, which takes its own room.
+  const floating = actionBar === null && (dirty || done);
   useEffect(() => {
     if (!floating) return;
     const before = document.body.style.paddingBottom;

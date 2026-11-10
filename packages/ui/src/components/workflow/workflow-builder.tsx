@@ -167,8 +167,10 @@ const listed = (message: string, locale: Locale) => typographic(message, locale)
  * WF-4's API. Used by Project Settings, the Library and Rabaed Admin.
  */
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
-  const isPhone = useMediaQuery(PHONE, false);
-  if (isPhone && props.largerScreen !== undefined) return <ReadOnlyBuilder {...props} />;
+  // With a banner, the server's render and the first client one are the read-only view: the editing builder's
+  // first effects (a blank draft's seeded Step) save the draft, so it mounts only once the screen is known wider.
+  const readOnly = useMediaQuery(PHONE, props.largerScreen !== undefined) && props.largerScreen !== undefined;
+  if (readOnly) return <ReadOnlyBuilder {...props} />;
   return (
     // Toasts at the bottom centre, as the reference's, clear of the side panel in both directions.
     <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss} placement="center" look="dark">

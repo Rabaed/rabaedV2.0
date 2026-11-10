@@ -251,7 +251,7 @@ export const PhoneReadOnly: Story = {
 };
 
 /** Wider than a phone (here 1024, a tablet in landscape) the same page edits as ever: the banner is for a phone only. */
-export const TabletEdits: Story = {
+export const WiderEdits: Story = {
   render: PhoneReadOnly.render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);

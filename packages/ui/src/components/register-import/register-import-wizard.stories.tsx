@@ -110,7 +110,8 @@ export const MapFieldsPhone: Story = {
     await toMapFields(canvas, locale);
     await expect(canvas.getByRole("note")).toHaveTextContent(largerScreen.title[locale]);
     const table = within(canvas.getByRole("region", { name: t.map.caption }));
-    for (const select of table.getAllByRole("combobox")) await expect(select).toBeDisabled();
+    // Disabled on the trigger itself too: Radix opens a select on a mouse's pointerdown, which the fieldset doesn't stop.
+    for (const select of canvas.getAllByRole("combobox")) await expect(select).toHaveAttribute("data-disabled");
     for (const box of table.getAllByRole("checkbox")) await expect(box).toBeDisabled();
     for (const radio of canvas.getAllByRole("radio")) await expect(radio).toBeDisabled();
     await expect(canvas.getByRole("button", { name: new RegExp(t.map.nextValues) })).toBeDisabled();
