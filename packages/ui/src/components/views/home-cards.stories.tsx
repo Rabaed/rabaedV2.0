@@ -2,7 +2,7 @@ import { formatDayMonthYear, formatNumber, relativeAge, type HomeActivityEntry, 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
-import { expectTouchTarget, phone } from "../../storybook/form.ts";
+import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { NeedsMyActionCard, RecentActivityCard, type NeedsMyActionCardLabels, type RecentActivityCardLabels } from "./home-cards.tsx";
 
@@ -115,11 +115,15 @@ function when(at: string, locale: Locale): string {
   return `${n}${age.unit === "minutes" ? "m" : "h"} ago`;
 }
 
-function Cards({ locale, empty = false }: { locale: Locale; empty?: boolean }) {
+/** A Subject too long for one line on a phone, and for two (RP-1276, row 35). */
+const longTitle = "Fire suppression system, sprinkler heads and pipework for basement levels B1 to B3 and the podium car park";
+
+function Cards({ locale, empty = false, long = false }: { locale: Locale; empty?: boolean; long?: boolean }) {
+  const shown = long ? [{ ...items[0]!, title: longTitle }, ...items.slice(1)] : items;
   return (
     <div className="grid items-stretch gap-[18px] min-[1101px]:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
       <NeedsMyActionCard
-        items={empty ? [] : items}
+        items={empty ? [] : shown}
         locale={locale}
         labels={needsLabels[locale]}
         itemHref={(i) => `#/work-items/${i}`}
@@ -215,12 +219,49 @@ export const Empty: Story = {
   },
 };
 
-/** Phone: the cards stack and each row is a touch target. */
+const stageOf = (row: HTMLElement, context: PlayContext) => within(row).getByText(storyText(context, b("Internal Review", "مراجعة داخلية")));
+const titleOf = (row: HTMLElement, title: string) => within(row).getByText(title);
+const lineHeightOf = (element: HTMLElement) => parseFloat(getComputedStyle(element).lineHeight);
+
+/**
+ * Phone: the cards stack and each row is a touch target. A Subject takes two lines before it is cut
+ * (the owner's answer to row 35), and the Stage goes under the row's text instead of shortening it.
+ */
 export const Narrow: Story = {
   parameters: phone,
+  args: { long: true },
   play: async (context) => {
     const [needs, activity] = context.canvas.getAllByRole("region").map((r) => r.getBoundingClientRect());
     await expect(activity!.top).toBeGreaterThanOrEqual(needs!.bottom);
     await expectTouchTarget(context.canvas.getAllByRole("link")[0]!);
+    const [long, short] = within(needsOf(context)).getAllByRole("listitem");
+    const title = titleOf(long!, longTitle);
+    // Two lines, then cut: no more.
+    await expect(Math.round(title.getBoundingClientRect().height / lineHeightOf(title))).toBe(2);
+    await expect(title.scrollHeight).toBeGreaterThan(title.clientHeight);
+    // The Stage under the title, at the text's start (the right in Arabic), not beside it.
+    const rtl = storyLocale(context) === "ar";
+    for (const row of [long!, short!]) {
+      const name = titleOf(row, row === long ? longTitle : "Villa pumps").getBoundingClientRect();
+      const stage = stageOf(row, context).getBoundingClientRect();
+      await expect(stage.top).toBeGreaterThanOrEqual(name.bottom);
+      await expect(Math.abs(rtl ? stage.right - name.right : stage.left - name.left)).toBeLessThanOrEqual(12);
+    }
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
+/** A tablet (820): each row on one line, the Stage at its end, as the Tablet Flow draws it (row 35). */
+export const NeedsMyActionTablet: Story = {
+  parameters: tablet,
+  args: { long: true },
+  play: async (context) => {
+    const [long] = within(needsOf(context)).getAllByRole("listitem");
+    const title = titleOf(long!, longTitle);
+    await expect(Math.round(title.getBoundingClientRect().height / lineHeightOf(title))).toBe(1);
+    const name = title.getBoundingClientRect();
+    const stage = stageOf(long!, context).getBoundingClientRect();
+    await expect(stage.top).toBeLessThan(name.bottom);
+    await expect(storyLocale(context) === "ar" ? stage.right <= name.left : stage.left >= name.right).toBe(true);
   },
 };

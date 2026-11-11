@@ -67,6 +67,7 @@ export { NumberingVersions, type NumberingVersionsProps } from "./components/num
 export type { SampleContext } from "./components/numbering/numbering-model.ts";
 export type { NumberingText } from "./components/numbering/numbering-text.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
+export { SaveBar, type SaveBarProps } from "./components/form/save-bar.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";
 export { Select, type SelectProps } from "./components/form/select.tsx";
 export { Switch, type SwitchProps } from "./components/form/switch.tsx";
@@ -463,6 +464,8 @@ export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
 export type { WorkflowRuleLabels } from "./components/workflow/workflow-rule-labels.ts";
 export type { MapStage } from "./components/workflow/workflow-map.ts";
 export {
+  HomeCountTiles,
+  type HomeCountTilesProps,
   NeedsMyActionCard,
   RecentActivityCard,
   type NeedsMyActionCardLabels,
