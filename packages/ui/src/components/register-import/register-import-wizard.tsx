@@ -19,6 +19,8 @@ import {
 } from "@rabaed/domain";
 import { useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { Button, IconButton } from "../button/button.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
@@ -182,6 +184,7 @@ export function RegisterImportWizard({
   packageLink,
   initialMapping = null,
   sample = false,
+  largerScreen,
 }: {
   locale: Locale;
   /** The `registerImport` messages. */
@@ -221,8 +224,14 @@ export function RegisterImportWizard({
    * where confirming it would put made-up Drafts in a Company's Project.
    */
   sample?: boolean;
+  /**
+   * A `LargerScreenBanner`: given, the Map fields step is read-only on a phone, under it (RP-1275, gap-table
+   * row 59). Left out (Rabaed Admin), it maps at every width, as before.
+   */
+  largerScreen?: ReactNode;
 }) {
   const me = importer;
+  const mapReadOnly = useMediaQuery(PHONE, false) && largerScreen !== undefined;
   const [step, setStep] = useState<Step>(initialPreview ? "validate" : "upload");
   const [file, setFile] = useState<Uploaded | null>(null);
   const [sheet, setSheet] = useState<RegisterSheet | null>(null);
@@ -883,9 +892,12 @@ export function RegisterImportWizard({
 
       {step === "map" && sheet && file && (
         <section aria-label={t("step.map")} className="flex flex-col gap-4">
+          {mapReadOnly && largerScreen}
           {fileCard(
             t("map.fileDetail", { worksheet: sheet.sheet, headerRow: n(sheet.headerRow), rows: n(sheet.dataRows), columns: n(sheet.headers.length) }),
           )}
+          {/* On a phone, read-only (RP-1275): every choice below shown as it stands, none of it changed. */}
+          <fieldset disabled={mapReadOnly} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
           {(savedMappings.length > 0 || client.saveMapping) && (
             <div role="group" aria-labelledby="saved-mapping-label" className="flex flex-col gap-2 rounded-md border border-border bg-surface px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -896,6 +908,8 @@ export function RegisterImportWizard({
                 <Select
                   className="w-full sm:w-72 sm:flex-none"
                   aria-label={t("mappings.label")}
+                  // Radix opens on a mouse's pointerdown, which a disabled fieldset doesn't stop.
+                  disabled={mapReadOnly}
                   value={appliedMapping ?? "none"}
                   onValueChange={(id) => {
                     setMappingSaved(false);
@@ -980,7 +994,11 @@ export function RegisterImportWizard({
             })}
             {t("map.required")}
           </p>
-          <div role="region" aria-label={t("map.caption")} tabIndex={0} className="overflow-x-auto rounded-md border border-border bg-surface">
+          </fieldset>
+          {/* Relative, so the table's screen-reader-only words stay inside its scroll and never widen a phone's page;
+              the region itself outside the read-only fieldset, so it still scrolls from the keyboard (RP-1275). */}
+          <div role="region" aria-label={t("map.caption")} tabIndex={0} className="relative overflow-x-auto rounded-md border border-border bg-surface">
+            <fieldset disabled={mapReadOnly} className="m-0 min-w-0 border-0 p-0">
             <table className="w-full min-w-[640px] text-[14px]">
               <caption className="sr-only">{t("map.caption")}</caption>
               <thead>
@@ -1020,6 +1038,7 @@ export function RegisterImportWizard({
                           <Select
                             className="min-w-0 flex-1"
                             aria-label={t("map.fieldFor", { column: name })}
+                            disabled={mapReadOnly}
                             value={field}
                             onValueChange={(value) => mapColumn(column, value)}
                             options={fieldOptions}
@@ -1046,7 +1065,9 @@ export function RegisterImportWizard({
                 })}
               </tbody>
             </table>
+            </fieldset>
           </div>
+          <fieldset disabled={mapReadOnly} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
           <p className="flex flex-wrap items-start gap-2 rounded-md bg-info-tint px-4 py-3 text-[13px] text-info-fg">
             <Icon name="info-circle" size={16} className="mt-0.5" />
             <span className="flex-1">{t("map.valuesHelp")}</span>
@@ -1073,6 +1094,7 @@ export function RegisterImportWizard({
                 sameForEvery={t("map.sameForEvery")}
                 choose={t("map.choose")}
                 options={types.map((ty) => ({ value: ty.code, label: `${ty.code} · ${ty.name[locale]}` }))}
+                disabled={mapReadOnly}
               />
               <FixedChoice
                 label={t("fields.trade")}
@@ -1083,12 +1105,14 @@ export function RegisterImportWizard({
                 sameForEvery={t("map.sameForEvery")}
                 choose={t("map.choose")}
                 options={trades.map((tr) => ({ value: tr.id, label: tr.name[locale] }))}
+                disabled={mapReadOnly}
               />
             </div>
           </section>
+          </fieldset>
           <div className="flex items-center justify-between">
             {back("sheet")}
-            <Button onClick={() => void (tickedColumns > 0 ? loadValues() : openAssign())} disabled={busy || mapping(false) === null}>
+            <Button onClick={() => void (tickedColumns > 0 ? loadValues() : openAssign())} disabled={busy || mapReadOnly || mapping(false) === null}>
               {tickedColumns > 0 ? t("map.nextValues") : t("map.nextAssign")}
               <Icon name="arrow-right" />
             </Button>
@@ -1726,6 +1750,7 @@ function FixedChoice({
   sameForEvery,
   choose,
   options,
+  disabled = false,
 }: {
   label: string;
   source: Source;
@@ -1735,6 +1760,8 @@ function FixedChoice({
   sameForEvery: string;
   choose: string;
   options: { value: string; label: string }[];
+  /** Read-only on a phone (RP-1275): Radix opens on a mouse's pointerdown, which a disabled fieldset doesn't stop. */
+  disabled?: boolean;
 }) {
   const column = source.from === "column" && source.column !== null ? headers[source.column] || columnLetter(source.column) : null;
   return (
@@ -1750,7 +1777,7 @@ function FixedChoice({
         ]}
       />
       {source.from === "value" && (
-        <Select aria-label={label} placeholder={choose} value={source.value ?? undefined} onValueChange={(value) => onChange({ from: "value", value })} options={options} />
+        <Select aria-label={label} disabled={disabled} placeholder={choose} value={source.value ?? undefined} onValueChange={(value) => onChange({ from: "value", value })} options={options} />
       )}
     </div>
   );

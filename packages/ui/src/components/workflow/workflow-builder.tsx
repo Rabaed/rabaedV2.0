@@ -26,6 +26,8 @@ import {
 } from "@rabaed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { Button, IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
@@ -44,6 +46,7 @@ import { defaultSample, offeredWith, sampledFields, TestRunBar, type Sample, typ
 import { canvasDragType, WorkflowCanvas, type ArrowStyle, type CanvasMark, type CanvasMove, type CanvasSelection } from "./workflow-canvas.tsx";
 import { WorkflowChangeList } from "./workflow-changes.tsx";
 import { arrangedLayout, placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
+import { WorkflowStepList } from "./workflow-step-list.tsx";
 import { referenceModal, referenceModalBody, referenceModalFooter, stageVars, typographic } from "./workflow-parts.tsx";
 
 /** Where the draft's saving stands, as the page saving it through WF-4's API knows it; `opened` until the first save. */
@@ -99,6 +102,11 @@ export type WorkflowBuilderProps = {
   onValidate: () => Promise<readonly WorkflowProblem[]>;
   /** Publishes the draft with its change note (the server checks it again). */
   onPublish: (changeNote: string) => Promise<WorkflowPublishResult>;
+  /**
+   * A `LargerScreenBanner`: given, the builder opens read-only on a phone, under it (RP-1275, Project
+   * Settings). Left out (the Library, Rabaed Admin), it edits at every width, as before.
+   */
+  largerScreen?: ReactNode;
 };
 
 type History = { past: WorkflowDefinition[]; present: WorkflowDefinition; future: WorkflowDefinition[] };
@@ -159,11 +167,41 @@ const listed = (message: string, locale: Locale) => typographic(message, locale)
  * WF-4's API. Used by Project Settings, the Library and Rabaed Admin.
  */
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
+  // With a banner, the server's render and the first client one are the read-only view: the editing builder's
+  // first effects (a blank draft's seeded Step) save the draft, so it mounts only once the screen is known wider.
+  const readOnly = useMediaQuery(PHONE, props.largerScreen !== undefined) && props.largerScreen !== undefined;
+  if (readOnly) return <ReadOnlyBuilder {...props} />;
   return (
     // Toasts at the bottom centre, as the reference's, clear of the side panel in both directions.
     <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss} placement="center" look="dark">
       <Builder {...props} />
     </ToastProvider>
+  );
+}
+
+/**
+ * The builder on a phone (RP-1275, gap-table row 59, the owner's answer (a); Responsive Anatomy screenshot 18):
+ * the draft as a read-only map under the "Continue on a larger screen" banner. It edits nothing and saves
+ * nothing, so the draft stays as it is for a larger screen.
+ */
+function ReadOnlyBuilder({ name, versionNo, definition, stages, locale, labels, backHref, largerScreen }: WorkflowBuilderProps) {
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <BackLink href={backHref} label={labels.back} />
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="m-0 min-w-0 text-[19px] leading-tight font-bold">{name}</h1>
+        <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-md bg-warning-tint px-2 text-[11.5px] font-bold whitespace-nowrap text-warning-fg">
+          <Icon name="edit" size={12} />
+          {labels.draft(formatNumber(versionNo, locale))}
+        </span>
+      </div>
+      {largerScreen}
+      {/* The diagram (it pans and zooms), then its Steps as a list, readable at a phone's width. */}
+      <div className="h-80 overflow-hidden rounded-md border border-border bg-surface">
+        <WorkflowCanvas definition={definition} stages={stages} locale={locale} labels={labels.map} className="h-full" />
+      </div>
+      <WorkflowStepList definition={definition} stages={stages} locale={locale} labels={labels.map} />
+    </div>
   );
 }
 

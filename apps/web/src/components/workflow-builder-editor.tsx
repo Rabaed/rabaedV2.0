@@ -1,7 +1,7 @@
 "use client";
 
 import { type BilingualText, type Locale, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowProblem } from "@rabaed/domain";
-import { WorkflowBuilder, workflowBuilderLabels, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
+import { LargerScreenBanner, WorkflowBuilder, workflowBuilderLabels, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +31,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const tRules = useTranslations("workflowRules");
   const tRoles = useTranslations("projects.roles");
   const tBack = useTranslations("backLink");
+  const tLarger = useTranslations("settings.largerScreen");
   const { workflow } = read;
   const api = `/api/v1/workflows/${encodeURIComponent(workflow.id)}`;
   const start = workflow.draft?.definition ?? workflow.published?.definition ?? { steps: [], transitions: [], layout: {} };
@@ -152,6 +153,10 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const name: BilingualText = workflow.draft?.name ?? workflow.name;
   return (
     <WorkflowBuilder
+      // A Project's builder is read-only on a phone (RP-1275, gap-table row 59); the Library's edits at every width.
+      largerScreen={
+        project ? <LargerScreenBanner title={tLarger("title")}>{tLarger("workflowBuilder")}</LargerScreenBanner> : undefined
+      }
       // Not keyed by Version: a publish keeps the builder (its "Published" badge) while the page reads the new Version.
       name={name[locale]}
       versionNo={versionNo}

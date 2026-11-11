@@ -1,7 +1,7 @@
 "use client";
 
 import type { NumberingAttributes, NumberingCounter, NumberingPattern } from "@rabaed/domain";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useContext, useEffect, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
@@ -9,6 +9,7 @@ import { Checkbox } from "../form/checkbox.tsx";
 import { Field } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { SettingsSection } from "../settings/settings-layout.tsx";
+import { ActionBarContext, PrimaryAction } from "../shell/action-bar.tsx";
 import { NumberingDrawer, NumberingModal, TypeCode } from "./numbering-drawer.tsx";
 import {
   comfortableLength,
@@ -104,8 +105,11 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
     ...types.flatMap((type) => (samePattern(customs[type.id] ?? null, saved.customs[type.id] ?? null) ? [] : [{ workItemTypeId: type.id, pattern: customs[type.id] ?? null }])),
   ];
   const dirty = canEdit && changes.length > 0;
+  // True while AppShell shows its bottom action bar (a phone, RP-1272); false wider and outside AppShell.
+  const inActionBar = useContext(ActionBarContext)?.bar != null;
   // Room under the page while the floating bar shows, so it never covers the last card (the kit's padding under the page).
-  const floating = dirty || done;
+  // On a phone the buttons sit in the bottom action bar, which takes its own room.
+  const floating = !inActionBar && (dirty || done);
   useEffect(() => {
     if (!floating) return;
     const before = document.body.style.paddingBottom;
@@ -354,7 +358,26 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
       </SettingsSection>
 
 
-      {dirty && (
+      {/* On a phone (RP-1275) Discard and Review & save sit across the bottom action bar instead. */}
+      {dirty && inActionBar && (
+        <PrimaryAction>
+          <div role="region" aria-label={t("unsaved")} className="flex gap-2 [&>*]:flex-1" data-testid="unsaved-bar">
+            <Button variant="secondary" onClick={discard}>
+              {t("discard")}
+            </Button>
+            <Button
+              onClick={() => {
+                setAccepted(false);
+                setError(null);
+                setReviewing(true);
+              }}
+            >
+              {t("reviewSave")}
+            </Button>
+          </div>
+        </PrimaryAction>
+      )}
+      {dirty && !inActionBar && (
         <div
           role="region"
           aria-label={t("unsaved")}
