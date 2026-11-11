@@ -108,6 +108,7 @@
     "noSearchMatchTitle": "Nothing you can see matches this search",
     "clearFilters": "Clear filters",
     "searchPlaceholder": "Search number or Subject",
+    "openPage": "Open its page",
     "mobile": {
       "swipeHint": "Swipe a card for what you can do on it",
       "showItems": "{count, plural, one {Show 1 item} other {Show {n} items}}",

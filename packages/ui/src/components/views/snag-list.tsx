@@ -15,8 +15,10 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { useEffect, useId, useState, type ElementType, type ReactNode } from "react";
+import { useEffect, useId, useState, type ElementType, type MouseEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { TABLET } from "../../lib/widths.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -25,7 +27,7 @@ import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { companyFilterChoice, tradeFilterChoice } from "../list/filter-choices.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
-import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
+import { ListToolbar, ToolbarSearch, ToolbarSwitch, toolbarButton, toolbarFilled } from "../list/list-toolbar.tsx";
 import { TableCard } from "../list/table-card.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -36,6 +38,7 @@ import { boardColumn, boardScroller, columnCards } from "./board-scroll.ts";
 import { HeaderBadge, OwnerMark, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
 import { SnagBulkBar, type SnagBulkActions, type SnagReportActions } from "./snag-bulk.tsx";
+import { SnagDetail } from "./snag-detail.tsx";
 import { snagExcel, type SnagExportLabels } from "./snag-export.ts";
 import { lookOf, placeText, questionLook, type Places } from "./snag-look.ts";
 import { chipChosen, typeChipsOf } from "./snag-type-chips.ts";
@@ -61,6 +64,10 @@ export type SnagListLabels = {
   clearAll: string;
   done: string;
   close: string;
+  /** Up to the tablet width, the one menu holding Export to Excel and Export PDF (RP-1278), e.g. "Export". */
+  export: string;
+  /** In a Snag's detail over the List at tablet width (RP-1278), the link to its own page. */
+  openPage: string;
   filtersApplied: (n: string, count: number) => string;
   clear: string;
   clearField: string;
@@ -287,6 +294,10 @@ export function SnagList({
   const filtered = isFilteredWorkItemQuery(query);
   const total = list.stages.reduce((sum, s) => sum + s.count, 0);
   const places = placesOf(list.filters.locations);
+  // Up to the tablet width a row opens the Snag's detail over the List (RP-1278, row 72); wider, its page.
+  const overlayDetail = useMediaQuery(TABLET, false) && data.view === "list";
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detailRow = overlayDetail && data.view === "list" ? (data.list.items.find((r) => r.id === detailId) ?? null) : null;
 
   const valueLabels = { clear: labels.clearField, search: labels.searchValues, noMatches: labels.noMatches };
   const many = (key: "stage" | "trade" | "company" | "raisedFrom", label: string, choices: FilterChoice[]): FilterMenuField => ({
@@ -346,6 +357,7 @@ export function SnagList({
     ]),
   ];
 
+  const exportable = bulk !== undefined && data.view === "list" && total > 0;
   const newAction = <NewMenu types={newTypes} locale={locale} labels={labels} newHref={newHref} onNew={onNew} linkAs={Link} />;
   const clearLink = (
     <Link href={hrefFor(withoutFilters(query))} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
@@ -379,6 +391,7 @@ export function SnagList({
         photoUrls={photoUrls}
         linkAs={Link}
         onQueryChange={change}
+        onOpen={overlayDetail ? (row) => setDetailId(row.id) : undefined}
         bulk={
           bulk && {
             bulk,
@@ -401,7 +414,7 @@ export function SnagList({
   const desktop = (
     // The Kanban takes the rest of the window under the type chips (RP-1092).
     <div className={cn("flex min-w-0 flex-col gap-3 fills-window:min-h-0 fills-window:flex-1", phone && "max-md:hidden")}>
-      <ListToolbar label={labels.toolbar} end={viewSwitch} className="gap-1.5">
+      <ListToolbar label={labels.toolbar} className="gap-1.5">
         {newTypes.length > 0 && newAction}
         <ToolbarSearch
           tall
@@ -426,23 +439,32 @@ export function SnagList({
             {labels.clear}
           </Link>
         )}
-        {bulk && data.view === "list" && total > 0 && (
-          <Button variant="secondary" size="sm" disabled={exporting} onClick={() => void exportRows(bulk.loadExportRows)} className="h-[34px]">
-            <Icon name="file-download" />
-            {bulk.actions.labels.exportAll}
-          </Button>
+        {bulk && exportable && (
+          // Past the tablet width, the two exports side by side; up to it, inside the one Export menu below (RP-1278, row 71).
+          <>
+            <Button variant="secondary" size="sm" disabled={exporting} onClick={() => void exportRows(bulk.loadExportRows)} className="h-[34px] tablet:hidden">
+              <Icon name="file-download" />
+              {bulk.actions.labels.exportAll}
+            </Button>
+            <Button variant="secondary" size="sm" disabled={reporting} onClick={() => void exportPdf(null)} className="h-[34px] tablet:hidden">
+              <Icon name="file-text" />
+              {bulk.report.labels.exportPdf}
+            </Button>
+          </>
         )}
-        {bulk && data.view === "list" && total > 0 && (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={reporting}
-            onClick={() => void exportPdf(null)}
-            className="h-[34px]"
-          >
-            <Icon name="file-text" />
-            {bulk.report.labels.exportPdf}
-          </Button>
+        {/* At the tablet width the view switch and the Export menu take a second row, as the Tablet Flow draws it; a phone keeps its own rows. */}
+        <span aria-hidden="true" className="hidden tablet:block tablet:basis-full phone:hidden" />
+        {viewSwitch !== undefined && <div className="ms-auto flex flex-wrap items-center gap-1.5 tablet:ms-0 phone:contents">{viewSwitch}</div>}
+        {bulk && exportable && (
+          <ExportMenu
+            labels={labels}
+            excel={bulk.actions.labels.exportAll}
+            pdf={bulk.report.labels.exportPdf}
+            exporting={exporting}
+            reporting={reporting}
+            onExcel={() => void exportRows(bulk.loadExportRows)}
+            onPdf={() => void exportPdf(null)}
+          />
         )}
       </ListToolbar>
       {bulk && report !== null && (
@@ -467,6 +489,19 @@ export function SnagList({
       )}
       <TypeChips list={list} query={query} locale={locale} labels={labels} hrefFor={hrefFor} linkAs={Link} />
       {body}
+      {overlayDetail && (
+        <SnagDetail
+          row={detailRow}
+          onClose={() => setDetailId(null)}
+          locale={locale}
+          labels={labels}
+          places={places}
+          itemHref={itemHref}
+          photoUrls={photoUrls}
+          linkAs={Link}
+          swipe={swipe}
+        />
+      )}
     </div>
   );
   if (!phone || data.view !== "list") return desktop;
@@ -569,6 +604,61 @@ function NewMenu({
   );
 }
 
+/** Up to the tablet width, the one "Export" menu: Excel and PDF of every row the filters match (RP-1278, row 71). */
+function ExportMenu({
+  labels,
+  excel,
+  pdf,
+  exporting,
+  reporting,
+  onExcel,
+  onPdf,
+}: {
+  labels: SnagListLabels;
+  excel: string;
+  pdf: string;
+  exporting: boolean;
+  reporting: boolean;
+  onExcel: () => void;
+  onPdf: () => void;
+}) {
+  const id = useId();
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className={cn(toolbarButton, toolbarFilled, "hidden tablet:inline-flex phone:hidden")}>
+          <Icon name="file-download" />
+          {labels.export}
+          <Icon name="chevron-down" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent aria-labelledby={`${id}-title`} align="start" className="w-56 rounded-md p-1 shadow-lg">
+        <h2 id={`${id}-title`} className="sr-only">
+          {labels.export}
+        </h2>
+        <ul>
+          <li>
+            <PopoverClose asChild>
+              <button type="button" disabled={exporting} className={menuItem} onClick={onExcel}>
+                <Icon name="file-download" size={16} />
+                {excel}
+              </button>
+            </PopoverClose>
+          </li>
+          <li>
+            <PopoverClose asChild>
+              <button type="button" disabled={reporting} className={menuItem} onClick={onPdf}>
+                <Icon name="file-text" size={16} />
+                {pdf}
+              </button>
+            </PopoverClose>
+          </li>
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * The type chips: All, then each of the Module's Types (a new Type shows as a chip with no
  * change here), the three Question Types as one "Questions" chip (RP-1109), each with how many
@@ -656,7 +746,7 @@ function RaisedFrom({ row, locale, labels, itemHref, linkAs: Link }: { row: Work
   return (
     <span className="inline-flex items-center gap-1.5" title={source.subject}>
       {source.workItemId ? (
-        <Link href={itemHref(source.workItemId)} className={cn("text-brand-fg hover:underline", focusRing)}>
+        <Link href={itemHref(source.workItemId)} className={cn("text-brand-fg hover:underline", focusRing, touchBox)}>
           {number}
         </Link>
       ) : (
@@ -706,7 +796,15 @@ function Thumbnail({ row, urls, labels }: { row: WorkItemRow; urls: Readonly<Rec
 }
 
 const cell = "h-12 border-b border-border-subtle bg-surface px-2 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
-const head = "sticky top-0 z-[3] h-[42px] border-b border-border-subtle bg-surface-subtle px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+const head =
+  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-2 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+// Up to the tablet width, where the table scrolls sideways in its area, the checkbox and the Document Number stay
+// pinned at its start, as the Submittals List's do (RP-1278 with RP-1273's rule, the Review's decision): the number
+// 44px in, 64 on a touch screen, as wide as the checkbox column, with a shadow on its edge the rows slide under.
+const pinnedCheckbox = "tablet:sticky tablet:start-0 tablet:z-[2] tablet:pointer-coarse:w-16 tablet:pointer-coarse:px-0 tablet:pointer-coarse:text-center";
+const pinnedNumber = "tablet:sticky tablet:start-11 tablet:pointer-coarse:start-16 tablet:z-[2]";
+const pinnedNumberAlone = "tablet:sticky tablet:start-0 tablet:z-[2]";
+const pinnedEdge = "tablet:shadow-[6px_0_6px_-6px_var(--color-overlay)] tablet:rtl:shadow-[-6px_0_6px_-6px_var(--color-overlay)]";
 
 /** The List: the page's rows under a folding header per Stage, in the Project's Stage order, each with its count. */
 function SnagTable({
@@ -720,6 +818,7 @@ function SnagTable({
   photoUrls,
   linkAs: Link,
   onQueryChange,
+  onOpen,
   bulk,
 }: {
   list: WorkItemListData;
@@ -732,6 +831,8 @@ function SnagTable({
   photoUrls: Readonly<Record<string, string>>;
   linkAs: ElementType;
   onQueryChange: (next: Partial<WorkItemQuery>) => void;
+  /** Up to the tablet width: a row, or its Subject, opens the Snag's detail over the List instead of its page. */
+  onOpen?: (row: WorkItemRow) => void;
   /** Bulk select: the rows chosen on this page, and what the bar does with them. */
   bulk?: {
     bulk: SnagBulk;
@@ -777,7 +878,7 @@ function SnagTable({
           <thead>
             <tr>
               {bulk && (
-                <th scope="col" className={cn(head, "w-11 ps-3 pe-0")}>
+                <th scope="col" className={cn(head, pinnedCheckbox, "z-[4] w-11 ps-3 pe-0")}>
                   <Checkbox
                     aria-label={bulk.bulk.actions.labels.selectAll}
                     targetBox
@@ -788,8 +889,8 @@ function SnagTable({
                   />
                 </th>
               )}
-              {headers.map((h) => (
-                <th key={h} scope="col" className={head}>
+              {headers.map((h, i) => (
+                <th key={h} scope="col" className={cn(head, i === 0 && cn(bulk ? pinnedNumber : pinnedNumberAlone, pinnedEdge, "tablet:z-[4]"))}>
                   {h}
                 </th>
               ))}
@@ -814,7 +915,8 @@ function SnagTable({
                           return next;
                         })
                       }
-                      className={cn("inline-flex items-center gap-2 rounded-xs", focusRing, touchBox)}
+                      // Held at the start while the table scrolls sideways at tablet width, beside the pinned columns.
+                      className={cn("inline-flex items-center gap-2 rounded-xs tablet:sticky tablet:start-3", focusRing, touchBox)}
                     >
                       <Icon name={open ? "chevron-down" : "chevron-right"} size={16} className="text-muted" />
                       <StagePill stage={stageColour(stage)} label={name} locale={locale} />
@@ -831,11 +933,12 @@ function SnagTable({
                       onClick={(event) => {
                         // eslint-disable-next-line rabaed/no-avoid-terms -- CSS element names: a click on a control in the row is its own
                         if ((event.target as Element).closest("a, button, input, label")) return;
-                        event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
+                        if (onOpen) onOpen(row);
+                        else event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
                       }}
                     >
                       {bulk && (
-                        <td className={cn(cell, "w-11 ps-4 pe-0")}>
+                        <td className={cn(cell, pinnedCheckbox, "w-11 ps-4 pe-0")}>
                           <Checkbox
                             aria-label={bulk.bulk.actions.labels.selectRow(row.title)}
                             className="size-4 align-middle"
@@ -849,7 +952,7 @@ function SnagTable({
                           />
                         </td>
                       )}
-                      <td className={cell}>
+                      <td className={cn(cell, bulk ? pinnedNumber : pinnedNumberAlone, pinnedEdge)}>
                         {row.documentNumber ? (
                           <DocNo value={row.documentNumber} locale={locale} className="font-ui text-[12.5px] font-semibold text-muted" />
                         ) : (
@@ -862,6 +965,12 @@ function SnagTable({
                           data-item-link=""
                           dir="auto"
                           title={row.title}
+                          onClick={(event: MouseEvent) => {
+                            // A plain tap opens the detail; a modified click still opens the page, e.g. in a new tab.
+                            if (!onOpen || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                            event.preventDefault();
+                            onOpen(row);
+                          }}
                           className={cn("block max-w-[190px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
                         >
                           {row.title}
