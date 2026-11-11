@@ -280,10 +280,19 @@ export const Tablet: Story = {
     await expect(heading).toBeVisible();
     // The whole name, not cut short by the bar's tools.
     await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
-    await expect(canvas.getByRole("button", { name: labels.publish })).toBeVisible();
+    const publish = canvas.getByRole("button", { name: labels.publish });
+    await expect(publish).toBeVisible();
+    // The tools on a line of their own, under the name.
+    await expect(publish.getBoundingClientRect().top).toBeGreaterThanOrEqual(heading.getBoundingClientRect().bottom);
     await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
     await expect(canvas.getByRole("button", { name: labels.editor })).toHaveAttribute("aria-expanded", "false");
     await noSidewaysScroll();
+
+    // Escape clears the selection and shuts the inspector.
+    await pickStep(canvas, "draft", locale);
+    await expect(canvas.getByRole("complementary", { name: labels.editor })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
   },
 };
 
@@ -297,14 +306,19 @@ export const TabletInspector: Story = {
     await pickStep(canvas, "draft", locale);
     const panel = canvas.getByRole("complementary", { name: labels.editor });
     await expect(panel).toBeVisible();
-    await expect(panel.getBoundingClientRect().width).toBe(400);
+    const box = panel.getBoundingClientRect();
+    await expect(box.width).toBe(400);
+    // On the inline end: the right in English, the left in Arabic.
+    if (locale === "ar") await expect(box.left).toBeLessThan(window.innerWidth / 2);
+    else await expect(box.right).toBeGreaterThan(window.innerWidth / 2);
     await expect(within(panel).getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
     await noSidewaysScroll();
 
-    // Closed, the canvas is whole again; the bar's button opens it once more, with the selection kept.
+    // Closed, the canvas is whole again and the focus is on the bar's button, which opens it once more, with the selection kept.
     await userEvent.click(within(panel).getByRole("button", { name: labels.close }));
     await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
     const toggle = canvas.getByRole("button", { name: labels.editor });
+    await expect(toggle).toHaveFocus();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(toggle);
     await expect(toggle).toHaveAttribute("aria-expanded", "true");

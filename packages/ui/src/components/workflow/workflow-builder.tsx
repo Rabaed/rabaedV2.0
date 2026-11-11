@@ -277,6 +277,13 @@ function Builder(props: WorkflowBuilderProps) {
   // shut by its close button or by clearing the selection, and opened again from the bar. Wider, it is always shown.
   const [inspector, setInspector] = useState(seeded.key !== null);
   const inspectorId = useId();
+  const inspectorToggle = useRef<HTMLButtonElement>(null);
+  const inspectorBox = useRef<HTMLElement>(null);
+  /** Shuts the overlay; focus inside it goes back to the bar's button, not to the page's top. */
+  const closeInspector = useCallback(() => {
+    if (inspectorBox.current?.contains(document.activeElement)) inspectorToggle.current?.focus();
+    setInspector(false);
+  }, []);
 
   // Selecting never marks the draft changed (a V2 prototype bug, not copied).
   const select = useCallback((next: CanvasSelection | null) => {
@@ -431,12 +438,13 @@ function Builder(props: WorkflowBuilderProps) {
         e.preventDefault();
         remove();
       } else if (e.key === "Escape" && !publish && !popup) {
+        closeInspector();
         select(null);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [undo, redo, remove, select, selection, group, testRun, publish, popup]);
+  }, [undo, redo, remove, select, closeInspector, selection, group, testRun, publish, popup]);
 
   const autoLayout = () => {
     commit({ ...definition, layout: arrangedLayout(definition, stages) });
@@ -625,6 +633,7 @@ function Builder(props: WorkflowBuilderProps) {
             {labels.publish}
           </Button>
           <IconButton
+            ref={inspectorToggle}
             label={labels.editor}
             variant="secondary"
             aria-expanded={inspector}
@@ -743,6 +752,7 @@ function Builder(props: WorkflowBuilderProps) {
 
         <aside
           id={inspectorId}
+          ref={inspectorBox}
           aria-label={labels.editor}
           // With nothing selected it holds no control (how to work the canvas, what the draft holds): it takes the
           // keyboard's focus itself, so where it scrolls its text can be scrolled by keyboard (RP-1289).
@@ -756,7 +766,7 @@ function Builder(props: WorkflowBuilderProps) {
           )}
         >
           <div className="-mb-1 flex justify-end lg:hidden">
-            <IconButton label={labels.close} size="sm" onClick={() => setInspector(false)}>
+            <IconButton label={labels.close} size="sm" onClick={closeInspector}>
               <Icon name="x" />
             </IconButton>
           </div>
