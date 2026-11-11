@@ -105,11 +105,11 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
     ...types.flatMap((type) => (samePattern(customs[type.id] ?? null, saved.customs[type.id] ?? null) ? [] : [{ workItemTypeId: type.id, pattern: customs[type.id] ?? null }])),
   ];
   const dirty = canEdit && changes.length > 0;
-  // The phone's bottom action bar, while AppShell shows one (RP-1272); null wider.
-  const actionBar = useContext(ActionBarContext);
+  // True while AppShell shows its bottom action bar (a phone, RP-1272); false wider and outside AppShell.
+  const inActionBar = useContext(ActionBarContext)?.bar != null;
   // Room under the page while the floating bar shows, so it never covers the last card (the kit's padding under the page).
   // On a phone the buttons sit in the bottom action bar, which takes its own room.
-  const floating = actionBar === null && (dirty || done);
+  const floating = !inActionBar && (dirty || done);
   useEffect(() => {
     if (!floating) return;
     const before = document.body.style.paddingBottom;
@@ -359,7 +359,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
 
 
       {/* On a phone (RP-1275) Discard and Review & save sit across the bottom action bar instead. */}
-      {dirty && actionBar !== null && (
+      {dirty && inActionBar && (
         <PrimaryAction>
           <div role="region" aria-label={t("unsaved")} className="flex gap-2 [&>*]:flex-1" data-testid="unsaved-bar">
             <Button variant="secondary" onClick={discard}>
@@ -377,7 +377,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
           </div>
         </PrimaryAction>
       )}
-      {dirty && actionBar === null && (
+      {dirty && !inActionBar && (
         <div
           role="region"
           aria-label={t("unsaved")}
