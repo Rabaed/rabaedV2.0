@@ -6,8 +6,7 @@ import { useMediaQuery } from "../../lib/use-media-query.ts";
 import { PHONE } from "../../lib/widths.ts";
 import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { ModalContent } from "../overlay/modal.tsx";
-import { Sheet, SheetTrigger } from "../overlay/sheet.tsx";
+import { BottomSheetContent, Sheet, SheetTrigger } from "../overlay/sheet.tsx";
 import { PrimaryAction } from "./action-bar.tsx";
 
 export type PageHeaderProps = {
@@ -73,14 +72,12 @@ function MoreActions({ label, closeLabel, children }: { label: string; closeLabe
           <Icon name="dots" />
         </IconButton>
       </SheetTrigger>
-      <ModalContent
+      <BottomSheetContent
         title={label}
         closeLabel={closeLabel}
-        // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
-        className="inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-[20px] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
       >
         <div className="flex flex-col gap-2 [&>*]:w-full">{children}</div>
-      </ModalContent>
+      </BottomSheetContent>
     </Sheet>
   );
 }

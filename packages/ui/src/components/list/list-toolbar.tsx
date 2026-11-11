@@ -15,19 +15,24 @@ export type ListToolbarProps = {
   label: string;
   /** Start to end: the primary action, `ToolbarSearch`, `FilterMenu`, `ToolbarSwitch`es. */
   children: ReactNode;
-  /** Pushed to the inline end, e.g. the List / Kanban switch. */
+  /** Pushed to the inline end, e.g. the List / Kanban switch. On a phone its controls join the rows, after a `ToolbarRowBreak` where one is given. */
   end?: ReactNode;
   className?: string;
 };
 
-/** One wrapping row of the list's controls. */
+/** One wrapping row of the list's controls; on a phone, short rows broken where a `ToolbarRowBreak` stands (RP-1273). */
 export function ListToolbar({ label, children, end, className }: ListToolbarProps) {
   return (
     <section aria-label={label} className={cn("flex flex-wrap items-center gap-2", className)}>
       {children}
-      {end !== undefined && <div className="ms-auto flex flex-wrap items-center gap-1.5">{end}</div>}
+      {end !== undefined && <div className="ms-auto flex flex-wrap items-center gap-1.5 phone:contents">{end}</div>}
     </section>
   );
+}
+
+/** Starts a new row of the toolbar on a phone (the Review's 402 frame: Search and Filter; Need My Action and Group; the views and ⋯). Nothing wider. */
+export function ToolbarRowBreak() {
+  return <span aria-hidden="true" className="hidden phone:block phone:basis-full" />;
 }
 
 export type ToolbarSearchProps = {

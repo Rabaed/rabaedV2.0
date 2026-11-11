@@ -1,7 +1,7 @@
 import type { ProjectSummary } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-import { phone } from "../../storybook/form.ts";
+import { phone, tablet } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { projectsBrowserLabels } from "../../storybook/views.ts";
 import { Button } from "../button/button.tsx";
@@ -100,11 +100,32 @@ export const Empty: Story = {
   },
 };
 
-/** Narrow: one column, search and chips wrap, nothing scrolls sideways. */
+/** The All / Active / Closed chips, each 44 high on a touch screen (the Responsive Review's rules, row 38). */
+async function expectTouchHighChips(canvasElement: HTMLElement, locale: string) {
+  const group = within(canvasElement).getByRole("group", { name: projectsBrowserLabels[locale === "ar" ? "ar" : "en"].filter });
+  const chips = within(group).getAllByRole("button");
+  await expect(chips).toHaveLength(3);
+  for (const chip of chips) await expect(Math.round(chip.getBoundingClientRect().height)).toBe(44);
+}
+
+/** Narrow: one column, search and chips wrap, nothing scrolls sideways; the chips 44 high (row 38). */
 export const Narrow: Story = {
   parameters: phone,
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, globals }) => {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+    await expectTouchHighChips(canvasElement, String(globals.locale));
+  },
+};
+
+/** A tablet (820, touch): two cards across, the chips 44 high too (rows 36 and 38). */
+export const Tablet: Story = {
+  parameters: tablet,
+  play: async ({ canvasElement, globals }) => {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    await expectTouchHighChips(canvasElement, String(globals.locale));
+    const cards = within(canvasElement).getAllByRole("listitem").map((c) => Math.round(c.getBoundingClientRect().top));
+    await expect(cards[0]).toBe(cards[1]);
+    await expect(cards[2]).toBeGreaterThan(cards[0]!);
   },
 };

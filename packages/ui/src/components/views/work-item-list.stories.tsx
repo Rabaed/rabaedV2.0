@@ -2,7 +2,10 @@ import { defaultOutcomeSets, listColumns, workItemQuery, workItemSearchParams, t
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
-import { phone } from "../../storybook/form.ts";
+import { Button } from "../button/button.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
+import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { overlay } from "../../storybook/overlay.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { viewSwitchLabels, workItemListLabels } from "../../storybook/views.ts";
@@ -41,6 +44,8 @@ const copy = {
   settings: b("Table settings", "إعدادات الجدول"),
   group: b("Group", "تجميع"),
   export: b("Export", "تصدير"),
+  addSubmittal: b("Add Submittal", "إضافة اعتماد"),
+  done: b("Done", "تم"),
 };
 
 const stages = {
@@ -392,9 +397,10 @@ export const ColumnSettingsOpen: Story = {
 /**
  * Under 1440 wide (RP-1177, UX-04, the owner's answers of 2026-11-02): the views show their icons only, each still
  * named for screen readers and by its tooltip, so the toolbar keeps one row at 1366; and under 1600, with no saved
- * layout, the Code and "With" come right after the Status, where they show without scrolling. The runner is 1024 wide.
+ * layout, the Code and "With" come right after the Status, where they show without scrolling. At 1366 (`wide`): 1024 is a tablet now, where the table scrolls past its pinned number.
  */
 export const LaptopWidth: Story = {
+  parameters: wide,
   render: (args, context) => (
     <WorkItemList
       {...args}
@@ -587,7 +593,12 @@ export const ExportByKeyboard: Story = {
 
 /** On a phone Export's choices take the menu's place, with a row back to it. Left open for the screenshot. */
 export const ExportOnAPhone: Story = {
-  parameters: { ...phone, ...overlay },
+  parameters: {
+    ...phone,
+    ...overlay,
+    // The open menu drops from ⋯ at the start of its row (RP-1273) over the checkbox column: they are behind it, not taps beside it.
+    touchTargets: { exempt: [{ selector: "table [role=checkbox]", reason: "under the open ⋯ menu" }] },
+  },
   play: async (context) => {
     const menu = await openExport(context);
     // Hidden while the choices show, so found among the hidden too.
@@ -928,13 +939,22 @@ export const FiltersOpen: Story = {
   },
 };
 
-/** On a phone the filters open in a sheet, every field one under the other. Left open for the screenshot. */
+/**
+ * On a phone the filters open in a sheet from the bottom of the screen, about 92% high (RP-1273), every
+ * field one under the other, with Clear all and Done at its foot. Left open for the screenshot.
+ */
 export const FiltersOnAPhone: Story = {
   parameters: { ...phone, ...overlay },
   args: { query: { ...defaults, type: ["MAR"] } },
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 1` }));
     const sheet = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
+    const box = sheet.getBoundingClientRect();
+    await expect(box.bottom).toBe(innerHeight);
+    await expect(Math.round(box.height)).toBe(Math.round(innerHeight * 0.92));
+    await expect(box.width).toBe(innerWidth);
+    await expect(within(sheet).getByRole("button", { name: storyText(context, copy.clearAll) })).toBeVisible();
+    await expect(within(sheet).getByRole("button", { name: storyText(context, copy.done) })).toBeVisible();
     await expect(within(sheet).getByRole("heading", { name: `${storyText(context, copy.documentType)} 1` })).toBeVisible();
     await expect(within(sheet).getByRole("group", { name: storyText(context, copy.status) })).toBeInTheDocument();
     await expect(within(sheet).queryByRole("tab")).toBeNull();
@@ -1120,13 +1140,13 @@ export const SearchWithNone: Story = {
   },
 };
 
-/** Narrow: the search box takes the whole width above the filters. */
+/** Narrow: the search box takes the row beside Filter (RP-1273), most of the phone's width. */
 export const SearchNarrow: Story = {
   parameters: phone,
   args: { query: { ...defaults, q: "LED" } },
   play: async (context) => {
     const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
-    await expect(box.getBoundingClientRect().width).toBeGreaterThan(200);
+    await expect(box.getBoundingClientRect().width).toBeGreaterThan(180);
   },
 };
 
@@ -1174,5 +1194,101 @@ export const OpensInThePanel: Story = {
     const calls = onOpen.mock.calls.length;
     await userEvent.click(within(tableOf(context)).getByRole("checkbox", { name: storyText(context, b("Select LED downlights", "تحديد LED downlights")) }));
     await expect(onOpen).toHaveBeenCalledTimes(calls);
+  },
+};
+
+/** The List as its page draws it (RP-1272's shell): the primary action and the view switch in the toolbar. */
+function OnItsPage({ args, context }: { args: WorkItemListProps; context: PlayContext }) {
+  const locale = storyLocale(context);
+  return (
+    <StoryProjectPage context={context} current="submittals">
+      <WorkItemList
+        {...args}
+        locale={locale}
+        labels={workItemListLabels[locale]}
+        action={
+          <Button>
+            <Icon name="plus" />
+            {storyText(context, copy.addSubmittal)}
+          </Button>
+        }
+        viewSwitch={<WorkItemViewSwitch view="list" views={["kanban", "list", "packages"]} labels={viewSwitchLabels[locale]} hrefFor={(v) => `?view=${v}`} />}
+      />
+    </StoryProjectPage>
+  );
+}
+
+const toolbarOf = (context: PlayContext) => context.canvas.getByRole("region", { name: workItemListLabels[storyLocale(context)].toolbar });
+const topOf = (element: Element) => Math.round(element.getBoundingClientRect().top);
+
+/** The Document Number's cell stays beside the pinned checkbox while the table scrolls sideways to its end (RP-1273). */
+async function expectNumberPinned(context: PlayContext) {
+  const region = context.canvas.getByRole("region", { name: storyText(context, copy.table) });
+  await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
+  const number = within(tableOf(context)).getByText("TWR-TMC-EL-MAR-0003").closest("td")!;
+  const checkbox = number.previousElementSibling!;
+  const ar = storyLocale(context) === "ar";
+  const edge = () => (ar ? checkbox.getBoundingClientRect().left - number.getBoundingClientRect().right : number.getBoundingClientRect().left - checkbox.getBoundingClientRect().right);
+  await expect(Math.abs(edge())).toBeLessThanOrEqual(1);
+  region.scrollBy({ left: ar ? -region.scrollWidth : region.scrollWidth });
+  await waitFor(() => expect(Math.abs(region.scrollLeft)).toBeGreaterThan(100));
+  await expect(Math.abs(edge())).toBeLessThanOrEqual(1);
+  // Still in the region's view, at its start: the left in English, the right in Arabic.
+  const box = region.getBoundingClientRect();
+  const cell = number.getBoundingClientRect();
+  await expect(cell.left).toBeGreaterThanOrEqual(box.left - 1);
+  await expect(cell.right).toBeLessThanOrEqual(box.right + 1);
+  // A shadow on the pinned edge, so the rows read as sliding under it.
+  // Cast towards the rows: right of the number in English, left of it in Arabic.
+  await expect(getComputedStyle(number).boxShadow).toMatch(ar ? / -6px 0px 6px -6px/ : / 6px 0px 6px -6px/);
+  region.scrollTo({ left: 0 });
+}
+
+/**
+ * The List on a phone (RP-1273, the Review's 402 frame): the toolbar in three short rows (Search and
+ * Filter; Need My Action and Group; the view switch and ⋯), each control 44 high, and Add Submittal in
+ * the bottom action bar, not the toolbar. The table scrolls sideways in its own area with the checkbox
+ * and the Document Number pinned at the start; the page never scrolls sideways.
+ */
+export const OnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const toolbar = toolbarOf(context);
+    const search = within(toolbar).getByRole("search");
+    const filter = within(toolbar).getByRole("button", { name: storyText(context, copy.filters) });
+    const needMyAction = within(toolbar).getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    const group = within(toolbar).getByRole("button", { name: storyText(context, copy.group) });
+    const view = within(toolbar).getByRole("link", { name: viewSwitchLabels[storyLocale(context)].kanban });
+    const more = within(toolbar).getByRole("button", { name: workItemListLabels[storyLocale(context)].more });
+    await expect(topOf(filter)).toBe(topOf(search.querySelector("label")!));
+    await expect(Math.abs(topOf(group) - topOf(needMyAction.parentElement!))).toBeLessThanOrEqual(1);
+    await expect(Math.abs(topOf(more) - topOf(view))).toBeLessThanOrEqual(6);
+    await expect(topOf(group)).toBeGreaterThan(topOf(filter));
+    await expect(topOf(view)).toBeGreaterThan(topOf(group));
+    for (const control of [filter, group, more, search.querySelector("label")!]) await expect(control.getBoundingClientRect().height).toBe(44);
+    await expectTouchTarget(needMyAction.parentElement!);
+
+    const add = await waitFor(() => within(context.canvasElement.querySelector<HTMLElement>("[data-action-bar]")!).getByRole("button", { name: storyText(context, copy.addSubmittal) }));
+    await expect(toolbar).not.toContainElement(add);
+    // The Subject keeps to 112 on a phone, so an English one in the Arabic List shows its start beside the pinned number.
+    await expect(context.canvas.getByRole("link", { name: "Cable tray support brackets" }).getBoundingClientRect().width).toBeLessThanOrEqual(112);
+
+    await expectNumberPinned(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
+/** On a tablet (820) the toolbar keeps its rows and Add Submittal; the table pins the checkbox and the Document Number as on a phone. */
+export const OnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expect(within(toolbarOf(context)).getByRole("button", { name: storyText(context, copy.addSubmittal) })).toBeVisible();
+    await expect(context.canvasElement.querySelector("[data-action-bar]")).toBeNull();
+    // The Subject is no longer cut to 112 here: the table scrolls past the pinned number instead.
+    await expect(context.canvas.getByRole("link", { name: "Cable tray support brackets" }).getBoundingClientRect().width).toBeGreaterThan(150);
+    await expectNumberPinned(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   },
 };

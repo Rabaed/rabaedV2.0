@@ -420,7 +420,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
             <div className="px-[18px] pt-4">
               <SectionHeading>{labels.whatToEmail}</SectionHeading>
               <div className="overflow-hidden rounded-[12px] shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
-                <div aria-hidden className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-[14px] py-[9px] text-[11.5px] font-semibold text-muted sm:grid">
+                <div aria-hidden className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border-subtle bg-surface-subtle px-[14px] py-[9px] text-[11.5px] font-semibold text-muted phone:hidden">
                   <span>{labels.groupColumn}</span>
                   <span>{labels.emailColumn}</span>
                 </div>
@@ -445,7 +445,8 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       key={group}
                       role="group"
                       aria-labelledby={titleId}
-                      className={cn("grid gap-3 px-[14px] py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center", i > 0 && "border-t border-border-subtle")}
+                      // On a phone the choice drops under its row (row 62); wider, it sits at the row's end.
+                      className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-[14px] py-3 phone:grid-cols-1 phone:items-stretch", i > 0 && "border-t border-border-subtle")}
                     >
                       {row.opensOutcomes ? (
                         <button
@@ -470,7 +471,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       ) : (
                         <SegmentedControl
                           aria-labelledby={titleId}
-                          className={cn(segmented, "w-full sm:w-fit [&>*]:flex-1")}
+                          className={cn(segmented, "w-fit phone:w-full [&>*]:flex-1")}
                           value={saved.settings[group].email}
                           onValueChange={(email) => void setGroup(group, { email: email as NotificationEmailChoice })}
                           options={emailOptions}
@@ -479,7 +480,7 @@ export function ProfileSettings({ locale, labels, member, value, signature, onSa
                       {row.opensOutcomes && watchedOpen && (
                         <div
                           id={`${id}-outcomes`}
-                          className="grid gap-3 rounded-[10px] bg-surface-subtle p-3 sm:col-span-2 sm:ms-[42px] sm:grid-cols-3"
+                          className="col-span-2 ms-[42px] grid grid-cols-3 gap-3 rounded-[10px] bg-surface-subtle p-3 phone:col-span-1 phone:ms-0 phone:grid-cols-1"
                         >
                           {Object.entries(outcomeGroups).map(([key, outcomes]) => (
                             <div key={key} className="min-w-0">
