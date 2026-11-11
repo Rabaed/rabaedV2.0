@@ -40,7 +40,7 @@ jobs:
         run: node scripts/dependency-audit-needed.ts
         env:
           BASE: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.sha }}
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         if: steps.needed.outputs.needed == 'true'
       # Reads pnpm-lock.yaml only: no install, so no package script runs. Every severity goes
       # into the JSON; the report splits it at --level. pnpm exits 1 on any finding and on a
