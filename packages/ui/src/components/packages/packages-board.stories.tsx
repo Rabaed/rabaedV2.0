@@ -492,7 +492,13 @@ export const TableOnATablet: Story = {
   render: (args, context) => <OnItsPage args={args} context={context} />,
   play: async (context) => {
     await expectTabletToolbar(context);
-    await expect(context.canvas.getByRole("region", { name: labelsOf(context).list.table })).toBeVisible();
+    const table = context.canvas.getByRole("region", { name: labelsOf(context).list.table });
+    await expect(table).toBeVisible();
+    // It scrolls inside its own area where it is wider than the window, and stays in the window.
+    await expect(getComputedStyle(table).overflowX).toBe("auto");
+    const box = table.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(innerWidth);
     await expectNoSidewaysPage();
   },
 };
