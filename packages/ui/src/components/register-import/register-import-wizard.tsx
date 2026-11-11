@@ -844,7 +844,8 @@ export function RegisterImportWizard({
                     disabled={busy}
                     onClick={() => void read(file, { sheet: s.name })}
                     className={cn(
-                      "flex items-center gap-2 rounded-sm px-2.5 py-2 text-start text-[14px] hover:bg-hover",
+                      // 44 high on touch (RP-1288); a mouse keeps the 36.
+                      "flex items-center gap-2 rounded-sm px-2.5 py-2 text-start text-[14px] hover:bg-hover pointer-coarse:min-h-11",
                       s.name === sheet.sheet && "bg-brand-tint font-semibold text-brand-fg",
                     )}
                   >
