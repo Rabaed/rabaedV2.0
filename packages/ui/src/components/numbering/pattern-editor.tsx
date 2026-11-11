@@ -26,6 +26,7 @@ import {
   type SegmentKind,
 } from "./numbering-model.ts";
 import { Code, rich, toneClasses, type NumberingText } from "./numbering-text.tsx";
+import { useSegmentLongPress } from "./use-segment-long-press.ts";
 
 // The pattern editor of the Numbering page (RP-412, kit settings/numbering.js):
 // the segment chips, edited in place and reordered by drag or by the arrow keys on
@@ -47,8 +48,10 @@ const levelKeys = ["zone", "building", "floor"] as const;
 /** A segment's example code, as it would print for the example item. */
 const exampleCode = (segment: NumberingSegment, example: NumberingAttributes): string => segmentValue(segment, example) ?? "—";
 
+// On touch the handle and remove button are 44 px, so the chip's own padding shrinks around them (RP-1288);
+// on a phone each chip is a card across the list.
 const chipBase =
-  "relative flex min-w-[130px] items-center gap-2 rounded-[10px] bg-surface py-2 ps-1.5 pe-2 shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_color-mix(in_srgb,var(--shadow-colour)_5%,transparent)]";
+  "relative flex min-w-[130px] items-center gap-2 rounded-[10px] bg-surface py-2 ps-1.5 pe-2 shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_color-mix(in_srgb,var(--shadow-colour)_5%,transparent)] pointer-coarse:py-1 pointer-coarse:ps-0.5 pointer-coarse:pe-0.5 phone:w-full";
 
 /** The segment chips, the sequence last and locked. */
 export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
@@ -56,6 +59,8 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
   const hintId = useId();
   const direction = useDirection();
   const [dragging, setDragging] = useState<number | null>(null);
+  // A finger is carrying the segment (a long press), not the browser's drag.
+  const [lifted, setLifted] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [focusAt, setFocusAt] = useState<number | null>(null);
   const grips = useRef<(HTMLButtonElement | null)[]>([]);
@@ -66,14 +71,34 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
     if (focusAt !== null) grips.current[focusAt]?.focus();
   }, [focusAt, pattern]);
 
+  const movedText = (kind: SegmentKind, at: number) => t("moved", { segment: name(kind), n: at + 1, total: pattern.segments.length });
+
   const move = (from: number, to: number, announce: boolean) => {
     if (!onChange || to < 0 || to >= pattern.segments.length || to === from) return;
     onChange(moveSegment(pattern, from, to));
     if (announce) {
       setFocusAt(to);
-      setAnnouncement(t("moved", { segment: name(pattern.segments[from]!.kind), n: to + 1, total: pattern.segments.length }));
+      setAnnouncement(movedText(pattern.segments[from]!.kind, to));
     }
   };
+
+  // A long press on touch (RP-1288): the lifted segment moves as the finger passes each other one.
+  const longPress = useSegmentLongPress({
+    onLift: (i) => {
+      setDragging(i);
+      setLifted(true);
+    },
+    onOver: (over) => {
+      if (dragging === null || over === null || over === dragging) return;
+      move(dragging, over, false);
+      setDragging(over);
+    },
+    onDrop: () => {
+      if (dragging !== null) setAnnouncement(movedText(pattern.segments[dragging]!.kind, dragging));
+      setDragging(null);
+      setLifted(false);
+    },
+  });
 
   /** Arrow keys move the chip along the reading direction; Home and End to the ends. */
   const onGripKey = (i: number) => (e: KeyboardEvent) => {
@@ -95,8 +120,9 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
   };
 
   // Each chip carries the separator after it, so a wrapped line never starts with one (the kit's trailing separator).
+  // On a phone the cards stand one under the other, so there is nothing to separate (Responsive Anatomy 18).
   const separator = (
-    <span aria-hidden="true" className="self-center text-sm font-bold text-faint">
+    <span aria-hidden="true" className="self-center text-sm font-bold text-faint phone:hidden">
       {pattern.separator}
     </span>
   );
@@ -106,23 +132,28 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
       <ol
         aria-label={t("segmentList")}
         id={listId}
-        className="flex min-h-[74px] flex-wrap items-stretch gap-2 rounded-md bg-surface-subtle p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]"
+        className="flex min-h-[74px] flex-wrap items-stretch gap-2 rounded-md bg-surface-subtle p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)] phone:flex-col phone:flex-nowrap"
         data-testid="segment-chips"
       >
         {pattern.segments.map((segment, i) => {
           const tone = toneClasses[segment.kind];
           const label = name(segment.kind);
           return (
-            <li key={i} className="flex items-stretch gap-2">
+            <li key={i} className="flex items-stretch gap-2 phone:w-full">
               <div
                 className={cn(
                   chipBase,
                   editable && "cursor-grab hover:shadow-[inset_0_0_0_1px_var(--border-strong),0_4px_10px_color-mix(in_srgb,var(--shadow-colour)_8%,transparent)]",
-                  dragging === i && "opacity-35",
+                  // A long press must not select the card's words or open the browser's callout.
+                  editable && "pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]",
+                  dragging === i && (lifted ? "z-10 outline-2 outline-primary" : "opacity-35"),
                 )}
+                data-segment-index={i}
+                {...(editable ? longPress.pressProps(i) : {})}
                 draggable={editable}
                 onDragStart={(e) => {
-                  if ((e.target as HTMLElement).closest("input,select")) return e.preventDefault();
+                  // A finger reorders with a long press, not the browser's drag.
+                  if (longPress.pressing() || (e.target as HTMLElement).closest("input,select")) return e.preventDefault();
                   setDragging(i);
                   e.dataTransfer.effectAllowed = "move";
                   e.dataTransfer.setData("text/plain", String(i));
@@ -147,9 +178,10 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
                     type="button"
                     aria-label={t("move", { segment: label })}
                     aria-describedby={hintId}
+                    data-segment-grip=""
                     onKeyDown={onGripKey(i)}
                     onBlur={() => setFocusAt(null)}
-                    className={cn("flex size-6 cursor-grab items-center justify-center rounded-xs text-faint hover:bg-hover", focusRing)}
+                    className={cn("flex size-6 shrink-0 cursor-grab items-center justify-center rounded-xs text-faint hover:bg-hover pointer-coarse:size-11", focusRing)}
                   >
                     <Icon name="grid-dots" size={14} />
                   </button>
@@ -167,7 +199,7 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
                     disabled={pattern.segments.length === 1}
                     onClick={() => onChange(removeSegment(pattern, i))}
                     className={cn(
-                      "ms-auto flex size-6 items-center justify-center rounded-[6px] text-faint hover:bg-danger-tint hover:text-danger-fg disabled:invisible",
+                      "ms-auto flex size-6 shrink-0 items-center justify-center rounded-[6px] text-faint hover:bg-danger-tint hover:text-danger-fg disabled:invisible pointer-coarse:size-11",
                       focusRing,
                     )}
                   >
@@ -179,8 +211,9 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
             </li>
           );
         })}
-        <li className="flex items-stretch gap-2">
-          <div className={cn(chipBase, "cursor-default bg-press")} title={t("sequenceLocked")}>
+        <li className="flex items-stretch gap-2 phone:w-full">
+          {/* The lock stands where a segment's handle is on touch, so the names line up. */}
+          <div className={cn(chipBase, "cursor-default bg-press pointer-coarse:min-h-[52px] pointer-coarse:ps-2")} title={t("sequenceLocked")}>
             <span aria-hidden="true" className={cn("h-[30px] w-1 shrink-0 rounded-[3px]", toneClasses.sequence.solid)} />
             <span className="flex min-w-0 flex-col gap-0.5">
               <b className="text-sm font-semibold whitespace-nowrap text-text">{name("sequence")}</b>
@@ -213,9 +246,11 @@ function Chip({ kind, children }: { kind: SegmentKind | "sequence"; children: Re
   );
 }
 
-// The kit's `.mini`: a 24px control with a light inset edge, inside a chip.
+// The kit's `.mini`: a 24px control with a light inset edge, inside a chip. 44 high on touch, and 16 px text on
+// a phone so the browser doesn't zoom in on it (RP-1288).
 const mini = cn(
   "h-6 rounded-[5px] bg-surface px-1.5 text-caption text-text shadow-[inset_0_0_0_1px_var(--border-strong)] hover:shadow-[inset_0_0_0_1px_var(--control-border)]",
+  "pointer-coarse:h-11 phone:text-base",
   focusRing,
 );
 
@@ -244,7 +279,7 @@ function SegmentValue({
           const text = cleanText(e.target.value);
           if (text) onChange({ kind: "text", text });
         }}
-        className={cn(mini, "w-[78px] font-semibold uppercase")}
+        className={cn(mini, "w-[78px] font-semibold uppercase phone:w-32")}
       />
     );
   }
@@ -290,7 +325,7 @@ export function AddSegments({ t, pattern, example, onChange }: EditorProps & { o
             aria-label={t("add", { segment: t(`kinds.${kind}`) })}
             onClick={() => onChange(addSegment(pattern, kind))}
             className={cn(
-              "group inline-flex h-[30px] items-center gap-1.5 rounded-sm bg-surface px-2.5 text-[12.5px] font-semibold text-text-secondary",
+              "group inline-flex h-[30px] items-center gap-1.5 rounded-sm bg-surface px-2.5 text-[12.5px] font-semibold text-text-secondary pointer-coarse:h-11",
               "outline-1 -outline-offset-1 outline-border-strong outline-dashed enabled:hover:text-brand-fg enabled:hover:outline-primary",
               // Disabled: the plain muted look, no segment tone and no hover colour.
               "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-on-disabled disabled:outline-border",
@@ -533,7 +568,8 @@ export function SequenceOptions({
                 <li key={kind}>
                   <label
                     className={cn(
-                      "inline-flex h-[34px] items-center gap-2 rounded-sm ps-2.5 pe-3 text-[13px] select-none",
+                      // 44 high on touch (RP-1288), the hidden box at its centre so the whole label is its target.
+                      "relative inline-flex h-[34px] items-center gap-2 rounded-sm ps-2.5 pe-3 text-[13px] select-none pointer-coarse:h-11",
                       on ? cn(tone.tint, tone.fg, "font-semibold") : "bg-surface text-text shadow-[inset_0_0_0_1px_var(--border)]",
                       !readOnly && "cursor-pointer has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-focus",
                     )}
@@ -541,7 +577,7 @@ export function SequenceOptions({
                     {/* Read-only, a disabled box still says whether it is ticked. */}
                     <input
                       type="checkbox"
-                      className="sr-only"
+                      className="sr-only pointer-coarse:inset-0 pointer-coarse:m-auto"
                       checked={on}
                       disabled={readOnly}
                       onChange={(e) => onChange?.(setCounted(pattern, kind, e.target.checked))}
