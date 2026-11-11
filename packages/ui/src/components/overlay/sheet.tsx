@@ -20,6 +20,28 @@ export type SheetContentProps = ModalContentProps & {
  * A full-height panel on the inline-end (or start) side. Up to 28rem wide;
  * the whole width on a phone.
  */
+/**
+ * A panel that comes up from the bottom of a phone's screen (RP-1272, RP-1273): the full width, at most 92%
+ * high, rounded at the top with the kit's handle, its foot clear of the home indicator. Compose it in a
+ * `Sheet` as `SheetContent`; Escape, the scrim or the close button shut it.
+ */
+export function BottomSheetContent({ className, children, ...props }: ModalContentProps) {
+  return (
+    <ModalContent
+      className={cn(
+        "inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-[20px] px-4 pt-3",
+        // eslint-disable-next-line rabaed/no-avoid-terms -- CSS env() name
+        "pb-[max(1rem,env(safe-area-inset-bottom))]",
+        className,
+      )}
+      {...props}
+    >
+      <span aria-hidden="true" className="absolute inset-x-0 top-2 mx-auto h-1 w-9 rounded-full bg-border-strong" />
+      {children}
+    </ModalContent>
+  );
+}
+
 export function SheetContent({ side = "end", className, ...props }: SheetContentProps) {
   return (
     <ModalContent

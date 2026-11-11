@@ -1,7 +1,7 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
-import { expect, fn, screen, userEvent, waitFor } from "storybook/test";
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
-import { storyText } from "../../storybook/locale.ts";
+import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { EmptyState } from "../feedback/states.tsx";
 import { RowActionsMenu } from "../list/row-menu.tsx";
@@ -191,11 +191,23 @@ export const MenuKeyboard: Story = {
   },
 };
 
-/** On a phone the table scrolls inside the card, never the page. */
+/** On a phone the table scrolls inside the card, never the page, with each Member's name pinned at its start (RP-1273). */
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {
-    await expect(context.canvas.getByRole("region", { name: storyText(context, copy.table) })).toBeVisible();
+    const region = context.canvas.getByRole("region", { name: storyText(context, copy.table) });
+    await expect(region).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
+    const ar = storyLocale(context) === "ar";
+    const name = within(region).getAllByRole("cell")[0]!;
+    // About 180 wide at most, so the other columns have the rest of the card to scroll in.
+    await expect(name.getBoundingClientRect().width).toBeLessThanOrEqual(185);
+    const start = () => (ar ? region.getBoundingClientRect().right - name.getBoundingClientRect().right : name.getBoundingClientRect().left - region.getBoundingClientRect().left);
+    await expect(Math.abs(start())).toBeLessThanOrEqual(1);
+    region.scrollBy({ left: ar ? -region.scrollWidth : region.scrollWidth });
+    await waitFor(() => expect(Math.abs(region.scrollLeft)).toBeGreaterThan(50));
+    await expect(Math.abs(start())).toBeLessThanOrEqual(1);
+    region.scrollTo({ left: 0 });
   },
 };

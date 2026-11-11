@@ -503,7 +503,16 @@ defineCase("SIG-15", async (t) => {
     page.setDefaultTimeout(15_000);
     await page.goto(`${webUrl}/en/verify/${token}`, { waitUntil: "networkidle" });
     const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-    c.check("the verification page opens with no sign-in and says the record is genuine", /This record is genuine/.test(body) && body.includes(num), body.slice(0, 200));
+    // Off production every record is sealed with a test key (RP-1042, ADR 0026): the page then reads
+    // "Test record: not a valid record…", never "This record is genuine". On a lane (*.localhost) that is expected.
+    const testKey = verification.testKey === true;
+    const lane = new URL(webUrl).hostname.endsWith(".localhost");
+    const face = testKey ? lane && /Test record: not a valid record/.test(body) && !/This record is genuine/.test(body) : /This record is genuine/.test(body);
+    c.check(
+      "the verification page opens with no sign-in and says the record is genuine (on a lane: a Test record, RP-1042)",
+      verification.status === "genuine" && face && body.includes(num),
+      `${testKey ? `testKey: true (sealed off production with a test key, RP-1042 / ADR 0026: ${lane ? "expected on a lane" : "NOT a lane host, so not accepted"}), so the page reads Test record, not genuine. ` : ""}status ${String(verification.status)}. ${body.slice(0, 200)}`,
+    );
     c.check("it shows the signers with their Companies and links to no live item", /Signed by/.test(body) && /Design Consultants LLC/.test(body) && (await page.locator("a[href*='/work-items/']").count()) === 0);
     await t.shot(page, "verify-page");
     const uploads: string[] = [];

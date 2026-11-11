@@ -2,7 +2,7 @@
 
 import type { DimensionKind, DimensionValue, DimensionValues, Locale, Visibility } from "@rabaed/domain";
 import { dimensionKinds } from "@rabaed/domain";
-import { Button, Checkbox, Field, Icon, cn, useToast, type IconName } from "@rabaed/ui";
+import { Checkbox, Field, Icon, SaveBar, cn, useToast, type IconName } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { useHandover, type HandoverOutcome } from "@/components/handover";
@@ -98,7 +98,7 @@ export function MemberVisibilityEditor({
   }
 
   return (
-    <div className={cn("space-y-4", !readOnly && "pb-24 sm:pb-4")}>
+    <div className="space-y-4">
       <div className="grid items-start gap-4 md:grid-cols-2">
         {dimensionKinds.map((kind) => (
           <DimensionCard
@@ -116,23 +116,17 @@ export function MemberVisibilityEditor({
           />
         ))}
       </div>
+      {/* On a phone, the shell's bottom action bar (RP-1276, row 64). */}
       {!readOnly && (
-        <div
-          className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 shadow-md max-sm:fixed max-sm:inset-x-0 max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0"
-          data-testid="save-bar"
-        >
-          <p role="status" className={cn("text-sm", dirty ? "font-semibold text-warning-fg" : "text-muted")}>
-            {dirty ? t("unsaved") : justSaved ? t("saved") : t("noChanges")}
-          </p>
-          <div className="flex gap-2">
-            <Button variant="secondary" disabled={!dirty || pending || handover.pending} onClick={() => setDraft(saved)}>
-              {t("cancel")}
-            </Button>
-            <Button disabled={!dirty || pending || handover.pending} onClick={() => void save()}>
-              {t("save")}
-            </Button>
-          </div>
-        </div>
+        <SaveBar
+          status={dirty ? t("unsaved") : justSaved ? t("saved") : t("noChanges")}
+          dirty={dirty}
+          busy={pending || handover.pending}
+          cancelLabel={t("cancel")}
+          saveLabel={t("save")}
+          onCancel={() => setDraft(saved)}
+          onSave={() => void save()}
+        />
       )}
       {handover.dialog}
     </div>

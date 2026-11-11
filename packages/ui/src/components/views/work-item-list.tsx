@@ -43,7 +43,8 @@ import { filterClearClass, tradeFilterChoice } from "../list/filter-choices.tsx"
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { HeaderBadge, poolIcon } from "./kanban-card.tsx";
 import { outcomeBadge } from "./work-item-board.tsx";
-import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
+import { ListToolbar, ToolbarRowBreak, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
+import { PrimaryAction } from "../shell/action-bar.tsx";
 import { NumberedPager } from "../list/numbered-pager.tsx";
 import { TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -724,13 +725,15 @@ function WorkItemListBody({
         end={
           <>
             {groupMenu}
+            <ToolbarRowBreak />
             {viewSwitch}
             {moreMenu}
           </>
         }
         className={board ? "gap-3" : "gap-1.5"}
       >
-        {action}
+        {/* On a phone in the bottom action bar (RP-1272), not the toolbar (RP-1273). */}
+        {action !== undefined && <PrimaryAction>{action}</PrimaryAction>}
         <ToolbarSearch
           tall
           // A new query (back button, a cleared filter) shows its own words.
@@ -743,7 +746,8 @@ function WorkItemListBody({
           onSearch={(q) => change({ q })}
           // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
           hintWide={!board}
-          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
+          // On a phone it shares its row with Filter (RP-1273).
+          className={cn("phone:w-auto phone:min-w-0 phone:flex-1", !board && cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60"))}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -797,6 +801,7 @@ function WorkItemListBody({
             {importFilter.name !== null && <bdi className="max-w-60 truncate font-semibold text-text">{importFilter.name}</bdi>}
           </NamedFilter>
         )}
+        <ToolbarRowBreak />
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
         {query.bucket.length + query.codeC.length > 0 && (
