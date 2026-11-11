@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { useState, type ReactNode } from "react";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
-import { phone } from "../../storybook/form.ts";
+import { phone, tablet } from "../../storybook/form.ts";
+import { touchTargetOffenders } from "../../storybook/touch-target.ts";
 import { ActionBarContext } from "../shell/action-bar.tsx";
 import { storyLocale } from "../../storybook/locale.ts";
 import { numberingText } from "../../storybook/numbering.ts";
@@ -135,19 +136,7 @@ function WithActionBar({ children }: { children: ReactNode }) {
  * width, in place of the bar floating over the page (the Responsive Review: "the save bar spans the width").
  */
 export const PhoneSaveInActionBar: Story = {
-  parameters: {
-    ...phone,
-    layout: "fullscreen",
-    touchTargets: {
-      exempt: [
-        {
-          // The segment chips, Add segment, and the Sequence card's counter-scope toggles (34 high).
-          selector: "[data-testid=numbering-project-pattern] :is(button, input), [role=group] label > input[type=checkbox].sr-only",
-          reason: "the pattern editor's phone layout (vertical segment cards, Responsive Anatomy 18) is not part of RP-1275; this story checks the save bar",
-        },
-      ],
-    },
-  },
+  parameters: { ...phone, layout: "fullscreen" },
   render: (args, context) => (
     <WithActionBar>
       <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
@@ -168,6 +157,194 @@ export const PhoneSaveInActionBar: Story = {
     await expect(getComputedStyle(unsaved).position).not.toBe("fixed");
     await expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
+/** Every interactive element at least 44 × 44 px, and no sideways scroll (RP-1288). */
+async function expectTouchSized() {
+  await expect(touchTargetOffenders(document.body)).toEqual([]);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+}
+
+const chipBoxes = (canvas: ReturnType<typeof within>) => canvas.getAllByTestId("segment-chip").map((chip: HTMLElement) => chip.getBoundingClientRect());
+
+/**
+ * On a phone the segments are vertical cards, one under the other across the card (Responsive Anatomy 18,
+ * RP-1288), and every control of the pattern editor is a 44-px target. The harness checks the targets too.
+ */
+export const PatternPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: (args, context) => (
+    <WithActionBar>
+      <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
+    </WithActionBar>
+  ),
+  play: async (context) => {
+    const { canvas } = context;
+    const t = text(context);
+    // A Location and a Fixed text too, so their fields are measured.
+    await userEvent.click(canvas.getByRole("button", { name: t("add", { segment: t("kinds.location") }) }));
+    await userEvent.click(canvas.getByRole("button", { name: t("add", { segment: t("kinds.text") }) }));
+    await expect(canvas.getByRole("combobox", { name: t("level") })).toBeVisible();
+    await expect(canvas.getByRole("textbox", { name: t("text") })).toBeVisible();
+    const boxes = chipBoxes(canvas);
+    for (const [i, box] of boxes.entries()) {
+      // As wide as the first, one under the other.
+      await expect(Math.round(box.width)).toBe(Math.round(boxes[0]!.width));
+      if (i > 0) await expect(box.top).toBeGreaterThanOrEqual(boxes[i - 1]!.bottom);
+    }
+    // The separator sits between the codes in the number, not between the cards.
+    for (const separator of canvas.getByTestId("segment-chips").querySelectorAll("li > span[aria-hidden]")) await expect(separator).not.toBeVisible();
+    await expectTouchSized();
+  },
+};
+
+/** A touch on a segment card, as a finger sends it. */
+/** `dy`: that far below the card's middle (negative: above), as a finger passing it is. */
+function touch(type: "pointerdown" | "pointermove" | "pointerup", target: EventTarget, at: Element, dy = 0) {
+  const box = at.getBoundingClientRect();
+  target.dispatchEvent(
+    new PointerEvent(type, { pointerType: "touch", pointerId: 7, isPrimary: true, bubbles: true, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 + dy }),
+  );
+}
+
+/**
+ * On a phone a long press lifts a segment and the finger carries it to its place (Responsive Anatomy 18,
+ * RP-1288), announced as the keyboard's move is. A finger that moves before the press lifts it scrolls instead.
+ */
+export const PhoneLongPressReorder: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: PatternPhone.render,
+  play: async (context) => {
+    const { canvas } = context;
+    const t = text(context);
+    const name = (chip: Element) => chip.querySelector("[data-segment-grip]")!.getAttribute("aria-label");
+    const chips = () => canvas.getAllByTestId("segment-chip");
+    // A finger touches what is on the screen.
+    canvas.getByTestId("segment-chips").scrollIntoView({ block: "center", behavior: "instant" });
+    // Moved straight away: a scroll, nothing lifts.
+    touch("pointerdown", chips()[3]!, chips()[3]!);
+    touch("pointermove", document, chips()[0]!);
+    touch("pointerup", document, chips()[0]!);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await expect(previewNumber(canvas)).toHaveTextContent("TWR-TMC-EL-MAR-");
+    // Lifted and let go in place: nothing moved, so nothing is announced.
+    touch("pointerdown", chips()[1]!, chips()[1]!);
+    await waitFor(() => expect(chips()[1]).toHaveClass("outline-primary"));
+    touch("pointerup", document, chips()[1]!);
+    await waitFor(() => expect(chips()[1]).not.toHaveClass("outline-primary"));
+    await expect(canvas.queryByText(/position/)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    // Held still: the Work Item Type lifts, and is carried over Trade and Company to the top.
+    touch("pointerdown", chips()[3]!, chips()[3]!);
+    await waitFor(() => expect(chips()[3]).toHaveClass("outline-primary"));
+    touch("pointermove", document, chips()[2]!, -10);
+    await waitFor(() => expect(previewNumber(canvas)).toHaveTextContent("TWR-TMC-MAR-EL-"));
+    touch("pointermove", document, chips()[0]!, -10);
+    await waitFor(() => expect(previewNumber(canvas)).toHaveTextContent("MAR-TWR-TMC-EL-"));
+    touch("pointerup", document, chips()[0]!);
+    await waitFor(() => expect(chips()[0]).not.toHaveClass("outline-primary"));
+    // The finger let go of a carried card: that is no tap, so the moves menu stays shut.
+    chips()[0]!.querySelector<HTMLElement>("[data-segment-grip]")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(within(document.body).queryByRole("menu")).toBeNull();
+    // A press later is a tap again: it opens the moves.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await userEvent.click(chips()[0]!.querySelector<HTMLElement>("[data-segment-grip]")!);
+    await expect(await within(document.body).findByRole("menu")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect(name(chips()[0]!)).toBe(t("move", { segment: t("kinds.type") }));
+    await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 1, total: 4 }))).toBeInTheDocument();
+    await expect(canvas.getByTestId("unsaved-bar")).toBeVisible();
+  },
+};
+
+/**
+ * A tap on a segment's ⋮ opens its moves (the owner's (b) on RP-1288, comment 15836): Move up, Move down,
+ * Move to top, Move to bottom, those that can't apply disabled. A move is announced as the keyboard's is, and
+ * focus comes back to the moved segment's handle.
+ */
+async function moveMenuPlay(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const { canvas } = context;
+  const t = text(context);
+  const page = within(document.body);
+  const grip = (kind: string) => canvas.getByRole("button", { name: t("move", { segment: t(`kinds.${kind}`) }) });
+  const items = [t("moveUp"), t("moveDown"), t("moveTop"), t("moveBottom")];
+
+  // The first segment: up and top can't apply.
+  await userEvent.click(grip("project"));
+  const first = await page.findByRole("menu", { name: t("move", { segment: t("kinds.project") }) });
+  await expect(within(first).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(items);
+  await expect(within(first).getByRole("menuitem", { name: t("moveUp") })).toBeDisabled();
+  await expect(within(first).getByRole("menuitem", { name: t("moveTop") })).toBeDisabled();
+  await expect(within(first).getByRole("menuitem", { name: t("moveDown") })).toBeEnabled();
+  await expect(touchTargetOffenders(first)).toEqual([]);
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(page.queryByRole("menu")).toBeNull());
+
+  // The last segment before the sequence: down and bottom can't apply.
+  await userEvent.click(grip("type"));
+  const last = await page.findByRole("menu");
+  await expect(within(last).getByRole("menuitem", { name: t("moveDown") })).toBeDisabled();
+  await expect(within(last).getByRole("menuitem", { name: t("moveBottom") })).toBeDisabled();
+  await userEvent.click(within(last).getByRole("menuitem", { name: t("moveTop") }));
+  await waitFor(() => expect(page.queryByRole("menu")).toBeNull());
+  await expect(previewNumber(canvas)).toHaveTextContent("MAR-TWR-TMC-EL-");
+  await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 1, total: 4 }))).toBeInTheDocument();
+  await waitFor(() => expect(grip("type")).toHaveFocus());
+
+  // One step down from the top.
+  await userEvent.click(grip("type"));
+  await userEvent.click(within(await page.findByRole("menu")).getByRole("menuitem", { name: t("moveDown") }));
+  await expect(previewNumber(canvas)).toHaveTextContent("TWR-MAR-TMC-EL-");
+  await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 2, total: 4 }))).toBeInTheDocument();
+  await expectTouchSized();
+}
+
+export const PhoneMoveMenu: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: PatternPhone.render,
+  play: moveMenuPlay,
+};
+
+export const TabletMoveMenu: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => (
+    <div className="p-6">
+      <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
+    </div>
+  ),
+  play: moveMenuPlay,
+};
+
+/** At 820 the segments stay a wrapping row of chips (Responsive Review 15), every control a 44-px target on touch. */
+export const PatternTablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => (
+    <div className="p-6">
+      <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
+    </div>
+  ),
+  play: async (context) => {
+    const { canvas } = context;
+    const boxes = chipBoxes(canvas);
+    // A row: the second chip beside the first.
+    await expect(Math.round(boxes[1]!.top)).toBe(Math.round(boxes[0]!.top));
+    await expectTouchSized();
+  },
+};
+
+/** The drawer's Custom pattern on a phone: the same vertical cards and 44-px targets. */
+export const CustomPatternDrawerPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  play: async (context) => {
+    const { canvas } = context;
+    const t = text(context);
+    await userEvent.click(within(canvas.getAllByTestId("numbering-type-item")[0]!).getByRole("button", { name: t("customize") }));
+    const drawer = within(await within(document.body).findByTestId("custom-pattern-drawer"));
+    const boxes = drawer.getAllByTestId("segment-chip").map((chip) => chip.getBoundingClientRect());
+    await expect(boxes[1]!.top).toBeGreaterThanOrEqual(boxes[0]!.bottom);
+    await expect(touchTargetOffenders(drawer.getByTestId("segment-chips").parentElement!.parentElement!)).toEqual([]);
   },
 };
 

@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import type { RegisterImportFields, RegisterSheet } from "@rabaed/domain";
 import ar from "../../../../../apps/web/messages/ar.json" with { type: "json" };
 import en from "../../../../../apps/web/messages/en.json" with { type: "json" };
-import { phone } from "../../storybook/form.ts";
+import { phone, tablet } from "../../storybook/form.ts";
 import { translator } from "../../storybook/icu.ts";
 import { storyLocale } from "../../storybook/locale.ts";
+import { touchTargetOffenders } from "../../storybook/touch-target.ts";
 import { LargerScreenBanner } from "../settings/settings-layout.tsx";
 import { RegisterImportWizard, type RegisterImportClient } from "./register-import-wizard.tsx";
 
@@ -68,14 +69,14 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-function Wizard({ locale, phoneBanner }: { locale: "en" | "ar"; phoneBanner: boolean }) {
+function Wizard({ locale, phoneBanner, client: reader = client }: { locale: "en" | "ar"; phoneBanner: boolean; client?: RegisterImportClient }) {
   const t = translator(messages[locale].registerImport, locale);
   return (
     <div className="bg-canvas p-4">
       <RegisterImportWizard
         locale={locale}
         t={t}
-        client={client}
+        client={reader}
         importer={{ id: "3d0b6a3e-6a5b-4a8e-8a3e-1b2c3d4e5f60", name: { en: "Hafiz Hamdan", ar: "حافظ حمدان" } }}
         types={types}
         trades={trades}
@@ -119,6 +120,41 @@ export const MapFieldsPhone: Story = {
     // Back to the sheet still works.
     await expect(canvas.getByRole("button", { name: t.back })).toBeEnabled();
   },
+};
+
+/** A register with two worksheets, so the Sheet step lists a choice. */
+const twoSheets: RegisterImportClient = {
+  ...client,
+  read: async (body) => ({ ok: true, body: { ...sheet, sheets: [...sheet.sheets, { name: "Notes", rows: 12 }], sheet: body.sheet ?? sheet.sheet } }),
+};
+
+/** Every interactive element at least 44 × 44 px, and no sideways scroll (RP-1288). */
+async function expectTouchSized() {
+  await expect(touchTargetOffenders(document.body)).toEqual([]);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+/** The Sheet step on a touch screen (RP-1288): the worksheet buttons and the step's other targets are 44 px. */
+async function sheetStepPlay({ canvas, context }: { canvas: ReturnType<typeof within>; context: Parameters<typeof storyLocale>[0] }) {
+  const t = messages[storyLocale(context)].registerImport;
+  await userEvent.click(canvas.getByRole("button", { name: t.upload.sample }));
+  const notes = await canvas.findByRole("button", { name: /Notes/ });
+  await expect(canvas.getByRole("button", { name: /Register/ })).toHaveAttribute("aria-pressed", "true");
+  await expectTouchSized();
+  await userEvent.click(notes);
+  await waitFor(() => expect(canvas.getByRole("button", { name: /Notes/ })).toHaveAttribute("aria-pressed", "true"));
+}
+
+export const SheetStepPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: (_args, context) => <Wizard locale={storyLocale(context)} phoneBanner client={twoSheets} />,
+  play: sheetStepPlay,
+};
+
+export const SheetStepTablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (_args, context) => <Wizard locale={storyLocale(context)} phoneBanner client={twoSheets} />,
+  play: sheetStepPlay,
 };
 
 /** Wider than a phone the mapping edits as ever: no banner, the fields can be changed. */
