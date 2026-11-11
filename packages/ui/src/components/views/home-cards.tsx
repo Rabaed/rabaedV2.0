@@ -3,6 +3,8 @@
 import { cardNumber, outcomeLabel, type HomeActivityEntry, type HomeActivityVerb, type HomeWorkItem, type Locale } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { useMediaQuery } from "../../lib/use-media-query.ts";
+import { PHONE } from "../../lib/widths.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { TitledCard } from "../data/titled-card.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -18,6 +20,39 @@ import { StagePill } from "../status/stage-pill.tsx";
 // them, and the app supplies the words and links.
 
 const linkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg hover:underline underline-offset-4", focusRing, touchBox);
+
+export type HomeCountTilesProps = {
+  /** The tiles' region name, e.g. "Across your Projects". */
+  label: string;
+  /** The `StatTile`s, in the app's order. */
+  children: ReactNode;
+  className?: string;
+};
+
+/**
+ * Home's counts (RP-1276, gap-table rows 30 and 34): four across from 1100 wide, 2 × 2 below. On a phone
+ * one row that swipes, snapping a tile at a time, 158 wide so the first two show whole and the third
+ * peeks (the owner's Responsive Anatomy, Home on a phone). Logical scrolling, so it starts at the right
+ * and swipes right to left in Arabic. There it takes keyboard focus, so it scrolls without touch too.
+ */
+export function HomeCountTiles({ label, children, className }: HomeCountTilesProps) {
+  const isPhone = useMediaQuery(PHONE, false);
+  return (
+    <section
+      aria-label={label}
+      tabIndex={isPhone ? 0 : undefined}
+      className={cn(
+        "grid grid-cols-2 gap-[18px] min-[1100px]:grid-cols-4",
+        "phone:flex phone:snap-x phone:snap-mandatory phone:gap-3 phone:overflow-x-auto phone:overscroll-x-contain phone:[scrollbar-width:none]",
+        "phone:*:w-[158px] phone:*:shrink-0 phone:*:snap-start",
+        focusRing,
+        className,
+      )}
+    >
+      {children}
+    </section>
+  );
+}
 
 /** A titled card with links at the end of its 49px heading, as the kit's; its rows sit close under the heading. */
 function HomeCard({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
@@ -108,22 +143,32 @@ export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, lin
             const number = cardNumber(item.documentNumber, item.revisionNo);
             return (
               <li key={item.id}>
-                <Link href={itemHref(item.id)} className={rowClass}>
+                <Link
+                  href={itemHref(item.id)}
+                  // A phone: the Stage drops under the text (column 2, next row), so the Subject keeps two lines (row 35).
+                  className={cn(rowClass, "phone:grid phone:grid-cols-[auto_minmax(0,1fr)] phone:items-start phone:gap-y-1.5")}
+                >
                   <span aria-hidden="true" className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-canvas text-muted">
                     <Icon name="file-text" size={18} />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-body font-semibold">{item.title}</span>
-                    <span className="text-[12.5px] text-muted sm:truncate">
+                    <span className="truncate text-body font-semibold phone:line-clamp-2 phone:break-words phone:whitespace-normal">{item.title}</span>
+                    {/* On a phone the Project takes a line of its own; wider, one line after the number. */}
+                    <span className="truncate text-[12.5px] text-muted phone:overflow-visible phone:whitespace-normal">
                       <span className="whitespace-nowrap">
                         {number ? <DocNo value={number} className="font-normal" /> : labels.noNumber}
                         {item.revisionNo > 0 && ` · ${labels.revision(item.revisionNo)}`}
                       </span>
-                      <span className="hidden sm:inline"> · </span>
-                      <span className="block break-words sm:inline">{item.project.name[locale]}</span>
+                      <span className="phone:hidden"> · </span>
+                      <span className="phone:block phone:break-words">{item.project.name[locale]}</span>
                     </span>
                   </span>
-                  <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} className="ms-auto shrink-0" />
+                  <StagePill
+                    stage={stageColour(item.stage)}
+                    label={item.stage.name[locale]}
+                    locale={locale}
+                    className="ms-auto shrink-0 phone:col-start-2 phone:ms-0 phone:justify-self-start"
+                  />
                 </Link>
               </li>
             );

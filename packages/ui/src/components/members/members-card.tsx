@@ -75,8 +75,11 @@ const statusClasses: Record<MemberStatus, string> = {
   deactivated: "bg-neutral-tint text-neutral-fg",
 };
 
-// Below `sm` the menu column stays at the row's end while the table scrolls sideways, as the List's last column.
-const pinned = "max-sm:sticky max-sm:end-0 max-sm:border-s max-sm:border-border-subtle";
+// On a phone the menu column stays at the row's end while the table scrolls sideways, as the List's last column.
+const pinned = "phone:sticky phone:end-0 phone:border-s phone:border-border-subtle";
+// On a phone each Member's name stays at the row's start too (RP-1273, gap-table row 65), a shadow on its edge as the List's pinned number has.
+const pinnedName =
+  "phone:sticky phone:start-0 phone:z-[1] phone:shadow-[6px_0_6px_-6px_var(--color-overlay)] phone:rtl:shadow-[-6px_0_6px_-6px_var(--color-overlay)]";
 
 const head = "h-auto px-5 py-3";
 // The kit's 70px row: 36px avatar and 15px above and below, plus the line.
@@ -91,7 +94,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
         <Table label={labels.table} data-testid="members" className="text-body">
           <TableHeader>
             <TableRow>
-              <TableHead className={head}>{labels.name}</TableHead>
+              <TableHead className={cn(head, pinnedName, "phone:bg-surface-subtle")}>{labels.name}</TableHead>
               <TableHead className={head}>{labels.marks}</TableHead>
               <TableHead className={head}>{labels.projects}</TableHead>
               <TableHead className={head}>{labels.status}</TableHead>
@@ -105,12 +108,13 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id} className="group/row [tbody_&]:hover:bg-surface-subtle">
-                <TableCell className={cell}>
+                <TableCell className={cn(cell, pinnedName, "phone:bg-surface phone:group-hover/row:bg-surface-subtle")}>
                   <div className="flex items-center gap-2.5">
                     <Avatar name={row.name} initialsFrom={row.initialsFrom} solidFrom={row.colourKey} decorative className="size-9 text-body" />
-                    <div className="min-w-0">
-                      <div className="font-semibold text-text">{row.name}</div>
-                      <bdi dir="ltr" className="block text-[12.5px] text-muted">
+                    {/* On a phone the pinned name keeps to about 180 wide, the rest of the row scrolling beside it; in full in its tooltip. */}
+                    <div className="min-w-0 phone:max-w-[96px]" title={`${row.name} · ${row.email}`}>
+                      <div className="font-semibold text-text phone:truncate">{row.name}</div>
+                      <bdi dir="ltr" className="block text-[12.5px] text-muted phone:truncate">
                         {row.email}
                       </bdi>
                     </div>

@@ -10,7 +10,7 @@ import { Button } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
-import { Sheet, SheetClose, SheetContent, SheetFooter, SheetTrigger } from "../overlay/sheet.tsx";
+import { BottomSheetContent, Sheet, SheetClose, SheetFooter, SheetTrigger } from "../overlay/sheet.tsx";
 import { toolbarButton } from "./list-toolbar.tsx";
 
 // The Filter button of a data list page and what it opens (the owner's Kanban
@@ -87,7 +87,8 @@ export function FilterMenu({ fields, labels, onClearAll, initialField, triggerCl
     return (
       <Sheet>
         <SheetTrigger asChild>{trigger}</SheetTrigger>
-        <SheetContent title={labels.filters} closeLabel={labels.close}>
+        {/* From the bottom of the phone's screen, about 92% high (RP-1273, the Anatomy's phone filter). */}
+        <BottomSheetContent title={labels.filters} closeLabel={labels.close} className="h-[92dvh]">
           <div className="flex flex-col gap-6">
             {fields.map((field) => (
               <StackedField key={field.key} field={field} number={labels.number} />
@@ -106,7 +107,7 @@ export function FilterMenu({ fields, labels, onClearAll, initialField, triggerCl
               </SheetClose>
             </div>
           </SheetFooter>
-        </SheetContent>
+        </BottomSheetContent>
       </Sheet>
     );
   }

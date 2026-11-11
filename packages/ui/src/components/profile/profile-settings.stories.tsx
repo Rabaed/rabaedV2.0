@@ -1,7 +1,8 @@
 import { defaultNotificationSettings, type NotificationSettingsView } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
-import { expectTouchTarget, phone } from "../../storybook/form.ts";
+import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
+import { touchTargetOffenders } from "../../storybook/touch-target.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { profileSettingsLabels } from "../../storybook/profile.ts";
 import { ProfileSettings, type ProfileSettingsProps } from "./profile-settings.tsx";
@@ -90,6 +91,7 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
 /** The defaults: the Profile card beside the settings. Every setting is about email: no In-app switch anywhere. */
 export const Defaults: Story = {
@@ -233,7 +235,15 @@ export const Refused: Story = {
   },
 };
 
-/** At phone width the controls sit under each row and are touch-sized. */
+/** A "What to email" row's choices and its title: whether the choices sit under the title or beside it. */
+function emailRow(context: PlayContext) {
+  const row = context.canvas.getByRole("group", { name: storyText(context, copy.stepReached) });
+  const title = within(row).getByText(storyText(context, copy.stepReached)).getBoundingClientRect();
+  const choices = within(row).getByRole("radiogroup").getBoundingClientRect();
+  return { title, choices, row: row.getBoundingClientRect() };
+}
+
+/** At phone width the email choices drop under each row (row 62), full width, and are touch-sized. */
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {
@@ -241,5 +251,25 @@ export const Phone: Story = {
     await expectTouchTarget(canvas.getByRole("switch", { name: storyText(context, copy.pauseAll) }));
     await expectTouchTarget(canvas.getAllByRole("radio", { name: storyText(context, copy.digest) })[0]!);
     await expectTouchTarget(canvas.getByRole("button", { name: new RegExp(storyText(context, copy.watched)) }));
+    const { title, choices, row } = emailRow(context);
+    await expect(choices.top).toBeGreaterThanOrEqual(title.bottom);
+    // Full width of the row, inside its 14 px padding.
+    await expect(Math.round(choices.width)).toBe(Math.round(row.width) - 28);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
+/**
+ * A tablet (820, touch): the cards stacked, each email choice still beside its row (the approved row 62
+ * drops them under only on a phone; the page is wider here than the Tablet Flow's column); every
+ * control 44 across on the touch screen (row 62: 13 were under 44 by their own boxes).
+ */
+export const Tablet: Story = {
+  parameters: tablet,
+  play: async (context) => {
+    const { title, choices } = emailRow(context);
+    await expect(choices.top).toBeLessThan(title.bottom);
+    await expect(touchTargetOffenders(context.canvasElement)).toEqual([]);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   },
 };

@@ -122,7 +122,7 @@ function WithActionBar({ children }: { children: ReactNode }) {
   const [bar, setBar] = useState<HTMLElement | null>(null);
   return (
     <div className="flex min-h-dvh flex-col">
-      <ActionBarContext.Provider value={bar}>
+      <ActionBarContext.Provider value={{ bar }}>
         <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
       </ActionBarContext.Provider>
       <div ref={setBar} data-action-bar="" className="sticky bottom-0 z-20 border-t border-border bg-surface px-4 pt-3 pb-3 empty:hidden" />
