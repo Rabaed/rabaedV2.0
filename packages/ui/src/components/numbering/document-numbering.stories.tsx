@@ -200,10 +200,11 @@ export const PatternPhone: Story = {
 };
 
 /** A touch on a segment card, as a finger sends it. */
-function touch(type: "pointerdown" | "pointermove" | "pointerup", target: EventTarget, at: Element) {
+/** `dy`: that far below the card's middle (negative: above), as a finger passing it is. */
+function touch(type: "pointerdown" | "pointermove" | "pointerup", target: EventTarget, at: Element, dy = 0) {
   const box = at.getBoundingClientRect();
   target.dispatchEvent(
-    new PointerEvent(type, { pointerType: "touch", pointerId: 7, isPrimary: true, bubbles: true, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 }),
+    new PointerEvent(type, { pointerType: "touch", pointerId: 7, isPrimary: true, bubbles: true, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 + dy }),
   );
 }
 
@@ -227,18 +228,31 @@ export const PhoneLongPressReorder: Story = {
     touch("pointerup", document, chips()[0]!);
     await new Promise((resolve) => setTimeout(resolve, 400));
     await expect(previewNumber(canvas)).toHaveTextContent("TWR-TMC-EL-MAR-");
+    // Lifted and let go in place: nothing moved, so nothing is announced.
+    touch("pointerdown", chips()[1]!, chips()[1]!);
+    await waitFor(() => expect(chips()[1]).toHaveClass("outline-primary"));
+    touch("pointerup", document, chips()[1]!);
+    await waitFor(() => expect(chips()[1]).not.toHaveClass("outline-primary"));
+    await expect(canvas.queryByText(/position/)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 450));
     // Held still: the Work Item Type lifts, and is carried over Trade and Company to the top.
     touch("pointerdown", chips()[3]!, chips()[3]!);
     await waitFor(() => expect(chips()[3]).toHaveClass("outline-primary"));
-    touch("pointermove", document, chips()[2]!);
+    touch("pointermove", document, chips()[2]!, -10);
     await waitFor(() => expect(previewNumber(canvas)).toHaveTextContent("TWR-TMC-MAR-EL-"));
-    touch("pointermove", document, chips()[0]!);
+    touch("pointermove", document, chips()[0]!, -10);
     await waitFor(() => expect(previewNumber(canvas)).toHaveTextContent("MAR-TWR-TMC-EL-"));
     touch("pointerup", document, chips()[0]!);
     await waitFor(() => expect(chips()[0]).not.toHaveClass("outline-primary"));
     // The finger let go of a carried card: that is no tap, so the moves menu stays shut.
     chips()[0]!.querySelector<HTMLElement>("[data-segment-grip]")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 100));
     await expect(within(document.body).queryByRole("menu")).toBeNull();
+    // A press later is a tap again: it opens the moves.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await userEvent.click(chips()[0]!.querySelector<HTMLElement>("[data-segment-grip]")!);
+    await expect(await within(document.body).findByRole("menu")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
     await expect(name(chips()[0]!)).toBe(t("move", { segment: t("kinds.type") }));
     await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 1, total: 4 }))).toBeInTheDocument();
     await expect(canvas.getByTestId("unsaved-bar")).toBeVisible();

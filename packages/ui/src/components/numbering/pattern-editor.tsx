@@ -86,18 +86,30 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
   };
 
   // A long press on touch (RP-1288): the lifted segment moves as the finger passes each other one.
+  // It moves once the finger passes the other card's middle, so cards of different sizes don't swap back and forth.
+  const liftedFrom = useRef<number | null>(null);
   const longPress = useSegmentLongPress({
     onLift: (i) => {
+      liftedFrom.current = i;
       setDragging(i);
       setLifted(true);
     },
-    onOver: (over) => {
-      if (dragging === null || over === null || over === dragging) return;
-      move(dragging, over, false);
-      setDragging(over);
+    onOver: (over, x, y) => {
+      if (dragging === null || over === null || over.index === dragging) return;
+      const later = over.index > dragging;
+      const box = over.card.getBoundingClientRect();
+      const own = over.card.closest("ol")?.querySelector(`[data-segment-index="${dragging}"]`)?.getBoundingClientRect();
+      // Beside it in a row (820 and wider): along the reading direction; one under the other: down the list.
+      const sameLine = own !== undefined && Math.abs(own.top - box.top) < box.height / 2;
+      const ahead = sameLine ? (direction === "rtl" ? box.left + box.width / 2 - x : x - (box.left + box.width / 2)) : y - (box.top + box.height / 2);
+      if (later ? ahead <= 0 : ahead >= 0) return;
+      move(dragging, over.index, false);
+      setDragging(over.index);
     },
-    onDrop: () => {
-      if (dragging !== null) setAnnouncement(movedText(pattern.segments[dragging]!.kind, dragging));
+    onDrop: (cancelled) => {
+      // Only a move that happened is announced.
+      if (dragging !== null && !cancelled && dragging !== liftedFrom.current) setAnnouncement(movedText(pattern.segments[dragging]!.kind, dragging));
+      liftedFrom.current = null;
       setDragging(null);
       setLifted(false);
     },
@@ -135,6 +147,7 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
       <ol
         aria-label={t("segmentList")}
         id={listId}
+        ref={longPress.listRef}
         className="flex min-h-[74px] flex-wrap items-stretch gap-2 rounded-md bg-surface-subtle p-3 shadow-[inset_0_0_0_1px_var(--border-subtle)] phone:flex-col phone:flex-nowrap"
         data-testid="segment-chips"
       >
