@@ -578,10 +578,16 @@ async function expectFullPage(context: Parameters<NonNullable<Story["play"]>>[0]
   const l = labelsOf(context);
   await expect(context.canvas.getByRole("link", { name: l.back })).toBeVisible();
   await expect(context.canvas.getByRole("heading", { level: 1 })).toHaveTextContent(name[storyLocale(context)]);
-  // The page's content takes the window's width, less the shell's gutters: no master–detail.
-  const content = context.canvasElement.querySelector("main")!.getBoundingClientRect();
+  // The item table takes the whole width of the page's content, less only its card's border: nothing sits beside it (no master–detail).
+  const back = context.canvas.getByRole("link", { name: l.back });
   const table = context.canvasElement.querySelector<HTMLElement>("[data-package-table]")!;
-  await expect(table.getBoundingClientRect().width).toBeGreaterThan(content.width * 0.8);
+  let page = table.parentElement!;
+  while (!page.contains(back)) page = page.parentElement!;
+  const style = getComputedStyle(page);
+  const inner = page.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  await expect(table.getBoundingClientRect().width).toBeGreaterThanOrEqual(inner - 4);
+  // And the page is the window's width, less the shell's gutters on each side.
+  await expect(page.getBoundingClientRect().width).toBeGreaterThanOrEqual(innerWidth - 2 * 32);
   await expect(getComputedStyle(table).overflowX).toBe("auto");
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
 }

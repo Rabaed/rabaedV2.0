@@ -162,8 +162,8 @@ export function PackagesBoard({
             ]}
           />
         )}
-        {/* On a phone the View switch takes a row of its own (RP-1277). */}
-        <ToolbarRowBreak />
+        {/* On a phone the View switch takes a row of its own, under Cards / Table (RP-1277). */}
+        {onFilterChange && viewSwitch !== undefined && <ToolbarRowBreak />}
         {viewSwitch}
       </>
     ) : undefined;

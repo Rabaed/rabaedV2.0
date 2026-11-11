@@ -465,7 +465,12 @@ export const TableOnAPhone: Story = {
   render: (args, context) => <OnItsPage args={args} context={context} />,
   play: async (context) => {
     await expectPhoneToolbar(context);
-    await expect(context.canvas.getByRole("region", { name: labelsOf(context).list.table })).toBeVisible();
+    const table = context.canvas.getByRole("region", { name: labelsOf(context).list.table });
+    await expect(table).toBeVisible();
+    // Wider than the phone: it scrolls inside its own area, inside the window.
+    await expect(getComputedStyle(table).overflowX).toBe("auto");
+    await expect(table.scrollWidth).toBeGreaterThan(table.clientWidth);
+    await expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
     await expectNoSidewaysPage();
   },
 };
