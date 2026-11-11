@@ -108,6 +108,7 @@
     "noSearchMatchTitle": "لا شيء مما تراه يطابق هذا البحث",
     "clearFilters": "مسح التصفية",
     "searchPlaceholder": "ابحث بالرقم أو الموضوع",
+    "openPage": "فتح صفحته",
     "mobile": {
       "swipeHint": "اسحب البطاقة لترى ما يمكنك فعله عليها",
       "showItems": "{count, plural, one {عرض عنصر واحد} other {عرض {n} عنصر}}",

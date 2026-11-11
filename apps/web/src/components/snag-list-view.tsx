@@ -43,6 +43,8 @@ function useSnagLabels(tableLabel: string): SnagListLabels {
     clearAll: l("clearAll"),
     done: l("done"),
     close: l("close"),
+    export: l("export"),
+    openPage: t("openPage"),
     filtersApplied: (n, count) => l("filtersApplied", { n, count }),
     clear: l("clear"),
     clearField: l("clearField"),

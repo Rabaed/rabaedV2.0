@@ -1,6 +1,6 @@
 import { workItemQuery, workItemSearchParams, type Locale, type WorkItemBoard as WorkItemBoardData, type WorkItemList as WorkItemListData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectColumnScrollsOnItsOwn, expectOneColumnAndAPeek, expectSnapsByColumn } from "../../storybook/board.ts";
 import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
@@ -8,11 +8,14 @@ import { phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
+import { touchTargetOffenders } from "../../storybook/touch-target.ts";
+import { viewSwitchLabels } from "../../storybook/views.ts";
 import type { SnagBulkLabels } from "./snag-bulk.tsx";
 import type { SnagExportLabels } from "./snag-export.ts";
 import { SnagList, type SnagBulk, type SnagListLabels, type SnagListProps } from "./snag-list.tsx";
 import type { SnagSwipe } from "./snag-phone.tsx";
 import type { SwipeAction } from "./snag-swipe.ts";
+import { WorkItemViewSwitch } from "./work-item-board.tsx";
 
 // The Snag List's desktop views (RP-94, design/reference/claude-design/ui_kits/app/snag-list.html)
 // as TMC's PM sees them: Snags raised by the Consultant on TMC, and Comments raised from
@@ -29,7 +32,9 @@ const labels: Record<Locale, SnagListLabels> = {
     clearAll: "Clear all",
     done: "Done",
     close: "Close",
-    filtersApplied: (n, count) => (count === 0 ? "No filters applied" : count === 1 ? "1 filter applied" : `${n} filters applied`),
+    export: "Export",
+    openPage: "Open its page",
+    filtersApplied: (n, count) => (count === 0 ? "No filters applied": count === 1 ? "1 filter applied" : `${n} filters applied`),
     clear: "Clear",
     clearField: "Clear",
     searchValues: "Search",
@@ -99,6 +104,8 @@ const labels: Record<Locale, SnagListLabels> = {
     clearAll: "مسح الكل",
     done: "تم",
     close: "إغلاق",
+    export: "تصدير",
+    openPage: "فتح صفحته",
     filtersApplied: (n, count) => (count === 0 ? "لا تصفية مطبقة" : `${n} تصفية مطبقة`),
     clear: "مسح",
     clearField: "مسح",
@@ -708,6 +715,8 @@ export const ExportPdf: Story = {
 
 /** The report holds items the viewer can no longer see, for example after a change while it was made (RP-1110): no link, only the line saying so. */
 export const ExportPdfGone: Story = {
+  // The toolbar's own "Export PDF", past the tablet width (up to it, it is in the Export menu: ExportPdfFromTheMenu).
+  parameters: wide,
   render: (args, context) => {
     const bulk = bulkFor(storyLocale(context));
     return (
@@ -891,6 +900,196 @@ export const PhoneFilters: Story = {
     await userEvent.click(sheet.getByRole("switch", { name: text.needMyAction }));
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith(expect.objectContaining({ needMyAction: true }));
     await userEvent.click(sheet.getByRole("button", { name: text.phone.showItems(storyLocale(context) === "ar" ? "6" : "6", 6) }));
+    await expect(within(document.body).queryByRole("dialog")).toBeNull();
+  },
+};
+
+// The tablet (820, RP-1278; RP-1158 rows 71 and 72): the toolbar in two rows, one Export menu, and a Snag's detail as an overlay.
+
+type StoryContext = Parameters<NonNullable<Story["play"]>>[0];
+
+/** The Snag List on its page, as TMC's engineer sees it: bulk, the view switch and the swipe stub's Transitions. */
+function OnItsPage({ args, context }: { args: SnagListProps; context: Parameters<NonNullable<Story["render"]>>[1] }) {
+  const locale = storyLocale(context);
+  return (
+    <StoryProjectPage context={context} current="snag_list">
+      <SnagList
+        {...args}
+        locale={locale}
+        labels={labels[locale]}
+        bulk={bulkFor(locale)}
+        swipe={swipeStub()}
+        viewSwitch={<WorkItemViewSwitch view="list" labels={viewSwitchLabels[locale]} hrefFor={(v) => `?view=${v}`} />}
+      />
+    </StoryProjectPage>
+  );
+}
+
+const onATablet = { ...tablet, layout: "fullscreen" } as const;
+const toolbarOf = (context: StoryContext) => context.canvas.getByRole("region", { name: labels[storyLocale(context)].toolbar });
+const topOf = (element: Element) => Math.round(element.getBoundingClientRect().top);
+
+/**
+ * At 820 the toolbar takes two rows, as the Tablet Flow draws it: New, Search, Filter and Need My Action on
+ * the first; the view switch and one Export menu (Excel and PDF inside it) on the second. Every control is
+ * 44 high on the touch screen, the checkbox and the Document Number stay pinned while the table scrolls in
+ * its own area, and the page never scrolls sideways.
+ */
+export const OnATablet: Story = {
+  parameters: onATablet,
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const ar = locale === "ar";
+    const text = labels[locale];
+    const toolbar = within(toolbarOf(context));
+    const first = topOf(toolbar.getByRole("link", { name: new RegExp(text.newOfType(snag.name[locale])) }));
+    await expect(topOf(toolbar.getByRole("search"))).toBe(first);
+    await expect(Math.abs(topOf(toolbar.getByRole("button", { name: new RegExp(text.filters) })) - first)).toBeLessThanOrEqual(8);
+    await expect(topOf(toolbar.getByRole("switch", { name: text.needMyAction }))).toBeLessThan(first + 30);
+    const views = toolbar.getByRole("navigation", { name: viewSwitchLabels[locale].view });
+    const exportMenu = toolbar.getByRole("button", { name: text.export });
+    const second = topOf(views);
+    await expect(second).toBeGreaterThan(first + 30);
+    await expect(Math.abs(topOf(exportMenu) - second)).toBeLessThanOrEqual(8);
+    // The view switch comes first on the second row, the Export menu after it.
+    const after = ar ? exportMenu.getBoundingClientRect().right <= views.getBoundingClientRect().left : exportMenu.getBoundingClientRect().left >= views.getBoundingClientRect().right;
+    await expect(after).toBe(true);
+    // One Export menu: the two exports are inside it, not beside it.
+    await expect(toolbar.queryByRole("button", { name: bulkLabels[locale].exportAll })).toBeNull();
+    await expect(toolbar.queryByRole("button", { name: reportLabels[locale].exportPdf })).toBeNull();
+
+    await expect(touchTargetOffenders(context.canvasElement)).toEqual([]);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+
+    // The table scrolls in its own area; the checkbox and the Document Number stay at its start.
+    const region = context.canvas.getByRole("region", { name: text.table });
+    await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
+    const number = within(region).getByText("TWR-DCL-EL-SNG-011").closest("td")!;
+    const before = number.getBoundingClientRect().left;
+    region.scrollBy({ left: ar ? -region.scrollWidth : region.scrollWidth });
+    await waitFor(() => expect(Math.abs(region.scrollLeft)).toBeGreaterThan(100));
+    await expect(Math.abs(number.getBoundingClientRect().left - before)).toBeLessThanOrEqual(1);
+    region.scrollTo({ left: 0 });
+  },
+};
+
+/** The Export menu open at 820: Excel and PDF, each 44 high, each of what the filters match. Left open for the screenshot. */
+export const ExportMenuOnATablet: Story = {
+  parameters: { ...onATablet, overlay: true },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await userEvent.click(within(toolbarOf(context)).getByRole("button", { name: labels[locale].export }));
+    const menu = within(await within(document.body).findByRole("dialog", { name: labels[locale].export }));
+    await expect(menu.getByRole("button", { name: bulkLabels[locale].exportAll })).toBeVisible();
+    await expect(menu.getByRole("button", { name: reportLabels[locale].exportPdf })).toBeVisible();
+    await expect(touchTargetOffenders(menu.getByRole("list"))).toEqual([]);
+  },
+};
+
+/** "Export PDF" from the menu asks for the report of every row the filters match, and the line says so. */
+export const ExportPdfFromTheMenu: Story = {
+  parameters: onATablet,
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await userEvent.click(within(toolbarOf(context)).getByRole("button", { name: labels[locale].export }));
+    const menu = within(await within(document.body).findByRole("dialog", { name: labels[locale].export }));
+    await userEvent.click(menu.getByRole("button", { name: reportLabels[locale].exportPdf }));
+    await expect(await context.canvas.findByText(reportLabels[locale].preparing)).toBeVisible();
+    await expect(within(document.body).queryByRole("dialog")).toBeNull();
+  },
+};
+
+/** Opens Cable tray not bonded's detail by tapping its row (its number, not its Subject link). */
+async function openDetail(context: StoryContext) {
+  const region = context.canvas.getByRole("region", { name: labels[storyLocale(context)].table });
+  await userEvent.click(within(region).getByText("TWR-DCL-EL-SNG-011"));
+  return within(document.body).findByRole("dialog", { name: "Cable tray not bonded" });
+}
+
+/**
+ * At 820 a Snag's detail opens over the List as a 480 panel with a scrim (the Anatomy's 15, row 72): from the
+ * right in English, the left in Arabic, the List full width behind it. It names the item, offers the
+ * Transitions its item offers and a link to its page, and closes on Escape and on the scrim.
+ */
+export const DetailOnATablet: Story = {
+  parameters: onATablet,
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const text = labels[locale];
+    const table = context.canvas.getByRole("region", { name: text.table });
+    const listWidth = table.getBoundingClientRect().width;
+    const dialog = await openDetail(context);
+    const box = dialog.getBoundingClientRect();
+    await expect(Math.round(box.width)).toBe(480);
+    await expect(Math.round(locale === "ar" ? box.left : innerWidth - box.right)).toBe(0);
+    // The List stays full width behind it.
+    await expect(table.getBoundingClientRect().width).toBe(listWidth);
+    const panel = within(dialog);
+    await expect(panel.getByText("TWR-DCL-EL-SNG-011")).toBeVisible();
+    await expect(panel.getByRole("link", { name: text.openPage })).toHaveAttribute("href", `#${items[0]!.id}`);
+    await expect(await panel.findByRole("button", { name: offered[items[0]!.id]![0]!.label[locale] })).toBeVisible();
+    await expect(touchTargetOffenders(dialog)).toEqual([]);
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+
+    await openDetail(context);
+    // The scrim, over the List's side of the screen.
+    const x = locale === "ar" ? innerWidth - 40 : 40;
+    const scrim = document.elementFromPoint(x, 400)!;
+    await expect(scrim.closest("[role=dialog]")).toBeNull();
+    await userEvent.pointer({ keys: "[MouseLeft]", target: scrim, coords: { clientX: x, clientY: 400 } });
+    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+  },
+};
+
+/** A Transition in the detail is taken as on the phone's card: the page opens its pop-up. */
+export const DetailTakesATransition: Story = {
+  parameters: onATablet,
+  args: { swipe: swipeStub() },
+  render: (args, context) => {
+    const locale = storyLocale(context);
+    return (
+      <StoryProjectPage context={context} current="snag_list">
+        <SnagList {...args} locale={locale} labels={labels[locale]} bulk={bulkFor(locale)} />
+      </StoryProjectPage>
+    );
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const panel = within(await openDetail(context));
+    const resolve = offered[items[0]!.id]![0]!;
+    await userEvent.click(await panel.findByRole("button", { name: resolve.label[locale] }));
+    await expect(context.args.swipe!.take).toHaveBeenCalledWith(items[0]!.id, resolve.key);
+  },
+};
+
+/** A Snag's detail left open at 820, for the screenshot. */
+export const DetailOpenOnATablet: Story = {
+  parameters: { ...onATablet, overlay: true },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const panel = within(await openDetail(context));
+    await panel.findByRole("button", { name: offered[items[0]!.id]![0]!.label[storyLocale(context)] });
+  },
+};
+
+/** Past the tablet width the toolbar keeps its two export buttons, and a row still opens the item's page (1366 and 1920 stay as they were). */
+export const OnADesktop: Story = {
+  parameters: wide,
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const toolbar = within(toolbarOf(context));
+    await expect(toolbar.getByRole("button", { name: bulkLabels[locale].exportAll })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: reportLabels[locale].exportPdf })).toBeVisible();
+    await expect(toolbar.queryByRole("button", { name: labels[locale].export })).toBeNull();
+    const region = context.canvas.getByRole("region", { name: labels[locale].table });
+    await userEvent.click(within(region).getByText("TWR-DCL-EL-SNG-011"));
     await expect(within(document.body).queryByRole("dialog")).toBeNull();
   },
 };
