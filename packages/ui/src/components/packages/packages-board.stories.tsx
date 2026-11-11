@@ -407,6 +407,165 @@ export const ListOfPackages: Story = {
   },
 };
 
+/** The Packages view as its page draws it (RP-1272's shell): "+ New Package", the search and filters, Cards / Table and the View switch. */
+function OnItsPage({ args, context }: { args: Parameters<typeof PackagesBoard>[0]; context: Parameters<NonNullable<Story["render"]>>[1] }) {
+  const locale = storyLocale(context);
+  return (
+    <StoryProjectPage context={context} current="submittals">
+      <FilteredBoard
+        {...args}
+        locale={locale}
+        labels={labelsOf(context)}
+        onCreate={fn(async () => ({ ok: true as const }))}
+        viewSwitch={<WorkItemViewSwitch view="packages" views={["kanban", "list", "packages"]} labels={viewSwitchLabels[locale]} hrefFor={(v) => `?view=${v}`} />}
+      />
+    </StoryProjectPage>
+  );
+}
+
+const toolbarOf = (context: { canvas: ReturnType<typeof within>; globals: Record<string, unknown> }) => context.canvas.getByRole("region", { name: labelsOf(context).toolbar });
+const actionBarOf = (context: { canvasElement: HTMLElement }) => context.canvasElement.querySelector<HTMLElement>("[data-action-bar]");
+const topOf = (element: Element) => Math.round(element.getBoundingClientRect().top);
+const middleOf = (element: Element) => Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2);
+const listShown = { trade: [], company: [], show: "list" as const };
+
+/** The page never scrolls sideways: the board and the table scroll inside their own areas. */
+async function expectNoSidewaysPage() {
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+}
+
+/**
+ * The toolbar on a phone (RP-1277, gap-table row 66, as the List's: RP-1273): Search and Filter
+ * share the first row; Need My Action and Cards / Table the second; the View switch the third. Each
+ * control 44 high. "+ New Package" is not in the toolbar but in the bottom action bar (RP-1272).
+ */
+async function expectPhoneToolbar(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const l = labelsOf(context);
+  const toolbar = within(toolbarOf(context));
+  const search = toolbar.getByRole("search").querySelector("label")!;
+  const filter = toolbar.getByRole("button", { name: new RegExp(`^${escaped(l.filter.filters)}`) });
+  const mine = toolbar.getByRole("switch", { name: l.filter.mine }).closest("label")!;
+  const show = toolbar.getByRole("radiogroup", { name: l.show.label });
+  const views = toolbar.getByRole("navigation", { name: viewSwitchLabels[storyLocale(context)].view });
+  await expect(topOf(filter)).toBe(topOf(search));
+  await expect(Math.abs(middleOf(show) - middleOf(mine))).toBeLessThanOrEqual(1);
+  await expect(topOf(mine)).toBeGreaterThan(topOf(filter));
+  // The View switch on a row of its own, under Cards / Table: the toolbar's last control, wholly below the row above.
+  await expect(views.getBoundingClientRect().top).toBeGreaterThanOrEqual(show.getBoundingClientRect().bottom);
+  for (const control of [search, filter, mine]) await expect(control.getBoundingClientRect().height).toBe(44);
+  for (const control of [show, views]) await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await expectTouchTarget(toolbar.getByRole("switch", { name: l.filter.mine }));
+  // In the window's width: nothing pushed past its edge.
+  for (const control of [search, filter, mine, show, views]) {
+    const box = control.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(innerWidth);
+  }
+  await expect(toolbar.queryByRole("button", { name: l.create.trigger })).toBeNull();
+  const bar = await waitFor(() => {
+    const element = actionBarOf(context);
+    expect(element).not.toBeNull();
+    return element!;
+  });
+  const create = await within(bar).findByRole("button", { name: l.create.trigger });
+  // Full width in the bar, less its padding.
+  await expect(create.getBoundingClientRect().width).toBeGreaterThan(innerWidth - 40);
+}
+
+/** On a tablet (and wider) "+ New Package" stays at the toolbar's start and there is no bottom action bar. */
+async function expectTabletToolbar(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const l = labelsOf(context);
+  await expect(within(toolbarOf(context)).getByRole("button", { name: l.create.trigger })).toBeVisible();
+  await expect(actionBarOf(context)).toBeNull();
+}
+
+/**
+ * The Packages view on a phone (RP-1277; the Review's 402 frame, screenshot 32): the toolbar in three
+ * short rows, "+ New Package" in the bottom action bar, and the board one column with the next peeking
+ * (row 67); the page never scrolls sideways.
+ */
+export const OnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expectPhoneToolbar(context);
+    // Row 67, as RP-1274 builds it: one column, the next one peeking in from the inline end.
+    await expectOneColumnAndAPeek(context.canvas.getByRole("region", { name: labelsOf(context).board }), packageColumns(context));
+    await expectNoSidewaysPage();
+  },
+};
+
+/** The table of Packages on a phone: the same toolbar; the table scrolls sideways inside its own area. */
+export const TableOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { filter: listShown },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expectPhoneToolbar(context);
+    const table = context.canvas.getByRole("region", { name: labelsOf(context).list.table });
+    await expect(table).toBeVisible();
+    // Wider than the phone: it scrolls inside its own area, inside the window.
+    await expect(getComputedStyle(table).overflowX).toBe("auto");
+    await expect(table.scrollWidth).toBeGreaterThan(table.clientWidth);
+    await expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+    await expectNoSidewaysPage();
+  },
+};
+
+/** The Packages view at 820 (the Tablet Flow's screenshot 16): the toolbar as on a desktop, "+ New Package" in it. */
+export const OnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expectTabletToolbar(context);
+    await expectNoSidewaysPage();
+  },
+};
+
+/** The table of Packages at 820. */
+export const TableOnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  args: { filter: listShown },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expectTabletToolbar(context);
+    const table = context.canvas.getByRole("region", { name: labelsOf(context).list.table });
+    await expect(table).toBeVisible();
+    // It scrolls inside its own area where it is wider than the window, and stays in the window.
+    await expect(getComputedStyle(table).overflowX).toBe("auto");
+    const box = table.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(innerWidth);
+    await expectNoSidewaysPage();
+  },
+};
+
+/** At 1366 the toolbar is one row, as before RP-1277. */
+export const OnALaptop: Story = {
+  parameters: { ...wide, layout: "fullscreen" },
+  render: (args, context) => <OnItsPage args={args} context={context} />,
+  play: async (context) => {
+    await expectTabletToolbar(context);
+    const toolbar = within(toolbarOf(context));
+    const create = toolbar.getByRole("button", { name: labelsOf(context).create.trigger });
+    const views = toolbar.getByRole("navigation", { name: viewSwitchLabels[storyLocale(context)].view });
+    await expect(Math.abs(topOf(views) - topOf(create))).toBeLessThanOrEqual(6);
+  },
+};
+
+/** On a phone the Filter panel opens from the bottom of the screen (RP-1273's FilterMenu). Left open for the screenshot. */
+export const FilterOnAPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  render: (args, context) => <FilteredBoard {...args} locale={storyLocale(context)} labels={labelsOf(context)} />,
+  play: async (context) => {
+    const f = filterOf(context);
+    await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(`^${escaped(f.filters)}`) }));
+    const sheet = await screen.findByRole("dialog", { name: f.filters });
+    await expect(sheet.getBoundingClientRect().bottom).toBe(innerHeight);
+    await expect(within(sheet).getByRole("group", { name: f.trade })).toBeInTheDocument();
+  },
+};
+
 /** Nothing found: one message, and the × clears the search and every filter. */
 export const NoMatches: Story = {
   args: { filter: { q: "zzz", trade: [], company: [] } },

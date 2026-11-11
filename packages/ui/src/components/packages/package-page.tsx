@@ -280,7 +280,7 @@ export function PackagePage({
                   data-tab={t}
                   onClick={() => setTab(t)}
                   className={cn(
-                    "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-2.5 text-sm font-semibold whitespace-nowrap",
+                    "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-2.5 text-sm font-semibold whitespace-nowrap pointer-coarse:min-h-11",
                     on ? "border-primary text-text" : "border-transparent text-text-secondary hover:text-text",
                     focusRing,
                   )}

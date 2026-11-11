@@ -106,7 +106,7 @@ export function PackagesList({
                   </td>
                   <td className={cn(td, sticky2)}>
                     <span className="flex max-w-[210px] items-center gap-2">
-                      <Link href={packageHref(p.id)} dir="auto" className={cn("min-w-0 truncate font-bold text-text hover:underline", focusRing)}>
+                      <Link href={packageHref(p.id)} dir="auto" className={cn("min-w-0 truncate font-bold text-text hover:underline pointer-coarse:min-w-11 pointer-coarse:leading-11", focusRing)}>
                         {p.name[locale]}
                       </Link>
                       <PackageStatusPill status={p.status} label={l.status[p.status]} className="ms-auto" />
