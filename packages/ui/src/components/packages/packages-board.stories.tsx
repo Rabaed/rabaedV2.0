@@ -6,7 +6,6 @@ import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectColumnScrollsOnItsOwn, expectOneColumnAndAPeek, expectSnapsByColumn } from "../../storybook/board.ts";
 import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
-import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { packagesBoardLabels } from "../../storybook/packages.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
