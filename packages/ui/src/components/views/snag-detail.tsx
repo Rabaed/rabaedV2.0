@@ -1,7 +1,7 @@
 "use client";
 
 import { isOpenStageCategory, type Locale, type WorkItemRow } from "@rabaed/domain";
-import { useEffect, useState, type ElementType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, buttonVariants } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -41,31 +41,63 @@ export type SnagDetailProps = {
 };
 
 /** The detail panel: from the right in English, the left in Arabic; Escape and the scrim close it. */
-export function SnagDetail({ row, onClose, ...rest }: SnagDetailProps) {
+export function SnagDetail({ row, onClose, swipe, ...rest }: SnagDetailProps) {
+  // Set when a Transition is taken: the page's pop-up opens as this panel closes, so the panel gives focus back to nobody.
+  const handingOver = useRef(false);
+  const take =
+    swipe &&
+    ((id: string, key: string) => {
+      handingOver.current = true;
+      onClose();
+      swipe.take(id, key);
+    });
   return (
     <Sheet open={row !== null} onOpenChange={(open) => !open && onClose()}>
       {row && (
-        <SheetContent title={row.title} closeLabel={rest.labels.close} className="max-w-[480px] gap-5 p-5" closeClassName="pointer-coarse:size-11">
-          <SnagDetailBody key={row.id} row={row} onClose={onClose} {...rest} />
+        <SheetContent
+          title={row.title}
+          closeLabel={rest.labels.close}
+          className="max-w-[480px] gap-5 p-5"
+          closeClassName="pointer-coarse:size-11"
+          onCloseAutoFocus={(event) => {
+            if (!handingOver.current) return;
+            handingOver.current = false;
+            event.preventDefault();
+          }}
+        >
+          <SnagDetailBody key={row.id} row={row} load={swipe?.load} take={take} {...rest} />
         </SheetContent>
       )}
     </Sheet>
   );
 }
 
-function SnagDetailBody({ row, onClose, locale, labels, places, itemHref, photoUrls, linkAs: Link, swipe }: SnagDetailProps & { row: WorkItemRow }) {
-  const [loaded, setLoaded] = useState<Loaded | null>(swipe ? "loading" : null);
+function SnagDetailBody({
+  row,
+  load,
+  take,
+  locale,
+  labels,
+  places,
+  itemHref,
+  photoUrls,
+  linkAs: Link,
+}: Omit<SnagDetailProps, "row" | "onClose" | "swipe"> & { row: WorkItemRow; load?: SnagSwipe["load"]; take?: SnagSwipe["take"] }) {
+  const [loaded, setLoaded] = useState<Loaded | null>(load ? "loading" : null);
+  // Read once per item (the body is keyed by it): the page's `swipe` is a new object on every render.
+  const loadRef = useRef(load);
   useEffect(() => {
-    if (!swipe) return;
+    const read = loadRef.current;
+    if (!read) return;
     let stale = false;
-    swipe.load(row.id).then(
+    read(row.id).then(
       (actions) => !stale && setLoaded(actions ?? "failed"),
       () => !stale && setLoaded("failed"),
     );
     return () => {
       stale = true;
     };
-  }, [swipe, row.id]);
+  }, [row.id]);
   const owner = ownerOf(row, locale, labels);
   const place = placeText(row, places, locale);
   const url = row.photo ? photoUrls[row.photo.documentId] : undefined;
@@ -111,11 +143,8 @@ function SnagDetailBody({ row, onClose, locale, labels, places, itemHref, photoU
                 key={action.key}
                 variant={toneVariant[action.tone]}
                 className="min-w-32 flex-1 pointer-coarse:min-h-11"
-                onClick={() => {
-                  // The page opens the Transition's pop-up: this panel closes first, so the two never trap focus together.
-                  onClose();
-                  swipe?.take(row.id, action.key);
-                }}
+                // The page opens the Transition's pop-up; this panel closes as it does.
+                onClick={() => take?.(row.id, action.key)}
               >
                 {action.label[locale]}
               </Button>

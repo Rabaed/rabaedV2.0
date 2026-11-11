@@ -970,6 +970,11 @@ export const OnATablet: Story = {
     region.scrollBy({ left: ar ? -region.scrollWidth : region.scrollWidth });
     await waitFor(() => expect(Math.abs(region.scrollLeft)).toBeGreaterThan(100));
     await expect(Math.abs(number.getBoundingClientRect().left - before)).toBeLessThanOrEqual(1);
+    // A Stage's fold button stays in the region's view too.
+    const fold = within(region).getByRole("button", { name: text.hideGroup(stages.open.name[locale]) }).getBoundingClientRect();
+    const box = region.getBoundingClientRect();
+    await expect(fold.left).toBeGreaterThanOrEqual(box.left - 1);
+    await expect(fold.right).toBeLessThanOrEqual(box.right + 1);
     region.scrollTo({ left: 0 });
   },
 };

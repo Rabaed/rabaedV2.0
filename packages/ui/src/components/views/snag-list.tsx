@@ -801,7 +801,7 @@ const head =
 // Up to the tablet width, where the table scrolls sideways in its area, the checkbox and the Document Number stay
 // pinned at its start, as the Submittals List's do (RP-1278 with RP-1273's rule, the Review's decision): the number
 // 44px in, 64 on a touch screen, as wide as the checkbox column, with a shadow on its edge the rows slide under.
-const pinnedCheckbox = "sticky start-0 z-[2] pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center";
+const pinnedCheckbox = "tablet:sticky tablet:start-0 tablet:z-[2] tablet:pointer-coarse:w-16 tablet:pointer-coarse:px-0 tablet:pointer-coarse:text-center";
 const pinnedNumber = "tablet:sticky tablet:start-11 tablet:pointer-coarse:start-16 tablet:z-[2]";
 const pinnedNumberAlone = "tablet:sticky tablet:start-0 tablet:z-[2]";
 const pinnedEdge = "tablet:shadow-[6px_0_6px_-6px_var(--color-overlay)] tablet:rtl:shadow-[-6px_0_6px_-6px_var(--color-overlay)]";
@@ -915,7 +915,8 @@ function SnagTable({
                           return next;
                         })
                       }
-                      className={cn("inline-flex items-center gap-2 rounded-xs", focusRing, touchBox)}
+                      // Held at the start while the table scrolls sideways at tablet width, beside the pinned columns.
+                      className={cn("inline-flex items-center gap-2 rounded-xs tablet:sticky tablet:start-3", focusRing, touchBox)}
                     >
                       <Icon name={open ? "chevron-down" : "chevron-right"} size={16} className="text-muted" />
                       <StagePill stage={stageColour(stage)} label={name} locale={locale} />
