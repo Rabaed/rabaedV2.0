@@ -31,6 +31,7 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overla
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot, StagePill } from "../status/stage-pill.tsx";
+import { tabletPageBleed } from "../shell/page-frame.tsx";
 import { boardColumn, boardScroller, columnCards } from "./board-scroll.ts";
 import { HeaderBadge, OwnerMark, tradeChipClass } from "./kanban-card.tsx";
 import { menuItem } from "./list-menus.tsx";
@@ -931,7 +932,8 @@ function SnagBoard({
         "flex min-h-64 min-w-0 flex-1 gap-3 overflow-auto pb-2",
         boardScroller,
         // At 1024 and below it reaches the screen's edges, as the other boards do, so the next column peeks about 40 px on a phone.
-        "tablet:-mx-4 tablet:px-4 tablet:scroll-px-4",
+        tabletPageBleed,
+        "tablet:scroll-px-4",
         focusRing,
         "focus-visible:-outline-offset-2",
       )}
