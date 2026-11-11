@@ -24,7 +24,7 @@ import {
   type WorkflowStep,
   type WorkflowTransition,
 } from "@rabaed/domain";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
 import { PHONE } from "../../lib/widths.ts";
@@ -273,16 +273,30 @@ function Builder(props: WorkflowBuilderProps) {
     onChange(next);
   }, [history.future, onChange]);
 
+  // Below the laptop width the inspector is an overlay over the canvas (RP-1287): open while something is selected,
+  // shut by its close button or by clearing the selection, and opened again from the bar. Wider, it is always shown.
+  const [inspector, setInspector] = useState(seeded.key !== null);
+  const inspectorId = useId();
+  const inspectorToggle = useRef<HTMLButtonElement>(null);
+  const inspectorBox = useRef<HTMLElement>(null);
+  /** Shuts the overlay; focus inside it goes back to the bar's button, not to the page's top. */
+  const closeInspector = useCallback(() => {
+    if (inspectorBox.current?.contains(document.activeElement)) inspectorToggle.current?.focus();
+    setInspector(false);
+  }, []);
+
   // Selecting never marks the draft changed (a V2 prototype bug, not copied).
   const select = useCallback((next: CanvasSelection | null) => {
     coalescing.current = null;
     setSelection(next);
     setGroup([]);
+    setInspector(next !== null);
   }, []);
   const selectMany = useCallback((items: readonly CanvasSelection[]) => {
     coalescing.current = null;
     setSelection(null);
     setGroup(items.map((i) => i.key));
+    setInspector(items.length > 0);
   }, []);
 
   const openStages = useMemo(() => stages.filter((s) => open.has(s.category)), [stages]);
@@ -424,12 +438,13 @@ function Builder(props: WorkflowBuilderProps) {
         e.preventDefault();
         remove();
       } else if (e.key === "Escape" && !publish && !popup) {
+        closeInspector();
         select(null);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [undo, redo, remove, select, selection, group, testRun, publish, popup]);
+  }, [undo, redo, remove, select, closeInspector, selection, group, testRun, publish, popup]);
 
   const autoLayout = () => {
     commit({ ...definition, layout: arrangedLayout(definition, stages) });
@@ -532,7 +547,8 @@ function Builder(props: WorkflowBuilderProps) {
 
   return (
     <div className="flex h-full min-h-[520px] flex-col gap-2.5 p-3 sm:px-4">
-      <div className="flex items-center gap-2">
+      {/* Below the laptop width the tools take a line of their own, so the name keeps its line (RP-1287). */}
+      <div className="flex items-center gap-2 max-lg:flex-wrap">
         {/* Back in this tab's history inside Rabaed, else to the Workflows (RP-1241). */}
         <BackLink href={backHref} label={labels.back} iconOnly />
         {/* The full name in a tooltip on hover and on keyboard focus, when the bar cuts it short. */}
@@ -562,72 +578,86 @@ function Builder(props: WorkflowBuilderProps) {
           </span>
         )}
         <span className="flex-1" />
-        <div role="radiogroup" aria-label={labels.arrowStyle} className="inline-flex shrink-0 gap-0.5 rounded-[7px] bg-field-fill p-0.5 shadow-[inset_0_0_0_1px_var(--control-border)]">
-          {(
-            [
-              ["curved", "route", labels.curved],
-              ["orthogonal", "link", labels.orthogonal],
-            ] as const
-          ).map(([style, icon, text]) => (
-            <button
-              key={style}
-              type="button"
-              role="radio"
-              aria-checked={view.arrowStyle === style}
-              title={text}
-              onClick={() => setView({ arrowStyle: style })}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[13px] font-semibold text-muted [&_svg]:size-[15px]",
-                view.arrowStyle === style && "bg-surface text-text shadow-[0_1px_2px_color-mix(in_srgb,var(--text)_8%,transparent),inset_0_0_0_1px_var(--control-border)]",
-                focusRing,
-              )}
-            >
-              <Icon name={icon} />
-              <span className={"lg:max-[1439px]:sr-only"}>{text}</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2 max-lg:flex-wrap max-lg:basis-full max-lg:justify-end">
+          <div role="radiogroup" aria-label={labels.arrowStyle} className="inline-flex shrink-0 gap-0.5 rounded-[7px] bg-field-fill p-0.5 shadow-[inset_0_0_0_1px_var(--control-border)]">
+            {(
+              [
+                ["curved", "route", labels.curved],
+                ["orthogonal", "link", labels.orthogonal],
+              ] as const
+            ).map(([style, icon, text]) => (
+              <button
+                key={style}
+                type="button"
+                role="radio"
+                aria-checked={view.arrowStyle === style}
+                title={text}
+                onClick={() => setView({ arrowStyle: style })}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[13px] font-semibold text-muted [&_svg]:size-[15px]",
+                  view.arrowStyle === style && "bg-surface text-text shadow-[0_1px_2px_color-mix(in_srgb,var(--text)_8%,transparent),inset_0_0_0_1px_var(--control-border)]",
+                  focusRing,
+                )}
+              >
+                <Icon name={icon} />
+                <span className="max-[1439px]:sr-only">{text}</span>
+              </button>
+            ))}
+          </div>
+          <IconButton label={labels.undo} title="⌘Z" variant="secondary" onClick={undo} disabled={history.past.length === 0}>
+            <Icon name="arrow-back-up" />
+          </IconButton>
+          <IconButton label={labels.redo} title="⇧⌘Z" variant="secondary" onClick={redo} disabled={history.future.length === 0}>
+            <Icon name="arrow-forward-up" />
+          </IconButton>
+          <Button variant="secondary" onClick={autoLayout}>
+            <Icon name="layout-grid" />
+            {labels.autoLayout}
+          </Button>
+          <Button
+            variant="secondary"
+            aria-pressed={!!testRun}
+            onClick={toggleTestRun}
+            // While a run is on: the reference's tomato tint.
+            className={cn(testRun && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}
+          >
+            <Icon name="player-play" />
+            {labels.testRun}
+          </Button>
+          <Button variant="secondary" onClick={() => void validate()}>
+            <Icon name={errors.length ? "alert-triangle" : "circle-check"} />
+            {labels.validate}
+          </Button>
+          <Button onClick={() => void openPublish()} disabled={publishedNow !== null}>
+            <Icon name="upload" />
+            {labels.publish}
+          </Button>
+          <IconButton
+            ref={inspectorToggle}
+            label={labels.editor}
+            variant="secondary"
+            aria-expanded={inspector}
+            aria-controls={inspectorId}
+            onClick={() => setInspector((shown) => !shown)}
+            className={cn("lg:hidden", inspector && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}
+          >
+            <Icon name="pencil" />
+          </IconButton>
         </div>
-        <IconButton label={labels.undo} title="⌘Z" variant="secondary" onClick={undo} disabled={history.past.length === 0}>
-          <Icon name="arrow-back-up" />
-        </IconButton>
-        <IconButton label={labels.redo} title="⇧⌘Z" variant="secondary" onClick={redo} disabled={history.future.length === 0}>
-          <Icon name="arrow-forward-up" />
-        </IconButton>
-        <Button variant="secondary" onClick={autoLayout}>
-          <Icon name="layout-grid" />
-          {labels.autoLayout}
-        </Button>
-        <Button
-          variant="secondary"
-          aria-pressed={!!testRun}
-          onClick={toggleTestRun}
-          // While a run is on: the reference's tomato tint.
-          className={cn(testRun && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}
-        >
-          <Icon name="player-play" />
-          {labels.testRun}
-        </Button>
-        <Button variant="secondary" onClick={() => void validate()}>
-          <Icon name={errors.length ? "alert-triangle" : "circle-check"} />
-          {labels.validate}
-        </Button>
-        <Button onClick={() => void openPublish()} disabled={publishedNow !== null}>
-          <Icon name="upload" />
-          {labels.publish}
-        </Button>
       </div>
 
       <div
         className={cn(
-          "grid min-h-0 flex-1 gap-2.5 lg:grid-rows-[minmax(0,1fr)_auto]",
+          // Below the laptop width: the palette as icons beside the canvas, and the inspector over the canvas (RP-1287).
+          "relative grid min-h-0 flex-1 grid-cols-[64px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-2.5",
           "lg:max-[1439px]:grid-cols-[64px_minmax(0,1fr)_290px] min-[1440px]:grid-cols-[200px_minmax(0,1fr)_330px]",
         )}
       >
         <aside
           aria-label={labels.palette}
-          className={cn("flex min-w-0 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-[14px] border border-border bg-surface p-3 lg:row-span-2", "lg:max-[1439px]:p-2")}
+          className={cn("row-span-2 flex min-w-0 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-[14px] border border-border bg-surface p-3", "max-[1439px]:p-2")}
         >
-          <div className={"lg:max-[1439px]:hidden"}>
+          <div className="max-[1439px]:hidden">
             <Heading>{labels.add}</Heading>
           </div>
           <PaletteItem item="step" hint={labels.dragHint} icon={<Icon name="square-plus" size={16} className="shrink-0" />} onAdd={() => addItem("step", selectedStage())}>
@@ -648,7 +678,7 @@ function Builder(props: WorkflowBuilderProps) {
               </PaletteItem>
             );
           })}
-          <div className={"lg:max-[1439px]:hidden"}>
+          <div className="max-[1439px]:hidden">
             <Heading>{labels.templates}</Heading>
           </div>
           <PaletteItem item="template:internal" hint={labels.dragHint} icon={<Icon name="template" size={16} className="shrink-0" />} onAdd={() => addItem("template:internal", null)}>
@@ -657,7 +687,7 @@ function Builder(props: WorkflowBuilderProps) {
           <PaletteItem item="template:consultant" hint={labels.dragHint} icon={<Icon name="template" size={16} className="shrink-0" />} onAdd={() => addItem("template:consultant", null)}>
             {labels.templateConsultant}
           </PaletteItem>
-          <div className={cn("flex flex-col gap-2", "lg:max-[1439px]:hidden")}>
+          <div className="flex flex-col gap-2 max-[1439px]:hidden">
             <Heading>{labels.canvasHeading}</Heading>
             <Field label={labels.snapToGrid} layout="inline" className="text-[12.5px]">
               <Switch checked={view.snap} onCheckedChange={(on) => setView({ snap: on })} />
@@ -668,7 +698,7 @@ function Builder(props: WorkflowBuilderProps) {
           </div>
         </aside>
 
-        <section className="relative min-h-[320px] lg:col-start-2 lg:row-start-1">
+        <section className="relative col-start-2 row-start-1 min-h-[320px]">
           <WorkflowCanvas
             definition={definition}
             stages={stages}
@@ -721,9 +751,25 @@ function Builder(props: WorkflowBuilderProps) {
         </section>
 
         <aside
+          id={inspectorId}
+          ref={inspectorBox}
           aria-label={labels.editor}
-          className="flex min-w-0 flex-col gap-2.5 overflow-auto rounded-[14px] border border-border bg-surface px-[14px] py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1"
+          // With nothing selected it holds no control (how to work the canvas, what the draft holds): it takes the
+          // keyboard's focus itself, so where it scrolls its text can be scrolled by keyboard (RP-1289).
+          tabIndex={selection === null && group.length === 0 ? 0 : undefined}
+          className={cn(
+            "flex min-w-0 flex-col gap-2.5 overflow-auto rounded-[14px] border border-border bg-surface px-[14px] py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1",
+            focusRing,
+            // The Anatomy's "side inspector becomes a 400 overlay" (screenshot 18), on the end side over the canvas.
+            "max-lg:absolute max-lg:inset-y-0 max-lg:end-0 max-lg:z-20 max-lg:w-[min(400px,100%)] max-lg:shadow-lg",
+            !inspector && "max-lg:hidden",
+          )}
         >
+          <div className="-mb-1 flex justify-end lg:hidden">
+            <IconButton label={labels.close} size="sm" onClick={closeInspector}>
+              <Icon name="x" />
+            </IconButton>
+          </div>
           <SideEditor
             definition={definition}
             selection={selection}
@@ -748,7 +794,7 @@ function Builder(props: WorkflowBuilderProps) {
           />
         </aside>
 
-        <section aria-label={labels.problemsName} className="max-h-[150px] overflow-auto rounded-[14px] border border-border bg-surface px-3 py-2 lg:col-start-2 lg:row-start-2">
+        <section aria-label={labels.problemsName} className="col-start-2 row-start-2 max-h-[150px] overflow-auto rounded-[14px] border border-border bg-surface px-3 py-2">
           <div className="mb-1 flex items-center gap-2 text-[12.5px] font-bold">
             <Icon name={errors.length ? "alert-triangle" : "circle-check"} size={16} style={{ color: errors.length ? "var(--danger-fg)" : "var(--success)" }} />
             {errors.length ? labels.errors(errors.length, v(errors.length)) : labels.noErrors}
@@ -853,14 +899,14 @@ function PaletteItem({ item, icon, hint, onAdd, children }: { item: string; icon
       onClick={onAdd}
       className={cn(
         "flex w-full min-w-0 cursor-grab items-center gap-2 rounded-[9px] bg-surface-subtle px-2.5 py-[9px] text-start text-[12.5px] font-semibold text-text shadow-[inset_0_0_0_1px_var(--border-subtle)] hover:shadow-[inset_0_0_0_1px_var(--primary)] active:cursor-grabbing",
-        "lg:max-[1439px]:justify-center lg:max-[1439px]:px-0 lg:max-[1439px]:py-2.5 lg:max-[1439px]:[&_svg]:size-[18px]",
+        "max-[1439px]:justify-center max-[1439px]:px-0 max-[1439px]:py-2.5 max-[1439px]:[&_svg]:size-[18px]",
         focusRing,
       )}
     >
       {icon}
       {/* Whole names, wrapped when long (the reference clipped them at 1920: not copied). */}
-      <span className={cn("min-w-0 leading-snug", "lg:max-[1439px]:sr-only")}>{children}</span>
-      <Icon name="grip-vertical" size={14} className={cn("ms-auto text-faint", "lg:max-[1439px]:hidden")} />
+      <span className="min-w-0 leading-snug max-[1439px]:sr-only">{children}</span>
+      <Icon name="grip-vertical" size={14} className="ms-auto text-faint max-[1439px]:hidden" />
     </button>
   );
 }
