@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import type { WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
 import { actionFormLabels } from "../../storybook/form-engine.ts";
-import { phone } from "../../storybook/form.ts";
+import { phone, tablet } from "../../storybook/form.ts";
 import { LargerScreenBanner } from "../settings/settings-layout.tsx";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
@@ -94,7 +94,7 @@ type Story = StoryObj<typeof meta>;
  * page drives it: each edit is "saved" and checked again with the publish checks, and Validate
  * and Publish see the problems of the draft as it stands.
  */
-function Frame(props: WorkflowBuilderProps) {
+function Frame({ frameClassName, ...props }: WorkflowBuilderProps & { frameClassName?: string }) {
   // Each story starts from the default view (curved arrows, snap and minimap on), whatever an earlier story chose.
   useState(() => {
     try {
@@ -131,7 +131,7 @@ function Frame(props: WorkflowBuilderProps) {
     [onPublish],
   );
   return (
-    <div className="h-dvh max-h-[1080px] min-h-[700px] bg-canvas">
+    <div className={frameClassName ?? "h-dvh max-h-[1080px] min-h-[700px] bg-canvas"}>
       <WorkflowBuilder {...props} problems={problems} saveState={saveState} onChange={change} onValidate={validate} onPublish={publish} />
     </div>
   );
@@ -258,6 +258,88 @@ export const WiderEdits: Story = {
     await ready(canvas, locale);
     await expect(canvas.queryByRole("note")).toBeNull();
     await expect(canvas.getByRole("button", { name: workflowBuilderLabels(locale).publish })).toBeVisible();
+  },
+};
+
+/** The page's own width fits the window: nothing scrolls sideways. */
+const noSidewaysScroll = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+
+/**
+ * RP-1287 (Responsive Anatomy screenshot 18, "full edit; side inspector becomes a 400 overlay"): on a tablet the
+ * builder edits as ever, with the palette as icons and the canvas the full width. The Workflow's name keeps its own
+ * line in the bar, nothing scrolls sideways, and the inspector stays shut until something is selected.
+ */
+export const Tablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await ready(canvas, locale);
+    const heading = canvas.getByRole("heading", { level: 1, name: workflowName[locale] });
+    await expect(heading).toBeVisible();
+    // The whole name, not cut short by the bar's tools.
+    await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+    await expect(canvas.getByRole("button", { name: labels.publish })).toBeVisible();
+    await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
+    await expect(canvas.getByRole("button", { name: labels.editor })).toHaveAttribute("aria-expanded", "false");
+    await noSidewaysScroll();
+  },
+};
+
+/** RP-1287: on a tablet, selecting a Step opens the inspector over the canvas, 400 px wide; closing it goes back to the canvas. */
+export const TabletInspector: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "draft", locale);
+    const panel = canvas.getByRole("complementary", { name: labels.editor });
+    await expect(panel).toBeVisible();
+    await expect(panel.getBoundingClientRect().width).toBe(400);
+    await expect(within(panel).getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
+    await noSidewaysScroll();
+
+    // Closed, the canvas is whole again; the bar's button opens it once more, with the selection kept.
+    await userEvent.click(within(panel).getByRole("button", { name: labels.close }));
+    await expect(canvas.queryByRole("complementary", { name: labels.editor })).toBeNull();
+    const toggle = canvas.getByRole("button", { name: labels.editor });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(within(canvas.getByRole("complementary", { name: labels.editor })).getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
+    // Left open, so the story's axe check and screenshot see the overlay.
+    await noSidewaysScroll();
+  },
+};
+
+/**
+ * RP-1289: the inspector with nothing selected holds no control, only how to work the canvas and what the draft
+ * holds. Where it scrolls (here a narrow, short frame, as the Library's builder, which edits at every width, can be),
+ * it takes the keyboard's focus itself, so its text can be scrolled by keyboard (axe `scrollable-region-focusable`,
+ * which the harness checks on this story).
+ */
+export const TabletNothingSelected: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => {
+    const locale = storyLocale(context);
+    return <Frame {...args} frameClassName="h-[520px] w-[380px] bg-canvas" name={workflowName[locale]} locale={locale} labels={workflowBuilderLabels(locale)} actionFormLabels={actionFormLabels[locale]} />;
+  },
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await ready(canvas, locale);
+    await userEvent.click(canvas.getByRole("button", { name: labels.editor }));
+    const panel = canvas.getByRole("complementary", { name: labels.editor });
+    await expect(within(panel).getByText(labels.nothingSelected)).toBeVisible();
+    // It scrolls here, so the check below is the one RP-1289 asks for.
+    await expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+    // In the Tab order (a synthetic key press scrolls nothing, so the harness's axe run is the scrolling check).
+    await expect(panel).toHaveAttribute("tabindex", "0");
+    panel.focus();
+    await expect(panel).toHaveFocus();
+    await noSidewaysScroll();
   },
 };
 
