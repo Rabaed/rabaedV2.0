@@ -489,14 +489,8 @@ export const OnAPhone: Story = {
   render: (args, context) => <OnItsPage args={args} context={context} />,
   play: async (context) => {
     await expectPhoneToolbar(context);
-    // Row 67: the first column on screen whole, the next one peeking in from the inline end.
-    const first = columnOf(context, "open").getBoundingClientRect();
-    const next = columnOf(context, "in_progress").getBoundingClientRect();
-    await expect(first.left).toBeGreaterThanOrEqual(0);
-    await expect(first.right).toBeLessThanOrEqual(innerWidth);
-    const peek = storyLocale(context) === "ar" ? next.right : innerWidth - next.left;
-    await expect(peek).toBeGreaterThan(0);
-    await expect(peek).toBeLessThan(next.width);
+    // Row 67, as RP-1274 builds it: one column, the next one peeking in from the inline end.
+    await expectOneColumnAndAPeek(context.canvas.getByRole("region", { name: labelsOf(context).board }), packageColumns(context));
     await expectNoSidewaysPage();
   },
 };
