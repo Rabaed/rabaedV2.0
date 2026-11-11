@@ -133,7 +133,7 @@ export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type Tabs
 export { BackLink, type BackLinkProps } from "./components/navigation/back-link.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";
 export { Popover, PopoverClose, PopoverContent, PopoverTrigger, type PopoverContentProps } from "./components/overlay/popover.tsx";
-export { Sheet, SheetClose, SheetContent, SheetFooter, SheetTrigger, type SheetContentProps } from "./components/overlay/sheet.tsx";
+export { BottomSheetContent, Sheet, SheetClose, SheetContent, SheetFooter, SheetTrigger, type SheetContentProps } from "./components/overlay/sheet.tsx";
 export { ToastProvider, useToast, type ToastInput, type ToastProviderProps, type ToastTone } from "./components/overlay/toast.tsx";
 export { Tooltip, type TooltipProps } from "./components/overlay/tooltip.tsx";
 export { AgeDots, type AgeDotsProps } from "./components/status/age-dots.tsx";
@@ -201,6 +201,7 @@ export {
 export { stageColour } from "./components/status/stage-colour.ts";
 export {
   ListToolbar,
+  ToolbarRowBreak,
   ToolbarSearch,
   ToolbarSwitch,
   toolbarButton,
