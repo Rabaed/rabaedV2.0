@@ -236,10 +236,71 @@ export const PhoneLongPressReorder: Story = {
     await waitFor(() => expect(previewNumber(canvas)).toHaveTextContent("MAR-TWR-TMC-EL-"));
     touch("pointerup", document, chips()[0]!);
     await waitFor(() => expect(chips()[0]).not.toHaveClass("outline-primary"));
+    // The finger let go of a carried card: that is no tap, so the moves menu stays shut.
+    chips()[0]!.querySelector<HTMLElement>("[data-segment-grip]")!.click();
+    await expect(within(document.body).queryByRole("menu")).toBeNull();
     await expect(name(chips()[0]!)).toBe(t("move", { segment: t("kinds.type") }));
     await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 1, total: 4 }))).toBeInTheDocument();
     await expect(canvas.getByTestId("unsaved-bar")).toBeVisible();
   },
+};
+
+/**
+ * A tap on a segment's ⋮ opens its moves (the owner's (b) on RP-1288, comment 15836): Move up, Move down,
+ * Move to top, Move to bottom, those that can't apply disabled. A move is announced as the keyboard's is, and
+ * focus comes back to the moved segment's handle.
+ */
+async function moveMenuPlay(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const { canvas } = context;
+  const t = text(context);
+  const page = within(document.body);
+  const grip = (kind: string) => canvas.getByRole("button", { name: t("move", { segment: t(`kinds.${kind}`) }) });
+  const items = [t("moveUp"), t("moveDown"), t("moveTop"), t("moveBottom")];
+
+  // The first segment: up and top can't apply.
+  await userEvent.click(grip("project"));
+  const first = await page.findByRole("menu", { name: t("move", { segment: t("kinds.project") }) });
+  await expect(within(first).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(items);
+  await expect(within(first).getByRole("menuitem", { name: t("moveUp") })).toBeDisabled();
+  await expect(within(first).getByRole("menuitem", { name: t("moveTop") })).toBeDisabled();
+  await expect(within(first).getByRole("menuitem", { name: t("moveDown") })).toBeEnabled();
+  await expect(touchTargetOffenders(first)).toEqual([]);
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(page.queryByRole("menu")).toBeNull());
+
+  // The last segment before the sequence: down and bottom can't apply.
+  await userEvent.click(grip("type"));
+  const last = await page.findByRole("menu");
+  await expect(within(last).getByRole("menuitem", { name: t("moveDown") })).toBeDisabled();
+  await expect(within(last).getByRole("menuitem", { name: t("moveBottom") })).toBeDisabled();
+  await userEvent.click(within(last).getByRole("menuitem", { name: t("moveTop") }));
+  await waitFor(() => expect(page.queryByRole("menu")).toBeNull());
+  await expect(previewNumber(canvas)).toHaveTextContent("MAR-TWR-TMC-EL-");
+  await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 1, total: 4 }))).toBeInTheDocument();
+  await waitFor(() => expect(grip("type")).toHaveFocus());
+
+  // One step down from the top.
+  await userEvent.click(grip("type"));
+  await userEvent.click(within(await page.findByRole("menu")).getByRole("menuitem", { name: t("moveDown") }));
+  await expect(previewNumber(canvas)).toHaveTextContent("TWR-MAR-TMC-EL-");
+  await expect(canvas.getByText(t("moved", { segment: t("kinds.type"), n: 2, total: 4 }))).toBeInTheDocument();
+  await expectTouchSized();
+}
+
+export const PhoneMoveMenu: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  render: PatternPhone.render,
+  play: moveMenuPlay,
+};
+
+export const TabletMoveMenu: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  render: (args, context) => (
+    <div className="p-6">
+      <DocumentNumbering {...args} t={numberingText(storyLocale(context))} />
+    </div>
+  ),
+  play: moveMenuPlay,
 };
 
 /** At 820 the segments stay a wrapping row of chips (Responsive Review 15), every control a 44-px target on touch. */

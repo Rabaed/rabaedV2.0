@@ -68,7 +68,18 @@ export function useSegmentLongPress(handlers: Handlers) {
       };
       const onUp = (e: PointerEvent) => {
         if (e.pointerId !== pointerId) return;
-        if (lifted) latest.current.onDrop(false);
+        if (lifted) {
+          latest.current.onDrop(false);
+          // The click a finger may still send as it lets go is no tap: it opens no handle's menu.
+          const swallow = (click: MouseEvent) => {
+            if (!(click.target instanceof Element && click.target.closest("[data-segment-index]"))) return;
+            click.preventDefault();
+            click.stopPropagation();
+            window.removeEventListener("click", swallow, { capture: true });
+          };
+          window.addEventListener("click", swallow, { capture: true });
+          setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 400);
+        }
         end();
       };
       const onCancel = (e: PointerEvent) => {

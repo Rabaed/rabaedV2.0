@@ -8,6 +8,7 @@ import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import {
   addSegment,
   cleanText,
@@ -64,6 +65,8 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
   const [announcement, setAnnouncement] = useState("");
   const [focusAt, setFocusAt] = useState<number | null>(null);
   const grips = useRef<(HTMLButtonElement | null)[]>([]);
+  // A move from a handle's menu: focus goes to the moved segment's handle, not back to the menu's own.
+  const menuMoved = useRef(false);
   const editable = onChange !== undefined;
   const name = (kind: SegmentKind | "sequence") => t(`kinds.${kind}`);
 
@@ -171,20 +174,26 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
                 data-testid="segment-chip"
               >
                 {editable && (
-                  <button
-                    ref={(el) => {
-                      grips.current[i] = el;
-                    }}
-                    type="button"
-                    aria-label={t("move", { segment: label })}
-                    aria-describedby={hintId}
-                    data-segment-grip=""
-                    onKeyDown={onGripKey(i)}
-                    onBlur={() => setFocusAt(null)}
-                    className={cn("flex size-6 shrink-0 cursor-grab items-center justify-center rounded-xs text-faint hover:bg-hover pointer-coarse:size-11", focusRing)}
-                  >
-                    <Icon name="grid-dots" size={14} />
-                  </button>
+                  <MoveMenu t={t} label={label} at={i} count={pattern.segments.length} onMove={(to) => move(i, to, true)} movedRef={menuMoved}>
+                    <button
+                      ref={(el) => {
+                        grips.current[i] = el;
+                      }}
+                      type="button"
+                      aria-label={t("move", { segment: label })}
+                      aria-describedby={hintId}
+                      data-segment-grip=""
+                      onKeyDown={onGripKey(i)}
+                      onBlur={() => setFocusAt(null)}
+                      className={cn(
+                        "flex size-6 shrink-0 cursor-grab items-center justify-center rounded-xs text-faint hover:bg-hover pointer-coarse:size-11",
+                        "data-[state=open]:bg-brand-tint data-[state=open]:text-brand-fg",
+                        focusRing,
+                      )}
+                    >
+                      <Icon name="grid-dots" size={14} />
+                    </button>
+                  </MoveMenu>
                 )}
                 <span aria-hidden="true" className={cn("h-[30px] w-1 shrink-0 rounded-[3px]", tone.solid)} />
                 <span className="flex min-w-0 flex-col gap-0.5">
@@ -234,6 +243,95 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * A tap on a segment's ⋮ opens its moves (RP-1288, the owner's (b), comment 15836): a way to reorder that needs
+ * only a tap, beside the drag, the long press and the arrow keys. Those that can't apply are disabled. Keyboard:
+ * Enter or Space opens it on the first move it can make; Up, Down, Home and End go between them; Escape closes it.
+ */
+function MoveMenu({
+  t,
+  label,
+  at,
+  count,
+  onMove,
+  movedRef,
+  children,
+}: {
+  t: NumberingText;
+  label: string;
+  at: number;
+  count: number;
+  onMove: (to: number) => void;
+  movedRef: { current: boolean };
+  children: ReactNode;
+}) {
+  const list = useRef<HTMLDivElement>(null);
+  const name = t("move", { segment: label });
+  const moves = [
+    { key: "moveUp", to: at - 1 },
+    { key: "moveDown", to: at + 1 },
+    { key: "moveTop", to: 0 },
+    { key: "moveBottom", to: count - 1 },
+  ] as const;
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+    if (items.length === 0) return;
+    const now = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      event.key === "ArrowDown" ? (now + 1) % items.length
+      : event.key === "ArrowUp" ? (now - 1 + items.length) % items.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? items.length - 1
+      : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    items[next]?.focus();
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild aria-haspopup="menu">
+        {children}
+      </PopoverTrigger>
+      <PopoverContent
+        ref={list}
+        aria-label={name}
+        onKeyDown={onKeyDown}
+        onCloseAutoFocus={(event) => {
+          // After a move the handle of the moved segment takes focus (SegmentChips' focusAt).
+          if (movedRef.current) event.preventDefault();
+          movedRef.current = false;
+        }}
+        className="w-auto min-w-48 rounded-md border-border-strong p-1.5 shadow-lg"
+      >
+        <div role="menu" aria-label={name}>
+          {moves.map(({ key, to }) => (
+            <PopoverClose asChild key={key}>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={to < 0 || to >= count || to === at}
+                onClick={() => {
+                  movedRef.current = true;
+                  onMove(to);
+                }}
+                className={cn(
+                  "flex w-full items-center rounded-sm px-2.5 py-[9px] text-start text-[13.5px] font-medium whitespace-nowrap text-text-secondary hover:bg-canvas",
+                  "disabled:cursor-not-allowed disabled:text-on-disabled disabled:hover:bg-transparent pointer-coarse:min-h-11",
+                  focusRing,
+                )}
+              >
+                {t(key)}
+              </button>
+            </PopoverClose>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
