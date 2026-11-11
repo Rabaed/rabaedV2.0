@@ -1,10 +1,13 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
+import type { ReactNode } from "react";
 import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { Button } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { NewPackageDialog } from "../packages/package-dialogs.tsx";
 import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
+import { packagesBoardLabels } from "../../storybook/packages.ts";
 import { shellCopy, storyProjectTabs, storySidebar, storyTopBar } from "../../storybook/shell.tsx";
 import { PageContent, TabsBar } from "./page-frame.tsx";
 import { PageHeader } from "./page-header.tsx";
@@ -15,7 +18,18 @@ const copy = {
   moreActions: { en: "More actions", ar: "إجراءات أخرى" },
 };
 
-function Page({ context, defaultCollapsed = false, long = false }: { context: StoryContext; defaultCollapsed?: boolean; long?: boolean }) {
+function Page({
+  context,
+  defaultCollapsed = false,
+  long = false,
+  primaryAction,
+}: {
+  context: StoryContext;
+  defaultCollapsed?: boolean;
+  long?: boolean;
+  /** Instead of "+ New Submittal". */
+  primaryAction?: ReactNode;
+}) {
   const t = (text: { en: string; ar: string }) => storyText(context, text);
   return (
     <AppShell
@@ -29,10 +43,12 @@ function Page({ context, defaultCollapsed = false, long = false }: { context: St
         <PageHeader
           title={t(shellCopy.submittals)}
           primaryAction={
-            <Button>
-              <Icon name="plus" />
-              {t(shellCopy.newSubmittal)}
-            </Button>
+            primaryAction ?? (
+              <Button>
+                <Icon name="plus" />
+                {t(shellCopy.newSubmittal)}
+              </Button>
+            )
           }
           actions={<Button variant="secondary">{t(copy.exportList)}</Button>}
           more={{ label: t(copy.moreActions), closeLabel: t(shellCopy.close) }}
@@ -319,6 +335,24 @@ export const PhoneActionBar: Story = {
     const sheet = await screen.findByRole("dialog", { name: t(context, copy.moreActions) });
     await expect(within(sheet).getByRole("button", { name: t(context, copy.exportList) })).toBeVisible();
     await expect(sheet.getBoundingClientRect().bottom).toBe(innerHeight);
+  },
+};
+
+/**
+ * A primary action that opens a dialog, "+ New Package" (RP-1290): at 820 in the page header. Turning the
+ * tablet to the phone width moves it to the bottom bar, and an open dialog stays open with what was typed;
+ * test/primary-action.test.tsx turns the window, which a story can't.
+ */
+export const PrimaryActionDialog: Story = {
+  render: (_args, context) => {
+    const l = packagesBoardLabels[storyLocale(context)];
+    return <Page context={context} primaryAction={<NewPackageDialog labels={l.create} close={l.close} cancel={l.cancel} refusals={l.refusals} onCreate={async () => ({ ok: true as const })} />} />;
+  },
+  parameters: { ...tablet, ...overlay, layout: "fullscreen" },
+  play: async (context) => {
+    const header = context.canvas.getByRole("main").querySelector<HTMLElement>("[data-page-header]")!;
+    await expect(within(header).getByRole("button", { name: packagesBoardLabels[storyLocale(context)].create.trigger })).toBeVisible();
+    await expect(context.canvasElement.querySelector("[data-action-bar]")).toBeNull();
   },
 };
 
