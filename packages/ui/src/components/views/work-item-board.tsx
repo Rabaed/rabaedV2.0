@@ -21,15 +21,18 @@ import {
   type WorkItemRow,
   type WorkItemView,
 } from "@rabaed/domain";
-import { useEffect, useState, type ElementType } from "react";
+import { useEffect, useRef, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
-import { VIEW_ICONS_ONLY } from "../../lib/widths.ts";
+import { PHONE, VIEW_ICONS_ONLY } from "../../lib/widths.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
+import { BottomSheetContent, Sheet, SheetClose, SheetTrigger } from "../overlay/sheet.tsx";
 import { Tooltip } from "../overlay/tooltip.tsx";
+import { boardColumn, boardOfRow, boardRow, boardScroller, columnCards } from "./board-scroll.ts";
+import { useLongPressDrag } from "./use-long-press-drag.ts";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
 import { KanbanCard, type KanbanCardBadge, type KanbanCardOwner, type KanbanCardPlace } from "./kanban-card.tsx";
@@ -57,6 +60,8 @@ export type WorkItemBoardLabels = {
   showAllIn: (stage: string) => string;
   move: string;
   moveItem: (subject: string) => string;
+  /** The close button of the Move sheet on a phone. */
+  close: string;
   moveTo: (stage: string) => string;
   /** Announced while a card is dragged. */
   dragging: string;
@@ -171,23 +176,65 @@ export function WorkItemBoard({
     });
     // `columns` is rebuilt from `board` on every render; the board is what changes.
   }, [board]);
+
+  // A card lifted by a finger (RP-1274): the same targets and the same `onMove` as a mouse drag.
+  const region = useRef<HTMLElement>(null);
+  const [touchDrag, setTouchDrag] = useState(false);
+  // The card a finger carries, read on the drop without waiting for a render.
+  const lifted = useRef<Dragging | null>(null);
+  // On a phone the cards' Move menus come up as a sheet; asked once for the board.
+  const phone = useMediaQuery(PHONE, false);
+  const stageUnder = (under: Element | null) => {
+    const column = under?.closest<HTMLElement>("[data-stage]");
+    return column && region.current?.contains(column) ? (column.dataset.stage ?? null) : null;
+  };
+  const touch = useLongPressDrag<Dragging>({
+    region,
+    onLift: (d) => {
+      lifted.current = d;
+      setDragging(d);
+      setTouchDrag(true);
+    },
+    onOver: (under) => setOver(stageUnder(under)),
+    onDrop: (under) => {
+      const carried = lifted.current;
+      lifted.current = null;
+      const key = stageUnder(under);
+      const move = key === null ? undefined : carried?.targets.get(key);
+      if (carried && move) onMove?.(carried.card, move);
+      setDragging(null);
+      setOver(null);
+      setTouchDrag(false);
+    },
+  });
   return (
     <section
+      ref={region}
       aria-label={labels.board}
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
       data-board=""
+      data-touch-drag={touchDrag ? "" : undefined}
       // The page gives it the rest of the window (`fills-window`, RP-1092); it scrolls itself, so the page doesn't.
       // In a very short window it keeps 16rem and the page scrolls instead. Its focus ring is drawn inside: the board ends on the window's edge.
       data-fills-window=""
-      className={cn("relative min-h-64 flex-1 overflow-auto bg-canvas pt-[18px] pb-[40px]", focusRing, "focus-visible:-outline-offset-2", className)}
+      className={cn(
+        "relative min-h-64 flex-1 overflow-auto bg-canvas pt-[18px] pb-[40px]",
+        // At 1024 and below it snaps to each column, inside the page's 16 px gutter, and its columns scroll down (RP-1274).
+        boardScroller,
+        boardOfRow,
+        "tablet:scroll-px-4 tablet:pb-4",
+        focusRing,
+        "focus-visible:-outline-offset-2",
+        className,
+      )}
     >
       {dragging && (
         <p role="status" className="sr-only">
           {labels.dragging}
         </p>
       )}
-      <ol className="flex w-max items-start gap-[18px]">
+      <ol className={cn("flex w-max items-start gap-[18px]", boardRow)}>
         {board.stages.map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
@@ -209,7 +256,9 @@ export function WorkItemBoard({
               data-drop-over={dropMove && over === stage.key ? "" : undefined}
               className={cn(
                 // A column grows with its cards (the anatomy): the board scrolls down and sideways in its own region.
+                // At 1024 and below it scrolls its own cards instead; on a phone it is the board's width less 40 px (RP-1274).
                 "flex w-[318px] shrink-0 flex-col rounded-lg border border-border bg-surface transition-shadow",
+                boardColumn,
                 dropMove && "outline-2 outline-offset-2 outline-brand outline-dashed",
                 dropMove && over === stage.key && "outline-solid",
               )}
@@ -267,7 +316,7 @@ export function WorkItemBoard({
                   </span>
                 </div>
               )}
-              <div className="flex min-h-16 flex-col px-2 py-1.5">
+              <div className={cn("flex min-h-16 flex-col px-2 py-1.5", columnCards)}>
                 {shown === 0 ? (
                   <p className="px-1 py-4 text-center text-caption text-muted">{labels.noItems}</p>
                 ) : (
@@ -300,6 +349,8 @@ export function WorkItemBoard({
                           setDragging(d);
                           if (!d) setOver(null);
                         }}
+                        touch={{ pressProps: touch.pressProps, lifted: touch.lifted, active: touchDrag }}
+                        sheet={phone}
                       />
                     );
                   })
@@ -452,6 +503,8 @@ function Lane({
   openId,
   dragging,
   onDragChange,
+  touch,
+  sheet,
 }: {
   lane: WorkItemBoardLane;
   index: number;
@@ -474,6 +527,10 @@ function Lane({
   /** The id of the card being dragged. */
   dragging: string | null;
   onDragChange: (dragging: Dragging | null) => void;
+  /** The long touch press that lifts a card (RP-1274); `active` while a finger carries one. */
+  touch: { pressProps: ReturnType<typeof useLongPressDrag<Dragging>>["pressProps"]; lifted: () => boolean; active: boolean };
+  /** A phone: the Move menu comes up as a bottom sheet. */
+  sheet: boolean;
 }) {
   const name =
     lane.kind === "role"
@@ -518,15 +575,29 @@ function Lane({
         {lane.cards.map((card) => {
           const targets = dropTargets(moves[card.id] ?? [], card.stage.key);
           const movable = onMove !== undefined && targets.size > 0;
+          const lifted = touch.active && dragging === card.id;
           return (
             <li
               key={card.id}
               data-movable={movable ? "" : undefined}
-              className={cn(movable && "cursor-grab active:cursor-grabbing")}
+              data-lifted={lifted ? "" : undefined}
+              className={cn(
+                movable && "cursor-grab active:cursor-grabbing",
+                // A long press lifts the card, so it opens no text selection or link menu on touch.
+                movable && "pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]",
+                // Lifted: a small rise and shadow that stay inside the column's padding, which clips what scrolls.
+                lifted && "relative z-10 -translate-y-0.5 rounded-lg shadow-md",
+              )}
               draggable={movable || undefined}
+              {...(movable ? touch.pressProps({ card, targets }) : {})}
               onDragStart={
                 movable
                   ? (event) => {
+                      // A finger already carries it: the browser's own drag would be a second one.
+                      if (touch.lifted()) {
+                        event.preventDefault();
+                        return;
+                      }
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", card.id);
                       onDragChange({ card, targets });
@@ -542,7 +613,7 @@ function Lane({
                 selected={dragging === card.id || openId === card.id}
                 open={openId === card.id}
                 opener={onOpen && { id: card.id, onOpen: () => onOpen(card) }}
-                actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} /> : undefined}
+                actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} sheet={sheet} /> : undefined}
               />
             </li>
           );
@@ -555,7 +626,8 @@ function Lane({
 /**
  * The same moves as the drop targets, for the keyboard, screen readers and
  * touch: one button per Stage a card may move to, each opening its
- * Transition's Action Form.
+ * Transition's Action Form. On a phone they come up in a sheet from the
+ * bottom of the screen (RP-1274, RP-1158 row 52); a popover elsewhere.
  */
 function MoveMenu({
   card,
@@ -564,6 +636,7 @@ function MoveMenu({
   locale,
   labels,
   onMove,
+  sheet,
 }: {
   card: WorkItemRow;
   targets: Map<string, WorkItemMove>;
@@ -571,32 +644,52 @@ function MoveMenu({
   locale: Locale;
   labels: WorkItemBoardLabels;
   onMove: (card: WorkItemRow, move: WorkItemMove) => void;
+  sheet: boolean;
 }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
+  const name = labels.moveItem(card.title);
+  // 24 px, with a 44 × 44 box on touch (RP-1158 row 52).
+  const trigger = (
+    <button
+      type="button"
+      aria-label={name}
+      title={labels.move}
+      className={cn("inline-flex size-6 items-center justify-center rounded-xs text-muted hover:bg-hover hover:text-text", focusRing, touchBox)}
+    >
+      <Icon name="arrows-move" size={15} />
+    </button>
+  );
+  const choices = (Close: typeof PopoverClose | typeof SheetClose, wide: boolean): ReactNode =>
+    [...targets].map(([stageKey, move]) => (
+      <Close asChild key={stageKey}>
         <button
           type="button"
-          aria-label={labels.moveItem(card.title)}
-          title={labels.move}
-          className={cn("inline-flex size-6 items-center justify-center rounded-xs text-muted hover:bg-hover hover:text-text", focusRing, touchBox)}
+          onClick={() => onMove(card, move)}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: wide ? "md" : "sm" }),
+            "h-auto flex-col items-start gap-0 py-1.5 text-start pointer-coarse:min-h-11",
+            wide && "w-full py-2.5",
+          )}
         >
-          <Icon name="arrows-move" size={15} />
+          <span>{move.label[locale]}</span>
+          <span className="text-caption font-normal text-muted">{labels.moveTo(stageNames.get(stageKey)?.[locale] ?? stageKey)}</span>
         </button>
-      </PopoverTrigger>
-      <PopoverContent aria-label={labels.moveItem(card.title)} className="flex w-64 flex-col gap-1 p-2">
-        {[...targets].map(([stageKey, move]) => (
-          <PopoverClose asChild key={stageKey}>
-            <button
-              type="button"
-              onClick={() => onMove(card, move)}
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-auto flex-col items-start gap-0 py-1.5 text-start pointer-coarse:min-h-11")}
-            >
-              <span>{move.label[locale]}</span>
-              <span className="text-caption font-normal text-muted">{labels.moveTo(stageNames.get(stageKey)?.[locale] ?? stageKey)}</span>
-            </button>
-          </PopoverClose>
-        ))}
+      </Close>
+    ));
+  if (sheet) {
+    return (
+      <Sheet>
+        <SheetTrigger asChild>{trigger}</SheetTrigger>
+        <BottomSheetContent title={name} closeLabel={labels.close}>
+          <div className="flex flex-col gap-1 pt-1">{choices(SheetClose, true)}</div>
+        </BottomSheetContent>
+      </Sheet>
+    );
+  }
+  return (
+    <Popover>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent aria-label={name} className="flex w-64 flex-col gap-1 p-2">
+        {choices(PopoverClose, false)}
       </PopoverContent>
     </Popover>
   );

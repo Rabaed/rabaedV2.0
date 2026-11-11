@@ -181,6 +181,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       showAllIn: (stage) => t("board.showAllIn", { stage }),
       move: t("board.move"),
       moveItem: (subject) => t("board.moveItem", { subject }),
+      close: t("list.close"),
       moveTo: (stage) => t("board.moveTo", { stage }),
       dragging: t("board.dragging"),
       showOnlyStep: (step) => t("board.showOnlyStep", { step }),
@@ -333,8 +334,9 @@ export function WorkItemListOrKanban(
   };
   return (
     <>
-    {/* Hidden while the Submittal Panel is at Full, which covers it (RP-1237 row 1). */}
-    <div className="sdp-behind">
+    {/* Hidden while the Submittal Panel is at Full, which covers it (RP-1237 row 1). It passes the window's height down
+        to the Kanban (RP-1092), so the board ends at the window's foot and, at 1024 and below, its columns scroll (RP-1274). */}
+    <div className="sdp-behind fills-window:flex fills-window:min-h-0 fills-window:flex-1 fills-window:flex-col">
     <WorkItemList
       list={props.view === "list" ? props.list : { ...props.board, items: [], nextCursor: null }}
       onOpen={props.view === "list" ? onOpen : undefined}

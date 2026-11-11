@@ -6,6 +6,7 @@ import {
   Icon,
   ImportRows,
   Input,
+  LargerScreenBanner,
   RegisterImportWizard as Wizard,
   SegmentedControl,
   Table,
@@ -79,6 +80,7 @@ export function RegisterImportWizard({
   initialPreview?: RegisterImport | null;
 }) {
   const t = useTranslations("registerImport");
+  const tLarger = useTranslations("settings.largerScreen");
   const client: RegisterImportClient = {
     read: (body) => setupCall("POST", `/projects/${projectId}/register-imports/read`, body),
     values: (body) => setupCall("POST", `/projects/${projectId}/register-imports/values`, body),
@@ -110,6 +112,8 @@ export function RegisterImportWizard({
         </Link>
       )}
       initialMapping={initialMapping}
+      // On a phone the column mapping is read-only (RP-1275, gap-table row 59).
+      largerScreen={<LargerScreenBanner title={tLarger("title")}>{tLarger("mapping")}</LargerScreenBanner>}
       // A Member tries the wizard with a made-up register (RP-954).
       sample
       // "Open the Drafts" (RP-954): the Submittals List of this import's Drafts that the Member sees

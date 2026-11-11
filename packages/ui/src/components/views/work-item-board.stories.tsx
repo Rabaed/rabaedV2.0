@@ -15,7 +15,8 @@ import { useState } from "react";
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
-import { expectTouchTarget, phone } from "../../storybook/form.ts";
+import { expectColumnScrollsOnItsOwn, expectOneColumnAndAPeek, expectSnapsByColumn, fingerDown, fingerMove, fingerUp, hold } from "../../storybook/board.ts";
+import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { pageBleed } from "../shell/page-frame.tsx";
@@ -448,12 +449,13 @@ const crowded: WorkItemBoardData = {
 };
 
 /**
- * A column with many cards grows with them, as the anatomy draws it: no inner
+ * Above the tablet width, a column with many cards grows with them, as the anatomy draws it: no inner
  * scroll in the column. The board scrolls sideways in its own region and the
  * page never does (Epic RP-405, decision 7); on its page it scrolls down too
- * (FillsTheWindow, RP-1092).
+ * (FillsTheWindow, RP-1092). At 1024 and below each column scrolls on its own (OnATablet, RP-1274).
  */
 export const ColumnsGrowWithTheirCards: Story = {
+  parameters: wide,
   args: { board: crowded },
   play: async (context) => {
     const column = columnOf(context, stages.pending);
@@ -541,7 +543,20 @@ export const NoMoveHandler: Story = {
 };
 
 /** The toolbar the List shares, the Card view layout menu and the Kanban / List switch, as the Submittals tab shows it. */
-function Toolbar({ args, locale, boardClassName, extra }: { args: Story["args"]; locale: "en" | "ar"; boardClassName?: string; extra?: Partial<WorkItemListProps> }) {
+function Toolbar({
+  args,
+  locale,
+  boardClassName,
+  extra,
+  moves = false,
+}: {
+  args: Story["args"];
+  locale: "en" | "ar";
+  boardClassName?: string;
+  extra?: Partial<WorkItemListProps>;
+  /** Hands the story's `onMove` and `onOpen` to the board. */
+  moves?: boolean;
+}) {
   const [layout, setLayout] = useState<BoardCardLayout>(defaultBoardCardLayout);
   const data = args?.board ?? board;
   return (
@@ -582,6 +597,7 @@ function Toolbar({ args, locale, boardClassName, extra }: { args: Story["args"];
           listHrefFor={listHrefFor}
           itemHref={(id) => `#${id}`}
           className={boardClassName}
+          {...(moves ? { onMove: args?.onMove, onOpen: args?.onOpen } : {})}
         />
       }
     />
@@ -694,9 +710,10 @@ export const WithToolbarNarrow: Story = {
  * On its page (RP-1092), the board fills the window from under its toolbar to the bottom edge,
  * so its sideways scrollbar sits on that edge, not under the tallest column. A column still
  * grows with its cards; the board scrolls down inside itself, and the page doesn't scroll.
+ * Above the tablet width: at 1024 and below the columns scroll instead (OnATablet, RP-1274).
  */
 export const FillsTheWindow: Story = {
-  parameters: { ...overlay, layout: "fullscreen" },
+  parameters: { ...overlay, ...wide, layout: "fullscreen" },
   args: { board: crowded },
   render: (args, context) => (
     <StoryProjectPage context={context} current="submittals">
@@ -783,5 +800,207 @@ export const OpensInThePanel: Story = {
     await userEvent.click(link);
     await expect(onOpen).toHaveBeenCalledWith(cards.hvac);
     await expect(location.hash).not.toBe(`#${cards.hvac.id}`);
+  },
+};
+
+// At 820 and 402 (RP-1274, RP-1158 rows 48–54): the board as the Submittals tab shows it, in the shell,
+// its canvas reaching the page's edges, so the board has the window's height under its toolbar.
+const crowdedWithMoves: WorkItemBoardData = { ...crowded, moves: boardWithMoves.moves };
+const inTheShell: Story["render"] = (args, context) => (
+  <StoryProjectPage context={context} current="submittals">
+    <Toolbar args={args} locale={storyLocale(context)} boardClassName={pageBleed} moves />
+  </StoryProjectPage>
+);
+const regionOf = (context: PlayContext) => context.canvas.getByRole("region", { name: storyText(context, copy.board) });
+const columnsOf = (context: PlayContext) => within(regionOf(context)).getAllByRole("listitem").filter((li) => li.dataset.stage);
+const headerOf = (column: HTMLElement) => within(column).getByRole("heading", { level: 2 });
+
+/**
+ * A tablet (820, RP-1158 row 48): the columns keep 318 and the board snaps to each one, right to left in
+ * Arabic; the board no longer scrolls down: a column with more cards than fit scrolls them on its own,
+ * under its header. Column and group headers, the Step buttons and the ✥ move buttons are 44 on touch (rows 52, 54).
+ */
+export const OnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  args: { board: crowdedWithMoves, onMove: fn() },
+  render: inTheShell,
+  play: async (context) => {
+    const region = regionOf(context);
+    const columns = columnsOf(context);
+    await expect(Math.round(columns[0]!.getBoundingClientRect().width)).toBe(318);
+    await expectSnapsByColumn(region, columns);
+    const pending = columnOf(context, stages.pending);
+    await expectColumnScrollsOnItsOwn(region, pending, headerOf(pending));
+    for (const column of columns) await expect(headerOf(column).getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    for (const control of [...within(region).getAllByRole("button"), ...within(region).getAllByRole("link")]) await expectTouchTarget(control);
+    const page = document.scrollingElement!;
+    await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth);
+  },
+};
+
+/**
+ * A phone (402, RP-1158 row 49): one column fills the board less 40 px, so the next one peeks; the board
+ * snaps to each column, right to left in Arabic, and each column scrolls on its own.
+ */
+export const OnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { board: crowdedWithMoves, onMove: fn() },
+  render: inTheShell,
+  play: async (context) => {
+    const region = regionOf(context);
+    const columns = columnsOf(context);
+    await expectOneColumnAndAPeek(region, columns);
+    await expectSnapsByColumn(region, columns);
+    const pending = columnOf(context, stages.pending);
+    await expectColumnScrollsOnItsOwn(region, pending, headerOf(pending));
+  },
+};
+
+/**
+ * On a phone the card's ✥ opens its moves in a sheet from the bottom of the screen (RP-1158 row 52), the
+ * same moves as the popover and the drop targets; choosing one opens its Transition's Action Form
+ * (`onMove`). Left open for the screenshot.
+ */
+export const MoveSheetOnAPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  args: { board: boardWithMoves, onMove: fn() },
+  play: async (context) => {
+    const onMove = context.args.onMove as ReturnType<typeof fn>;
+    const locale = storyLocale(context);
+    const name = storyText(context, copy.moveItem).replace("#", cards.fire.title);
+    const open = async () => {
+      await userEvent.click(within(movableCard(context)).getByRole("button", { name }));
+      return screen.findByRole("dialog", { name });
+    };
+    let sheet = await open();
+    const box = sheet.getBoundingClientRect();
+    await expect(Math.round(box.bottom)).toBe(innerHeight);
+    await expect(Math.round(box.width)).toBe(innerWidth);
+    const choices = within(sheet).getAllByRole("button").filter((b) => b.textContent!.includes(storyText(context, copy.moveTo).replace("#", "")));
+    await expect(choices.map((c) => c.textContent)).toEqual([
+      `${sendBack.label[locale]}${storyText(context, copy.moveTo).replace("#", stages.resubmitted.name[locale])}`,
+      `${cancel.label[locale]}${storyText(context, copy.moveTo).replace("#", stages.cancelled.name[locale])}`,
+    ]);
+    for (const choice of choices) await expectTouchTarget(choice);
+    await userEvent.click(choices[1]!);
+    await expect(onMove).toHaveBeenCalledWith(cards.fire, cancel);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name })).toBeNull());
+    sheet = await open();
+    await expect(sheet).toBeVisible();
+  },
+};
+
+/** A point inside the part of `column` the board shows, 24 px in from its start edge, clear of the board's scrolling edges. */
+function insideShown(region: HTMLElement, column: HTMLElement) {
+  const board = region.getBoundingClientRect();
+  const box = column.getBoundingClientRect();
+  const y = Math.min(box.bottom, board.bottom) - 120;
+  return getComputedStyle(region).direction === "rtl" ? { x: Math.min(box.right, board.right - 70) - 24, y } : { x: Math.max(box.left, board.left + 70) + 24, y };
+}
+
+/**
+ * Touch drag (RP-1158 row 53, the owner's (a)): a 300 ms press on a card that may move lifts it and
+ * outlines the Stages its Transitions alone lead to, as a mouse drag does. A tap still opens the item, and
+ * a finger that moves first scrolls. Lifting over a Stage that is no target does nothing (the same refusal
+ * as on desktop); lifting over a target calls the same `onMove` with the same Transition, so its Action Form
+ * and the engine's checks are the desktop's. Left lifted over Revised & Resubmitted for the screenshot.
+ */
+export const LongPressOnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  args: { board: boardWithMoves, onMove: fn(), onOpen: fn() },
+  render: inTheShell,
+  play: async (context) => {
+    const onMove = context.args.onMove as ReturnType<typeof fn>;
+    const onOpen = context.args.onOpen as ReturnType<typeof fn>;
+    const region = regionOf(context);
+    const item = movableCard(context);
+    const link = within(item).getByRole("link", { name: cards.fire.title });
+
+    // A tap opens the item, and nothing lifts.
+    let at = fingerDown(link);
+    await hold(80);
+    fingerUp(at, link);
+    await expect(onOpen).toHaveBeenCalledWith(cards.fire);
+    await hold(320);
+    await expect(targetColumns(context)).toEqual([]);
+    onOpen.mockClear();
+
+    // A finger that moves before 300 ms scrolls: nothing lifts.
+    at = fingerDown(link);
+    fingerMove({ x: at.x, y: at.y - 30 });
+    await hold(400);
+    await expect(targetColumns(context)).toEqual([]);
+    await expect(item).not.toHaveAttribute("data-lifted");
+    fingerUp({ x: at.x, y: at.y - 30 });
+
+    // A long press on the card's ✥ button is for the button: nothing lifts.
+    const moveButton = within(item).getByRole("button", { name: storyText(context, copy.moveItem).replace("#", cards.fire.title) });
+    const onButton = fingerDown(moveButton);
+    await hold(400);
+    await expect(item).not.toHaveAttribute("data-lifted");
+    fingerUp(onButton);
+
+    // Held still for 300 ms, it lifts: the same targets as a mouse drag.
+    fingerDown(link);
+    await hold(150);
+    await expect(targetColumns(context)).toEqual([]);
+    await waitFor(() => expect(targetColumns(context)).toEqual(["revise_resubmit", "cancelled"]));
+    await expect(item).toHaveAttribute("data-lifted");
+    // Lifted over its own column, which is no target: nothing happens, and no click opens the item.
+    fingerMove(insideShown(region, columnOf(context, stages.internal)));
+    fingerUp(insideShown(region, columnOf(context, stages.internal)), link);
+    await expect(onMove).not.toHaveBeenCalled();
+    await expect(onOpen).not.toHaveBeenCalled();
+    await waitFor(() => expect(targetColumns(context)).toEqual([]));
+
+    // Lifted over Revised & Resubmitted: the desktop's move, Return.
+    fingerDown(link);
+    await waitFor(() => expect(item).toHaveAttribute("data-lifted"));
+    const over = insideShown(region, columnOf(context, stages.resubmitted));
+    fingerMove(over);
+    await waitFor(() => expect(columnOf(context, stages.resubmitted)).toHaveAttribute("data-drop-over"));
+    fingerUp(over, link);
+    await expect(onMove).toHaveBeenCalledTimes(1);
+    await expect(onMove).toHaveBeenCalledWith(cards.fire, sendBack);
+    await expect(onOpen).not.toHaveBeenCalled();
+
+    // Left lifted over Revised & Resubmitted, for the screenshot.
+    fingerDown(link);
+    await waitFor(() => expect(item).toHaveAttribute("data-lifted"));
+    fingerMove(over);
+    await waitFor(() => expect(columnOf(context, stages.resubmitted)).toHaveAttribute("data-drop-over"));
+  },
+};
+
+/**
+ * On a phone the target is off screen: holding the lifted card near the board's end edge scrolls the board
+ * (64 px zone, RP-1158 row 53) until the next column is under the finger, right to left in Arabic.
+ */
+export const LongPressScrollsTheBoardOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { board: boardWithMoves, onMove: fn(), onOpen: fn() },
+  render: inTheShell,
+  play: async (context) => {
+    const onMove = context.args.onMove as ReturnType<typeof fn>;
+    const region = regionOf(context);
+    const rtl = getComputedStyle(region).direction === "rtl";
+    columnOf(context, stages.internal).scrollIntoView({ inline: "start", block: "nearest" });
+    await hold(100);
+    const item = movableCard(context);
+    const link = within(item).getByRole("link", { name: cards.fire.title });
+    const at = fingerDown(link);
+    await waitFor(() => expect(item).toHaveAttribute("data-lifted"));
+    const board = region.getBoundingClientRect();
+    const before = region.scrollLeft;
+    const edge = { x: rtl ? board.left + 12 : board.right - 12, y: at.y };
+    fingerMove(edge);
+    await waitFor(() => expect(Math.abs(region.scrollLeft - before)).toBeGreaterThan(120), { timeout: 3000 });
+    // Away from the edge the board stops, and the finger rests on Revised & Resubmitted.
+    const over = insideShown(region, columnOf(context, stages.resubmitted));
+    fingerMove(over);
+    await waitFor(() => expect(columnOf(context, stages.resubmitted)).toHaveAttribute("data-drop-over"));
+    fingerUp(over, link);
+    await expect(onMove).toHaveBeenCalledWith(cards.fire, sendBack);
+    await expect(context.args.onOpen).not.toHaveBeenCalled();
   },
 };

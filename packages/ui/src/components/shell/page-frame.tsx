@@ -80,6 +80,9 @@ export function TabsBar({ children, className }: { children: ReactNode; classNam
  */
 export const pageBleed = "-mx-7 px-7 tablet:-mx-4 tablet:px-4";
 
+/** `pageBleed` at 1024 and below only: out to the page's edges through its 16 px gutter there. */
+export const tabletPageBleed = "tablet:-mx-4 tablet:px-4";
+
 export type PageContentProps = {
   children: ReactNode;
   /**

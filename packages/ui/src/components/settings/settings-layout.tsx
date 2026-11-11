@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ElementType, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ElementType, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Field } from "../form/field.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -8,8 +8,9 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 
 // The template of every Project Settings page (RP-412): a navigation of the
 // settings pages on the inline-start side (the right in Arabic), and beside it
-// the page's header and its section cards. Below `md` the navigation becomes a
-// select at the top. Presentational; the app lists the pages and navigates.
+// the page's header and its section cards. On a tablet the navigation is a row
+// of chips above the page, and on a phone a select (RP-1275, the owner's
+// Responsive Review). Presentational; the app lists the pages and navigates.
 
 export type SettingsNavItem = {
   key: string;
@@ -31,13 +32,51 @@ export type SettingsNavProps = {
   className?: string;
 };
 
-/** The settings navigation: a card of links from `md` up, a select below it. */
+/**
+ * The settings navigation: a card of links beside the page wider than a tablet; on a tablet a row of chips
+ * above the page, scrolling sideways with the open page's chip in view (RP-1275); on a phone a select.
+ */
 export function SettingsNav({ heading, items, current, linkAs: Link = "a", onNavigate, className }: SettingsNavProps) {
   const headingId = useId();
   const currentItem = items.find((item) => item.key === current);
+  const row = useRef<HTMLUListElement>(null);
+  // The open page's chip to the middle of the row, wherever it falls (the Anatomy's "active centred"). By the
+  // boxes' screen positions, so it works the same from the right in Arabic. Not drawn (wider, or a phone): nothing.
+  useEffect(() => {
+    const list = row.current;
+    const chip = list?.querySelector("[aria-current=page]");
+    if (!list || !chip || list.clientWidth === 0) return;
+    const box = list.getBoundingClientRect();
+    const at = chip.getBoundingClientRect();
+    list.scrollLeft += at.left + at.width / 2 - (box.left + box.width / 2);
+  }, [current]);
   return (
-    <div className={cn("min-w-0 md:sticky md:top-6", className)}>
-      <nav aria-labelledby={headingId} className="hidden flex-col gap-0.5 rounded-[14px] border border-border bg-surface p-2 md:flex">
+    <div className={cn("min-w-0 not-tablet:sticky not-tablet:top-6", className)}>
+      <nav aria-label={heading} className="hidden rounded-[14px] border border-border bg-surface p-1.5 md:tablet:block">
+        <ul ref={row} className="flex gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+          {items.map((item) => {
+            const isCurrent = item.key === current;
+            return (
+              <li key={item.key} className="shrink-0">
+                <Link
+                  href={item.href}
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-11 items-center gap-2 rounded-sm px-3 text-[13.5px] whitespace-nowrap",
+                    focusRing,
+                    "focus-visible:outline-offset-[-2px]",
+                    isCurrent ? "bg-brand-tint font-semibold text-brand-fg" : "text-text-secondary hover:bg-hover",
+                  )}
+                >
+                  <Icon name={item.icon} size={17} className={isCurrent ? undefined : "text-muted"} />
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <nav aria-labelledby={headingId} className="flex flex-col gap-0.5 rounded-[14px] border border-border bg-surface p-2 tablet:hidden">
         <h2 id={headingId} className="px-2.5 pt-2 pb-1.5 text-notes font-bold text-muted uppercase ltr:tracking-wider rtl:text-caption">
           {heading}
         </h2>
@@ -102,12 +141,36 @@ export type SettingsLayoutProps = {
   className?: string;
 };
 
-/** The settings template: the navigation beside the page (above it below `md`), up to 1280px wide. */
+/** The settings template: the navigation beside the page wider than a tablet (above it on a tablet and a phone), up to 1280px wide. */
 export function SettingsLayout({ nav, children, className }: SettingsLayoutProps) {
   return (
-    <div className={cn("grid max-w-7xl items-start gap-6 md:grid-cols-[14.5rem_minmax(0,1fr)]", className)}>
+    <div className={cn("grid max-w-7xl items-start gap-6 not-tablet:grid-cols-[14.5rem_minmax(0,1fr)] tablet:gap-4", className)}>
       {nav}
       <div className="flex min-w-0 flex-col gap-4">{children}</div>
+    </div>
+  );
+}
+
+export type LargerScreenBannerProps = {
+  /** E.g. "Continue on a larger screen". */
+  title: ReactNode;
+  /** A line under it, e.g. what can't be done here and that nothing is lost. */
+  children?: ReactNode;
+  className?: string;
+};
+
+/**
+ * Over a page that needs room to edit (the Workflow builder, the import's column mapping), opened on a phone
+ * read-only (RP-1275, gap-table row 59; the owner's Responsive Anatomy): it says to carry on on a larger screen.
+ */
+export function LargerScreenBanner({ title, children, className }: LargerScreenBannerProps) {
+  return (
+    <div role="note" className={cn("flex items-start gap-3 rounded-[14px] bg-info-tint px-4 py-3 text-info-fg", className)}>
+      <Icon name="device-desktop" size={20} className="mt-0.5 shrink-0" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="m-0 text-sm font-bold">{title}</p>
+        {children !== undefined && <p className="m-0 text-[13px] leading-normal">{children}</p>}
+      </div>
     </div>
   );
 }
