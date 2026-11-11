@@ -3,7 +3,8 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
-import { expectFillsTheWindow } from "../../storybook/fills-window.ts";
+import { expectColumnScrollsOnItsOwn, expectOneColumnAndAPeek, expectSnapsByColumn } from "../../storybook/board.ts";
+import { expectTouchTarget, phone, tablet, wide } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { packagesBoardLabels } from "../../storybook/packages.ts";
@@ -212,16 +213,59 @@ const manyInProgress = Array.from({ length: 12 }, (_, i) => ({ ...lighting, id: 
 /**
  * On its page (RP-1135, as RP-1092's boards), the Packages board fills the window from under
  * its toolbar to the bottom edge, so its sideways scrollbar sits on that edge, not under the
- * tallest column. The board scrolls down inside itself, and the page doesn't scroll.
+ * tallest column. The board scrolls down inside itself, and the page doesn't scroll. Above the
+ * tablet width, where its three columns fit side by side; at 1024 and below the columns scroll
+ * instead (ColumnsOnATablet, RP-1274).
  */
 export const FillsTheWindow: Story = {
   ...WithToolbar,
-  parameters: { ...overlay, layout: "fullscreen" },
+  parameters: { ...overlay, ...wide, layout: "fullscreen" },
   args: { ...WithToolbar.args, packages: [bathrooms, lighting, facade, lifts, ...manyInProgress] },
   render: (args, context) => <StoryProjectPage context={context} current="submittals">{WithToolbar.render!(args, context)}</StoryProjectPage>,
   play: async (context) => {
     const labels = labelsOf(context);
-    await expectFillsTheWindow(context.canvas.getByRole("region", { name: labels.board }), context.canvas.getByRole("region", { name: labels.toolbar }));
+    const region = context.canvas.getByRole("region", { name: labels.board });
+    const box = region.getBoundingClientRect();
+    await expect(Math.round(box.bottom)).toBe(innerHeight);
+    await expect(box.top).toBeGreaterThanOrEqual(context.canvas.getByRole("region", { name: labels.toolbar }).getBoundingClientRect().bottom);
+    await expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+    const page = document.scrollingElement!;
+    await expect(page.scrollHeight).toBeLessThanOrEqual(page.clientHeight);
+    await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth);
+  },
+};
+
+const packageColumns = (context: { canvasElement: HTMLElement }) => [...context.canvasElement.querySelectorAll<HTMLElement>("[data-package-column]")];
+
+/**
+ * The columns on a tablet (820, RP-1274, RP-1158 row 67): 330 wide, the board snapping to each one, right to
+ * left in Arabic; the board doesn't scroll down, a column taller than it scrolls its own cards under its header.
+ */
+export const ColumnsOnATablet: Story = {
+  ...FillsTheWindow,
+  parameters: { ...tablet, layout: "fullscreen" },
+  play: async (context) => {
+    const region = context.canvas.getByRole("region", { name: labelsOf(context).board });
+    const columns = packageColumns(context);
+    await expect(Math.round(columns[0]!.getBoundingClientRect().width)).toBe(330);
+    await expectSnapsByColumn(region, columns);
+    const inProgress = columnOf(context, "in_progress");
+    await expectColumnScrollsOnItsOwn(region, inProgress, within(inProgress).getByRole("heading", { level: 2 }));
+    for (const control of within(region).getAllByRole("button")) await expectTouchTarget(control);
+  },
+};
+
+/** On a phone (402, row 67): one column, the board's width less 40 px, with the next one peeking. */
+export const ColumnsOnAPhone: Story = {
+  ...FillsTheWindow,
+  parameters: { ...phone, layout: "fullscreen" },
+  play: async (context) => {
+    const region = context.canvas.getByRole("region", { name: labelsOf(context).board });
+    const columns = packageColumns(context);
+    await expectOneColumnAndAPeek(region, columns);
+    await expectSnapsByColumn(region, columns);
+    const inProgress = columnOf(context, "in_progress");
+    await expectColumnScrollsOnItsOwn(region, inProgress, within(inProgress).getByRole("heading", { level: 2 }));
   },
 };
 
