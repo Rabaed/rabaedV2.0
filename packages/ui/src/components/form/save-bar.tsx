@@ -25,7 +25,8 @@ export type SaveBarProps = {
  * screen's bottom edge above Safari's toolbar (RP-1272); wider, a card stuck to the bottom of the page.
  */
 export function SaveBar({ status, dirty, busy = false, cancelLabel, saveLabel, onCancel, onSave, className }: SaveBarProps) {
-  const inActionBar = useContext(ActionBarContext) !== null;
+  // The plain row only when portalled into the phone's bar; elsewhere the sticky card (gap-table row 64).
+  const inActionBar = useContext(ActionBarContext)?.bar != null;
   return (
     <PrimaryAction>
       <div
