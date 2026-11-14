@@ -467,7 +467,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                     outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
                   />
                   {" "}
-                  <span className="ms-[0.35em] text-muted">· {tViews("list.revisionDraft")}</span>
+                  <span className="text-muted">· {tViews("list.revisionDraft")}</span>
                 </>
               ) : item.baseNumber !== undefined ? (
                 <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} draft={tViews("list.revisionDraft")} locale={locale} draftClassName="text-muted" />

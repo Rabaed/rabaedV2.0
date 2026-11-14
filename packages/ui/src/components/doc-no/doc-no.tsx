@@ -87,11 +87,12 @@ export function RevisionDraftNumber({
   draftClassName?: string;
 }) {
   return (
-    <span className="whitespace-nowrap">
+    // Isolated in the reader's direction, as DocNo with a revision is, so "· Draft" follows the revision in any container.
+    <bdi dir={directionOf(locale)} className="whitespace-nowrap">
       <DocNo value={base} rev={formatNumber(revision, locale)} locale={locale} className={className} revClassName={revClassName} />
       {" "}
       <span className={draftClassName}>· {draft}</span>
-    </span>
+    </bdi>
   );
 }
 

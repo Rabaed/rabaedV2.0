@@ -47,6 +47,13 @@ describe("Export (RP-409)", () => {
     );
   });
 
+  it("writes a Revision Draft's number as its chain's base, its revision and Draft (RP-1300)", () => {
+    const draft: WorkItemRow = { ...row, documentNumber: null, baseNumber: "TWR-MAR-0003", revisionNo: 1 };
+    const file = exportFile([draft], shownColumns(only("documentNumber"), context("en")), "csv", context("en"));
+    expect(file.content).toContain('"TWR-MAR-0003 Rev 1 · Draft"');
+    expect(file.content).not.toContain("no number yet");
+  });
+
   it("writes a Vacancy's With as the role it waits for, never a Company (RP-952)", () => {
     const vacant: WorkItemRow = { ...row, with: null, vacancy: { projectRole: { baseRole: "consultant", name: b("Consultant", "الاستشاري") } } };
     for (const locale of ["en", "ar"] as const) {

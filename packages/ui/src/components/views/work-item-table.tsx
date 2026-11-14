@@ -363,7 +363,8 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
   const n = (value: number) => formatNumber(value, locale);
   switch (column) {
     case "documentNumber": {
-      // The Rev column carries the Revision, so the number leaves out its " Rev n".
+      // The Rev column carries the Revision, so the number leaves out its " Rev n"; a Revision Draft's keeps it, as the
+      // owner's wording has it ("UAT01-MAR-01-0005 Rev 1 · Draft", RP-1300).
       const number = cardNumber(row.documentNumber, row.revisionNo);
       // A Revision Draft reads its chain's base number from the start, with its revision and "Draft" (RP-1300).
       if (number === null && row.baseNumber !== undefined)

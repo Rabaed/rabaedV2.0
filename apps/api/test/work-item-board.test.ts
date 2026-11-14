@@ -290,11 +290,17 @@ describe("filters apply to the board as to the List", () => {
         // Within the last 30 days, every item of a Stage the board shows is on it.
         const shown = new Set(b.stages.map((s) => s.key));
         expect(cardIds(b).sort(), label).toEqual(items.filter((r) => shown.has(r.stage.key)).map((r) => r.id).sort());
-        // Each card as its List row, in the List's order within a lane.
-        for (const lane of b.columns.flatMap((c) => c.lanes)) {
-          const order = items.map((r) => r.id).filter((id) => lane.cards.some((c) => c.id === id));
-          expect(lane.cards.map((c) => c.id), label).toEqual(order);
-          for (const c of lane.cards) expect(c, label).toEqual(items.find((r) => r.id === c.id));
+        // Each card as its List row, in the List's order within a lane; the Draft column's always by Subject, then id
+        // (bySubjectThenId), whatever the sort: the List puts a Revision Draft by its base number (RP-1300).
+        const byBytes = (x: string, y: string) => Buffer.compare(Buffer.from(x), Buffer.from(y));
+        for (const column of b.columns) {
+          const draftColumn = b.stages.find((s) => s.key === column.stageKey)?.category === "draft";
+          for (const lane of column.lanes) {
+            const inLane = items.filter((r) => lane.cards.some((c) => c.id === r.id));
+            const order = (draftColumn ? [...inLane].sort((x, y) => byBytes(x.title, y.title) || byBytes(x.id, y.id)) : inLane).map((r) => r.id);
+            expect(lane.cards.map((c) => c.id), label).toEqual(order);
+            for (const c of lane.cards) expect(c, label).toEqual(items.find((r) => r.id === c.id));
+          }
         }
       }
     });
