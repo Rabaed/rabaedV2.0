@@ -355,6 +355,35 @@ export const PackageChip: Story = {
   },
 };
 
+// The Project's Whole Project Location (RP-1304): a top-level Location, listed first, with the Zones' level name.
+const wholeProject = { ...loc(9, 1, null, b("Whole Project", "المشروع كامل"), level.zone), code: "WP" };
+const generalSpecification = card(29, { title: "General specification", location: at(wholeProject), with: own(engineer, person("Ahmed bin Said", "أحمد بن سعيد", true)) });
+const boardWithWholeProject: WorkItemBoardData = {
+  ...board,
+  stages: board.stages.map((s) => (s.key === stages.internal.key ? { ...s, count: s.count + 1 } : s)),
+  filters: { ...board.filters, locations: [wholeProject, ...locations] },
+  columns: board.columns.map((c) =>
+    c.stageKey !== stages.internal.key
+      ? c
+      : column(
+          c.stageKey,
+          c.shown + 1,
+          c.lanes.map((l, i) => (i === 0 ? { ...l, count: l.count + 1, cards: [generalSpecification, ...l.cards] } : l)),
+        ),
+  ),
+};
+
+/** A card at the Whole Project (RP-1304): its plan location reads "Whole Project", with no Building or Floor after it. */
+export const WholeProjectLocation: Story = {
+  args: { board: boardWithWholeProject },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const general = cardOf(context, generalSpecification);
+    await expect(within(general).getByText(wholeProject.name[locale])).toBeVisible();
+    await expect(within(general).queryByText(f5.name[locale])).toBeNull();
+  },
+};
+
 /** With the Contractor name switched on, and the plan location and date off (Card view layout). */
 export const OtherLayout: Story = {
   args: { layout: { contractorName: true, location: false, creationDate: false } satisfies BoardCardLayout },

@@ -22,7 +22,8 @@ let consultant: Company;
 let projectId = "";
 let hostParticipant = "";
 let consultantParticipant = "";
-const loc = { tower1: "", buildingA: "", floor1: "", buildingB: "", tower2: "" };
+// wholeProject: the Project's own (RP-1304), covered by any Location.
+const loc = { tower1: "", buildingA: "", floor1: "", buildingB: "", tower2: "", wholeProject: "" };
 const trade = { electrical: "", mechanical: "" };
 
 async function one(text: string, values: unknown[]): Promise<string> {
@@ -130,6 +131,7 @@ beforeAll(async () => {
   loc.floor1 = await value("location", "F1", loc.buildingA);
   loc.buildingB = await value("location", "BB", loc.tower1);
   loc.tower2 = await value("location", "T2");
+  loc.wholeProject = (await migrator.query("select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and v.whole_project", [projectId])).rows[0].id as string;
 });
 
 afterAll(async () => {
@@ -171,7 +173,7 @@ describe("a Participant's Visibility", () => {
     const floor1B = (await migrator.query("select id from dimension_value where parent_id = $1", [loc.buildingB]))
       .rows[0].id;
     expect(await myVisibility(consultant.member, "location")).toEqual(
-      sorted(loc.tower1, loc.buildingA, loc.floor1, loc.buildingB, floor1B),
+      sorted(loc.wholeProject, loc.tower1, loc.buildingA, loc.floor1, loc.buildingB, floor1B),
     );
   });
 
@@ -213,7 +215,7 @@ describe("a Member's Visibility (V4)", () => {
     expect(await set("location", false, [loc.tower2])).toBe("exceeds_participant");
     expect(await set("trade", false, [trade.electrical])).toBe("set");
     expect(await set("location", false, [loc.buildingA])).toBe("set");
-    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.buildingA, loc.floor1));
+    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.wholeProject, loc.buildingA, loc.floor1));
   });
 
   it("is set only by the Participant's own Authorized Person, for its own Project Members", async () => {
@@ -231,10 +233,10 @@ describe("a Member's Visibility (V4)", () => {
   it("shrinks with the Participant's when a Project Admin narrows it", async () => {
     expect(await setMemberVisibility(consultant.ap, consultantParticipant, consultant.member, "location", false, [loc.tower1])).toBe("set");
     expect(await setParticipantVisibility(host.ap, consultantParticipant, "location", false, [loc.buildingA])).toBe("set");
-    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.buildingA, loc.floor1));
+    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.wholeProject, loc.buildingA, loc.floor1));
     // Stored as the intersection, so widening the Participant again doesn't widen the Member.
     expect(await setParticipantVisibility(host.ap, consultantParticipant, "location", false, [loc.tower1])).toBe("set");
-    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.buildingA, loc.floor1));
+    expect(await myVisibility(consultant.member, "location")).toEqual(sorted(loc.wholeProject, loc.buildingA, loc.floor1));
   });
 });
 

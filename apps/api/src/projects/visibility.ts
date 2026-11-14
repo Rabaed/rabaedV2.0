@@ -42,6 +42,8 @@ export type ValueRow = {
   name: BilingualText;
   level_name: BilingualText | null;
   status: "active" | "deactivated";
+  /** Read where a page needs to tell the Whole Project Location apart (RP-1304). */
+  whole_project?: boolean;
 };
 
 export function toValues(rows: ValueRow[]): DimensionValues {
@@ -55,6 +57,7 @@ export function toValues(rows: ValueRow[]): DimensionValues {
       code: r.code,
       name: r.name,
       active: r.status === "active",
+      ...(r.whole_project ? { wholeProject: true as const } : {}),
     });
   }
   return values;
@@ -80,7 +83,7 @@ export function listDimensions(db: Db, memberId: string, projectId: string): Pro
     const rows = await trx
       .selectFrom("dimension_value as v")
       .innerJoin("visibility_dimension as d", "d.id", "v.dimension_id")
-      .select(["d.kind", "v.id", "v.parent_id", "v.depth", "v.code", "v.name", "v.level_name", "v.status"])
+      .select(["d.kind", "v.id", "v.parent_id", "v.depth", "v.code", "v.name", "v.level_name", "v.status", "v.whole_project"])
       .where("v.project_id", "=", projectId)
       .orderBy("v.depth")
       .orderBy("v.sort")
@@ -141,7 +144,7 @@ export function myVisibility(db: Db, memberId: string, projectId: string): Promi
   return withMember(db, memberId, async (trx) => {
     if (!(await onProject(trx, projectId))) return null;
     const { rows } = await sql<ValueRow>`
-      select mv.kind, v.id, v.parent_id, v.depth, v.code, v.name, v.level_name, v.status
+      select mv.kind, v.id, v.parent_id, v.depth, v.code, v.name, v.level_name, v.status, v.whole_project
       from app.my_visibility(${projectId}::uuid) mv
       join dimension_value v on v.id = mv.value_id
       order by v.depth, v.sort, v.id

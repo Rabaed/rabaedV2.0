@@ -121,7 +121,9 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
 
   it("covers Electrical and Building A, and not Mechanical", async () => {
     const mine = (await ok(added.caller.get(`/v1/projects/${at.projectId}/visibility`), 200)).json() as DimensionValues;
-    expect({ trade: ids(mine.trade), location: ids(mine.location) }).toEqual({ trade: [at.electrical], location: [at.buildingA] });
+    // With the Project's Whole Project Location first, which any Location covers (RP-1304).
+    const wholeProject = ((await ok(c1.caller.get(`/v1/projects/${at.projectId}/dimensions`), 200)).json() as DimensionValues).location.find((l) => l.wholeProject)!.id;
+    expect({ trade: ids(mine.trade), location: ids(mine.location) }).toEqual({ trade: [at.electrical], location: [wholeProject, at.buildingA] });
   });
 
   it("closes K1's Visibility Gap", async () => {

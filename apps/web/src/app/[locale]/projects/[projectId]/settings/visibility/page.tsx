@@ -4,6 +4,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddParticipantButton, ParticipantsVisibility, ProjectGapNotice } from "@/components/settings/project-visibility";
 import { redirect } from "@/i18n/navigation";
+import { withoutWholeProject } from "@/lib/dimension-tree";
 import {
   getMe,
   getParticipantVisibility,
@@ -61,7 +62,8 @@ export default async function VisibilitySettingsPage({
       )}
       <ParticipantsVisibility
         projectId={project.id}
-        dimensions={dimensions}
+        // No grant lists the Whole Project Location: any Location covers it (RP-1304).
+        dimensions={withoutWholeProject(dimensions)}
         participants={participants.participants.map((p, i) => ({
           id: p.id,
           company: p.company.legalName[locale],

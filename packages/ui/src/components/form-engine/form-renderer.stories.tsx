@@ -46,6 +46,7 @@ const schema = formSchema.parse({
 const id = {
   electrical: "0190a1b2-0000-7000-8000-000000000001",
   mechanical: "0190a1b2-0000-7000-8000-000000000002",
+  wholeProject: "0190a1b2-0000-7000-8000-000000000009",
   tower1: "0190a1b2-0000-7000-8000-000000000010",
   floor1: "0190a1b2-0000-7000-8000-000000000011",
   lighting: "0190a1b2-0000-7000-8000-000000000101",
@@ -63,6 +64,7 @@ const copy = {
   scopes: { en: "Scopes", ar: "النطاقات" },
   electrical: { en: "Electrical (EL)", ar: "الكهرباء (EL)" },
   mechanical: { en: "Mechanical (ME)", ar: "الميكانيكا (ME)" },
+  wholeProject: { en: "Whole Project (WP)", ar: "المشروع كامل (WP)" },
   tower1: { en: "Tower 1 (T1)", ar: "البرج 1 (T1)" },
   floor1: { en: "— Floor 1 (F1)", ar: "— الطابق 1 (F1)" },
   lighting: { en: "Lighting", ar: "الإنارة" },
@@ -88,7 +90,9 @@ const choices = (context: StoryContext): BuiltInChoices => {
       { id: id.electrical, label: text("electrical"), code: "EL" },
       { id: id.mechanical, label: text("mechanical") },
     ],
+    // The Whole Project Location first, above the Zones, as the API lists them (RP-1304).
     locations: [
+      { id: id.wholeProject, label: text("wholeProject") },
       { id: id.tower1, label: text("tower1") },
       { id: id.floor1, label: text("floor1") },
     ],
@@ -220,6 +224,25 @@ export const BuiltInFields: Story = {
     noCheckbox(context, copy.power);
     await expect(checkbox(context, copy.hvac)).not.toBeChecked();
     await expect(saved(context)).toMatchObject({ trade: id.mechanical, scopes: [] });
+  },
+};
+
+/**
+ * The Location picker (RP-1304): "Whole Project" is offered first, above the Zones, and answers the
+ * required Location, so the Form has no Location error once it is chosen.
+ */
+export const WholeProjectLocation: Story = {
+  render: (_args, context) => <Filling locale={context} />,
+  play: async (context) => {
+    await userEvent.click(combobox(context, copy.location));
+    const options = await screen.findAllByRole("option");
+    await expect(options.map((o) => o.textContent)).toEqual([copy.wholeProject, copy.tower1, copy.floor1].map((t) => storyText(context, t)));
+    await userEvent.click(options[0]!);
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    await expect(saved(context).location).toBe(id.wholeProject);
+    await expect(combobox(context, copy.location)).toHaveTextContent(storyText(context, copy.wholeProject));
+    const answered = { ...saved(context), manufacturer: "ACME", trade: id.electrical, description: "General specification" };
+    await expect(validateAnswers(schema, answered, "draft").ok).toBe(true);
   },
 };
 

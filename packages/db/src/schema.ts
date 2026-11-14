@@ -296,6 +296,8 @@ export interface DimensionValueTable {
   sort: Generated<number>;
   /** "Archived" on screen (RP-1239): kept where used, never picked anew. */
   status: Generated<"active" | "deactivated">;
+  /** The Project's "Whole Project" Location (RP-1304): one per Project, covered by any Location, never a grant's value. */
+  whole_project: Generated<boolean>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

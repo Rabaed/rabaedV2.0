@@ -116,7 +116,9 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
 
   it("covers every Trade and Building B, as C2 does, and not Building A", async () => {
     const mine = await myVisibility(added);
-    expect(mine.filter((v) => v.kind === "location").map((v) => v.id)).toEqual([tower.buildingB]);
+    // With the Project's Whole Project Location, which any Location covers (RP-1304).
+    const wholeProject = (await migrator.query("select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and v.whole_project", [tower.projectId])).rows[0].id as string;
+    expect(mine.filter((v) => v.kind === "location").map((v) => v.id).sort()).toEqual([wholeProject, tower.buildingB].sort());
     const trades = await migrator.query(
       "select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and d.kind = 'trade'",
       [tower.projectId],
@@ -148,6 +150,7 @@ describe("scenario RP-1155-3: a Member added to the Project starts with all of t
     expect((await myVisibility(added)).filter((v) => v.kind === "location")).toEqual([]); // not hidden-from: their own narrowed coverage
     expect(await run(sql`select app.remove_project_member(${p}::uuid, ${added}::uuid, now()) as outcome`)).toBe("removed");
     expect(await run(sql`select app.add_project_member(${p}::uuid, ${added}::uuid, now()) as outcome`)).toBe("added");
-    expect((await myVisibility(added)).filter((v) => v.kind === "location").map((v) => v.id)).toEqual([tower.buildingB]);
+    const wholeProject = (await migrator.query("select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and v.whole_project", [tower.projectId])).rows[0].id as string;
+    expect((await myVisibility(added)).filter((v) => v.kind === "location").map((v) => v.id).sort()).toEqual([wholeProject, tower.buildingB].sort());
   });
 });

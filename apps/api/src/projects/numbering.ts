@@ -37,7 +37,8 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
     const patterns = await readNumberingPatterns(trx, projectId, now);
     const types = await readNumberingWorkItemTypes(trx, projectId);
     const versions = await readNumberingVersions(trx, projectId, now);
-    // The live example's Trade and Location: the Project's first ones, the Location from its Zone down.
+    // The live example's Trade and Location: the Project's first ones, the Location from its Zone down
+    // (a Zone, not the Whole Project Location listed first, which has nothing below it: RP-1304).
     const { rows: trades } = await sql<{ code: string }>`
       select v.code from dimension_value v join visibility_dimension d on d.id = v.dimension_id
       where v.project_id = ${projectId}::uuid and d.kind = 'trade'
@@ -46,7 +47,7 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
     const { rows: locations } = await sql<{ code: string }>`
       with recursive first_down as (
         (select v.id, v.code, v.depth from dimension_value v join visibility_dimension d on d.id = v.dimension_id
-         where v.project_id = ${projectId}::uuid and d.kind = 'location' and v.parent_id is null
+         where v.project_id = ${projectId}::uuid and d.kind = 'location' and v.parent_id is null and not v.whole_project
          order by v.sort, v.id limit 1)
         union all
         (select c.id, c.code, c.depth from dimension_value c join first_down f on c.parent_id = f.id

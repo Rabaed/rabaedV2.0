@@ -279,6 +279,37 @@ export const Wide: Story = {
   },
 };
 
+// The Project's Whole Project Location (RP-1304): at the top level, listed first, with the Zones' level name.
+const wholeProject = { id: "00000000-0000-4000-8000-0000000000a9", code: "WP", name: b("Whole Project", "المشروع كامل") };
+const generalSpecification = row(9, {
+  id: "00000000-0000-4000-8000-0000000000f9",
+  title: "General specification",
+  documentNumber: "TWR-TMC-EL-MAR-0009",
+  location: wholeProject,
+});
+
+/**
+ * An item at the Whole Project (RP-1304): its Zone column names it, with no Building or Floor, and it is
+ * a value of its own in the Zone filter, first above the Zones.
+ */
+export const WholeProjectLocation: Story = {
+  args: {
+    list: {
+      ...list,
+      items: [generalSpecification, ...items],
+      filters: { ...list.filters, locations: [{ ...wholeProject, parentId: null, depth: 1, levelName: b("Zone", "المنطقة") }, ...list.filters.locations] },
+    },
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await expect(cellOf(context, "General specification", b("Zone", "المنطقة"))).toHaveTextContent(wholeProject.name[locale]);
+    await expect(cellOf(context, "General specification", b("Building", "المبنى"))).toHaveTextContent("—");
+    const panel = await openFilters(context, b("Zone", "المنطقة"));
+    await userEvent.click(within(panel).getByRole("checkbox", { name: wholeProject.name[locale] }));
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, location: [wholeProject.id] });
+  },
+};
+
 const cancelledStage = { key: "cancelled", name: b("Cancelled", "ملغى"), category: "cancelled" as const };
 
 /**

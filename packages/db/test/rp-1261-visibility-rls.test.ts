@@ -418,7 +418,9 @@ describe("scenario RP-1261-2: nothing of the earlier participation reopens to th
   it("their link to the withdrawn K1 counts for nothing: Visibility, Assign and the weekly report come from the new one", async () => {
     // The lead had every Location and Assign on the withdrawn K1; on the new one Building A only, and no Assign.
     const mine = await call<{ kind: string; value_id: string }>(k1Lead, sql`select kind, value_id from app.my_visibility(${projectId}::uuid)`);
-    expect(mine.filter((v) => v.kind === "location").map((v) => v.value_id)).toEqual([buildingA]);
+    // With the Project's Whole Project Location, which any Location covers (RP-1304).
+    const wholeProject = (await migrator.query("select v.id from dimension_value v join visibility_dimension d on d.id = v.dimension_id where d.project_id = $1 and v.whole_project", [projectId])).rows[0].id as string;
+    expect(mine.filter((v) => v.kind === "location").map((v) => v.value_id).sort()).toEqual([wholeProject, buildingA].sort());
     expect(mine.map((v) => v.value_id)).not.toContain(buildingB); // not hidden-from: the lead's own grant, read just above
     expect((await call<{ holds: boolean }>(k1Lead, sql`select app.holds_assign_permission() as holds`))[0]!.holds).toBe(false);
     // The weekly report reaches only a Member holding Assign on the Project: none for the lead, though they see items.

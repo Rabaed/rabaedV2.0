@@ -288,7 +288,9 @@ describe("scenario RP-1261-2: nothing of the earlier participation reopens to th
 
   it("their link to the withdrawn K1 counts for nothing: Visibility and the weekly report come from the new one", async () => {
     const mine = (await ok(k1Lead.caller.get(`/v1/projects/${projectId}/visibility`), 200)).json() as DimensionValues;
-    expect(mine.location.map((v) => v.id)).toEqual([buildingA]);
+    // With the Project's Whole Project Location first, which any Location covers (RP-1304).
+    const wholeProject = ((await ok(c1.caller.get(`/v1/projects/${projectId}/dimensions`), 200)).json() as DimensionValues).location.find((l) => l.wholeProject)!.id;
+    expect(mine.location.map((v) => v.id)).toEqual([wholeProject, buildingA]);
     expect(mine.location.map((v) => v.id)).not.toContain(buildingB); // not hidden-from: the lead's own grant, read just above
     const settings = (await ok(k1Lead.caller.get("/v1/notification-settings"), 200)).json() as NotificationSettingsView;
     expect(settings.receivesWeeklyReport).toBe(false);
