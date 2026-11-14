@@ -1552,7 +1552,7 @@ Every case here is run in **UAT 05 · Consultant Manager (Mohammed)**, as the on
 - **Steps:**
   1. Projects > UAT 05 · Consultant Manager (Mohammed) > Settings > Workflows.
   2. Open the MAR Workflow and a published Version.
-- **Expected result:** The page lists which Workflow each Work Item Type runs, its Version and every published Version whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.
+- **Expected result:** The page lists which Workflow each Work Item Type runs and its Version, and only the Workflows in use: no Rabaed Default a Type doesn't run (the Project Admin's list keeps them all, the one in use marked; RP-1299). Each published Version is read whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.
 
 ### PKG-09 Bulk Transition applies one Action Form to many
 

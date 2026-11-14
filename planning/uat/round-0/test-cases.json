@@ -247,7 +247,7 @@
   "title": "Duplicate copies only TMC's own work",
   "who": "Hafiz (TMC engineer)",
   "role": "01",
-  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate. 2) Open the new Draft.",
+  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate. 2) Open the new Draft. 3) Open UAT01-MAR-01-0009 again: Duplicate is also in the Submittal Panel's bar, beside Download PDF, at every panel size. Press it for another new Draft.",
   "expected": "A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. \"Duplicated from\" shows UAT01-MAR-01-0009 to TMC only.",
   "priority": "Low",
   "mode": "Both",
@@ -444,11 +444,11 @@
   "who": "Mohammed (DCL manager)",
   "role": "05",
   "steps": "1) Projects > UAT 05 · Consultant Manager (Mohammed) > Settings > Workflows. 2) Open the MAR Workflow and a published Version.",
-  "expected": "The page lists which Workflow each Work Item Type runs, its Version and every published Version whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.",
+  "expected": "The page lists which Workflow each Work Item Type runs and its Version, and only the Workflows in use: no Rabaed Default a Type doesn't run (the Project Admin's list keeps them all, the one in use marked; RP-1299). Each published Version is read whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.",
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
-  "covers": "Matrix: RP-441-1; Rules: V20, ADR 0016"
+  "covers": "Matrix: RP-441-1, RP-1299-1, RP-1299-2; Rules: V20, ADR 0016"
  },
  {
   "id": "WF-02",
@@ -744,8 +744,8 @@
   "title": "Trade, Location and Scopes are Built-in Fields",
   "who": "Hafiz (TMC engineer)",
   "role": "01",
-  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR: pick Location Block A, then Tower A, then Tower A Level 02. 2) Open Scopes. 3) Try to remove Trade from the Form view.",
-  "expected": "Locations nest Zone > Building > Floor (Block A > Tower A > Tower A Level 02); Scopes belong to the Trade, and UAT 01 has none, so Scopes offers nothing. Trade, Location and Scopes cannot be removed or made optional.",
+  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR: pick Location Block A, then Tower A, then Tower A Level 02. 2) Open Scopes, then pick Trade Electrical Works and open Scopes again. 3) Try to remove Trade from the Form view.",
+  "expected": "Locations nest Zone > Building > Floor (Block A > Tower A > Tower A Level 02); Scopes belong to the Trade: before a Trade is picked Scopes offers nothing, and for Electrical Works it offers only that Trade's Scopes (Lighting with Emergency lighting and External lighting under it, Power distribution, Earthing and lightning protection, Cable containment, Fire alarm), in English and Arabic. Trade, Location and Scopes cannot be removed or made optional.",
   "priority": "Low",
   "mode": "Manual",
   "waits": "Now",

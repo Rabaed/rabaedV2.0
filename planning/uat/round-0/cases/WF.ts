@@ -71,13 +71,26 @@ async function withException<T>(saeed: Api, projectId: string, workflowId: strin
 
 defineCase("WF-01", async (t) => {
   const tm = await H.team("ali", "mohammed", "saeed");
+  // RP-1299 (owner's decision 2026-11-13): the Project Admin is listed every Rabaed Default, the one in use marked;
+  // a Member who is not a Project Admin only the Workflows in use, and the plain 404 for a direct link to another.
+  const asAdmin = typeOf(await settings(tm.api.saeed!, tm.projectId), "MAR");
+  const unused = (asAdmin.rabaedDefaults as H.Json[]).find((d) => !d.bound);
+  t.check("saeed (Project Admin): lists every Rabaed Default of MAR, at most one in use", (asAdmin.rabaedDefaults as H.Json[]).length > 1 && (asAdmin.rabaedDefaults as H.Json[]).filter((d) => d.bound).length <= 1, (asAdmin.rabaedDefaults as H.Json[]).map((d) => `${d.name.en}${d.bound ? " (in use)" : ""}`).join(" | "));
+  // That check fails when MAR has no Default out of use, so `if (unused)` below only keeps a failed run from stopping.
+  const version = (id: string, n: number) => `/projects/${tm.projectId}/workflows/${id}/versions/${n}`;
   for (const who of ["ali", "mohammed"] as const) {
     const api = tm.api[who]!;
     const ws = await settings(api, tm.projectId);
     t.check(`${who}: Settings > Workflows reads (api 200, canEdit false)`, ws.canEdit === false && Array.isArray(ws.types), `canEdit ${ws.canEdit}`);
+    const listed = (ws.types as H.Json[]).flatMap((x) => (x.rabaedDefaults as H.Json[]).map((d) => ({ type: x.code as string, ...d })));
+    t.check(`${who}: is listed only the Rabaed Defaults in use, at most one per Type (RP-1299)`, listed.every((d) => d.bound) && new Set(listed.map((d) => d.type)).size === listed.length, listed.map((d) => `${d.type} ${d.name.en}`).join(" | "));
     const mar = typeOf(ws, "MAR");
     t.check(`${who}: the page lists which Workflow MAR runs and its Version`, !!mar.workflow?.name?.en && mar.workflow.versionNo >= 1, JSON.stringify(mar.workflow));
-    const v = await api.get(`/workflows/${mar.workflow.id}/versions/${mar.workflow.versionNo}`);
+    if (unused) {
+      const refused = await api.get(version(unused.id, unused.versionNo));
+      t.check(`${who}: a Rabaed Default not in use is the plain 404 by its Project link (RP-1299)`, refused.status === 404, `${unused.name.en}: ${refused.status}`);
+    }
+    const v = await api.get(version(mar.workflow.id, mar.workflow.versionNo));
     const def = (v.body as H.Json)?.definition;
     const stepNames = ((def?.steps as H.Json[]) ?? []).map((s) => s.name.en);
     t.check(`${who}: a published Version is read whole with every Company's Steps`, v.status === 200 && ["Contractor Engineer", "Contractor PM", "Consultant Engineer", "Consultant PM"].every((n) => stepNames.some((x) => x.includes(n.replace("PM", "PM"))) || true) && stepNames.length >= 7, stepNames.join(", "));
@@ -97,6 +110,12 @@ defineCase("WF-01", async (t) => {
   await settle(mp.page);
   await t.shot(mp.page, "version-page-mohammed");
   t.check("Mohammed opens a published Version page (read-only)", !(await mp.page.getByTestId("not-found").count()) && /Version/.test(await mp.page.getByRole("main").innerText()));
+  if (unused) {
+    await go(mp.page, `/projects/${tm.projectId}/settings/workflows/${unused.id}/versions/${unused.versionNo}`);
+    await settle(mp.page);
+    await t.shot(mp.page, "unused-default-mohammed");
+    t.check("Mohammed gets the plain 404 page for a Rabaed Default not in use (RP-1299)", (await mp.page.getByTestId("not-found").count()) > 0);
+  }
   await go(page, `/projects/${tm.projectId}/settings/workflows/${mar.workflow.id}`);
   await settle(page);
   t.check("Ali gets the plain 404 page where the builder would be", (await page.getByTestId("not-found").count()) > 0 || /Version/.test("") === false && !(await page.getByRole("main").getByText("Publish").count()));

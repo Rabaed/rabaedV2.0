@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
-import { phone, tablet } from "../../storybook/form.ts";
+import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { packagePageLabels } from "../../storybook/packages.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
@@ -598,18 +598,138 @@ const onItsPage: Story["render"] = (args, context) => (
   </StoryProjectPage>
 );
 
-/** On a phone (402): its own page with Back (row 68). */
+/** The shell's bottom action bar, on a phone only. */
+const actionBarOf = (context: { canvasElement: HTMLElement }) => context.canvasElement.querySelector<HTMLElement>("[data-action-bar]");
+
+/** The bottom action bar once the page's action has moved into it (after hydration). */
+const filledBarOf = (context: { canvasElement: HTMLElement }) =>
+  waitFor(() => {
+    const element = actionBarOf(context);
+    expect(element?.querySelector("button")).not.toBeNull();
+    return element!;
+  });
+
+/**
+ * On a phone (RP-1292, the owner's decision on RP-1277): the page's one primary action is in the bottom action bar
+ * (RP-1272), full width with a 44 px target, and not in the header; `inHeader` are what stay in the header's group.
+ */
+async function expectInTheBar(context: Parameters<NonNullable<Story["play"]>>[0], primary: string, inHeader: string[]) {
+  const bar = await filledBarOf(context);
+  const action = within(bar).getByRole("button", { name: primary });
+  await expect(action).toBeVisible();
+  await expect(within(bar).getAllByRole("button")).toHaveLength(1);
+  // Full width in the bar, less its padding.
+  await expect(action.getBoundingClientRect().width).toBeGreaterThan(innerWidth - 40);
+  await expectTouchTarget(action);
+  const header = within(actionsOf(context));
+  await expect(header.queryByRole("button", { name: primary })).toBeNull();
+  for (const other of inHeader) await expect(header.getByRole("button", { name: other })).toBeVisible();
+  await expect(header.getAllByRole("button")).toHaveLength(inHeader.length);
+}
+
+/** At 820 and wider: every action in the header's group, as on a desktop, and no bottom action bar. */
+async function expectAllInTheHeader(context: Parameters<NonNullable<Story["play"]>>[0], actions: string[]) {
+  await expect(actionBarOf(context)).toBeNull();
+  const header = within(actionsOf(context));
+  for (const action of actions) await expect(header.getByRole("button", { name: action })).toBeVisible();
+  await expect(header.getAllByRole("button")).toHaveLength(actions.length);
+}
+
+/** A new Open Package that can't be Submitted yet: nothing in it. Rename, Delete and "+ Add submittals". */
+const cannotSubmitYet = withItems({ ...openPkg, counts: { total: 0, open: 0, codes: {} }, actions: { ...openPkg.actions, submit: false } }, []);
+/** In Progress and ready: Rename, "+ Add submittals" and Submit Package. */
+const canSubmit = withItems(inProgress, [lights, fans, mixer, tiles]);
+
+/**
+ * On a phone (402): its own page with Back (row 68); it can be Submitted, so Submit Package is in the bottom
+ * action bar and "+ Add submittals" stays in the header beside Rename, as a secondary button (RP-1292).
+ */
 export const OnAPhone: Story = {
   parameters: { ...phone, layout: "fullscreen" },
-  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
+  args: { pkg: canSubmit },
   render: onItsPage,
-  play: expectFullPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await expectFullPage(context);
+    await expectInTheBar(context, l.submit.trigger, [l.rename.trigger, l.addItems.trigger]);
+  },
 };
 
-/** At 820: still the full page, no list of Packages beside it (row 69 (a)). */
+/** At 820: still the full page, no list of Packages beside it (row 69 (a)), and every action in the header as today. */
 export const OnATablet: Story = {
   parameters: { ...tablet, layout: "fullscreen" },
-  args: { pkg: withItems(inProgress, [lights, fans, mixer, tiles]) },
+  args: { pkg: canSubmit },
   render: onItsPage,
-  play: expectFullPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await expectFullPage(context);
+    await expectAllInTheHeader(context, [l.rename.trigger, l.addItems.trigger, l.submit.trigger]);
+  },
+};
+
+/** On a phone, a Package that can't be Submitted yet: "+ Add submittals" is in the bottom action bar; Rename and Delete stay in the header (RP-1292). */
+export const NotSubmittableOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await expectFullPage(context);
+    await expectInTheBar(context, l.addItems.trigger, [l.rename.trigger, l.delete.trigger]);
+    await expect(context.canvas.queryByRole("button", { name: l.submit.trigger })).toBeNull();
+  },
+};
+
+/** At 820, the same Package: Rename, Delete and "+ Add submittals" in the header as today. */
+export const NotSubmittableOnATablet: Story = {
+  parameters: { ...tablet, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await expectFullPage(context);
+    await expectAllInTheHeader(context, [l.rename.trigger, l.delete.trigger, l.addItems.trigger]);
+  },
+};
+
+/** On a phone, another Company reading it has no action: the bottom action bar stays empty and hidden. */
+export const ReadOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: withItems(asConsultant, [lights, fans, mixer]) },
+  render: onItsPage,
+  play: async (context) => {
+    await expectFullPage(context);
+    const bar = actionBarOf(context)!;
+    await expect(bar).toBeEmptyDOMElement();
+    await expect(bar).not.toBeVisible();
+  },
+};
+
+/** On a phone, "+ Add submittals" opens its pop-up from the bottom action bar, and adds the chosen ones. Left open for the screenshot. */
+export const AddItemsFromTheBar: Story = {
+  parameters: { ...phone, ...overlay, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.addItems.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
+    const results = await within(dialog).findByRole("list", { name: l.addItems.results });
+    await userEvent.click(within(results).getByRole("checkbox", { name: l.addItems.choose("Shower screens") }));
+    await expect(within(dialog).getByRole("button", { name: l.addItems.add("1", 1) })).toBeEnabled();
+  },
+};
+
+/** On a phone, Submit Package opens its pop-up from the bottom action bar, and Submits. */
+export const SubmitFromTheBar: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: canSubmit },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
+    await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
+    await expect(context.args.onSubmit).toHaveBeenCalledOnce();
+  },
 };

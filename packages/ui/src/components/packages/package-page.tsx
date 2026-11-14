@@ -26,6 +26,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { TableCard } from "../list/table-card.tsx";
 import { BackLink } from "../navigation/back-link.tsx";
+import { PrimaryAction } from "../shell/action-bar.tsx";
 import { scrollClear } from "../views/work-item-list.tsx";
 import { cellText, WorkItemTable, type WorkItemTableLabels } from "../views/work-item-table.tsx";
 import { AddPackageItemsDialog, type AddPackageItemsLabels, type PackageItemSearch } from "./add-package-items-dialog.tsx";
@@ -159,6 +160,24 @@ export function PackagePage({
   const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: rows.length === 0 ? labels.empty : labels.nothingHere };
   const sorted = sortRows(visible, sort, locale, tableLabels, filters);
 
+  // The page's one primary action (RP-1292, the owner's decision on RP-1277): Submit Package once it is offered, else "+ Add
+  // submittals". On a phone it goes in the bottom action bar (RP-1272); Rename, Delete and a secondary
+  // "+ Add submittals" stay in the header.
+  const addItemsDialog = pkg.actions.addItems && searchItems && onAdd && (
+    <AddPackageItemsDialog
+      packageId={pkg.id}
+      trades={filters.trades}
+      locale={locale}
+      labels={labels.addItems}
+      close={labels.close}
+      cancel={labels.cancel}
+      refusals={labels.refusals}
+      search={searchItems}
+      onAdd={onAdd}
+      primary={!submittable}
+    />
+  );
+
   const run = async (call: () => ReturnType<PackageCall>) => {
     setError(null);
     try {
@@ -199,34 +218,23 @@ export function PackagePage({
           {pkg.actions.delete && onDelete && (
             <DeletePackageDialog number={pkg.number} labels={labels.delete} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onDelete={onDelete} />
           )}
-          {pkg.actions.addItems && searchItems && onAdd && (
-            <AddPackageItemsDialog
-              packageId={pkg.id}
-              trades={filters.trades}
-              locale={locale}
-              labels={labels.addItems}
-              close={labels.close}
-              cancel={labels.cancel}
-              refusals={labels.refusals}
-              search={searchItems}
-              onAdd={onAdd}
-              primary={!submittable}
-            />
-          )}
+          {submittable ? addItemsDialog : <PrimaryAction>{addItemsDialog}</PrimaryAction>}
           {submittable && (
-            <SubmitPackageDialog
-              number={pkg.number}
-              items={toSubmit}
-              locale={locale}
-              labels={labels.submit}
-              close={labels.close}
-              cancel={labels.cancel}
-              refusals={labels.refusals}
-              itemHref={itemHref}
-              linkAs={Link}
-              onSubmit={onSubmit}
-              gate={bulk?.gate}
-            />
+            <PrimaryAction>
+              <SubmitPackageDialog
+                number={pkg.number}
+                items={toSubmit}
+                locale={locale}
+                labels={labels.submit}
+                close={labels.close}
+                cancel={labels.cancel}
+                refusals={labels.refusals}
+                itemHref={itemHref}
+                linkAs={Link}
+                onSubmit={onSubmit}
+                gate={bulk?.gate}
+              />
+            </PrimaryAction>
           )}
         </div>
       </header>

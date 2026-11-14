@@ -47,6 +47,7 @@ import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-pan
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
+import { duplicateProblemKey, duplicateWorkItem } from "@/lib/duplicate-work-item";
 import { itemPdfProblemMessage, openItemPdf } from "@/lib/item-pdf";
 import { listSearchParams } from "@/lib/list-url";
 
@@ -314,15 +315,18 @@ export function WorkItemListOrKanban(
         const problem = await openItemPdf(row.id, row.outcome !== null);
         return problem === null ? null : tRecord(itemPdfProblemMessage(problem));
       }
-      case "resubmit":
-      case "duplicate": {
-        // A key per request, so a double-click makes one Revision or one Draft.
-        const res = await post(`/work-items/${row.id}/${action === "resubmit" ? "revisions" : "duplicate"}`, { idempotencyKey: crypto.randomUUID() });
-        if (!res.ok) {
-          const { error } = (await res.json().catch(() => ({}))) as { error?: string };
-          return error === "duplicate_files_too_large" ? t("list.rowMenu.duplicateTooLarge") : failed;
-        }
+      case "resubmit": {
+        // A key per request, so a double-click makes one Revision.
+        const res = await post(`/work-items/${row.id}/revisions`, { idempotencyKey: crypto.randomUUID() });
+        if (!res.ok) return failed;
         router.push(itemHref(((await res.json()) as { id: string }).id));
+        return null;
+      }
+      case "duplicate": {
+        // The same call as the Submittal Panel's Duplicate (RP-1303).
+        const result = await duplicateWorkItem(row.id);
+        if (!result.ok) return t(`list.rowMenu.${duplicateProblemKey(result.reason)}`);
+        router.push(itemHref(result.id));
         return null;
       }
       case "delete": {

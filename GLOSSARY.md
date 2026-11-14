@@ -87,7 +87,7 @@ A discipline of the works, such as Civil, Architectural, Electrical or Mechanica
 _Avoid_: Discipline, package
 
 **Location**:
-A place in the Project's physical breakdown, such as a Zone, Building, Villa or Floor, or a Sector on infrastructure projects. A Location can be drawn on the Project's site map or floor plans so Work Items and Drawings can be shown on it. A Project Admin can rename a Location (its code never changes) or deactivate it ("Archive" on screen) with every Location inside it: it stays on the Work Items that use it but is never picked for new ones.
+A place in the Project's physical breakdown, such as a Zone, Building, Villa or Floor, or a Sector on infrastructure projects. A Location can be drawn on the Project's site map or floor plans so Work Items and Drawings can be shown on it. A Project Admin can rename a Location (its code never changes) or deactivate it ("Archive" on screen) with every Location inside it: it stays on the Work Items that use it but is never picked for new ones. Every Project also has a **Whole Project** Location («المشروع كامل»), first above the Zones, for Work Items that apply to the whole Project, such as a general specification: it is built in (never renamed, archived or given Locations inside it), and any Location covers it, so a Member whose Visibility covers any Location of the Project sees its Work Items of their Trades, and no Visibility lists it on its own.
 _Avoid_: Area, WBS
 
 **Visibility**:

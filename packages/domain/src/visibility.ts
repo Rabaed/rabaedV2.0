@@ -29,6 +29,11 @@ export const dimensionValue = z.object({
    * offered for new ones (RP-1239).
    */
   active: z.boolean(),
+  /**
+   * The Project's "Whole Project" Location (RP-1304): one per Project, first at the top level, for items that apply
+   * to the whole Project. Any Location covers it, so it is never a grant's value. Absent on every other value.
+   */
+  wholeProject: z.literal(true).optional(),
 });
 export type DimensionValue = z.infer<typeof dimensionValue>;
 

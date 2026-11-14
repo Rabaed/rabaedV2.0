@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { demoMailbox } from "../src/demo/mailbox.ts";
-import { SAMPLE_PROJECT, sampleInspections, samplePackages, sampleSubmittals, type SampleSubmittal } from "../src/demo/sample-project-plan.ts";
+import { SAMPLE_PROJECT, SAMPLE_SCOPES, sampleInspections, samplePackages, sampleSubmittals, type SampleSubmittal } from "../src/demo/sample-project-plan.ts";
 import { addSampleProject, sampleRecords, sampleProjectStatus } from "../src/demo/sample-project.ts";
 import { createFileStore, fileStoreSettingsFromEnv } from "../src/documents/file-store.ts";
 import { createTestApi, DEFAULT_PASSWORD, expectHidden, readById, testConfig, type Caller } from "./support/harness.ts";
@@ -111,6 +111,29 @@ describe("the sample Project, as its Contractor reads it", () => {
     for (const stage of ["open", "in_progress", "on_hold", "resolved", "closed"]) expect(counts[stage], stage).toBeGreaterThan(0);
     const types = new Set((await listed(as.ali, "snag_list")).map((i) => i.type.code));
     expect(types).toEqual(new Set(["SNG", "OBS", "CMT"]));
+  });
+});
+
+/** Project `id`'s Scopes as `by` reads them: "Trade code: Scope" and "Trade code: Scope > Sub-scope", in English, sorted. */
+async function scopesOf(by: Caller, id: string): Promise<string[]> {
+  const { trade } = (await by.get(`/v1/projects/${id}/dimensions`)).json() as { trade: { id: string; code: string }[] };
+  const res = await by.get(`/v1/projects/${id}/scopes`);
+  expect(res.statusCode, res.body).toBe(200);
+  const { scopes } = res.json() as { scopes: { id: string; tradeId: string; parentId: string | null; name: { en: string } }[] };
+  const code = (tradeId: string) => trade.find((t) => t.id === tradeId)?.code;
+  const label = (s: (typeof scopes)[number]) => (s.parentId ? `${scopes.find((p) => p.id === s.parentId)?.name.en} > ${s.name.en}` : s.name.en); // not hidden-from: names the Scopes every Project Member reads (V16)
+  return scopes.map((s) => `${code(s.tradeId)}: ${label(s)}`).sort();
+}
+/** The Scopes SAMPLE_SCOPES plans, as scopesOf reads them. */
+const plannedScopes = Object.entries(SAMPLE_SCOPES)
+  .flatMap(([code, scopes]) => scopes.flatMap((s) => [`${code}: ${s.name.en}`, ...(s.subScopes ?? []).map((x) => `${code}: ${s.name.en} > ${x.en}`)])) // not hidden-from: the seed's planned Scope names, which every Project Member reads (V16)
+  .sort();
+
+describe("its Scopes (RP-1305)", () => {
+  it("gives every Trade its Scopes and Sub-scopes, which every Project Member reads (V16)", async () => {
+    // Ali (TMC) and Ahmed (the Consultant): both Project Members, so both read every Trade's Scopes.
+    expect(await scopesOf(as.ali, projectId)).toEqual(plannedScopes);
+    expect(await scopesOf(as.ahmed, projectId)).toEqual(plannedScopes);
   });
 });
 
@@ -248,6 +271,8 @@ describe("its Packages (RP-1220)", () => {
 
     const third = await withApi((app) => addSampleProject(app, migrator, DEFAULT_PASSWORD, { records: full, project }));
     expect(third).toMatchObject({ added: 0, packages: { added: 0, present: full.packages.length } });
+    // Three runs, each Scope once (RP-1305).
+    expect(await scopesOf(as.ali, second.projectId)).toEqual(plannedScopes);
     expect(await status()).toEqual({ project: true, present: items + full.inspections.length + own, planned: items + full.inspections.length + own, packages: { present: full.packages.length, planned: full.packages.length } });
   });
 });
