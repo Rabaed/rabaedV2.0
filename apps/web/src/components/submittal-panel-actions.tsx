@@ -33,6 +33,7 @@ import { DownloadWorkingCopyButton } from "@/components/download-working-copy-bu
 import { OpenerAlert, useTransitionOpener } from "@/components/work-item-actions";
 import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
+import { duplicateProblemKey, duplicateWorkItem } from "@/lib/duplicate-work-item";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
 
@@ -44,7 +45,7 @@ import { useRevisionPickerLabels } from "@/components/work-item-revision-picker"
 /**
  * The Submittal Panel's action bar (RP-1237, gap table v3 rows 22–28 and 48–51; the owner's Anatomy V3
  * part 9), the same at every size and at Full, which is the item's page: Download PDF always, then exactly
- * what the engine offers this Member (`submittalPanelBar`): Edit for the Form's holder (then Save Draft and
+ * what the engine offers this Member (`submittalPanelBar`): Duplicate as the List row offers it (RP-1303), Edit for the Form's holder (then Save Draft and
  * the saved time), Discard Revision, Create Revision or a replacement, the Transitions that issue no code
  * as buttons with the Workflow's labels, Return to pool, Pick up, and the code Transitions in the "Issue
  * Review Code ▾" menu, the primary, last. With nothing to press, a chip says where it waits. Each
@@ -221,6 +222,8 @@ export function SubmittalPanelActionBar({
           labels={waitingLabels}
         />
       )}
+      {/* Duplicate as the List row's ⋯ menu offers it (RP-1303): the same flag and the same call. */}
+      {bar.duplicate && <DuplicateButton key={item.id} workItemId={item.id} />}
       {bar.edit &&
         (save ? (
           <Button variant="secondary" disabled={save.button.disabled} onClick={() => void save.run()} className="gap-2">
@@ -296,6 +299,49 @@ export function CreateRevisionButton({ workItemId }: { workItemId: string }) {
       <Button variant="secondary" disabled={pending} onClick={() => void run()} className="gap-2">
         <Icon name="git-branch" size={17} />
         {t("create")}
+      </Button>
+    </span>
+  );
+}
+
+/**
+ * Duplicate (RP-1303), where the item read offers it (`actions.duplicate`, the List row's own flag): the
+ * List row's call (`duplicateWorkItem`), so it copies only the viewer's own Company's work (RP-409).
+ * The new Draft opens in the panel.
+ */
+function DuplicateButton({ workItemId }: { workItemId: string }) {
+  const t = useTranslations("workItemViews.list.rowMenu");
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A press in the same frame as the first, before the button re-renders disabled, does nothing: one Draft.
+  const running = useRef(false);
+  async function run() {
+    if (running.current) return;
+    running.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      const result = await duplicateWorkItem(workItemId);
+      if (result.ok) router.push(`/work-items/${result.id}`);
+      else setError(t(duplicateProblemKey(result.reason)));
+    } catch {
+      setError(t("failed"));
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {error && (
+        <span role="alert" className="text-sm text-danger-fg">
+          {error}
+        </span>
+      )}
+      <Button variant="secondary" disabled={pending} onClick={() => void run()} className="gap-2">
+        <Icon name="copy" size={17} />
+        {t("duplicate")}
       </Button>
     </span>
   );

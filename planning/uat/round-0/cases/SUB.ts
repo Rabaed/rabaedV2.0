@@ -491,6 +491,20 @@ defineCase("SUB-17", async (t) => {
   t.check('"Duplicated from" shows the original\'s number to TMC', n.duplicatedFrom?.documentNumber === orig.documentNumber, JSON.stringify(n.duplicatedFrom));
   t.check("DCL cannot see the new Draft (404)", (await tm.api.ahmed!.get(`/work-items/${newId}`)).status === 404);
   await t.shot(page, "duplicated-draft");
+  // RP-1303: Duplicate is in the Submittal Panel's bar too, beside Download PDF, at every size; the same call.
+  await go(page, `/work-items/${id}`);
+  await settle(page, 800);
+  const panelDuplicate = page.getByRole("dialog").getByRole("button", { name: "Duplicate", exact: true });
+  t.check("The panel's bar offers Duplicate on TMC's closed item", await panelDuplicate.isVisible());
+  await t.shot(page, "panel-duplicate");
+  if (await panelDuplicate.isVisible()) {
+    await panelDuplicate.click();
+    await page.waitForURL((u) => { const o = u.searchParams.get("open"); return !!o && o !== id && o !== newId; }, { timeout: 15000 }).catch(() => undefined);
+    const fromPanel = new URL(page.url()).searchParams.get("open");
+    const copy = fromPanel && fromPanel !== id && fromPanel !== newId ? await H.detail(tm.api.hafiz!, fromPanel) : null;
+    t.check("The panel's Duplicate opens another new Draft of TMC's work", copy?.stage.key === "draft" && copy.title === subject, `${copy?.stage.key} ${copy?.title}`);
+  }
+  t.check("DCL is not offered Duplicate on TMC's item", (await H.detail(tm.api.ahmed!, id)).actions.duplicate === false);
 });
 
 defineCase("SUB-18", async (t) => {

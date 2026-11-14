@@ -99,6 +99,17 @@ describe("the Submittal Panel's action bar", () => {
     expect(replacement.chip).toBeNull();
   });
 
+  // RP-1303: Duplicate in the panel too, by the same flag as the List row's ⋯ menu (the API works it out:
+  // only the viewer's own Company's work, RP-409). It copies the item and moves nothing, so "View only" stays.
+  it("offers Duplicate exactly when the item read does, and keeps View only beside it", () => {
+    const closed = submittalPanelBar({ actions: { ...none, duplicate: true }, codes: {}, heldBy: null, stepAgeWeeks: null });
+    expect(closed.duplicate).toBe(true);
+    expect(closed.chip).toEqual({ kind: "viewOnly" });
+    expect(submittalPanelBar({ actions: none, codes: {}, heldBy: null, stepAgeWeeks: null }).duplicate).toBe(false);
+    const reviewing = submittalPanelBar({ actions: { ...none, duplicate: true, transitions: [transition("approve", "close")] }, codes: { approve: "A" }, heldBy: heldBy({ memberName: ahmed }), stepAgeWeeks: 1 });
+    expect(reviewing.duplicate).toBe(true);
+  });
+
   it("offers nothing on an earlier Revision, whatever the engine offers: 'Rev 1 · read only' and Download PDF (RP-1253)", () => {
     const everything: Actions = {
       ...none,
@@ -108,6 +119,7 @@ describe("the Submittal Panel's action bar", () => {
       createRevision: true,
       createReplacement: true,
       discardRevision: true,
+      duplicate: true,
       transitions: [transition("approve", "close"), transition("submit", "submit")],
     };
     const bar = submittalPanelBar({ actions: everything, codes: { approve: "A" }, heldBy: heldBy({ pool: { names: [ahmed] } }), stepAgeWeeks: 1, pastRevision: 1 });
@@ -116,6 +128,7 @@ describe("the Submittal Panel's action bar", () => {
       discardRevision: false,
       createRevision: false,
       createReplacement: false,
+      duplicate: false,
       buttons: [],
       menu: null,
       pickUp: false,

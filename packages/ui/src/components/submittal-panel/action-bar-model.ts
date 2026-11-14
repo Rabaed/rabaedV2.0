@@ -27,6 +27,11 @@ export type SubmittalPanelBar = {
   discardRevision: boolean;
   createRevision: boolean;
   createReplacement: boolean;
+  /**
+   * Duplicate (RP-1303): the same flag as the List row's ⋯ menu, which the API works out (RP-409: only
+   * the viewer's own Company's work). It copies the item and moves nothing, so it leaves the chip as it is.
+   */
+  duplicate: boolean;
   /** Transitions that issue no code, as buttons with the Workflow's labels (row 26). */
   buttons: SubmittalPanelBarTransition[];
   /** "Issue Review Code ▾": the code Transitions, then any other backward Transition below its divider (rows 23, 24). */
@@ -59,6 +64,7 @@ export function submittalPanelBar({
       discardRevision: false,
       createRevision: false,
       createReplacement: false,
+      duplicate: false,
       buttons: [],
       menu: null,
       pickUp: false,
@@ -92,6 +98,7 @@ export function submittalPanelBar({
     discardRevision: actions.discardRevision,
     createRevision: actions.createRevision,
     createReplacement: actions.createReplacement,
+    duplicate: actions.duplicate,
     buttons,
     menu,
     pickUp: actions.pickUp,

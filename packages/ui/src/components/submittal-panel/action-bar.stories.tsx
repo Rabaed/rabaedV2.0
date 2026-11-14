@@ -38,6 +38,8 @@ const copy = {
   returnToPool: bi("Return to pool", "إعادة إلى المجموعة"),
   pickUp: bi("Pick up", "استلام"),
   viewOnly: bi("View only", "للعرض فقط"),
+  duplicate: bi("Duplicate", "تكرار"),
+  back: bi("Back to Submittals", "العودة إلى التقديمات"),
   pending: bi("Pending Approval", "بانتظار الاعتماد"),
 };
 
@@ -66,6 +68,7 @@ const none = {
   createRevision: false,
   createReplacement: false,
   discardRevision: false,
+  duplicate: false,
   transitions: [],
 } as unknown as Actions;
 
@@ -80,6 +83,8 @@ const cases: Record<string, { actions: Actions; heldBy: WorkItemDetail["heldBy"]
   pickedUp: { actions: none, heldBy: { companyName: ownCompany, memberName: ahmed, pool: null } },
   // Another Company holds it: the read gives its name only (V14).
   anotherCompany: { actions: none, heldBy: { companyName: bi("TMC Constructions", "تي إم سي للمقاولات"), memberName: null, pool: null } },
+  // The raiser's own item, closed at Code A (UAT SUB-17): nothing to move, but its raiser may Duplicate it (RP-1303).
+  closedOwn: { actions: { ...none, duplicate: true }, heldBy: null },
 };
 
 const chipLabels = (locale: Locale): SubmittalPanelBarChipLabels => ({
@@ -90,7 +95,19 @@ const chipLabels = (locale: Locale): SubmittalPanelBarChipLabels => ({
   revision: revisionPickerLabels[locale].revision,
 });
 
-function BarDemo({ context, state, width, pastRevision = null }: { context: StoryContext; state: keyof typeof cases; width: number; pastRevision?: number | null }) {
+function BarDemo({
+  context,
+  state,
+  width,
+  pastRevision = null,
+  layout,
+}: {
+  context: StoryContext;
+  state: keyof typeof cases;
+  width: number;
+  pastRevision?: number | null;
+  layout?: "page";
+}) {
   const locale = storyLocale(context);
   const ids = useSubmittalPanelIds();
   const [opened, setOpened] = useState<string | null>(null);
@@ -102,7 +119,8 @@ function BarDemo({ context, state, width, pastRevision = null }: { context: Stor
       <p role="status">{opened ?? ""}</p>
       <SubmittalPanel
         locale={locale}
-        labels={{ module: copy.module[locale], position: (n, total) => `${n} / ${total}`, previous: copy.previous[locale], next: copy.next[locale], close: copy.close[locale], hint: copy.hint[locale], hintClose: copy.hintClose[locale] }}
+        labels={{ module: copy.module[locale], position: (n, total) => `${n} / ${total}`, previous: copy.previous[locale], next: copy.next[locale], close: copy.close[locale], hint: copy.hint[locale], hintClose: copy.hintClose[locale], back: copy.back[locale] }}
+        {...(layout ? { layout } : {})}
         crumb={<DocNo value="TWR-TMC-EL-MAR-280" />}
         position={{ index: 0, total: 42 }}
         onClose={() => setOpened("closed")}
@@ -135,6 +153,12 @@ function BarDemo({ context, state, width, pastRevision = null }: { context: Stor
               {copy.download[locale]}
             </Button>
             {bar.chip && <SubmittalPanelWaiting chip={bar.chip} labels={chipLabels(locale)} locale={locale} />}
+            {bar.duplicate && (
+              <Button variant="secondary" className="gap-2" onClick={() => setOpened("duplicate")}>
+                <Icon name="copy" size={17} />
+                {copy.duplicate[locale]}
+              </Button>
+            )}
             {bar.returnToPool && (
               <Button variant="secondary" className="gap-2" onClick={() => setOpened("return-to-pool")}>
                 <Icon name="arrow-back-up" size={17} />
@@ -256,5 +280,44 @@ export const EarlierRevisionReadOnly: Story = {
     const bar = barOf(context);
     await expect(bar.querySelector('[data-bar-chip="pastRevision"]')).toHaveTextContent(storyLocale(context) === "ar" ? "Rev 1 · للقراءة فقط" : "Rev 1 · read only");
     await expect(bar.querySelectorAll("button")).toHaveLength(1);
+  },
+};
+
+/**
+ * Duplicate in the panel too (RP-1303, UAT SUB-17): the raiser's own closed item offers it beside Download PDF,
+ * while "View only" still says nothing moves it. It is there at every size, the phone's page included, on one
+ * row with Download PDF, and pressing it is the List row's Duplicate.
+ */
+const duplicateAt = (width: number, layout?: "page"): Story => ({
+  render: (_args, context) => <BarDemo context={context} state="closedOwn" width={width} {...(layout ? { layout } : {})} />,
+  play: async (context) => {
+    const bar = barOf(context);
+    await expect(bar.querySelector('[data-bar-chip="viewOnly"]')).toHaveTextContent(storyText(context, copy.viewOnly));
+    const duplicate = within(bar).getByRole("button", { name: storyText(context, copy.duplicate) });
+    await expect(duplicate).toBeVisible();
+    await expect(bar.querySelectorAll("button")).toHaveLength(2);
+    // Inside the panel's own width: never cut off at its edge, and no sideways scroll.
+    const panel = panelOf(context).getBoundingClientRect();
+    const box = duplicate.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(panel.left);
+    await expect(box.right).toBeLessThanOrEqual(panel.right);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+    await userEvent.click(duplicate);
+    await expect(within(context.canvasElement).getByRole("status")).toHaveTextContent("duplicate");
+  },
+});
+
+export const DuplicateAtCompact: Story = duplicateAt(440);
+export const DuplicateAtNormal: Story = duplicateAt(640);
+export const DuplicateAtFull: Story = duplicateAt(1400);
+export const DuplicateOnAPhone: Story = { ...duplicateAt(640, "page"), parameters: { phone: true } };
+
+/** A Member the engine doesn't offer Duplicate to (a reviewer, whose Company did not raise it) finds none in the bar. */
+export const NoDuplicateForAReviewer: Story = {
+  render: (_args, context) => <BarDemo context={context} state="review" width={640} />,
+  play: async (context) => {
+    const bar = barOf(context);
+    await expect(within(bar).getByRole("button", { name: storyText(context, copy.menu) })).toBeVisible();
+    await expect(within(bar).queryByRole("button", { name: storyText(context, copy.duplicate) })).toBeNull();
   },
 };
