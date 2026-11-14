@@ -1,4 +1,4 @@
-import { directionOf, type Locale } from "@rabaed/domain";
+import { directionOf, formatNumber, type Locale } from "@rabaed/domain";
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 
@@ -61,3 +61,40 @@ export function DocNo({ value, rev, locale = "en", className, revClassName, ...p
     </bdi>
   );
 }
+
+/**
+ * A Revision Draft's number (RP-1300, owner's decision 2026-11-13): its chain's base number, known from the
+ * start, with its revision and the reader's word for Draft, "UAT01-MAR-01-0005 Rev 1 · Draft". Its own number
+ * (base " Rev n") is issued only when it first leaves Draft, so until then this is what it reads.
+ */
+export function RevisionDraftNumber({
+  base,
+  revision,
+  draft,
+  locale,
+  className,
+  revClassName,
+  draftClassName,
+}: {
+  /** The chain's base number, the original's Document Number. */
+  base: string;
+  revision: number;
+  /** The word for Draft, in the reader's language. */
+  draft: string;
+  locale: Locale;
+  className?: string;
+  revClassName?: string;
+  draftClassName?: string;
+}) {
+  return (
+    <span className="whitespace-nowrap">
+      <DocNo value={base} rev={formatNumber(revision, locale)} locale={locale} className={className} revClassName={revClassName} />
+      {" "}
+      <span className={draftClassName}>· {draft}</span>
+    </span>
+  );
+}
+
+/** `RevisionDraftNumber` as text, for Export and Group by: "UAT01-MAR-01-0005 Rev 1 · Draft". */
+export const revisionDraftText = (base: string, revision: number, draft: string, locale: Locale) =>
+  `${base} ${revisionWord[locale]} ${formatNumber(revision, locale)} · ${draft}`;

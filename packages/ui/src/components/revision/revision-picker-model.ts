@@ -23,7 +23,7 @@ export type RevisionPickerRow = {
 export type RevisionPickerView =
   /** Only the Original seen, or the item isn't in its own chain: nothing. */
   | { kind: "none" }
-  /** A Draft Revision, or the only Revision seen: a plain "Rev n", not a button. */
+  /** The only Revision seen: a plain "Rev n", not a button. */
   | { kind: "label"; revisionNo: number }
   | {
       kind: "button";
@@ -41,7 +41,8 @@ export type RevisionPickerView =
 export function revisionPicker(revisions: readonly Revision[], openId: string): RevisionPickerView {
   const open = revisions.find((r) => r.id === openId);
   if (!open) return { kind: "none" };
-  if (revisions.length < 2 || open.stage.category === "draft") return open.revisionNo > 0 ? { kind: "label", revisionNo: open.revisionNo } : { kind: "none" };
+  // A Draft Revision lists the chain too (RP-1300, owner's decision 2026-11-13): only its own number waits for the Submit.
+  if (revisions.length < 2) return open.revisionNo > 0 ? { kind: "label", revisionNo: open.revisionNo } : { kind: "none" };
   const newest = [...revisions].sort((a, b) => b.revisionNo - a.revisionNo);
   const top = newest[0]!;
   const past = open.id !== top.id;

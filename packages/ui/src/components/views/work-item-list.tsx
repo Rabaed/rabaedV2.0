@@ -141,6 +141,8 @@ export type WorkItemListLabels = {
   rowMenu: RowMenuLabels & { deleteTitle: string; deleteBody: (subject: string) => string; cancel: string };
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
+  /** After a Revision Draft's base number and its revision (RP-1300): "Draft", as in "UAT01-MAR-01-0005 Rev 1 · Draft". */
+  revisionDraft: string;
   empty: string;
   search: string;
   /** The search box's placeholder, e.g. "Search this list". */

@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef, useState, type ElementType, type KeyboardEvent
 import { cn } from "../../lib/cn.ts";
 import { isPlainClick } from "../../lib/plain-click.ts";
 import { Avatar } from "../data/avatar.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { DocNo, RevisionDraftNumber } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { Tooltip } from "../overlay/tooltip.tsx";
@@ -58,6 +58,11 @@ export type KanbanCardProps = {
   number: string | null;
   /** What a card with no number says instead. */
   noNumberLabel: string;
+  /**
+   * A Revision Draft (RP-1300): its chain's base number, its revision and the word for Draft, shown in place of
+   * `noNumberLabel` ("UAT01-MAR-01-0005 Rev 1 · Draft"). Only while `number` is null.
+   */
+  revisionDraft?: { base: string; revision: number; draft: string };
   /** The Subject. */
   title: string;
   /** The item's page. */
@@ -203,6 +208,7 @@ const placeIcons: IconName[] = ["map", "building", "stairs"];
 export function KanbanCard({
   number,
   noNumberLabel,
+  revisionDraft,
   title,
   href,
   linkAs: Link = "a",
@@ -253,7 +259,13 @@ export function KanbanCard({
           </span>
         )}
         <Icon name="file-text" size={14} className="shrink-0" />
-        {number ? <DocNo value={number} className="font-normal" /> : <CutText text={noNumberLabel} cardLink={linkRef} />}
+        {number ? (
+          <DocNo value={number} className="font-normal" />
+        ) : revisionDraft ? (
+          <RevisionDraftNumber {...revisionDraft} locale={locale} className="font-normal" />
+        ) : (
+          <CutText text={noNumberLabel} cardLink={linkRef} />
+        )}
         <span className="flex-1" />
         {actions && (
           <span className="relative z-10 flex shrink-0 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100 pointer-coarse:opacity-100">

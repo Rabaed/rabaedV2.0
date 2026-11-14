@@ -131,6 +131,8 @@ const items: WorkItemRow[] = [
   row(7, {
     title: "Earthing rods, galvanised",
     documentNumber: null,
+    // Rev 1 of "Earthing rods" (Code C), still a Draft: it reads its chain's base number from the start (RP-1300).
+    baseNumber: "TWR-TMC-EL-MAR-0005",
     revisionNo: 1,
     submissionDate: null,
     creationDate: null,
@@ -263,9 +265,10 @@ export const Wide: Story = {
     await expect(cellOf(context, "Busbar trunking", b("Code", "الرمز"))).toHaveTextContent("Code A");
     await expect(cellOf(context, "Earthing rods", b("Zone", "المنطقة"))).toHaveTextContent(zone.name[locale]);
     await expect(cellOf(context, "Earthing rods", b("Building", "المبنى"))).toHaveTextContent("—");
-    await expect(cellOf(context, "Earthing rods, galvanised", copy.number)).toHaveTextContent(
-      storyText(context, b("Revision 1: no number yet", "المراجعة 1: بلا رقم بعد")),
-    );
+    // A Revision Draft reads its chain's base number, its revision and "Draft" (RP-1300), the number left to right.
+    const draftNumber = cellOf(context, "Earthing rods, galvanised", copy.number);
+    await expect(draftNumber).toHaveTextContent(storyText(context, b("TWR-TMC-EL-MAR-0005 Rev 1 · Draft", "TWR-TMC-EL-MAR-0005 مراجعة 1 · مسودة")));
+    await expectLaidOutLeftToRight(within(draftNumber).getByText("TWR-TMC-EL-MAR-0005"));
     await expect(cellOf(context, "LED downlights", b("Rev", "المراجعة"))).toHaveTextContent("R1");
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003");
     await expect(getComputedStyle(number).direction).toBe("ltr");

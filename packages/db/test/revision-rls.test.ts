@@ -754,3 +754,91 @@ describe("the List's row commands (RP-409)", () => {
     expect(await shared(orB.member, closed)).toBeNull();
   });
 });
+
+// RP-1300 (owner's decision 2026-11-13, UAT SUB-15; docs/visibility/scenarios/RP-1300.md): a Revision Draft
+// reads its chain's base number from the start. The api reads it as the chain original's number through
+// app.revision_chain, and Search finds the Draft by it through app.search_work_items: both C1's only.
+describe("a Revision Draft's base number, as the api reads it (RP-1300-1, RP-1300-3)", () => {
+  let original = "";
+  let draft = "";
+  let base = "";
+  const baseOf = (as: string, id: string) =>
+    call<{ document_number: string }>(as, sql`select c.document_number from app.revision_chain(${id}::uuid) c where c.revision_no = 0`);
+
+  beforeAll(async () => {
+    const [made] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Cable trays RP-1300', app.latest_form_version(${TYPE}), '{"model": "CT-9"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    original = made!.work_item_id;
+    expect(await take(c1.member, original, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, original)).toBe("picked_up");
+    expect(await take(c1Pm, original, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, original)).toBe("picked_up");
+    expect(await take(k1.member, original, "revise_c")).toBe("applied");
+    draft = (await createRevision(c1.member, original)).work_item_id!;
+    base = (await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${original}`))[0]!.document_number;
+  });
+
+  it("gives C1 the original's number from the Draft, which has none of its own (RP-1300-1)", async () => {
+    for (const as of [c1.member, c1Pm]) {
+      expect(await call(as, sql`select document_number from work_item where id = ${draft}`)).toEqual([{ document_number: null }]);
+      expect(await baseOf(as, draft)).toEqual([{ document_number: base }]);
+    }
+  });
+
+  it("gives K1, the Owner and the Owner Representative nothing from the Draft's id (RP-1300-1)", async () => {
+    const read = async (as: string) => ((await baseOf(as, draft)).length > 0 ? [{ id: draft }] : []);
+    await expectHiddenFrom({ read, target: draft, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member, orA.member], label: "the Draft's base number" });
+  });
+
+  it("lists the original by its number and the Draft by none, to C1 (RP-1300-3)", async () => {
+    expect(await chain(c1.member, draft)).toEqual([
+      { work_item_id: original, document_number: base, revision_no: 0 },
+      { work_item_id: draft, document_number: null, revision_no: 1 },
+    ]);
+  });
+});
+
+describe("Search by the base number (RP-1300-2, RP-1300-4)", () => {
+  let original = "";
+  let draft = "";
+  let base = "";
+  const found = (q: string) => async (as: string) =>
+    (await call<{ id: string }>(as, sql`select s as id from app.search_work_items(${projectId}::uuid, ${q}::text) s`)).map((r) => ({ id: r.id }));
+
+  beforeAll(async () => {
+    const [made] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Sprinkler heads', app.latest_form_version(${TYPE}), '{"model": "SH-2"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    original = made!.work_item_id;
+    expect(await take(c1.member, original, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, original)).toBe("picked_up");
+    expect(await take(c1Pm, original, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, original)).toBe("picked_up");
+    expect(await take(k1.member, original, "revise_c")).toBe("applied");
+    draft = (await createRevision(c1.member, original)).work_item_id!;
+    base = (await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${original}`))[0]!.document_number;
+  });
+
+  it("finds the Revision Draft for C1 only, by the whole base number or a part of it (RP-1300-2)", async () => {
+    for (const q of [base, base.slice(-7)]) {
+      await expectHiddenFrom({ read: found(q), target: draft, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member, orA.member], label: `the search for ${q}` });
+    }
+    // K1 finds the original it reviewed, as before.
+    expect((await found(base)(k1.member)).map((r) => r.id)).toEqual([original]);
+  });
+
+  it("finds the Revision for K1 once Submitted, by its own number, base ' Rev 1' (RP-1300-4)", async () => {
+    expect(await take(c1.member, draft, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, draft)).toBe("picked_up");
+    expect(await take(c1Pm, draft, "submit")).toBe("applied");
+    expect(await call(k1.member, sql`select document_number from work_item where id = ${draft}`)).toEqual([{ document_number: `${base} Rev 1` }]);
+    expect((await found(base)(k1.member)).map((r) => r.id).sort()).toEqual([original, draft].sort());
+  });
+});

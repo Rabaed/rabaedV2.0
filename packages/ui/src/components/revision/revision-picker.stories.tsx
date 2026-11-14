@@ -212,13 +212,20 @@ export const LaterRevisionHiddenOnTheOriginal: Story = {
   },
 };
 
-/** C1 on its own Draft Rev 2: a plain "Rev 2" label, not a button, and no banner. */
+/**
+ * C1 on its own Draft Rev 2 (RP-1300, owner's decision 2026-11-13): the button lists the chain, Rev 2 open and
+ * Current with no date, each earlier Revision a row to open; no banner, as on the latest.
+ */
 export const DraftRevision: Story = {
   args: { revisions: [original, rev1, draftRev2], openId: draftRev2.id },
   play: async (context) => {
-    await expect(context.canvas.queryByRole("button")).toBeNull();
-    await expect(context.canvas.getByText("Rev 2")).toBeVisible();
     await expect(context.canvas.queryByRole("status")).toBeNull();
+    await userEvent.click(context.canvas.getByRole("button", { name: /Rev 2/ }));
+    const rows = await within(document.body).findAllByRole("menuitemradio");
+    await expect(rows).toHaveLength(3);
+    await expect(rows[0]).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(rows[1]!);
+    await expect(context.args.onOpen).toHaveBeenCalledWith(rev1.id);
   },
 };
 

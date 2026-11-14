@@ -302,6 +302,11 @@ export type SubmittalPanelIdentityProps = {
   number: { number: string; revisionNo: number | null } | null;
   /** What a Draft with no number says instead. */
   noNumber: string;
+  /**
+   * A Revision Draft (RP-1300, owner's decision 2026-11-13): its chain's base number and the word for Draft, shown
+   * in place of `noNumber`, with the revision (the picker, or "Rev n") between them: "UAT01-MAR-01-0005 Rev 1 · Draft".
+   */
+  revisionDraft?: { base: string; revisionNo: number; draft: string };
   subject: string;
   /** The Stage, the Issued Code and the Trade. */
   chips?: ReactNode;
@@ -330,6 +335,7 @@ export function SubmittalPanelIdentity({
   locale,
   number,
   noNumber,
+  revisionDraft,
   subject,
   chips,
   numberId,
@@ -361,6 +367,25 @@ export function SubmittalPanelIdentity({
                 revClassName="sdp-rev text-brand-fg"
               />
             )
+          ) : revisionDraft ? (
+            <>
+              {revision !== undefined ? (
+                <>
+                  <DocNo value={revisionDraft.base} className="font-extrabold whitespace-normal" />
+                  {revision}
+                </>
+              ) : (
+                <DocNo
+                  value={revisionDraft.base}
+                  rev={formatNumber(revisionDraft.revisionNo, locale)}
+                  locale={locale}
+                  className="font-extrabold whitespace-normal"
+                  revClassName="sdp-rev text-brand-fg"
+                />
+              )}
+              {" "}
+              <span className="sdp-draft text-[16px] font-bold whitespace-nowrap text-muted">· {revisionDraft.draft}</span>
+            </>
           ) : (
             <>
               <span className="text-[21px] text-muted">{noNumber}</span>

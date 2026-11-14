@@ -65,7 +65,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
 });
 
 // Each story names what differs from the default card by a key below; the render builds it in the story's language.
-type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "package" | "cut" | "cutPool" | "vacancy";
+type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "revisionDraft" | "package" | "cut" | "cutPool" | "vacancy";
 type StoryArgs = KanbanCardProps & { variant?: Variant };
 
 const meta = {
@@ -130,6 +130,14 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       return { owner: { kind: "vacancy", name: locale === "en" ? "Waiting for a new Consultant" : "بانتظار الاستشاري الجديد" } };
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
+    case "revisionDraft":
+      return {
+        number: null,
+        revisionDraft: { base: "UAT01-MAR-01-0005", revision: 1, draft: locale === "en" ? "Draft" : "مسودة" },
+        badge: { kind: "revision", label: "R1" },
+        date: undefined,
+        stepAgeWeeks: null,
+      };
     case "package":
       return {
         package: { number: "PKG-004", name: text.bathrooms[locale], companyName: text.builders[locale], href: "#package", label: text.openPackage[locale] },
@@ -256,6 +264,21 @@ export const WithContractorName: Story = {
 
 /** A Draft with no number yet: says so, and has no date or Step Age (nobody sees when it was started). */
 export const NoNumberYet: Story = { args: { variant: "noNumber" } };
+
+/**
+ * A Revision Draft (RP-1300, owner's decision 2026-11-13): its chain's base number from the start, with its
+ * revision and "Draft", never "No number yet"; the number reads left to right in Arabic too, with Latin digits.
+ */
+export const RevisionDraft: Story = {
+  args: { variant: "revisionDraft" },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const c = card(context);
+    await expect(c).toHaveTextContent(locale === "en" ? "UAT01-MAR-01-0005 Rev 1 · Draft" : "UAT01-MAR-01-0005 مراجعة 1 · مسودة");
+    await expect(c).not.toHaveTextContent(locale === "en" ? "No number yet" : "بلا رقم بعد");
+    await expect(within(c).getByText("UAT01-MAR-01-0005")).toHaveAttribute("dir", "ltr");
+  },
+};
 
 /**
  * In a Package the viewer sees (RP-659): its chip under the tags, `PKG-004 · Company · name`, the number

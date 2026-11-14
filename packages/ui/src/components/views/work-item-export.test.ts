@@ -24,6 +24,7 @@ const row: WorkItemRow = {
 const labels = {
   noNumber: "No number yet",
   revisionNoNumber: (r: string) => `Revision ${r}: no number yet`,
+  revisionDraft: "Draft",
   notPickedUp: "Not picked up",
   waitingFor: (role: string) => `Waiting for a new ${role}`,
   cancelled: "Cancelled",

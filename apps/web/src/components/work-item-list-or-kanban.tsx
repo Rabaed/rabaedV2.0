@@ -92,6 +92,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
   const shared = {
     noNumber: l("noNumber"),
     revisionNoNumber: (revision: string) => t("list.revisionNoNumber", { revision }),
+    revisionDraft: l("revisionDraft"),
     notPickedUp: l("notPickedUp"),
     waitingFor: (role: string) => t("list.waitingFor", { role }),
     // Cancelled is named once, with the notifications (watchOutcomeNames); every other outcome by its Type's set (RP-429).

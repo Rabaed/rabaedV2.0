@@ -572,6 +572,8 @@ type SummaryRow = {
   location_name: BilingualText | null;
   /** Null for a Draft with no number: its Step began when it was started, which nobody sees. */
   step_entered_at: Date | null;
+  /** A Revision Draft's chain base number (RP-1300); null for every other item. */
+  base_number: string | null;
 };
 
 /** The visible Work Items matching `where`, as list rows. */
@@ -581,7 +583,11 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      case when w.document_number is null then null else seen.entered_at end as step_entered_at
+      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
+      -- A Revision not yet numbered reads its chain's base number from the start (RP-1300): the original's,
+      -- through app.revision_chain, which gives only Revisions the reader sees (V1).
+      case when w.document_number is null and w.revision_no > 0
+        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
@@ -607,6 +613,7 @@ function toSummary(r: SummaryRow, now: Date): WorkItemSummary {
     type: { code: r.type_code, name: r.type_name },
     title: r.title,
     documentNumber: r.document_number,
+    ...(r.base_number ? { baseNumber: r.base_number } : {}),
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,

@@ -6,6 +6,7 @@ import {
   DocNo,
   ErrorState,
   Outcome,
+  RevisionDraftNumber,
   StagePill,
   SubmittalPanel,
   SubmittalPanelFacts,
@@ -218,7 +219,10 @@ export function SubmittalPanelHost({
         }}
         layout={phone ? "page" : "slide-over"}
         crumb={
-          !item ? null : number === null ? (
+          !item ? null : number === null && item.baseNumber !== undefined ? (
+            // A Revision Draft (RP-1300): its chain's base number, its revision and "Draft".
+            <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} draft={tList("revisionDraft")} locale={locale} />
+          ) : number === null ? (
             t("noNumber")
           ) : number.revisionNo === null ? (
             <DocNo value={number.number} />
@@ -245,6 +249,8 @@ export function SubmittalPanelHost({
               locale={locale}
               number={number}
               noNumber={t("noNumber")}
+              // A Revision Draft reads its chain's base number from the start (RP-1300).
+              revisionDraft={item.baseNumber !== undefined && item.documentNumber === null ? { base: item.baseNumber, revisionNo: item.revisionNo, draft: tList("revisionDraft") } : undefined}
               subject={item.title}
               numberId={ids.numberId}
               subjectId={ids.subjectId}

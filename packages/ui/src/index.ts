@@ -19,7 +19,7 @@ export {
   type TableRowProps,
   type TableSort,
 } from "./components/data/table.tsx";
-export { DocNo, type DocNoProps } from "./components/doc-no/doc-no.tsx";
+export { DocNo, RevisionDraftNumber, revisionDraftText, type DocNoProps } from "./components/doc-no/doc-no.tsx";
 export { PhotoTool, type PhotoToolLabels, type PhotoToolProps } from "./components/photo/photo-tool.tsx";
 export { PhotoViewer, type PhotoViewerLabels, type PhotoViewerProps } from "./components/photo/photo-viewer.tsx";
 export { PhotoAnnotator, type PhotoAnnotatorLabels, type PhotoAnnotatorProps } from "./components/photo/photo-annotator.tsx";
