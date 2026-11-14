@@ -93,7 +93,8 @@ describe("the sample Project's Snag List", () => {
 // RP-1305 (UAT round 0, FRM-04): "This Trade has no Scopes" for Electrical Works. Every Trade the
 // sample and UAT Projects use, the General Trade's Site Observations too, gets Scopes in EN and AR.
 describe("the sample Project's Scopes", () => {
-  const english = (trade: keyof typeof SAMPLE_SCOPES) => SAMPLE_SCOPES[trade].flatMap((s) => [s.name.en, ...(s.subScopes ?? []).map((x) => x.en)]);
+  /** Every Scope and Sub-scope English name of the Trade. */
+  const englishNamesOf = (trade: keyof typeof SAMPLE_SCOPES) => SAMPLE_SCOPES[trade].flatMap((s) => [s.name.en, ...(s.subScopes ?? []).map((sub) => sub.en)]);
 
   it("gives every Trade Scopes, the General Trade's included", () => {
     expect(Object.keys(SAMPLE_SCOPES).sort()).toEqual([...SAMPLE_TRADES.map((t) => t.code), "GEN"].sort());
@@ -101,7 +102,7 @@ describe("the sample Project's Scopes", () => {
   });
 
   it("gives Electrical Works lighting, power, earthing, cable containment and fire alarm, as FRM-04 picks them", () => {
-    const names = english("EL");
+    const names = englishNamesOf("EL");
     for (const wanted of ["Lighting", "Emergency lighting", "Power distribution", "Earthing", "Cable containment", "Fire alarm"]) {
       expect(names.some((n) => n.startsWith(wanted)), wanted).toBe(true);
     }

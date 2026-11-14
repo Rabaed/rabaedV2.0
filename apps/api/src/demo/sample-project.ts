@@ -371,6 +371,24 @@ interface Ids {
 const sameGrant = (a: VisibilityGrant, b: VisibilityGrant) => a.isAll === b.isAll && [...a.valueIds].sort().join() === [...b.valueIds].sort().join();
 const sameVisibility = (a: Visibility, b: Visibility) => sameGrant(a.trade, b.trade) && sameGrant(a.location, b.location);
 
+/**
+ * Each Trade's Scopes and Sub-scopes (RP-1305), the General Trade's too, added by the Project Admin: each only
+ * where its Trade (and, for a Sub-scope, its Scope) has none of its English name, so a second run adds nothing.
+ */
+async function addScopes(admin: Call, projectId: string, trade: Ids["trade"]): Promise<void> {
+  const url = `/v1/projects/${projectId}/scopes`;
+  const { scopes: have } = await admin<{ scopes: { id: string; tradeId: string; parentId: string | null; name: BilingualText }[] }>("GET", url);
+  const scopeOf = async (tradeId: string, parentId: string | null, name: BilingualText) =>
+    have.find((s) => s.tradeId === tradeId && s.parentId === parentId && s.name.en === name.en)?.id ??
+    (await admin<{ id: string }>("POST", url, { tradeId, parentId, name })).id;
+  for (const [code, scopes] of Object.entries(SAMPLE_SCOPES) as [keyof typeof SAMPLE_SCOPES, SampleScope[]][]) {
+    for (const scope of scopes) {
+      const parentId = await scopeOf(trade[code], null, scope.name);
+      for (const sub of scope.subScopes ?? []) await scopeOf(trade[code], parentId, sub);
+    }
+  }
+}
+
 /** Trades, Locations, Scopes, suppliers, Participants and Members: each added only where it is missing, `people`'s changes with them. */
 async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, people: SamplePeople): Promise<Ids> {
   const admin = as.saeed;
@@ -392,18 +410,7 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
   const trade = byCode(have.trade) as Ids["trade"];
   const location = byCode(have.location);
 
-  // Each Trade's Scopes and Sub-scopes (RP-1305), the General Trade's too: each added only where its English name is missing.
-  const scopesUrl = `/v1/projects/${projectId}/scopes`;
-  const { scopes: haveScopes } = await admin<{ scopes: { id: string; tradeId: string; parentId: string | null; name: BilingualText }[] }>("GET", scopesUrl);
-  const scopeOf = async (tradeId: string, parentId: string | null, name: BilingualText) =>
-    haveScopes.find((s) => s.tradeId === tradeId && s.parentId === parentId && s.name.en === name.en)?.id ??
-    (await admin<{ id: string }>("POST", scopesUrl, { tradeId, parentId, name })).id;
-  for (const [code, scopes] of Object.entries(SAMPLE_SCOPES) as [keyof typeof SAMPLE_SCOPES, SampleScope[]][]) {
-    for (const s of scopes) {
-      const parentId = await scopeOf(trade[code], null, s.name);
-      for (const sub of s.subScopes ?? []) await scopeOf(trade[code], parentId, sub);
-    }
-  }
+  await addScopes(admin, projectId, trade);
 
   const supplier = {} as Record<TradeCode, string>;
   for (const t of SAMPLE_TRADES) {
