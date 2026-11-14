@@ -439,10 +439,11 @@ defineCase("J3", async (t) => {
     throw new Error(`Create Revision did not open the Revision page (${page.url()}): ${flat(await page.locator("body").innerText()).slice(0, 200)}`);
   }
   const rev = await H.detail(hafiz, revId);
-  s.ck("SUB-15", "Hand-over 6, TMC's Revision Draft: Revision 1, no number yet, TMC's answers and the copied Datasheet", rev.revisionNo === 1 && rev.stage.key === "draft" && rev.documentNumber === null && rev.answers.manufacturer === "Philips", `rev ${rev.revisionNo} ${rev.stage.key}`);
+  // RP-1300: a Revision Draft keeps its base number from the start; only its own " Rev 1" waits for the Submit.
+  s.ck("SUB-15", "Hand-over 6, TMC's Revision Draft: Revision 1 under the base number, TMC's answers and the copied Datasheet", rev.revisionNo === 1 && rev.stage.key === "draft" && rev.documentNumber === null && rev.baseNumber === number && rev.answers.manufacturer === "Philips", `rev ${rev.revisionNo} ${rev.stage.key} ${rev.baseNumber}`);
   await t.shot(page, "hafiz-revision-draft");
   const draftText = flat(await page.locator("main").innerText());
-  s.ck("SUB-15", "The Draft page reads Revision 1: no number yet", /No number yet\s*Rev 1\b/.test(draftText), draftText.slice(0, 120));
+  s.ck("SUB-15", "The Draft page reads the base number, Rev 1 · Draft", draftText.includes(number) && /Rev 1\s*·\s*Draft\b/.test(draftText), draftText.slice(0, 120));
   // While it is a Draft nobody else reads anything of it.
   await s.hidden("VIS-12", "The Revision Draft", revId, ["mohammed", "faisal", "yousef", "ahmed"], true);
   const chainDraft = JSON.stringify((await mohammed.get(`/work-items/${id}/revisions`)).body);
