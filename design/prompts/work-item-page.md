@@ -20,7 +20,7 @@ Paste the shared brief from `design-requests-2026-10-07.md` first.
   - Edit mode: required fields, the "2 fields need your attention" summary, Save Draft and the "Saved" time.
 - **Actions** (side panel on desktop): who holds it ("With": your own Step and "unclaimed" or the claimer's name; another Company by name only), **Claim / Release to pool**, and the Transition buttons for the viewer (Send for Review, Return, Submit, Approve · A, Revise & Resubmit · C…).
 - **Action Form pop-up** of a Transition: Remarks (required with Code C), an optional **Internal Note** marked "Only your Company sees it", the confirm button named after the Transition.
-- **Attachments** (Attach a Document, file chips) and **Links** (free Links, "Find an item to link", and **Linked from**: an item the viewer can't open shows only its Document Number and Subject).
+- **Attachments** (Attach a Document, file chips) and **Links** (free Links, "Find an item to link", and **Linked from**: only the linking items the viewer may open; one they can't is left out, RP-1301).
 - **History**, newest first, numbered as the viewer sees it. Your own Company's internal events are marked "Internal: only your Company sees this". Another Company's internal moves never appear, except the Code with its signer's name and the Remarks.
 - **View workflow** drawer: the Steps as a simple diagram; another Company's internal Steps collapsed into one "Design Consultants LLC review" block.
 

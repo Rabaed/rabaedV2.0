@@ -28,6 +28,7 @@ import { useSubmittalPanelItemFacts } from "@/components/submittal-panel-item-fa
 import type { SubmittalPanelLog } from "@/components/submittal-panel-log";
 import { WorkItemAnswers, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
+import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
 import { Link } from "@/i18n/navigation";
 import { submittalPanelLinks } from "@/lib/submittal-panel-links";
@@ -144,6 +145,12 @@ export function SubmittalPanelDetails({
     ];
   };
 
+  // "Linked from" inside Links (RP-1301; dropped by RP-1237 row 40, back on the owner's word of 2026-11-13): the
+  // Submitted items the viewer sees linking here, each opening that item in the panel (its own link lands on its
+  // List with the panel open). Shown only when there is one: a linking item the viewer can't see is never in the read.
+  const linkedFromRows = (data: SubmittalPanelReads): ReactNode =>
+    data.linkedFrom && data.linkedFrom.length > 0 ? <WorkItemLinkedFrom items={data.linkedFrom} look="rows" /> : null;
+
   const tail = (data: SubmittalPanelReads): SubmittalPanelSectionItem[] => [
     // Where the viewer may add files, the item page's own control; otherwise the panel's cards (row 14).
     data.documents.canChange
@@ -155,9 +162,14 @@ export function SubmittalPanelDetails({
       title: t("links"),
       summary: t("linkCount", { count: data.links.links.length, n: latin(data.links.links.length) }),
       children: data.links.canChange ? (
-        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={data.links} locale={locale} questionLabels={questionLabelsOf(data, locale)} titleHidden look="rows" />
+        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={data.links} locale={locale} questionLabels={questionLabelsOf(data, locale)} titleHidden look="rows">
+          {linkedFromRows(data)}
+        </WorkItemLinks>
       ) : (
-        <SubmittalPanelLinks links={submittalPanelLinks(item.id, data.links.links)} none={t("noLinks")} linkAs={Link} />
+        <div className="flex flex-col gap-4">
+          <SubmittalPanelLinks links={submittalPanelLinks(item.id, data.links.links)} none={t("noLinks")} linkAs={Link} />
+          {linkedFromRows(data)}
+        </div>
       ),
     },
   ];

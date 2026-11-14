@@ -587,7 +587,7 @@ describe("the README walkthrough", () => {
     await expectHiddenFrom({ read: readById(`/v1/work-items/${approved}`), target: approved, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the approved MAR" });
   });
 
-  it("12. Hafiz links a new MAR to it under Related submittals; once Submitted, Omar sees it under Linked from as a number and Subject only", async () => {
+  it("12. Hafiz links a new MAR to it under Related submittals; once Submitted, Hafiz sees it under Linked from and Omar, who can't see it, sees nothing of it (RP-1301)", async () => {
     const linking = (await titled(hafiz, LINKING_TITLE))!;
     const lightingFixtures = (await titled(hafiz, "Lighting Fixtures"))!;
     // Link search finds it by part of its Subject.
@@ -607,7 +607,15 @@ describe("the README walkthrough", () => {
     const documentNumber = (await detail(hafiz, mar)).documentNumber;
     const subject = "Lighting control wiring – Tower 1";
     expect((await linkedFrom(hafiz, linking)).items).toEqual([{ documentNumber, subject, workItemId: mar }]);
-    expect((await linkedFrom(omar, linking)).items).toEqual([{ documentNumber, subject, workItemId: null }]);
+    // Not its number, Subject or id: a linking item Omar can't see is left out silently (RP-1301).
+    if (!documentNumber) throw new Error("the Submitted MAR has no Document Number");
+    for (const [target, label] of [
+      [mar, "id"],
+      [documentNumber, "Document Number"],
+      [subject, "Subject"],
+    ] as const) {
+      await expectHiddenFrom({ read: mentions(`/v1/work-items/${linking}/linked-from`, target), target, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: `Linked from, ${label}` });
+    }
     await expectHiddenFrom({ read: readById(`/v1/work-items/${mar}`), target: mar, seenBy: hafiz, hiddenFrom: omar, name: whoIs, label: "the new MAR" });
   });
 

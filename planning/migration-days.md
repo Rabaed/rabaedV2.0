@@ -197,3 +197,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271220 | RP-1261 | 41 | reinvite_withdrawn_participant |
 | 20271226 | RP-1304 | 42 | whole_project_location (20271225 is RP-1300's #748) |
 | 20271227 | RP-1300 | 21 | revision_draft_base_number (moved from 20271225) |
+| 20271228 | RP-1301 | 11 | linked_from_only_seen (given by Main 1; 20271226 and 20271227 taken meanwhile) |

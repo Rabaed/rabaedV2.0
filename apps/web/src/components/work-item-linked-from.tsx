@@ -6,9 +6,9 @@ import { useLinkedFromLabels } from "@/lib/form-labels";
 import { Link } from "@/i18n/navigation";
 
 // "Linked from", in the Links section below the item's Links (form-engine.md
-// part 2b; visibility.md E3): the Submitted items linking here, as the API
-// returns them for the viewer. One they can't see comes as its number and
-// Subject only, without an id, so it can't be opened.
+// part 2b; visibility.md E3, RP-1301): the Submitted items linking here that the
+// viewer sees, as the API returns them; each opens its item. One they can't see
+// is never in the read.
 
 export function WorkItemLinkedFrom({ items, look }: { items: readonly LinkedFromItem[]; look?: "rows" }) {
   const labels = useLinkedFromLabels();

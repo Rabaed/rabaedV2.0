@@ -348,8 +348,8 @@ export const workItemRoutes =
       },
     );
 
-    // Linked from (visibility.md E3): the Submitted items linking to a visible item,
-    // a linking item's id only when the Member sees it too. Never a Draft or internal item.
+    // Linked from (visibility.md E3, RP-1301): the Submitted items linking to a visible item
+    // that the Member sees too, each with its id. Never a Draft or internal item.
     app.get(
       "/v1/work-items/:workItemId/linked-from",
       { schema: { params: workItemParams, response: { 200: linkedFrom } } },

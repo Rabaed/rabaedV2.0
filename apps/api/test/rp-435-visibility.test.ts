@@ -4,7 +4,7 @@
 // see the rejected MAR, read nothing of the replacement (item, events, Documents, answers, history,
 // Links), and the rejected MAR's Links and Linked from don't name it; they can't create one, nor can C1
 // a second, and every refusal reads alike. It takes a new Document Number at its first Send (no Rev).
-// Once Submitted, it is in the rejected MAR's Linked from by number and Subject (E3), and lists the
+// Once Submitted, it is in the rejected MAR's Linked from for each viewer who sees it (E3, RP-1301), and lists the
 // rejected MAR under its Links (E1). Seam 2: packages/db/test/revision-rls.test.ts. The wider
 // replacement behaviour: replacements.test.ts.
 import { randomUUID } from "node:crypto";

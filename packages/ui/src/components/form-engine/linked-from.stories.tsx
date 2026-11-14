@@ -1,31 +1,26 @@
 import type { LinkedFromItem, Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { linkedFromLabels, linksSectionLabels } from "../../storybook/form-engine.ts";
 import { LinkedFromList } from "./linked-from.tsx";
 import { LinksSection } from "./links-section.tsx";
 
-// "Linked from" (RP-292, spec RP-289): the Submitted items that link to this
-// one, below its Links. One the viewer can see opens it; one they can't comes
-// as its Document Number and Subject only, without an id, and opening it only
-// says they may not see its details (E3). Story data only: the API decides what
-// each viewer gets, and never sends a Draft or an item in internal review.
+// "Linked from" (RP-292, spec RP-289; RP-1301): the Submitted items that link to
+// this one and that the viewer sees, below its Links. Each opens its item. One the
+// viewer can't see is never in the read (RP-1301, reversing E3's number and
+// Subject), so nothing of it shows. Story data only: the API decides what each
+// viewer gets, and never sends a Draft or an item in internal review.
 const subjects: Record<Locale, string[]> = {
   en: ["Busbar risers", "Cable trays, Tower 2"],
   ar: ["صواعد قضبان التوزيع", "حوامل الكابلات، البرج 2"],
 };
 const numbers = ["TWR-MAR-EL-0021", "TWR-MAR-EL-0034"];
 const itemId = (i: number) => `00000000-0000-4000-8000-0000000002${String(i + 1).padStart(2, "0")}`;
-const hiddenId = itemId(1);
 
-/** Story item `i` as the API returns it; `seen: false` is one the viewer can't see. */
-const linker = (locale: Locale, i: number, seen = true): LinkedFromItem => ({
-  documentNumber: numbers[i]!,
-  subject: subjects[locale][i]!,
-  workItemId: seen ? itemId(i) : null,
-});
+/** Story item `i` as the API returns it to a viewer who sees it. */
+const linker = (locale: Locale, i: number): LinkedFromItem => ({ documentNumber: numbers[i]!, subject: subjects[locale][i]!, workItemId: itemId(i) });
 
 const copy = {
   title: { en: "Linked from", ar: "مرتبط من" },
@@ -58,36 +53,46 @@ const section = (locale: Locale, items: LinkedFromItem[]) => (
   </LinksSection>
 );
 
-/**
- * Two Submitted items link here: one the viewer sees opens it; the other, which
- * they can't see, shows its number and Subject and only explains why it won't open.
- */
+/** Two Submitted items the viewer sees link here: each opens its item, its Document Number left to right. */
 export const Listed: Story = {
-  render: (_args, context) => section(storyLocale(context), [linker(storyLocale(context), 0), linker(storyLocale(context), 1, false)]),
+  render: (_args, context) => section(storyLocale(context), [linker(storyLocale(context), 0), linker(storyLocale(context), 1)]),
   play: async (context) => {
-    const { canvas, canvasElement } = context;
+    const { canvas } = context;
     const locale = storyLocale(context);
     await expect(canvas.getByRole("heading", { level: 3, name: storyText(context, copy.title) })).toBeVisible();
     const list = canvas.getByRole("list", { name: storyText(context, copy.title) });
     const opens = within(list).getAllByRole("link");
-    await expect(opens).toHaveLength(1);
-    await expect(opens[0]).toHaveAttribute("href", `#/work-items/${itemId(0)}`);
-    await expect(within(opens[0]!).getByText(numbers[0]!)).toHaveAttribute("dir", "ltr");
-    await expect(opens[0]).toHaveTextContent(subjects[locale][0]!);
-
-    const hidden = within(list).getByRole("button", { expanded: false });
-    await expect(hidden).toHaveTextContent(numbers[1]!);
-    await expect(hidden).toHaveTextContent(subjects[locale][1]!);
-    await expect(within(hidden).getByText(numbers[1]!)).toHaveAttribute("dir", "ltr");
-    await expect(canvas.getByText(storyText(context, copy.hidden), { selector: "p" })).not.toBeVisible();
-    await userEvent.click(hidden);
-    await expect(hidden).toHaveAttribute("aria-expanded", "true");
-    await expect(canvas.getByText(storyText(context, copy.hidden), { selector: "p" })).toBeVisible();
-    await expect(canvasElement.innerHTML).not.toContain(hiddenId);
+    await expect(opens).toHaveLength(2);
+    for (const i of [0, 1]) {
+      await expect(opens[i]).toHaveAttribute("href", `#/work-items/${itemId(i)}`);
+      await expect(within(opens[i]!).getByText(numbers[i]!)).toHaveAttribute("dir", "ltr");
+      await expect(opens[i]).toHaveTextContent(subjects[locale][i]!);
+    }
+    await expect(within(list).queryByRole("button")).toBeNull();
   },
 };
 
-/** Nothing Submitted links here: says so. */
+/**
+ * RP-1301-1: of the two items linking here, the viewer may see one. The read gives only that one, and the
+ * list shows exactly it: no second row, no "may not see" entry, no count or "1 more", no hidden number.
+ */
+export const OnlyWhatTheViewerMaySee: Story = {
+  render: (_args, context) => section(storyLocale(context), [linker(storyLocale(context), 0)]),
+  play: async (context) => {
+    const { canvas, canvasElement } = context;
+    const list = canvas.getByRole("list", { name: storyText(context, copy.title) });
+    await expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    await expect(within(list).getByRole("link")).toHaveAttribute("href", `#/work-items/${itemId(0)}`);
+    const text = canvasElement.textContent ?? "";
+    await expect(text).not.toContain(numbers[1]!);
+    await expect(text).not.toContain(subjects[storyLocale(context)][1]!);
+    await expect(text).not.toContain(storyText(context, copy.hidden));
+    await expect(text).not.toMatch(/\b(more|1\s*\+|\+\s*1)\b|المزيد/);
+    await expect(canvasElement.innerHTML).not.toContain(itemId(1));
+  },
+};
+
+/** Nothing the viewer sees links here: says so, as it does when nothing links here at all. */
 export const Empty: Story = {
   render: (_args, context) => section(storyLocale(context), []),
   play: async (context) => {
@@ -101,10 +106,9 @@ export const Empty: Story = {
 /** At phone width: every entry is touch-sized. */
 export const Phone: Story = {
   parameters: phone,
-  render: (_args, context) => section(storyLocale(context), [linker(storyLocale(context), 0), linker(storyLocale(context), 1, false)]),
+  render: (_args, context) => section(storyLocale(context), [linker(storyLocale(context), 0), linker(storyLocale(context), 1)]),
   play: async (context) => {
     const list = context.canvas.getByRole("list", { name: storyText(context, copy.title) });
-    await expectTouchTarget(within(list).getByRole("link"));
-    await expectTouchTarget(within(list).getByRole("button", { expanded: false }));
+    for (const open of within(list).getAllByRole("link")) await expectTouchTarget(open);
   },
 };

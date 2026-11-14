@@ -201,8 +201,8 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 
 ### 2.8 Linked from (as built, RP-292)
 
-- In the Links System Field, below the item's Links. `GET /v1/work-items/:id/linked-from` returns `{items}`: every item that has been Submitted and links to it, free Links and link questions alike, once each, by Document Number. Each is its Document Number and Subject, with its id only when the viewer sees it (E3); nothing else.
-- An item that has never left its raiser (Draft or internal review) is never listed, whoever asks; it appears at its first Submit. From then on it stays listed, also while it is Sent Back to its raiser, with its Links as they were at the Send Back until it is Submitted again (settled 2026-10-06, RP-295; as built, RP-309: `app.work_item_linked_from` reads each linking item's Links by the same rule, `app.item_row_as_arrived`, since it names linking items the viewer can't see (E3); `app.item_row_seen` adds the viewer's own access check). An item the viewer can't see is 404, like its other reads.
+- In the Links System Field, below the item's Links. `GET /v1/work-items/:id/linked-from` returns `{items}`: every item that has been Submitted and links to it, free Links and link questions alike, once each, by Document Number. Each is its Document Number, Subject and id, and only an item the viewer sees too is listed; one they can't see is left out silently (E3, RP-1301); nothing else.
+- An item that has never left its raiser (Draft or internal review) is never listed, whoever asks; it appears at its first Submit. From then on it stays listed, also while it is Sent Back to its raiser, with its Links as they were at the Send Back until it is Submitted again (settled 2026-10-06, RP-295; as built, RP-309: `app.work_item_linked_from` reads each linking item's Links by the same rule, `app.item_row_as_arrived`, and since RP-1301 lists a linking item only when `app.sees_work_item` gives it to the viewer). An item the viewer can't see is 404, like its other reads.
 - Served by `app.work_item_linked_from` (security definer), never the table: the app role can't read a Link's target.
 
 ### 2.8a Links within a Revision chain (RP-311 review, `20261107000000_revision_links_follow_chain.sql`)
@@ -224,7 +224,7 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - Published by migration `mar_form_version_3` as a Rabaed Default, like Version 2. `apps/api/test/mar-form-v3.test.ts` runs the part-1 publish checks on it against Versions 1 and 2.
 - Version 2 unchanged, plus a **References** section (before Classification) with one field: **Related submittals** (`related_submittals`, `work_item_ref`, optional; "الاعتمادات ذات الصلة"). No Rabaed Default makes a link question required.
 - New MARs pin Version 3. MARs on Version 1 or 2 keep showing and validating with theirs, leaving Draft included; Version 2 knows no `related_submittals`.
-- The demo (README, "Demo: the MAR journey") seeds an approved MAR in Tower 1 and a Submitted MAR on Version 3 in Tower 2 that links it under Related submittals and as a free Link, plus a TMC engineer (Omar) who covers Tower 2 only, so he reads the approved MAR as its Document Number and Subject (E1). The walkthrough's steps 10–12 show the Links, the hidden Link and Linked from (E3), and `apps/api/test/demo-seed.test.ts` follows them through the API.
+- The demo (README, "Demo: the MAR journey") seeds an approved MAR in Tower 1 and a Submitted MAR on Version 3 in Tower 2 that links it under Related submittals and as a free Link, plus a TMC engineer (Omar) who covers Tower 2 only, so he reads the approved MAR as its Document Number and Subject (E1). The walkthrough's steps 10–12 show the Links, the hidden Link and Linked from (E3: Omar's leaves out the Tower 1 MAR he can't see, RP-1301), and `apps/api/test/demo-seed.test.ts` follows them through the API.
 
 ### 2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)
 
@@ -571,7 +571,7 @@ The full engine is built in five parts. Each part is merged and usable before th
      - **One Link, two ways in:** free Links (`related`) in the Links System Field, and the items chosen in a `work_item_ref` field (`relies_on`). Both are `work_item_link` rows and both show in the Links System Field. `raised_from` comes with the Snag List.
      - **What can be linked:** any number of items in the same Project that the linker can see and that have been Submitted at least once, also while Sent Back to the raiser (settled 2026-10-06, RP-295). No item that has never left its raiser, no limits by Type or outcome.
      - **How a Link looks:** the Document Number and Subject, the same everywhere. Opening it shows the item, or, for an item the viewer can't see, only that they may not see its details.
-     - **Linked from:** the linked item lists every item that has been Submitted and links to it, with number and Subject even when the viewer can't see it (E3).
+     - **Linked from:** the linked item lists every item that has been Submitted, links to it and that the viewer may see; one they can't see is left out silently (E3, as changed by RP-1301).
      - **Who changes Links:** the raiser's Company, while it can still edit the answers (until Submit, and again while the item is Sent Back to it); then they are frozen with the answers. Adding a Link notifies nobody.
      - **No required Links on the Type:** `required_links` is dropped. A Form can make a `work_item_ref` field required instead; no Rabaed Default Form does.
      - **MAR Form Version 3** adds an optional **Related submittals** `work_item_ref` field. The demo shows a MAR linking an approved MAR, and a Contractor who sees only its number and Subject.

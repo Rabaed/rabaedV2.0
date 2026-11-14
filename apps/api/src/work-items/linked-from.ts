@@ -4,16 +4,16 @@ import { sql } from "kysely";
 
 // "Linked from" (RP-292; form-engine.md part 2b; visibility.md E3). The
 // database decides what comes back: app.work_item_linked_from lists only
-// Submitted items linking to an item the Member sees, each as its Document
-// Number and Subject, with its id only when the Member sees it too. A hidden
-// linking item's id never reaches the API, let alone the browser.
+// Submitted items linking to an item the Member sees that the Member sees too
+// (RP-1301), each as its Document Number, Subject and id. A linking item the
+// Member can't see never reaches the API, let alone the browser.
 
-/** The Submitted items linking to a visible item, by Document Number; null when the Member can't see the item. */
+/** The Submitted items the Member sees linking to a visible item, by Document Number; null when the Member can't see the item. */
 export function getLinkedFrom(db: Db, memberId: string, workItemId: string): Promise<LinkedFrom | null> {
   return withMember(db, memberId, async (trx) => {
     const visible = await trx.selectFrom("work_item").select("id").where("id", "=", workItemId).executeTakeFirst();
     if (!visible) return null;
-    const { rows } = await sql<{ document_number: string; subject: string; work_item_id: string | null }>`
+    const { rows } = await sql<{ document_number: string; subject: string; work_item_id: string }>`
       select document_number, subject, work_item_id from app.work_item_linked_from(${workItemId}::uuid)
     `.execute(trx);
     return {
