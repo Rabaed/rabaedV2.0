@@ -10,7 +10,7 @@ import {
   watchOutcomeNames,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, SentBackNotice, SnagTypeChip, StagePill, stageColour, submittalPanelNumber } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, RevisionDraftNumber, SentBackNotice, SnagTypeChip, StagePill, stageColour, submittalPanelNumber } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -455,6 +455,22 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                 </>
               ) : item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
+              ) : item.baseNumber !== undefined && chain ? (
+                // A Revision Draft reads its chain's base number from the start, with the Revision list (RP-1300).
+                <>
+                  <DocNo value={item.baseNumber} />
+                  <WorkItemRevisionPicker
+                    chain={chain}
+                    openId={item.id}
+                    locale={locale}
+                    typeCode={item.type.code}
+                    outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
+                  />
+                  {" "}
+                  <span className="text-muted">· {tViews("list.revisionDraft")}</span>
+                </>
+              ) : item.baseNumber !== undefined ? (
+                <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} draft={tViews("list.revisionDraft")} locale={locale} draftClassName="text-muted" />
               ) : item.revisionNo > 0 ? (
                 tViews("list.revisionNoNumber", { revision: formatNumber(item.revisionNo, locale) })
               ) : (

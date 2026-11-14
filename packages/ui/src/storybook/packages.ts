@@ -37,6 +37,7 @@ const table = (locale: Locale) => {
     sortBy: l.sortBy,
     noNumber: l.noNumber,
     revisionNoNumber: l.revisionNoNumber,
+    revisionDraft: l.revisionDraft,
     notPickedUp: l.notPickedUp,
     waitingFor: l.waitingFor,
     cancelled: l.cancelled,

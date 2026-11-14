@@ -48,6 +48,8 @@ export type WorkItemBoardLabels = {
   board: string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
+  /** After a Revision Draft's base number and its revision (RP-1300): "Draft", as in "UAT01-MAR-01-0005 Rev 1 · Draft". */
+  revisionDraft: string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
   /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›", its Project Role's name. */
@@ -713,9 +715,13 @@ export function cardContent(
   const place: KanbanCardPlace[] | undefined =
     card.location === null ? [] : places.get(card.location.id)?.map((p) => ({ depth: p.depth, name: p.name[locale] })) ?? [{ depth: 1, name: card.location.name[locale] }];
   return {
-    // The R badge carries the Revision, so the number leaves out its " Rev n".
+    // The R badge carries the Revision, so the number leaves out its " Rev n"; a Revision Draft's keeps it (RP-1300).
     number: cardNumber(card.documentNumber, card.revisionNo),
     noNumberLabel: card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber,
+    // A Revision Draft reads its chain's base number from the start (RP-1300).
+    ...(card.documentNumber === null && card.baseNumber !== undefined
+      ? { revisionDraft: { base: card.baseNumber, revision: card.revisionNo, draft: labels.revisionDraft } }
+      : {}),
     title: card.title,
     badge: badgeOf(card, locale, labels, outcomes),
     trade: { code: card.trade.code, name: card.trade.name[locale] },

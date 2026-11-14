@@ -24,6 +24,7 @@ const row: WorkItemRow = {
 const labels = {
   noNumber: "No number yet",
   revisionNoNumber: (r: string) => `Revision ${r}: no number yet`,
+  revisionDraft: "Draft",
   notPickedUp: "Not picked up",
   waitingFor: (role: string) => `Waiting for a new ${role}`,
   cancelled: "Cancelled",
@@ -44,6 +45,13 @@ describe("Export (RP-409)", () => {
     expect(file.content).toBe(
       '﻿"Submittal No.","Title","Rev","With"\r\n"TWR-MAR-0003","Cable ""tray"", galvanised","R1","Design Consultants"\r\n',
     );
+  });
+
+  it("writes a Revision Draft's number as its chain's base, its revision and Draft (RP-1300)", () => {
+    const draft: WorkItemRow = { ...row, documentNumber: null, baseNumber: "TWR-MAR-0003", revisionNo: 1 };
+    const file = exportFile([draft], shownColumns(only("documentNumber"), context("en")), "csv", context("en"));
+    expect(file.content).toContain('"TWR-MAR-0003 Rev 1 · Draft"');
+    expect(file.content).not.toContain("no number yet");
   });
 
   it("writes a Vacancy's With as the role it waits for, never a Company (RP-952)", () => {

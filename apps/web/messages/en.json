@@ -312,6 +312,7 @@
       "subject": "Subject",
       "noNumber": "No number yet",
       "revisionNoNumber": "Revision {revision}: no number yet",
+      "revisionDraft": "Draft",
       "empty": "No items you can see match these filters.",
       "search": "Search",
       "searchHelp": "Searches Document Number, Subject, Type, Trade, Location, Company and owner",

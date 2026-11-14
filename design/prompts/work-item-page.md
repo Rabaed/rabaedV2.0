@@ -9,7 +9,7 @@ Paste the shared brief from `design-requests-2026-10-07.md` first.
 ## Content
 
 - **Header:** back to the list; **Document Number** (left-to-right, "No number yet" for a Draft) and its Revision ("Rev 1"); the Stage pill; the Subject; Step Age dots; a **Watch / Watching** button (no watcher list or count anywhere).
-- **Revision drop-down** next to the Document Number: the chain's Revisions the viewer may see (`TWR-MAR-01-0003`, `TWR-MAR-01-0003 Rev 1`), the open one marked. When the item ended with Code C, a card offers **Create Revision**; a Draft Revision shows "No number yet: Revision 1" and **Discard Revision**.
+- **Revision drop-down** next to the Document Number: the chain's Revisions the viewer may see (`TWR-MAR-01-0003`, `TWR-MAR-01-0003 Rev 1`), the open one marked. When the item ended with Code C, a card offers **Create Revision**; a Draft Revision shows its chain's base number, "TWR-MAR-01-0003 Rev 1 · Draft", the drop-down with the earlier Revisions, and **Discard Revision** (RP-1300, owner's decision 2026-11-13).
 - **The Form**, in its Sections:
   - Material details: Manufacturer, Model, Specification section, Description.
   - Items: a table (Fixture type, Description, Quantity, Unit) with a total.

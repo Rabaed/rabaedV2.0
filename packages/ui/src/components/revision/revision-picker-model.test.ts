@@ -44,8 +44,19 @@ describe("the Revision picker (RP-1253)", () => {
     expect(revisionPicker([rev1], rev1.id)).toEqual({ kind: "label", revisionNo: 1 });
   });
 
-  it("is a plain Rev n label on a Draft Revision, not a button", () => {
-    expect(revisionPicker([original, rev1, draftRev2], draftRev2.id)).toEqual({ kind: "label", revisionNo: 2 });
+  // RP-1300 (owner's decision 2026-11-13): a Draft Revision shows the Revision list too, linking each earlier one.
+  it("lists the chain on a Draft Revision, the Draft open and Current, with no date and no banner", () => {
+    const view = revisionPicker([original, rev1, draftRev2], draftRev2.id);
+    expect(view).toMatchObject({ kind: "button", revisionNo: 2, past: false, banner: null });
+    expect(view.kind === "button" && view.rows.map((r) => [r.id, r.open, r.current, r.date])).toEqual([
+      [draftRev2.id, true, true, null],
+      [rev1.id, false, false, { kind: "closed", at: rev1.closedAt }],
+      [original.id, false, false, { kind: "closed", at: original.closedAt }],
+    ]);
+  });
+
+  it("is a plain Rev n label on a Draft Revision the viewer sees alone", () => {
+    expect(revisionPicker([draftRev2], draftRev2.id)).toEqual({ kind: "label", revisionNo: 2 });
   });
 
   it("lists the visible Revisions newest first, the Original last, the latest marked Current and dated by its Submission Date", () => {

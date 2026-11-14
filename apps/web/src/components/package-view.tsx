@@ -78,6 +78,7 @@ function usePackageLabels(): PackagePageLabels {
       sortBy: (column) => v("list.sortBy", { column }),
       noNumber: v("list.noNumber"),
       revisionNoNumber: (revision) => v("list.revisionNoNumber", { revision }),
+      revisionDraft: v("list.revisionDraft"),
       notPickedUp: v("list.notPickedUp"),
       waitingFor: (role) => v("list.waitingFor", { role }),
       // Cancelled is named once, with the notifications; every other outcome by its Type's set (RP-429).

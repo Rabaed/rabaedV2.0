@@ -21,7 +21,7 @@ import { Checkbox } from "../form/checkbox.tsx";
 import { moveColumn } from "./column-settings.tsx";
 import { cn } from "../../lib/cn.ts";
 import { isPlainClick } from "../../lib/plain-click.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { DocNo, RevisionDraftNumber, revisionDraftText } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -44,6 +44,8 @@ export type WorkItemTableLabels = {
   sortBy: (column: string) => string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
+  /** After a Revision Draft's base number and its revision (RP-1300): "Draft", as in "UAT01-MAR-01-0005 Rev 1 · Draft". */
+  revisionDraft: string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
   /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›". */
@@ -361,8 +363,12 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
   const n = (value: number) => formatNumber(value, locale);
   switch (column) {
     case "documentNumber": {
-      // The Rev column carries the Revision, so the number leaves out its " Rev n".
+      // The Rev column carries the Revision, so the number leaves out its " Rev n"; a Revision Draft's keeps it, as the
+      // owner's wording has it ("UAT01-MAR-01-0005 Rev 1 · Draft", RP-1300).
       const number = cardNumber(row.documentNumber, row.revisionNo);
+      // A Revision Draft reads its chain's base number from the start, with its revision and "Draft" (RP-1300).
+      if (number === null && row.baseNumber !== undefined)
+        return <RevisionDraftNumber base={row.baseNumber} revision={row.revisionNo} draft={labels.revisionDraft} locale={locale} className="font-ui font-normal text-muted" draftClassName="text-muted" />;
       return number ? (
         <DocNo value={number} locale={locale} className="font-ui font-normal text-muted tabular-nums" />
       ) : (
@@ -453,7 +459,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
 }
 
 /** The labels a column's text reads. */
-export type CellTextLabels = Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "notPickedUp" | "waitingFor" | "cancelled" | "code" | "revision">;
+export type CellTextLabels = Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "revisionDraft" | "notPickedUp" | "waitingFor" | "cancelled" | "code" | "revision">;
 
 type ColumnContext = {
   locale: Locale;
@@ -473,6 +479,7 @@ const placeAt = (row: WorkItemRow, depth: number, places: ColumnContext["places"
 const columnText: Record<ListColumnKey, (row: WorkItemRow, c: ColumnContext) => string> = {
   documentNumber: (row, { locale, labels }) =>
     cardNumber(row.documentNumber, row.revisionNo) ??
+    (row.baseNumber !== undefined ? revisionDraftText(row.baseNumber, row.revisionNo, labels.revisionDraft, locale) : null) ??
     (row.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(row.revisionNo, locale)) : labels.noNumber),
   subject: (row) => row.title,
   revision: (row, { locale, labels }) => labels.revision(formatNumber(row.revisionNo, locale)),

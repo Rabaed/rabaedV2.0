@@ -100,6 +100,13 @@ export const workItemSummary = z.object({
   title: z.string(),
   /** Null while Draft. */
   documentNumber: z.string().nullable(),
+  /**
+   * A Revision Draft's chain base number (RP-1300, owner's decision 2026-11-13): known from the start, so the
+   * Draft reads "UAT01-MAR-01-0005 Rev 1 · Draft"; only its own " Rev n" number waits for the Submit. Read
+   * through app.revision_chain, so only for a reader who sees the Draft and the chain's original. Left out
+   * for every other item.
+   */
+  baseNumber: z.string().optional(),
   stage,
   trade: dimensionValueRef,
   location: dimensionValueRef.nullable(),

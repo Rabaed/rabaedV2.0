@@ -6,7 +6,7 @@ import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { forwardIn, pointsTo } from "../../storybook/mirror.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { DocNo, RevisionDraftNumber } from "../doc-no/doc-no.tsx";
 import { StagePill } from "../status/stage-pill.tsx";
 import { submittalPanelNumber, submittalPanelPosition, submittalPanelWith } from "./panel-model.ts";
 import {
@@ -29,6 +29,7 @@ const copy = {
   stepAge: { en: "Step Age", ar: "عمر الخطوة" },
   location: { en: "Location", ar: "الموقع" },
   noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
+  draft: { en: "Draft", ar: "مسودة" },
   pending: { en: "Pending", ar: "قيد المراجعة" },
   sendForReview: { en: "Send for review", ar: "إرسال للمراجعة" },
 };
@@ -63,12 +64,29 @@ const rows: Row[] = [
   { id: "r3", documentNumber: "TWR-TMC-ME-MAR-077", revisionNo: 0, title: "Fan coil units", heldBy: consultant, stepAgeWeeks: 5 },
 ];
 
-/** `vacant`: the first row's Step is a Vacancy (RP-952), with no holder. */
-function PanelDemo({ context, start, startOpen = true, vacant = false }: { context: StoryContext; start: string; startOpen?: boolean; vacant?: boolean }) {
+/**
+ * `vacant`: the first row's Step is a Vacancy (RP-952), with no holder. `revisionDraft`: the second row is
+ * Rev 1 still in Draft (RP-1300), with no number of its own yet, only its chain's base number.
+ */
+function PanelDemo({
+  context,
+  start,
+  startOpen = true,
+  vacant = false,
+  revisionDraft = false,
+}: {
+  context: StoryContext;
+  start: string;
+  startOpen?: boolean;
+  vacant?: boolean;
+  revisionDraft?: boolean;
+}) {
   const locale = storyLocale(context);
   const [open, setOpen] = useState<string | null>(startOpen ? start : null);
   const ids = useSubmittalPanelIds();
-  const row = rows.find((r) => r.id === open);
+  const found = rows.find((r) => r.id === open);
+  const draftBase = revisionDraft && found?.id === "r2" ? "TWR-TMC-EL-MAR-042" : null;
+  const row = found && draftBase ? { ...found, documentNumber: null, stepAgeWeeks: null } : found;
   const position = row ? submittalPanelPosition(rows.map((r) => r.id), row.id) : null;
   const number = row ? submittalPanelNumber(row.documentNumber, row.revisionNo) : null;
   return (
@@ -83,7 +101,9 @@ function PanelDemo({ context, start, startOpen = true, vacant = false }: { conte
           locale={locale}
           labels={panelLabels(locale)}
           crumb={
-            number === null ? (
+            draftBase ? (
+              <RevisionDraftNumber base={draftBase} revision={row.revisionNo} draft={copy.draft[locale]} locale={locale} />
+            ) : number === null ? (
               copy.noNumber[locale]
             ) : number.revisionNo === null ? (
               <DocNo value={number.number} />
@@ -101,6 +121,7 @@ function PanelDemo({ context, start, startOpen = true, vacant = false }: { conte
               locale={locale}
               number={number}
               noNumber={copy.noNumber[locale]}
+              revisionDraft={draftBase ? { base: draftBase, revisionNo: row.revisionNo, draft: copy.draft[locale] } : undefined}
               subject={row.title}
               numberId={ids.numberId}
               subjectId={ids.subjectId}
@@ -174,6 +195,25 @@ export const Open: Story = {
     await expect(within(panel).queryByText(/due|overdue|استحقاق/i)).toBeNull();
     await expect(panel.querySelector(".sdp-body")!.scrollWidth).toBeLessThanOrEqual(panel.querySelector(".sdp-body")!.clientWidth);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
+/**
+ * A Revision Draft (RP-1300, owner's decision 2026-11-13): its chain's base number from the start, then
+ * "Rev 1" in brand orange and "· Draft", in the header and the breadcrumb, never "No number yet". The base
+ * number reads left to right in Arabic too, with Latin digits.
+ */
+export const RevisionDraft: Story = {
+  render: (_args, context) => <PanelDemo context={context} start="r2" revisionDraft />,
+  play: async (context) => {
+    const panel = panelOf(context);
+    const draft = storyText(context, { en: "Rev 1 · Draft", ar: "مراجعة 1 · مسودة" });
+    await expect(panel.querySelector(".sdp-number")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${draft}`);
+    await expect(panel.querySelector(".sdp-crumb")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${draft}`);
+    await expect(panel.querySelector(".sdp-rev")).toHaveTextContent(storyText(context, { en: "Rev 1", ar: "مراجعة 1" }));
+    await expect(panel).not.toHaveTextContent(storyText(context, copy.noNumber));
+    const number = within(panel.querySelector<HTMLElement>(".sdp-number")!).getByText("TWR-TMC-EL-MAR-042");
+    await expect(getComputedStyle(number).direction).toBe("ltr");
   },
 };
 

@@ -103,6 +103,10 @@ type Row = {
   type_name: BilingualText;
   title: string;
   document_number: string | null;
+  /** A Revision Draft's chain base number (RP-1300); null for every other item. */
+  base_number: string | null;
+  /** What the Document Number sort reads: the number, else a Revision Draft's base " Rev n"; null for any other Draft. */
+  sort_number: string | null;
   revision_no: number;
   outcome: WorkItemOutcome | null;
   stage_key: string;
@@ -177,6 +181,8 @@ type SnagRow = {
 function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
+      -- A Revision Draft's chain base number (RP-1300), and the number it sorts by: its own, else base " Rev n".
+      b.base_number, coalesce(w.document_number, b.base_number || ' Rev ' || w.revision_no) as sort_number,
       w.revision_no, w.outcome, w.paper_ref, w.closed_at,
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
@@ -224,6 +230,12 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
     -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
     -- count, cursor or card carries the time. numbered_at is set with the Document Number.
     cross join lateral (select case when w.document_number is null then null else w.entered_at end as step_entered_at) e
+    -- A Revision not yet numbered reads its chain's base number from the start (RP-1300; owner's decision
+    -- 2026-11-13): the original's, through app.revision_chain, which gives only Revisions the reader sees (V1).
+    cross join lateral (
+      select case when w.document_number is null and w.revision_no > 0
+        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number
+    ) b
     -- No Step while another Company holds it (db-mask: app.work_items_seen; RP-1192).
     left join workflow_step s on s.id = w.step_id
     join work_item_type t on t.id = w.work_item_type_id
@@ -500,14 +512,14 @@ const sorts: Record<WorkItemCursorSort, SortDefinition> = {
         ? sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and r.step_entered_at is null and ${pastTextThenId(sql`r.title`, subject, id)}))`
         : sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and (r.step_entered_at is null or r.step_entered_at > ${at}::timestamptz or (r.step_entered_at = ${at}::timestamptz and r.id > ${id}::uuid))))`,
   },
-  // Items with no number yet (Drafts) last, by Subject.
+  // Items with no number yet (Drafts) last, by Subject; a Revision Draft beside its chain, as base " Rev n" (RP-1300).
   documentNumber: {
-    orderBy: sql`r.document_number is null, r.document_number collate "C", ${bySubjectWhen(sql`r.document_number is null`)}`,
-    keyOf: (r) => keyOf(r.document_number === null, r.document_number, r),
+    orderBy: sql`r.sort_number is null, r.sort_number collate "C", ${bySubjectWhen(sql`r.sort_number is null`)}`,
+    keyOf: (r) => keyOf(r.sort_number === null, r.sort_number, r),
     after: ([none, number, subject, id]) =>
       none === "true"
-        ? sql`(r.document_number is null and ${pastTextThenId(sql`r.title`, subject, id)})`
-        : sql`(r.document_number is null or ${pastTextThenId(sql`r.document_number`, number, id)})`,
+        ? sql`(r.sort_number is null and ${pastTextThenId(sql`r.title`, subject, id)})`
+        : sql`(r.sort_number is null or ${pastTextThenId(sql`r.sort_number`, number, id)})`,
   },
   // The latest Submission Date first; items not yet Submitted last, by Subject.
   submissionDate: {
@@ -550,7 +562,7 @@ const named = (name: RawBuilder<unknown>, lang: Locale) => sql`lower(${name} ->>
 
 const columnSorts: Record<WorkItemSort, ColumnSort> = {
   stepAge: { value: () => sql`r.step_entered_at`, none: sql`(r.closed or r.step_entered_at is null)`, reversed: true },
-  documentNumber: { value: () => sql`r.document_number collate "C"` },
+  documentNumber: { value: () => sql`r.sort_number collate "C"` },
   submissionDate: { value: () => sql`r.submitted_at` },
   subject: { value: () => sql`lower(r.title) collate "C"` },
   revision: { value: () => sql`r.revision_no` },
@@ -616,6 +628,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     type: { code: r.type_code, name: r.type_name },
     title: r.title,
     documentNumber: r.document_number,
+    ...(r.base_number ? { baseNumber: r.base_number } : {}),
     revisionNo: r.revision_no,
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
