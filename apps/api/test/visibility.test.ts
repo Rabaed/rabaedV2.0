@@ -3,7 +3,7 @@
 // Visibility; each Authorized Person narrows it for their own Project Members,
 // who never get more than their Participant (visibility.md V4).
 import { randomUUID } from "node:crypto";
-import type { DimensionValue } from "@rabaed/domain";
+import type { DimensionValue, DimensionValues } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
 
@@ -136,7 +136,9 @@ describe("a Participant's Visibility", () => {
     // And so does the engineer given all of their Participant's Locations.
     expect((await setMemberVisibility(consultant.caller, engineer.member.id, { trade: none, location: all })).statusCode).toBe(204);
     const mine = (await engineer.caller.get(`/v1/projects/${projectId}/visibility`)).json();
-    expect(ids(mine.location)).toEqual(sorted(loc.tower1, loc.buildingA, loc.floor1, loc.buildingB));
+    // With the Project's Whole Project Location, which any Location covers (RP-1304); a grant's covered values leave it out.
+    const wholeProject = ((await host.caller.get(`/v1/projects/${projectId}/dimensions`)).json() as DimensionValues).location.find((l) => l.wholeProject)!.id;
+    expect(ids(mine.location)).toEqual(sorted(wholeProject, loc.tower1, loc.buildingA, loc.floor1, loc.buildingB));
     expect(mine.trade).toEqual([]);
   });
 
@@ -205,7 +207,8 @@ describe("a Member's Visibility", () => {
     // The Authorized Person, not on the Project, still sees what the Participant covers, to choose from.
     expect(ids(res.json().participant.covered.trade)).toEqual([trade.electrical]);
     const mine = (await engineer.caller.get(`/v1/projects/${projectId}/visibility`)).json();
-    expect(ids(mine.location)).toEqual(sorted(loc.buildingA, loc.floor1));
+    const wholeProject = ((await host.caller.get(`/v1/projects/${projectId}/dimensions`)).json() as DimensionValues).location.find((l) => l.wholeProject)!.id;
+    expect(ids(mine.location)).toEqual(sorted(wholeProject, loc.buildingA, loc.floor1));
     expect(ids(mine.trade)).toEqual([trade.electrical]);
   });
 

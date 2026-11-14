@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { impliedBySelection, pickable, treeOrder } from "./dimension-tree.ts";
+import { grantable, impliedBySelection, pickable, treeOrder } from "./dimension-tree.ts";
 
 const v = (id: string, parentId: string | null = null) => ({ id, parentId });
 // As the API lists them: by depth, then sort.
@@ -41,5 +41,23 @@ describe("pickable (RP-1239)", () => {
 
   it("keeps an archived value the grant already covers, so it can be unticked", () => {
     expect(pickable(all, new Set(["BA"])).map((x) => x.id)).toEqual(["T1", "BA", "F1"]);
+  });
+});
+
+describe("grantable", () => {
+  const value = (id: string, wholeProject = false) => ({
+    id,
+    parentId: null,
+    depth: 1,
+    levelName: null,
+    code: id,
+    name: { en: id, ar: id },
+    active: true,
+    ...(wholeProject ? { wholeProject: true as const } : {}),
+  });
+
+  it("leaves out the Whole Project Location: any Location covers it, so no grant lists it and the Settings tree edits it not (RP-1304)", () => {
+    const dimensions = { trade: [value("EL"), value("ME")], location: [value("WP", true), value("BA"), value("BB")] };
+    expect(grantable(dimensions)).toEqual({ trade: [value("EL"), value("ME")], location: [value("BA"), value("BB")] });
   });
 });

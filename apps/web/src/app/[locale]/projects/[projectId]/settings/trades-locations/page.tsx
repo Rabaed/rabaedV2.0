@@ -4,6 +4,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { TradesLocations } from "@/components/settings/trades-locations";
 import { redirect } from "@/i18n/navigation";
+import { grantable } from "@/lib/dimension-tree";
 import { getMe, getProject, getProjectDimensions, getProjectScopes } from "@/lib/session";
 
 /**
@@ -39,7 +40,8 @@ export default async function TradesLocationsPage({
         projectId={project.id}
         canEdit={project.isProjectAdmin}
         trades={dimensions.trade}
-        locations={dimensions.location}
+        // The Whole Project Location is built in, never edited (RP-1304).
+        locations={grantable(dimensions).location}
         scopes={scopes.scopes}
       />
     </>

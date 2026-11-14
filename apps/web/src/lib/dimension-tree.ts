@@ -34,6 +34,14 @@ export function pickable<T extends { id: string; active: boolean }>(values: T[],
   return values.filter((v) => v.active || kept.has(v.id));
 }
 
+/**
+ * A Project's values without its Whole Project Location (RP-1304), for the grant editors and the
+ * Settings tree: any Location covers it, so no grant lists it, and it is built in, never edited.
+ */
+export function grantable<T extends { wholeProject?: true }>(dimensions: { trade: T[]; location: T[] }): { trade: T[]; location: T[] } {
+  return { trade: dimensions.trade, location: dimensions.location.filter((l) => !l.wholeProject) };
+}
+
 /** The values covered through a selected ancestor: granting a Location covers everything beneath it. */
 export function impliedBySelection(values: Node[], selected: ReadonlySet<string>): Set<string> {
   const parentOf = new Map(values.map((v) => [v.id, v.parentId]));

@@ -210,14 +210,41 @@ function sectionsOf(row: Row, locale: Locale): SubmittalPanelSectionItem[] {
   return submittalPanelSectionKeys(row.form).flatMap((key) => (key === "attachments" ? [] : [all[key]]));
 }
 
-function DetailsDemo({ context, start, startCollapsed = {} }: { context: StoryContext; start: string; startCollapsed?: Record<string, boolean> }) {
+/** A drawing request at the Whole Project (RP-1304): its Location is that one level, with no Building or Floor. */
+const wholeProjectRow: Row = {
+  id: "r3",
+  number: "TWR-TMC-AR-DAR-290",
+  subject: "General specification",
+  type: bi("DAR Drawing approval", "DAR اعتماد مخططات"),
+  form: darForm,
+  answers: {},
+  trade: { code: "AR", name: bi("Architectural", "معماري") },
+  scopes: [],
+  place: [bi("Whole Project", "المشروع كامل")],
+  links: [],
+  internal: 0,
+};
+
+function DetailsDemo({
+  context,
+  start,
+  startCollapsed = {},
+  more = [],
+}: {
+  context: StoryContext;
+  start: string;
+  startCollapsed?: Record<string, boolean>;
+  /** Rows besides the shared ones, for a story of its own. */
+  more?: Row[];
+}) {
+  const shown = [...rows, ...more];
   const locale = storyLocale(context);
   const ids = useSubmittalPanelIds();
   const [open, setOpen] = useState(start);
   // Kept across submittals, as `panel-preferences` keeps them in the browser.
   const [collapsed, setCollapsed] = useState(startCollapsed);
   const [kept, setKept] = useState("details");
-  const row = rows.find((r) => r.id === open)!;
+  const row = shown.find((r) => r.id === open)!;
   const offered = row.internal > 0 ? ["details", "internal"] : ["details"];
   const sections = (
     <SubmittalPanelSections
@@ -230,7 +257,7 @@ function DetailsDemo({ context, start, startCollapsed = {} }: { context: StoryCo
   );
   return (
     <div className="space-y-2 p-4">
-      {rows.map((r) => (
+      {shown.map((r) => (
         <Button key={r.id} variant="secondary" data-row={r.id} onClick={() => setOpen(r.id)}>
           {r.subject}
         </Button>
@@ -413,6 +440,17 @@ export const TabsKeyboard: Story = {
     await expect(internal).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{Home}");
     await expect(details).toHaveFocus();
+  },
+};
+
+/** An item at the Whole Project (RP-1304): the Location section and its summary name it, one level only. */
+export const WholeProjectLocation: Story = {
+  render: (_args, context) => <DetailsDemo context={context} start="r3" more={[wholeProjectRow]} />,
+  play: async (context) => {
+    const location = panelOf(context).querySelector<HTMLElement>('[data-section="location"]')!;
+    const name = storyText(context, bi("Whole Project", "المشروع كامل"));
+    await expect(within(location).getAllByText(name).length).toBeGreaterThan(0);
+    await expect(location.querySelectorAll("li")).toHaveLength(1);
   },
 };
 
