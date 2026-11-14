@@ -10,6 +10,8 @@ import {
   type DocumentList,
   type FormChoices,
   type FormToFill,
+  type LinkedFrom,
+  type LinkedFromItem,
   type Locale,
   type OptionList,
   type RevisionChain,
@@ -35,6 +37,8 @@ export type SubmittalPanelReads = {
   people: FormChoices;
   documents: DocumentList;
   links: WorkItemLinks;
+  /** The Submitted items linking here that the viewer sees (RP-1301); null when that read failed, so none is shown. */
+  linkedFrom: readonly LinkedFromItem[] | null;
   optionLists: OptionList[];
   suppliers: { id: string; tradeId: string; status: ApprovedSuppliers["suppliers"][number]["status"]; name: ApprovedSuppliers["suppliers"][number]["name"] }[];
   checklistTemplates: ReturnType<typeof checklistTemplateChoices>;
@@ -65,12 +69,14 @@ export function useSubmittalPanelReads(item: WorkItemDetail | null, refreshKey: 
     const { signal } = controller;
     const failed = () => setRead((shown) => (shown?.id === id && !("failed" in shown) ? shown : { id, failed: true }));
     void (async () => {
-      const [form, people, documents, links, chain] = await Promise.all([
+      const [form, people, documents, links, chain, linkedFrom] = await Promise.all([
         readJson<FormToFill>(`/work-items/${id}/form`, signal),
         readJson<FormChoices>(`/work-items/${id}/form-choices`, signal),
         readJson<DocumentList>(`/work-items/${id}/documents`, signal),
         readJson<WorkItemLinks>(`/work-items/${id}/links`, signal),
         readJson<RevisionChain>(`/work-items/${id}/revisions`, signal),
+        // Linked from, as the Work Item page reads it: only the linking items the viewer sees (RP-1301).
+        readJson<LinkedFrom>(`/work-items/${id}/linked-from`, signal),
       ]);
       if (!form || !people || !documents || !links) return failed();
       const types = new Set(formFields(form.schema).map((f) => f.type));
@@ -87,6 +93,7 @@ export function useSubmittalPanelReads(item: WorkItemDetail | null, refreshKey: 
         people,
         documents,
         links,
+        linkedFrom: linkedFrom?.items ?? null,
         chain,
         optionLists: lists?.optionLists ?? [],
         suppliers: (suppliers?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name })),
