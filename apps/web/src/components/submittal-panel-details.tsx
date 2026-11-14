@@ -148,7 +148,7 @@ export function SubmittalPanelDetails({
   // "Linked from" inside Links (RP-1301; dropped by RP-1237 row 40, back on the owner's word of 2026-11-13): the
   // Submitted items the viewer sees linking here, each opening that item in the panel (its own link lands on its
   // List with the panel open). Shown only when there is one: a linking item the viewer can't see is never in the read.
-  const linkedFrom = (data: SubmittalPanelReads): ReactNode =>
+  const linkedFromRows = (data: SubmittalPanelReads): ReactNode =>
     data.linkedFrom && data.linkedFrom.length > 0 ? <WorkItemLinkedFrom items={data.linkedFrom} look="rows" /> : null;
 
   const tail = (data: SubmittalPanelReads): SubmittalPanelSectionItem[] => [
@@ -163,12 +163,12 @@ export function SubmittalPanelDetails({
       summary: t("linkCount", { count: data.links.links.length, n: latin(data.links.links.length) }),
       children: data.links.canChange ? (
         <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={data.links} locale={locale} questionLabels={questionLabelsOf(data, locale)} titleHidden look="rows">
-          {linkedFrom(data)}
+          {linkedFromRows(data)}
         </WorkItemLinks>
       ) : (
         <div className="flex flex-col gap-4">
           <SubmittalPanelLinks links={submittalPanelLinks(item.id, data.links.links)} none={t("noLinks")} linkAs={Link} />
-          {linkedFrom(data)}
+          {linkedFromRows(data)}
         </div>
       ),
     },
