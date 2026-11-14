@@ -76,6 +76,7 @@ defineCase("WF-01", async (t) => {
   const asAdmin = typeOf(await settings(tm.api.saeed!, tm.projectId), "MAR");
   const unused = (asAdmin.rabaedDefaults as H.Json[]).find((d) => !d.bound);
   t.check("saeed (Project Admin): lists every Rabaed Default of MAR, at most one in use", (asAdmin.rabaedDefaults as H.Json[]).length > 1 && (asAdmin.rabaedDefaults as H.Json[]).filter((d) => d.bound).length <= 1, (asAdmin.rabaedDefaults as H.Json[]).map((d) => `${d.name.en}${d.bound ? " (in use)" : ""}`).join(" | "));
+  // That check fails when MAR has no Default out of use, so `if (unused)` below only keeps a failed run from stopping.
   const version = (id: string, n: number) => `/projects/${tm.projectId}/workflows/${id}/versions/${n}`;
   for (const who of ["ali", "mohammed"] as const) {
     const api = tm.api[who]!;

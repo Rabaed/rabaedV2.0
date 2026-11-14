@@ -22,20 +22,22 @@ type Latest = { id: string; name: BilingualText; version_no: number | null };
 
 /** Which Workflow each Work Item Type of the Project runs, its exceptions and, for a Project Admin, the Workflows to bind or copy; null when the Member is not on the Project. */
 export function readWorkflowSettings(db: Db, memberId: string, projectId: string): Promise<WorkflowSettings | null> {
-  return withMember(db, memberId, (trx) => settingsAs(trx, projectId));
+  return withMember(db, memberId, (trx) => settingsAsMember(trx, projectId));
 }
 
 /**
  * The Workflows Settings lists to the Member on the Project, by id (RP-1299): for a Project Admin
  * every one it names (each Type's, the Rabaed Defaults, the exceptions, the Project's copies); for
  * anyone else only those in use: the one each Type runs and the exceptions they read (V15).
+ * It adds no rule of its own: `settingsAsMember` already lists a non-admin only the Rabaed Default
+ * in use and no copies, and row-level security gives them only their own exceptions.
  */
 const listedWorkflowIds = (settings: WorkflowSettings): Set<string> =>
   new Set(
     settings.types.flatMap((t) => [t.workflow.id, ...t.rabaedDefaults.map((d) => d.id), ...t.exceptions.map((e) => e.workflow.id), ...t.copies.map((c) => c.id)]),
   );
 
-async function settingsAs(trx: Db, projectId: string): Promise<WorkflowSettings | null> {
+async function settingsAsMember(trx: Db, projectId: string): Promise<WorkflowSettings | null> {
   const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
   if (!onProject) return null;
   const canEdit = await isProjectAdmin(trx, projectId);
@@ -155,7 +157,7 @@ async function settingsAs(trx: Db, projectId: string): Promise<WorkflowSettings 
 
 /** Published Version `versionNo` of Workflow `workflowId`, whole, with the Stages and Positions to draw it, for whoever reads the Workflow (V20); null for anyone else. */
 export function readWorkflowVersion(db: Db, memberId: string, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
-  return withMember(db, memberId, (trx) => versionAs(trx, workflowId, versionNo));
+  return withMember(db, memberId, (trx) => versionAsMember(trx, workflowId, versionNo));
 }
 
 /**
@@ -165,13 +167,13 @@ export function readWorkflowVersion(db: Db, memberId: string, workflowId: string
  */
 export function readProjectWorkflowVersion(db: Db, memberId: string, projectId: string, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
   return withMember(db, memberId, async (trx) => {
-    const settings = await settingsAs(trx, projectId);
+    const settings = await settingsAsMember(trx, projectId);
     if (!settings || !listedWorkflowIds(settings).has(workflowId)) return null;
-    return versionAs(trx, workflowId, versionNo);
+    return versionAsMember(trx, workflowId, versionNo);
   });
 }
 
-async function versionAs(trx: Db, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
+async function versionAsMember(trx: Db, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
   const { rows } = await sql<{ id: string; name: BilingualText; project_id: string | null; module_key: ModuleKey | null }>`
     select d.id, d.name, d.project_id, (select t.module_key from work_item_type t where t.id = app.workflow_type(d.id)) as module_key
     from workflow_definition d where d.id = ${workflowId}::uuid
@@ -216,7 +218,7 @@ async function versionAs(trx: Db, workflowId: string, versionNo: number): Promis
 export function readScreenPins(db: Db, memberId: string, projectId: string): Promise<ScreenPins | null> {
   return withMember(db, memberId, async (trx): Promise<ScreenPins | null> => {
     // Only the Workflows Settings lists to the Member (RP-1299), so no pin links to one they'd get the 404 of.
-    const settings = await settingsAs(trx, projectId);
+    const settings = await settingsAsMember(trx, projectId);
     if (!settings) return null;
     const listed = listedWorkflowIds(settings);
     const { rows } = await sql<{

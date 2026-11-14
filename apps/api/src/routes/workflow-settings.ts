@@ -8,6 +8,13 @@ const projectParams = z.object({ projectId: z.string() });
 const versionParams = z.object({ workflowId: z.string(), versionNo: z.string() });
 const projectVersionParams = versionParams.extend({ projectId: z.string() });
 
+/** A Version number from the path: a whole number from 1, or the plain 404. */
+const versionNoOrNotFound = (raw: string): number => {
+  const versionNo = Number(raw);
+  if (!Number.isInteger(versionNo) || versionNo < 1) throw notFound();
+  return versionNo;
+};
+
 // Project → Settings → Workflows (RP-441, WF-18): what the page reads. Every Member of a
 // Project reads which Workflow each Type runs and each published Version (V20); the
 // Library and the Project's drafts only the Project Admins, an exception only its
@@ -26,10 +33,10 @@ export const workflowSettingsRoutes =
       return visibleOrNotFound(readScreenPins(ctx.db, memberId, idOrNotFound(request.params.projectId)));
     });
 
+    // The Workflow's own read: whoever reads the Workflow (V20; Rabaed Defaults every Company).
     app.get("/v1/workflows/:workflowId/versions/:versionNo", { schema: { params: versionParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      const versionNo = Number(request.params.versionNo);
-      if (!Number.isInteger(versionNo) || versionNo < 1) throw notFound();
+      const versionNo = versionNoOrNotFound(request.params.versionNo);
       return visibleOrNotFound(readWorkflowVersion(ctx.db, memberId, idOrNotFound(request.params.workflowId), versionNo));
     });
 
@@ -37,8 +44,7 @@ export const workflowSettingsRoutes =
     // Admin reads only a Workflow in use there; anything else is the same 404.
     app.get("/v1/projects/:projectId/workflows/:workflowId/versions/:versionNo", { schema: { params: projectVersionParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      const versionNo = Number(request.params.versionNo);
-      if (!Number.isInteger(versionNo) || versionNo < 1) throw notFound();
+      const versionNo = versionNoOrNotFound(request.params.versionNo);
       const { projectId, workflowId } = request.params;
       return visibleOrNotFound(readProjectWorkflowVersion(ctx.db, memberId, idOrNotFound(projectId), idOrNotFound(workflowId), versionNo));
     });
