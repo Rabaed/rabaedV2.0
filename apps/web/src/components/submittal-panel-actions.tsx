@@ -314,7 +314,11 @@ function DuplicateButton({ workItemId }: { workItemId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A press in the same frame as the first, before the button re-renders disabled, does nothing: one Draft.
+  const running = useRef(false);
   async function run() {
+    if (running.current) return;
+    running.current = true;
     setPending(true);
     setError(null);
     try {
@@ -324,6 +328,7 @@ function DuplicateButton({ workItemId }: { workItemId: string }) {
     } catch {
       setError(t("failed"));
     } finally {
+      running.current = false;
       setPending(false);
     }
   }

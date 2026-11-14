@@ -29,7 +29,7 @@ describe("duplicating a Work Item", () => {
   });
 
   it("says when the files are too large to copy, and is a plain failure for any other refusal", async () => {
-    const tooLarge = vi.fn(async () => Response.json({ error: "duplicate_files_too_large" }, { status: 422 }));
+    const tooLarge = vi.fn(async () => Response.json({ error: "duplicate_files_too_large" }, { status: 409 }));
     expect(await duplicateWorkItem(id, { fetch: tooLarge })).toEqual({ ok: false, reason: "too_large" });
     for (const error of ["not_found", "duplicate_not_allowed", "project_closed"]) {
       const refused = vi.fn(async () => Response.json({ error }, { status: 404 }));
