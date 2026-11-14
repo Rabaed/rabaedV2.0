@@ -64,7 +64,7 @@ afterAll(async () => {
 });
 
 describe("scenario RP-1304-1: every Project has one Whole Project Location, at the top, and it is no grant's value", () => {
-  it("lists it first, above the Blocks, named in English and Arabic", async () => {
+  it("lists it first, above the Zones, named in English and Arabic", async () => {
     const [first, ...rest] = await locations(tower.c1.members.engineer);
     expect(first).toMatchObject({ parent_id: null, depth: 1, code: "WP", name: { en: "Whole Project", ar: "المشروع كامل" }, whole_project: true });
     expect(rest.map((l) => l.id)).toEqual([tower.buildingA, tower.buildingB]);
@@ -162,12 +162,22 @@ describe("a Whole Project item, Submitted by C1 to K1 (Electrical)", () => {
         target: item,
         seenBy: [tower.k1.members.manager, tower.k1.members.engineer, tower.c1.members.engineer],
         hiddenFrom: [tower.c2.members.engineer],
-        label: "a Whole Project item, to a Block A-only Member",
+        label: "a Whole Project item, to a Building A-only Member",
       });
     });
 
     it("is read the same through Building B: any Location covers it", async () => {
       expect(await setMember(tower.k1.members.manager, "location", [tower.buildingB])).toBe("set");
+      expect((await reads(item)(tower.k1.members.manager)).map((r) => r.id)).toEqual([item]);
+    });
+
+    it("is read through a grant listing only an archived Zone, which keeps the Visibility it gave (RP-1239)", async () => {
+      const [added] = await tower.call<{ outcome: string; value_id: string }>(
+        tower.c1.ap,
+        sql`select outcome, value_id from app.add_dimension_value(${tower.projectId}::uuid, 'location', null, 'ZR', ${JSON.stringify(bilingual("Zone R"))}::jsonb)`,
+      );
+      expect(await setMember(tower.k1.members.manager, "location", [added!.value_id])).toBe("set");
+      expect(await tower.outcome(tower.c1.ap, sql`select app.update_dimension_value(${added!.value_id}::uuid, 'location', null::jsonb, false, now()) as outcome`)).toBe("updated");
       expect((await reads(item)(tower.k1.members.manager)).map((r) => r.id)).toEqual([item]);
     });
   });
@@ -312,7 +322,7 @@ describe("scenario RP-1304-7: Sent Back, K1 reads it as it arrived (V19): at the
     ).toBe("saved");
   });
 
-  it("is read by K1's Block A manager while C1 has it at Building B, and by no K1 Member covering no Location", async () => {
+  it("is read by K1's Building A manager while C1 has it at Building B, and by no K1 Member covering no Location", async () => {
     const location = async (as: string) =>
       (
         await tower.call<{ value_id: string }>(

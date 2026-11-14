@@ -1,5 +1,5 @@
 // Seam 1 for the "Whole Project" Location (RP-1304; GLOSSARY › Location; data-model.md §3; visibility.md row 4,
-// V12, V16, V19; scenarios RP-1304-1 to RP-1304-7). Every Project has one, listed first, above the Blocks. An item
+// V12, V16, V19; scenarios RP-1304-1 to RP-1304-7). Every Project has one, listed first, above the Zones. An item
 // there is covered by any Location (owner's decision on RP-1304, 2026-11-14): within the Companies that already see
 // it, a Member whose Visibility covers any Location sees it in the item, the List and the Kanban, while its Trade must
 // still be covered. It is never a grant's value, and the Settings neither rename nor archive it.
@@ -28,6 +28,8 @@ let at: Tower;
 let c1: Company;
 let k1: Company;
 let c3: Company;
+let c2Engineer: Caller; // C2, a Contractor on the Project covering every Trade and Building B, never sent the item.
+let c2: Company;
 let buildingB = "";
 let wholeProject = "";
 let blockA: Caller; // K1's engineer on Electrical and Building A only.
@@ -107,12 +109,17 @@ beforeAll(async () => {
   otherTrade = await k1Member(at.mechanical, [at.buildingA]);
   noLocation = await k1Member(at.electrical, []);
   await api.createProject(c3.caller, { code: "RWO" });
+  // `submitted` raises at the Location it is given as `buildingA`: here, the Whole Project.
   item = await submitted({ ...at, buildingA: wholeProject }, at.c1Engineer, at.c1Pm, "General specification");
   blockAItem = await submitted(at, at.c1Engineer, at.c1Pm, "Cable tray, Building A");
+  c2 = await api.authorizedPerson();
+  const c2Id = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+  await ok(c1.caller.request("PUT", `/v1/participants/${c2Id}/visibility`, { trade: all, location: only(buildingB) }));
+  c2Engineer = (await memberOnProject(api, c2, c2Id, ["engineer"])).caller;
 });
 
 describe("scenario RP-1304-1: the Whole Project Location is listed first and is built in", () => {
-  it("is every Project Member's first Location, above the Blocks, in English and Arabic", async () => {
+  it("is every Project Member's first Location, above the Zones, in English and Arabic", async () => {
     for (const by of [c1.caller, at.c1Engineer, at.k1Manager]) {
       const [first, ...rest] = (await dimensions(by)).location;
       expect(first).toMatchObject({ parentId: null, depth: 1, code: "WP", name: { en: "Whole Project", ar: "المشروع كامل" }, active: true, wholeProject: true });
@@ -141,12 +148,12 @@ describe("scenario RP-1304-1: the Whole Project Location is listed first and is 
   });
 });
 
-describe("scenario RP-1304-2: a Block A-only engineer sees a Whole Project item of a Trade they cover", () => {
+describe("scenario RP-1304-2: a Building A-only engineer sees a Whole Project item of a Trade they cover", () => {
   it("reads it in the item page, the List and the Kanban, its Location named", async () => {
     await expectHiddenFrom({
       read: readsEverywhere(item),
       target: item,
-      seenBy: [viewer(blockA, "K1's Block A engineer"), viewer(at.k1Manager, "K1's manager"), viewer(at.c1Engineer, "C1's engineer")],
+      seenBy: [viewer(blockA, "K1's Building A engineer"), viewer(at.k1Manager, "K1's manager"), viewer(at.c1Engineer, "C1's engineer")],
       hiddenFrom: [viewer(otherTrade, "K1's Mechanical engineer"), viewer(noLocation, "K1's engineer with no Location"), viewer(c3.caller, "another Project's Authorized Person")],
       name: (v: Viewer) => v.name,
       label: "a Whole Project item",
@@ -155,13 +162,16 @@ describe("scenario RP-1304-2: a Block A-only engineer sees a Whole Project item 
     expect((await list(blockA)).items.find((i) => i.id === item)?.location).toMatchObject({ id: wholeProject, code: "WP" });
   });
 
-  it("is a filter value of its own, in the List's Zone filter beside the Blocks", async () => {
+  it("is a filter value of its own, in the List's Zone filter beside the Zones", async () => {
     const levels = (await list(c1.caller)).filters.locations;
     expect(levels.find((l) => l.id === wholeProject)).toMatchObject({ parentId: null, depth: 1, name: { en: "Whole Project" } });
     const ids = async (location: string[]) => (await list(at.k1Manager, location)).items.map((i) => i.id).sort();
     expect(await ids([wholeProject])).toEqual([item]);
     expect(await ids([at.buildingA])).toEqual([blockAItem]);
     expect(await ids([wholeProject, at.buildingA])).toEqual([item, blockAItem].sort());
+    // The Kanban reads the same filter.
+    const board = (await ok(at.k1Manager.get(`${kanbanPath()}?${workItemSearchParams({ location: [wholeProject] })}`), 200)).json() as WorkItemBoard;
+    expect(cards(board).map((c) => c.id)).toEqual([item]);
   });
 });
 
@@ -170,21 +180,35 @@ describe("scenario RP-1304-3: not when the Member's Trade isn't the item's, or t
     await expectHiddenFrom({
       read: readsEverywhere(item),
       target: item,
-      seenBy: viewer(blockA, "K1's Block A engineer"),
+      seenBy: viewer(blockA, "K1's Building A engineer"),
       hiddenFrom: [viewer(otherTrade, "K1's Mechanical engineer on Building A"), viewer(noLocation, "K1's engineer with no Location")],
       name: (v: Viewer) => v.name,
       label: "a Whole Project item, to another Trade or no Location",
     });
   });
-});
 
-describe("scenario RP-1304-4: the Company rules are unchanged: who couldn't see it still can't", () => {
-  it("is not read by the Authorized Person of another Project's Company", async () => {
+  it("is not read by C1's Members while C1 covers no Location, though their own grants are all of it", async () => {
+    // C1's own Participant: its Members hold no Step now, so nothing is handed over.
+    await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/visibility`, { trade: all, location: only(), handovers: [] }));
     await expectHiddenFrom({
       read: readsEverywhere(item),
       target: item,
       seenBy: viewer(at.k1Manager, "K1's manager"),
-      hiddenFrom: viewer(c3.caller, "another Project's Authorized Person and Admin"),
+      hiddenFrom: [viewer(at.c1Engineer, "C1's engineer, who raised it"), viewer(at.c1Pm, "C1's Project Manager")],
+      name: (v: Viewer) => v.name,
+      label: "a Whole Project item, to a Participant covering no Location",
+    });
+    await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/visibility`, { trade: all, location: all, handovers: [] }));
+  });
+});
+
+describe("scenario RP-1304-4: the Company rules are unchanged: who couldn't see it still can't", () => {
+  it("is not read by C2, which covers every Trade and Building B but was never sent it, or another Project's Company", async () => {
+    await expectHiddenFrom({
+      read: readsEverywhere(item),
+      target: item,
+      seenBy: viewer(at.k1Manager, "K1's manager"),
+      hiddenFrom: [viewer(c2Engineer, "C2's engineer"), viewer(c2.caller, "C2's Authorized Person"), viewer(c3.caller, "another Project's Authorized Person and Admin")],
       name: (v: Viewer) => v.name,
       label: "a Whole Project item, to another Company",
     });
@@ -202,12 +226,12 @@ describe("scenario RP-1304-7: Sent Back, K1 reads it as it arrived (V19): at the
     await take(at.c1Pm, sentBack, "submit");
     await ok(at.k1Manager.post(`/v1/work-items/${sentBack}/pick-up`));
     await take(at.k1Manager, sentBack, "send_back_to_draft");
-    // C1's engineer moves it to Building B, which K1's Block A engineer doesn't cover, before Submitting again.
+    // C1's engineer moves it to Building B, which K1's Building A engineer doesn't cover, before Submitting again.
     const now = await detail(at.c1Engineer, sentBack);
     await ok(at.c1Engineer.request("PUT", `/v1/work-items/${sentBack}/answers`, { answers: { ...now.answers, location: buildingB } }));
   });
 
-  it("is read by K1's Block A engineer at the Whole Project, as it arrived, while C1 has it at Building B", async () => {
+  it("is read by K1's Building A engineer at the Whole Project, as it arrived, while C1 has it at Building B", async () => {
     expect((await detail(at.c1Engineer, sentBack)).location?.id).toBe(buildingB);
     await expectHiddenFrom({
       read: async (v: Viewer) => {
@@ -219,7 +243,7 @@ describe("scenario RP-1304-7: Sent Back, K1 reads it as it arrived (V19): at the
         return [{ id: (await detail(v.by, sentBack)).id }];
       },
       target: sentBack,
-      seenBy: viewer(blockA, "K1's Block A engineer"),
+      seenBy: viewer(blockA, "K1's Building A engineer"),
       hiddenFrom: [viewer(noLocation, "K1's engineer with no Location"), viewer(otherTrade, "K1's Mechanical engineer")],
       name: (v: Viewer) => v.name,
       label: "a Sent Back item that arrived at the Whole Project",

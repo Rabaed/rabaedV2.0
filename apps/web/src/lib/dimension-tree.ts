@@ -38,7 +38,7 @@ export function pickable<T extends { id: string; active: boolean }>(values: T[],
  * A Project's values without its Whole Project Location (RP-1304), for the grant editors and the
  * Settings tree: any Location covers it, so no grant lists it, and it is built in, never edited.
  */
-export function grantable<T extends { wholeProject?: true }>(dimensions: { trade: T[]; location: T[] }): { trade: T[]; location: T[] } {
+export function withoutWholeProject<T extends { wholeProject?: true }>(dimensions: { trade: T[]; location: T[] }): { trade: T[]; location: T[] } {
   return { trade: dimensions.trade, location: dimensions.location.filter((l) => !l.wholeProject) };
 }
 

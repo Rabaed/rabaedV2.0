@@ -90,7 +90,7 @@ const choices = (context: StoryContext): BuiltInChoices => {
       { id: id.electrical, label: text("electrical"), code: "EL" },
       { id: id.mechanical, label: text("mechanical") },
     ],
-    // The Whole Project Location first, above the Blocks, as the API lists them (RP-1304).
+    // The Whole Project Location first, above the Zones, as the API lists them (RP-1304).
     locations: [
       { id: id.wholeProject, label: text("wholeProject") },
       { id: id.tower1, label: text("tower1") },
@@ -228,7 +228,7 @@ export const BuiltInFields: Story = {
 };
 
 /**
- * The Location picker (RP-1304): "Whole Project" is offered first, above the Blocks, and answers the
+ * The Location picker (RP-1304): "Whole Project" is offered first, above the Zones, and answers the
  * required Location, so the Form has no Location error once it is chosen.
  */
 export const WholeProjectLocation: Story = {

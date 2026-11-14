@@ -1,5 +1,5 @@
 -- RP-1304: a "Whole Project" Location, for items that apply to the whole Project (UAT round 0, SUB-01; owner's
--- decisions of 2026-11-13 and 2026-11-14 on the ticket, comment 15861). Scenarios RP-1304-1 to RP-1304-6.
+-- decisions of 2026-11-13 and 2026-11-14 on the ticket, comment 15861). Scenarios RP-1304-1 to RP-1304-7.
 --
 -- * dimension_value.whole_project: one Location of each Project, at the top level beside the Zones, sorted first
 --   (sort 0; a Zone's starts at 1), with code WP and the names "Whole Project" / "المشروع كامل". It is an ordinary
@@ -49,6 +49,9 @@ do $$
       where not exists (select 1 from dimension_value v where v.dimension_id = v_dimension.id and v.parent_id is null and v.code = x.c)
       order by x.n
       limit 1;
+      if v_code is null then
+        raise exception 'Project % has Zones WP and WP1 to WP9: give its Whole Project Location a code by hand', v_dimension.project_id;
+      end if;
       insert into dimension_value (project_id, dimension_id, depth, level_name, code, name, sort, whole_project)
       values (v_dimension.project_id, v_dimension.id, 1, '{"en": "Zone", "ar": "المنطقة"}', v_code,
         '{"en": "Whole Project", "ar": "المشروع كامل"}', 0, true);
