@@ -415,9 +415,13 @@ export function getWorkflowSettings(projectId: string): Promise<WorkflowSettings
   return apiGet<WorkflowSettings>(`/v1/projects/${encodeURIComponent(projectId)}/workflow-settings`);
 }
 
-/** A published Version of a Workflow, whole, for its read-only map (RP-441); null when the Member can't read it. */
-export function getWorkflowVersion(workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
-  return apiGet<WorkflowVersionRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/versions/${versionNo}`);
+/**
+ * A published Version of a Workflow, whole, for its read-only map (RP-441), as Project `projectId`'s
+ * Settings opens it; null when the Member can't read it there: a Member who is not a Project Admin
+ * reads only a Workflow in use on the Project (RP-1299).
+ */
+export function getWorkflowVersion(projectId: string, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
+  return apiGet<WorkflowVersionRead>(`/v1/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/versions/${versionNo}`);
 }
 
 /** The Screens a Project's Workflows may show: its own and the Rabaed Defaults (RP-441); null when the Member isn't on it. */

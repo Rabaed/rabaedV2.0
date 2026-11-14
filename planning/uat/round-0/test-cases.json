@@ -444,11 +444,11 @@
   "who": "Mohammed (DCL manager)",
   "role": "05",
   "steps": "1) Projects > UAT 05 · Consultant Manager (Mohammed) > Settings > Workflows. 2) Open the MAR Workflow and a published Version.",
-  "expected": "The page lists which Workflow each Work Item Type runs, its Version and every published Version whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.",
+  "expected": "The page lists which Workflow each Work Item Type runs and its Version, and only the Workflows in use: no Rabaed Default a Type doesn't run (the Project Admin's list keeps them all, the one in use marked; RP-1299). Each published Version is read whole, with every Company's Steps and Returns (V14). Mohammed cannot open the builder or see a draft.",
   "priority": "Medium",
   "mode": "Both",
   "waits": "Now",
-  "covers": "Matrix: RP-441-1; Rules: V20, ADR 0016"
+  "covers": "Matrix: RP-441-1, RP-1299-1, RP-1299-2; Rules: V20, ADR 0016"
  },
  {
   "id": "WF-02",
