@@ -123,7 +123,7 @@ describe("scenario RP-1304-1: the Whole Project Location is listed first and is 
 
   it("is the first Location a Form offers a Member covering Building A only, and not one covering none", async () => {
     expect((await mine(blockA)).location.map((l) => l.id)).toEqual([wholeProject, at.buildingA]);
-    expect((await mine(noLocation)).location).toEqual([]);
+    expect((await mine(noLocation)).location).toEqual([]); // not hidden-from: the Member's own coverage, no Location granted (state)
   });
 
   it("is never renamed, archived or given a Location inside it", async () => {

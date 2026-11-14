@@ -73,7 +73,8 @@ describe("scenario RP-1304-1: every Project has one Whole Project Location, at t
 
   it("gives a new Project its own, and only one", async () => {
     const other = await locations(tower.other.ap, tower.other.projectId);
-    expect(other).toHaveLength(1);
+    const own = await migrator.query("select id from dimension_value where project_id = $1 and whole_project", [tower.other.projectId]);
+    expect(other.map((l) => l.id)).toEqual(own.rows.map((r: { id: string }) => r.id));
     expect(other[0]).toMatchObject({ code: "WP", whole_project: true });
     expect(other[0]!.id).not.toBe(wholeProject);
   });
