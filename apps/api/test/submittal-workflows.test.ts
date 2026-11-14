@@ -140,9 +140,12 @@ describe("scenario RP-596-1: a new Project's Types run the Workflows the owner d
     }
   });
 
-  it("every Member reads them, and a Project Admin of another Project reads the same (Rabaed's own data, V20)", async () => {
+  it("a Member who is not a Project Admin is listed only the one in use (RP-1299)", async () => {
     const asEngineer = typeOf(await settings(hafiz), "DAR");
-    expect(asEngineer.rabaedDefaults).toHaveLength(8);
+    expect(asEngineer.rabaedDefaults.map((d) => ({ id: d.id, bound: d.bound }))).toEqual([{ id: asEngineer.workflow.id, bound: true }]);
+  });
+
+  it("every Member reads them, and a Project Admin of another Project reads the same (Rabaed's own data, V20)", async () => {
     const otherProject = (await api.createProject(outsider, { code: "SWO" })).id;
     expect(typeOf(await settings(outsider, otherProject), "DAR").rabaedDefaults.map((d) => d.name.en)).toEqual(submittalWorkflows.map((w) => w.name.en));
   });

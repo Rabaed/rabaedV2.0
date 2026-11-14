@@ -224,7 +224,8 @@ defineCase("VIS-29", async (t) => {
     try {
       await page.goto(`${webUrl}/en/projects/${pid}/settings/workflows/${copy.id}/versions/${versionNo}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(800);
-      await t.shot(page, "ali-versions-page");
+      await t.shot(page, "ali-exception-version-404");
+      t.check("Ali gets the plain 404 page for Beta Build's exception Workflow (RP-1299, V15)", (await page.getByTestId("not-found").count()) > 0);
     } finally {
       await context.close();
     }

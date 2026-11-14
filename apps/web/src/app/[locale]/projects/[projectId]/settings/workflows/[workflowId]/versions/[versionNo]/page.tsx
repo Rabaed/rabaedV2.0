@@ -12,7 +12,9 @@ type Params = { locale: Locale; projectId: string; workflowId: string; versionNo
  * Project → Settings → Workflows → View versions (RP-441): each published Version of a
  * Workflow as a read-only map, with the Screen Versions it pins. Every Project Member
  * reads it (V20, ADR 0016); a Workflow of another Project, a Library's and a Version that
- * isn't published are the not-found page, as the API answers them.
+ * isn't published are the not-found page, as the API answers them. So is, to a Member who
+ * is not a Project Admin, a Workflow not in use on the Project (RP-1299), as the Workflows
+ * page lists them only those.
  */
 export default async function WorkflowVersionsPage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<{ published?: string }> }) {
   const { locale, projectId, workflowId, versionNo: raw } = await params;
@@ -22,7 +24,7 @@ export default async function WorkflowVersionsPage({ params, searchParams }: { p
   const t = await getTranslations("projectSettings.workflows");
   const versionNo = Number(raw);
   if (!Number.isInteger(versionNo)) notFound();
-  const [me, read, pins] = await Promise.all([getMe(), getWorkflowVersion(workflowId, versionNo), getScreenPins(projectId)]);
+  const [me, read, pins] = await Promise.all([getMe(), getWorkflowVersion(projectId, workflowId, versionNo), getScreenPins(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!read) notFound();
   const base = `/projects/${projectId}/settings/workflows`;
