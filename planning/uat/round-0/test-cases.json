@@ -247,7 +247,7 @@
   "title": "Duplicate copies only TMC's own work",
   "who": "Hafiz (TMC engineer)",
   "role": "01",
-  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate. 2) Open the new Draft.",
+  "steps": "1) Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate. 2) Open the new Draft. 3) Open UAT01-MAR-01-0009 again: Duplicate is also in the Submittal Panel's bar, beside Download PDF, at every panel size. Press it for another new Draft.",
   "expected": "A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. \"Duplicated from\" shows UAT01-MAR-01-0009 to TMC only.",
   "priority": "Low",
   "mode": "Both",
