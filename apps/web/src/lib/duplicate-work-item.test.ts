@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { duplicateWorkItem } from "./duplicate-work-item.ts";
+import { duplicateProblemKey, duplicateWorkItem } from "./duplicate-work-item.ts";
 
 // RP-1303: the Submittal Panel's Duplicate and the List row's ⋯ menu Duplicate make one call, this one:
 // the same endpoint and body (RP-409), so the panel widens nothing. The API decides what may be copied
@@ -20,7 +20,13 @@ describe("duplicating a Work Item", () => {
     expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("uses a new key each time, so each press makes one Draft and a double-click is the API's to fold", async () => {
+  it("names the row menu's message for each refusal, one map for the List row and the panel", () => {
+    expect(duplicateProblemKey("too_large")).toBe("duplicateTooLarge");
+    expect(duplicateProblemKey("failed")).toBe("failed");
+  });
+
+  // As the List row always did: a key per press. The button itself refuses a second press while one runs.
+  it("uses a new key each time, so each press is its own request", async () => {
     const fetch = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ id: "x" }, { status: 201 }));
     await duplicateWorkItem(id, { fetch });
     await duplicateWorkItem(id, { fetch });

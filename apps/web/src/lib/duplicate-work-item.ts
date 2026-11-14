@@ -5,7 +5,12 @@
 
 export type DuplicateResult = { ok: true; id: string } | { ok: false; reason: "too_large" | "failed" };
 
-/** Duplicates the item; a key per call, so one press makes one Draft. */
+/** The row menu's message (`workItemViews.list.rowMenu.*`) for a refused Duplicate, wherever it was pressed. */
+export function duplicateProblemKey(reason: Extract<DuplicateResult, { ok: false }>["reason"]): "duplicateTooLarge" | "failed" {
+  return reason === "too_large" ? "duplicateTooLarge" : "failed";
+}
+
+/** Duplicates the item, with a key per call as the List row always sent. */
 export async function duplicateWorkItem(workItemId: string, deps: { fetch: (url: string, init: RequestInit) => Promise<Response> } = { fetch: (url, init) => fetch(url, init) }): Promise<DuplicateResult> {
   const res = await deps.fetch(`/api/v1/work-items/${workItemId}/duplicate`, {
     method: "POST",

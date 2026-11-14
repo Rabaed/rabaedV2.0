@@ -33,7 +33,7 @@ import { DownloadWorkingCopyButton } from "@/components/download-working-copy-bu
 import { OpenerAlert, useTransitionOpener } from "@/components/work-item-actions";
 import { useSaveDraft, useWorkItemForm } from "@/components/work-item-form";
 import { WorkItemRevision, useCreateRevision } from "@/components/work-item-revision";
-import { duplicateWorkItem } from "@/lib/duplicate-work-item";
+import { duplicateProblemKey, duplicateWorkItem } from "@/lib/duplicate-work-item";
 import { transitionGoesTo } from "@/lib/transition-goes-to";
 import { useRef, useState } from "react";
 
@@ -324,7 +324,7 @@ function DuplicateButton({ workItemId }: { workItemId: string }) {
     try {
       const result = await duplicateWorkItem(workItemId);
       if (result.ok) router.push(`/work-items/${result.id}`);
-      else setError(result.reason === "too_large" ? t("duplicateTooLarge") : t("failed"));
+      else setError(t(duplicateProblemKey(result.reason)));
     } catch {
       setError(t("failed"));
     } finally {

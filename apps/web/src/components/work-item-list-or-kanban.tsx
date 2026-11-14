@@ -47,7 +47,7 @@ import { SubmittalPanelHost, useOpenSubmittal } from "@/components/submittal-pan
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
-import { duplicateWorkItem } from "@/lib/duplicate-work-item";
+import { duplicateProblemKey, duplicateWorkItem } from "@/lib/duplicate-work-item";
 import { itemPdfProblemMessage, openItemPdf } from "@/lib/item-pdf";
 import { listSearchParams } from "@/lib/list-url";
 
@@ -324,7 +324,7 @@ export function WorkItemListOrKanban(
       case "duplicate": {
         // The same call as the Submittal Panel's Duplicate (RP-1303).
         const result = await duplicateWorkItem(row.id);
-        if (!result.ok) return result.reason === "too_large" ? t("list.rowMenu.duplicateTooLarge") : failed;
+        if (!result.ok) return t(`list.rowMenu.${duplicateProblemKey(result.reason)}`);
         router.push(itemHref(result.id));
         return null;
       }
