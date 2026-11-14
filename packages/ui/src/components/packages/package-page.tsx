@@ -160,10 +160,10 @@ export function PackagePage({
   const tableLabels: WorkItemTableLabels = { ...labels.table, columns: { ...labels.table.columns, owner: labels.with }, empty: rows.length === 0 ? labels.empty : labels.nothingHere };
   const sorted = sortRows(visible, sort, locale, tableLabels, filters);
 
-  // The page's one primary action (RP-1292, the owner's (a)): Submit Package once it is offered, else "+ Add
+  // The page's one primary action (RP-1292, the owner's decision on RP-1277): Submit Package once it is offered, else "+ Add
   // submittals". On a phone it goes in the bottom action bar (RP-1272); Rename, Delete and a secondary
   // "+ Add submittals" stay in the header.
-  const addItems = pkg.actions.addItems && searchItems && onAdd && (
+  const addItemsDialog = pkg.actions.addItems && searchItems && onAdd && (
     <AddPackageItemsDialog
       packageId={pkg.id}
       trades={filters.trades}
@@ -218,7 +218,7 @@ export function PackagePage({
           {pkg.actions.delete && onDelete && (
             <DeletePackageDialog number={pkg.number} labels={labels.delete} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onDelete={onDelete} />
           )}
-          {submittable ? addItems : <PrimaryAction>{addItems}</PrimaryAction>}
+          {submittable ? addItemsDialog : <PrimaryAction>{addItemsDialog}</PrimaryAction>}
           {submittable && (
             <PrimaryAction>
               <SubmitPackageDialog

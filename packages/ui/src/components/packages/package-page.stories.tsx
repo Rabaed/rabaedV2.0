@@ -602,7 +602,7 @@ const onItsPage: Story["render"] = (args, context) => (
 const actionBarOf = (context: { canvasElement: HTMLElement }) => context.canvasElement.querySelector<HTMLElement>("[data-action-bar]");
 
 /** The bottom action bar once the page's action has moved into it (after hydration). */
-const barOf = (context: { canvasElement: HTMLElement }) =>
+const filledBarOf = (context: { canvasElement: HTMLElement }) =>
   waitFor(() => {
     const element = actionBarOf(context);
     expect(element?.querySelector("button")).not.toBeNull();
@@ -610,11 +610,11 @@ const barOf = (context: { canvasElement: HTMLElement }) =>
   });
 
 /**
- * On a phone (RP-1292, the owner's (a) on RP-1277): the page's one primary action is in the bottom action bar
+ * On a phone (RP-1292, the owner's decision on RP-1277): the page's one primary action is in the bottom action bar
  * (RP-1272), full width with a 44 px target, and not in the header; `inHeader` are what stay in the header's group.
  */
 async function expectInTheBar(context: Parameters<NonNullable<Story["play"]>>[0], primary: string, inHeader: string[]) {
-  const bar = await barOf(context);
+  const bar = await filledBarOf(context);
   const action = within(bar).getByRole("button", { name: primary });
   await expect(action).toBeVisible();
   await expect(within(bar).getAllByRole("button")).toHaveLength(1);
@@ -636,9 +636,9 @@ async function expectAllInTheHeader(context: Parameters<NonNullable<Story["play"
 }
 
 /** A new Open Package that can't be Submitted yet: nothing in it. Rename, Delete and "+ Add submittals". */
-const notSubmittable = withItems({ ...openPkg, counts: { total: 0, open: 0, codes: {} }, actions: { ...openPkg.actions, submit: false } }, []);
+const cannotSubmitYet = withItems({ ...openPkg, counts: { total: 0, open: 0, codes: {} }, actions: { ...openPkg.actions, submit: false } }, []);
 /** In Progress and ready: Rename, "+ Add submittals" and Submit Package. */
-const submittablePkg = withItems(inProgress, [lights, fans, mixer, tiles]);
+const canSubmit = withItems(inProgress, [lights, fans, mixer, tiles]);
 
 /**
  * On a phone (402): its own page with Back (row 68); it can be Submitted, so Submit Package is in the bottom
@@ -646,7 +646,7 @@ const submittablePkg = withItems(inProgress, [lights, fans, mixer, tiles]);
  */
 export const OnAPhone: Story = {
   parameters: { ...phone, layout: "fullscreen" },
-  args: { pkg: submittablePkg },
+  args: { pkg: canSubmit },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
@@ -658,7 +658,7 @@ export const OnAPhone: Story = {
 /** At 820: still the full page, no list of Packages beside it (row 69 (a)), and every action in the header as today. */
 export const OnATablet: Story = {
   parameters: { ...tablet, layout: "fullscreen" },
-  args: { pkg: submittablePkg },
+  args: { pkg: canSubmit },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
@@ -670,7 +670,7 @@ export const OnATablet: Story = {
 /** On a phone, a Package that can't be Submitted yet: "+ Add submittals" is in the bottom action bar; Rename and Delete stay in the header (RP-1292). */
 export const NotSubmittableOnAPhone: Story = {
   parameters: { ...phone, layout: "fullscreen" },
-  args: { pkg: notSubmittable },
+  args: { pkg: cannotSubmitYet },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
@@ -683,7 +683,7 @@ export const NotSubmittableOnAPhone: Story = {
 /** At 820, the same Package: Rename, Delete and "+ Add submittals" in the header as today. */
 export const NotSubmittableOnATablet: Story = {
   parameters: { ...tablet, layout: "fullscreen" },
-  args: { pkg: notSubmittable },
+  args: { pkg: cannotSubmitYet },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
@@ -692,14 +692,27 @@ export const NotSubmittableOnATablet: Story = {
   },
 };
 
+/** On a phone, another Company reading it has no action: the bottom action bar stays empty and hidden. */
+export const ReadOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: withItems(asConsultant, [lights, fans, mixer]) },
+  render: onItsPage,
+  play: async (context) => {
+    await expectFullPage(context);
+    const bar = actionBarOf(context)!;
+    await expect(bar).toBeEmptyDOMElement();
+    await expect(bar).not.toBeVisible();
+  },
+};
+
 /** On a phone, "+ Add submittals" opens its pop-up from the bottom action bar, and adds the chosen ones. Left open for the screenshot. */
 export const AddItemsFromTheBar: Story = {
   parameters: { ...phone, ...overlay, layout: "fullscreen" },
-  args: { pkg: notSubmittable },
+  args: { pkg: cannotSubmitYet },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
-    await userEvent.click(within(await barOf(context)).getByRole("button", { name: l.addItems.trigger }));
+    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.addItems.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
     const results = await within(dialog).findByRole("list", { name: l.addItems.results });
     await userEvent.click(within(results).getByRole("checkbox", { name: l.addItems.choose("Shower screens") }));
@@ -710,11 +723,11 @@ export const AddItemsFromTheBar: Story = {
 /** On a phone, Submit Package opens its pop-up from the bottom action bar, and Submits. */
 export const SubmitFromTheBar: Story = {
   parameters: { ...phone, layout: "fullscreen" },
-  args: { pkg: submittablePkg },
+  args: { pkg: canSubmit },
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
-    await userEvent.click(within(await barOf(context)).getByRole("button", { name: l.submit.trigger }));
+    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
     await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
     await expect(context.args.onSubmit).toHaveBeenCalledOnce();
