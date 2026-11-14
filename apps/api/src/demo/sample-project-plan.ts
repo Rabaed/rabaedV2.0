@@ -48,6 +48,41 @@ export const SAMPLE_SUPPLIERS: Record<TradeCode, BilingualText> = {
   CV: { en: "Eastern Province Building Materials", ar: "المنطقة الشرقية لمواد البناء" },
 };
 
+/** A Scope of a Trade, and its Sub-scopes. */
+export interface SampleScope {
+  name: BilingualText;
+  subScopes?: BilingualText[];
+}
+
+/**
+ * Each Trade's Scopes (RP-1305), the General Trade's too, which Site Observations name: the Scopes field
+ * of a Trade's Work Items offers only these. UAT round 0's FRM-04 found Electrical Works with none.
+ */
+export const SAMPLE_SCOPES: Record<TradeCode | "GEN", SampleScope[]> = {
+  EL: [
+    { name: { en: "Lighting", ar: "الإنارة" }, subScopes: [{ en: "Emergency lighting", ar: "إنارة الطوارئ" }, { en: "External lighting", ar: "الإنارة الخارجية" }] },
+    { name: { en: "Power distribution", ar: "توزيع الطاقة" }, subScopes: [{ en: "Small power", ar: "المقابس والقوى الصغيرة" }] },
+    { name: { en: "Earthing and lightning protection", ar: "التأريض والحماية من الصواعق" } },
+    { name: { en: "Cable containment", ar: "حوامل الكابلات" } },
+    { name: { en: "Fire alarm", ar: "إنذار الحريق" } },
+  ],
+  ME: [
+    { name: { en: "HVAC", ar: "التكييف والتهوية" }, subScopes: [{ en: "Ductwork", ar: "مجاري الهواء" }, { en: "Chilled water piping", ar: "أنابيب المياه المبردة" }] },
+    { name: { en: "Plumbing and drainage", ar: "السباكة والصرف" } },
+    { name: { en: "Fire fighting", ar: "مكافحة الحريق" }, subScopes: [{ en: "Sprinklers", ar: "الرشاشات" }] },
+  ],
+  CV: [
+    { name: { en: "Concrete works", ar: "أعمال الخرسانة" } },
+    { name: { en: "Waterproofing", ar: "العزل المائي" } },
+    { name: { en: "Blockwork", ar: "أعمال البلوك" } },
+  ],
+  GEN: [
+    { name: { en: "Health and safety", ar: "الصحة والسلامة" } },
+    { name: { en: "Housekeeping", ar: "نظافة الموقع" } },
+    { name: { en: "Site logistics", ar: "لوجستيات الموقع" } },
+  ],
+};
+
 export interface Product {
   name: string;
   manufacturer: string;

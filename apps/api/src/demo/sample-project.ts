@@ -8,6 +8,7 @@ import { jpegWithExif } from "./exif-jpeg.ts";
 import {
   SAMPLE_PROJECT,
   SAMPLE_LOCATIONS,
+  SAMPLE_SCOPES,
   SAMPLE_SUPPLIERS,
   SAMPLE_TRADES,
   SAMPLE_CHECKLISTS,
@@ -19,6 +20,7 @@ import {
   type SampleDraft,
   type SampleInspection,
   type SamplePackage,
+  type SampleScope,
   type SampleSnag,
   type SampleSubmittal,
   type TradeCode,
@@ -369,7 +371,25 @@ interface Ids {
 const sameGrant = (a: VisibilityGrant, b: VisibilityGrant) => a.isAll === b.isAll && [...a.valueIds].sort().join() === [...b.valueIds].sort().join();
 const sameVisibility = (a: Visibility, b: Visibility) => sameGrant(a.trade, b.trade) && sameGrant(a.location, b.location);
 
-/** Trades, Locations, suppliers, Participants and Members: each added only where it is missing, `people`'s changes with them. */
+/**
+ * Each Trade's Scopes and Sub-scopes (RP-1305), the General Trade's too, added by the Project Admin: each only
+ * where its Trade (and, for a Sub-scope, its Scope) has none of its English name, so a second run adds nothing.
+ */
+async function addScopes(admin: Call, projectId: string, trade: Ids["trade"]): Promise<void> {
+  const url = `/v1/projects/${projectId}/scopes`;
+  const { scopes: have } = await admin<{ scopes: { id: string; tradeId: string; parentId: string | null; name: BilingualText }[] }>("GET", url);
+  const scopeOf = async (tradeId: string, parentId: string | null, name: BilingualText) =>
+    have.find((s) => s.tradeId === tradeId && s.parentId === parentId && s.name.en === name.en)?.id ??
+    (await admin<{ id: string }>("POST", url, { tradeId, parentId, name })).id;
+  for (const [code, scopes] of Object.entries(SAMPLE_SCOPES) as [keyof typeof SAMPLE_SCOPES, SampleScope[]][]) {
+    for (const scope of scopes) {
+      const parentId = await scopeOf(trade[code], null, scope.name);
+      for (const sub of scope.subScopes ?? []) await scopeOf(trade[code], parentId, sub);
+    }
+  }
+}
+
+/** Trades, Locations, Scopes, suppliers, Participants and Members: each added only where it is missing, `people`'s changes with them. */
 async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, people: SamplePeople): Promise<Ids> {
   const admin = as.saeed;
   const dimensions = () => admin<DimensionValues>("GET", `/v1/projects/${projectId}/dimensions`);
@@ -389,6 +409,8 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
   const byCode = (values: DimensionValues["trade"]) => Object.fromEntries(values.map((v) => [v.code, v.id]));
   const trade = byCode(have.trade) as Ids["trade"];
   const location = byCode(have.location);
+
+  await addScopes(admin, projectId, trade);
 
   const supplier = {} as Record<TradeCode, string>;
   for (const t of SAMPLE_TRADES) {
