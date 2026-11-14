@@ -288,9 +288,10 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
 
 /**
  * The Rabaed Default Workflows of the Types that have several (RP-596: the eight submittal
- * Workflows, 1 or 2 reviewers on each side, with and without the Owner's review): everyone reads
- * them and the one each Type runs; Project Admins use one for the Type or duplicate it to edit.
- * Nothing is shown while no Type has more than one.
+ * Workflows, 1 or 2 reviewers on each side, with and without the Owner's review), the one each
+ * Type runs marked; Project Admins use one for the Type or duplicate it to edit. Nothing is shown
+ * while no Type has more than one, so never to a Member who is not a Project Admin: the API lists
+ * them only the one in use (RP-1299), which the Types table above already names.
  */
 function RabaedDefaultsSection({
   types,

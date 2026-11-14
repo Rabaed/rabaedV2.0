@@ -9,7 +9,8 @@ import { getMe, getProjectParticipants, getWorkflowSettings } from "@/lib/sessio
 /**
  * Project → Settings → Workflows (RP-441, WF-18; design `settings-workflows.html`): which
  * Workflow each Work Item Type runs and its exceptions, with the Project Admins' commands.
- * Every Project Member reads it (V20); an exception only its own Participant's Members and
+ * Every Project Member reads it (V20), a Member who is not a Project Admin only the Workflows
+ * in use (RP-1299); an exception only its own Participant's Members and
  * the Project Admins do (V15), as the API gives it; the Participants an exception may name
  * are those the API lists for the viewer, every one for a Project Admin.
  */
