@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { sampleSnags, sampleSubmittals, type SubmittalEnd } from "./sample-project-plan.ts";
+import { SAMPLE_SCOPES, SAMPLE_TRADES, sampleSnags, sampleSubmittals, type SubmittalEnd } from "./sample-project-plan.ts";
 
 // RP-1217, with the owner's answers of 2026-11-02 (comment on the ticket): 12 in Internal Review,
 // 10 Revise and Resubmit (Code C), 50 Pending Approval, 26 closed at Code A or B, 5 Rejected (Code D).
@@ -87,5 +87,39 @@ describe("the sample Project's Snag List", () => {
 
   it("puts photos on some Snags", () => {
     expect(snags.filter((s) => (s.photos ?? 0) > 0).length).toBeGreaterThan(5);
+  });
+});
+
+// RP-1305 (UAT round 0, FRM-04): "This Trade has no Scopes" for Electrical Works. Every Trade the
+// sample and UAT Projects use, the General Trade's Site Observations too, gets Scopes in EN and AR.
+describe("the sample Project's Scopes", () => {
+  const english = (trade: keyof typeof SAMPLE_SCOPES) => SAMPLE_SCOPES[trade].flatMap((s) => [s.name.en, ...(s.subScopes ?? []).map((x) => x.en)]);
+
+  it("gives every Trade Scopes, the General Trade's included", () => {
+    expect(Object.keys(SAMPLE_SCOPES).sort()).toEqual([...SAMPLE_TRADES.map((t) => t.code), "GEN"].sort());
+    for (const scopes of Object.values(SAMPLE_SCOPES)) expect(scopes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("gives Electrical Works lighting, power, earthing, cable containment and fire alarm, as FRM-04 picks them", () => {
+    const names = english("EL");
+    for (const wanted of ["Lighting", "Emergency lighting", "Power distribution", "Earthing", "Cable containment", "Fire alarm"]) {
+      expect(names.some((n) => n.startsWith(wanted)), wanted).toBe(true);
+    }
+  });
+
+  it("names each Scope and Sub-scope in English and Arabic, once in its Trade", () => {
+    for (const [trade, scopes] of Object.entries(SAMPLE_SCOPES)) {
+      const all = scopes.flatMap((s) => [s.name, ...(s.subScopes ?? [])]);
+      for (const name of all) {
+        expect(name.en.trim().length, `${trade} ${name.en}`).toBeGreaterThan(0);
+        expect(name.ar, `${trade} ${name.en}`).toMatch(/[؀-ۿ]/);
+      }
+      expect(new Set(all.map((n) => n.en)).size, trade).toBe(all.length);
+      expect(new Set(all.map((n) => n.ar)).size, trade).toBe(all.length);
+    }
+  });
+
+  it("puts a Sub-scope under some Scope, as the Scopes field nests them", () => {
+    expect(Object.values(SAMPLE_SCOPES).flat().some((s) => (s.subScopes ?? []).length > 0)).toBe(true);
   });
 });
