@@ -432,8 +432,8 @@ describe("the Links between the items of a chain, for a reader who sees only som
   it("leaves the original out of the Revision's Linked from for a reader who sees only the Revision", async () => {
     expect(await call(orB.member, sql`select id from work_item where id = ${moved}`)).toEqual([{ id: moved }]);
     await expectHiddenFrom({ read: byId(original), target: original, seenBy: [c1.member, k1.member, ow.member, orA.member], hiddenFrom: orB.member, label: "the original, in Building A" });
-    // By Document Number, unique in the Project: Linked from names a linking item the reader can't see by
-    // its number with no id (E3), so a compare by id would miss exactly that leak.
+    // By Document Number, unique in the Project: Linked from once named a linking item the reader can't see by
+    // its number with no id (E3 before RP-1301), so a compare by id would miss exactly that leak.
     const revisionLinkers = (as: string) => linkedFrom(as, moved);
     await expectHiddenFrom({
       read: revisionLinkers,

@@ -1,8 +1,8 @@
 // Seam 2 for "Linked from" (RP-292, spec RP-289; visibility.md E3, the Linked
-// from row and scenarios 77-78): app.work_item_linked_from lists, for an item
-// the caller sees, every Submitted item that links to it. Each comes back as its
-// Document Number and Subject, with its id only for a caller who sees it, and
-// nothing else (no Stage, Code or Company). A Draft or an item in its raiser's
+// from row and scenarios 77-78, RP-1301-1): app.work_item_linked_from lists, for
+// an item the caller sees, every Submitted item that links to it and that the
+// caller sees too (RP-1301). Each comes back as its Document Number, Subject and
+// id, and nothing else (no Stage, Code or Company). A Draft or an item in its raiser's
 // internal review never comes back, and an item the caller can't see has no
 // Linked from at all. The app role can't get there through the table: it can't
 // read a Link's target.
@@ -162,11 +162,18 @@ describe("Linked from", () => {
     ]);
   });
 
-  it("gives a linking item the caller can't see as its Document Number and Subject only, never its id (E3, scenario 77)", async () => {
+  // RP-1301 (owner, comment 15885, reversing E3's number and Subject): a linking item the caller can't see is
+  // left out silently, so nothing of it comes back: no Document Number, no Subject, no id, no row to count.
+  it("leaves out a linking item the caller can't see, its Document Number, Subject and id alike (RP-1301-1, scenario 77)", async () => {
     expect(await linkedFrom(a.narrow, a.target)).toEqual([
-      { document_number: `${a.code}-MAR-01-0002`, subject: "Busbar risers", work_item_id: null },
       { document_number: `${a.code}-MAR-01-0003`, subject: "Cable trays", work_item_id: a.visibleLinker },
     ]);
+    type Row = { document_number: string; subject: string; work_item_id: string };
+    const rows = (as: string) => linkedFrom(as, a.target) as Promise<Row[]>;
+    const label = "RP-1301-1";
+    await expectHiddenFrom({ read: rows, target: a.hiddenLinker, idOf: (r) => r.work_item_id, seenBy: a.ap, hiddenFrom: a.narrow, label: `${label}, id` });
+    await expectHiddenFrom({ read: rows, target: `${a.code}-MAR-01-0002`, idOf: (r) => r.document_number, seenBy: a.ap, hiddenFrom: a.narrow, label: `${label}, number` });
+    await expectHiddenFrom({ read: rows, target: "Busbar risers", idOf: (r) => r.subject, seenBy: a.ap, hiddenFrom: a.narrow, label: `${label}, Subject` });
   });
 
   it("never lists a Draft or an item in internal review, whoever asks (scenario 78)", async () => {

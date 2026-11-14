@@ -386,15 +386,15 @@ export const linksChangeField = "$links";
 export const linksChangeValue = z.array(z.object({ documentNumber: z.string(), subject: z.string() }));
 
 /**
- * One Submitted item that links to a Work Item, as the viewer may read it
- * (visibility.md E3): its Document Number and Subject always, its id only when
- * the viewer can see it. Nothing else about a hidden one ever reaches them.
+ * One Submitted item that links to a Work Item and that the viewer sees too
+ * (visibility.md E3, RP-1301): its Document Number, Subject and id. One the
+ * viewer can't see is never listed, so nothing of it reaches them.
  */
 export const linkedFromItem = z.object({
   documentNumber: z.string(),
   subject: z.string(),
-  /** The linking item's id, only when the viewer can see it; null otherwise. */
-  workItemId: z.uuid().nullable(),
+  /** The linking item's id: the viewer sees it, so it opens. */
+  workItemId: z.uuid(),
 });
 export type LinkedFromItem = z.infer<typeof linkedFromItem>;
 

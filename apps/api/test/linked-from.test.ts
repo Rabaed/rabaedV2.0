@@ -1,15 +1,16 @@
 // Seam 1: "Linked from" (RP-292, spec RP-289; form-engine.md part 2b;
 // visibility.md E3, the Linked from row, scenarios 77 and 78). Any Member who
-// sees a Work Item reads the Submitted items that link to it. A linking item
-// they can see comes with its id; one they can't comes as its Document Number
-// and Subject only, and everything else about it stays 404. A Draft or an item
-// in internal review never appears, whoever asks; it appears once Submitted.
+// sees a Work Item reads the Submitted items that link to it and that they see
+// too, each with its id. One they can't see is left out silently (RP-1301,
+// reversing E3's number and Subject), and everything else about it stays 404. A
+// Draft or an item in internal review never appears, whoever asks; it appears
+// once Submitted.
 //
 // The Tower setup: C1 (Contractor, created the Project) and K1 (the Consultant,
 // covering the whole Project, with a second manager covering Mechanical only).
-// Only Contractors raise items today, so scenario 77's "item K1 can't see"
-// is an Electrical C1 item linking a Mechanical one, read by K1's Mechanical
-// manager: the same E3 rule, one viewer who sees the target and not the linker.
+// Only Contractors raise items today, so scenario 77's and RP-1301-1's "item K1
+// can't see" is an Electrical C1 item linking a Mechanical one, read by K1's
+// Mechanical manager: one viewer who sees the target and not the linker.
 import { randomUUID } from "node:crypto";
 import type { LinkedFrom } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -114,10 +115,19 @@ describe("Linked from", () => {
     expect(await linkedFrom(k1Manager, chillers)).toEqual(listed);
   });
 
-  it("shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 77)", async () => {
+  // RP-1301 (owner, comment 15885, reversing E3's number and Subject): C1's Electrical item, which K1's
+  // Mechanical manager can't see, is left out of their Linked from silently, with nothing to count.
+  it("leaves out a linking item of another Company the reader can't see: no number, no Subject, no id; everything else about it is 404 (RP-1301-1, scenario 77)", async () => {
     const res = await ok(k1Mechanical.get(linkedFromUrl(chillers)), 200);
-    expect(res.json()).toEqual({ items: [{ documentNumber: await number(busbars), subject: "Busbars", workItemId: null }] });
-    await expectHiddenFrom({ read: naming(linkedFromUrl(chillers), busbars), target: busbars, seenBy: k1Manager, hiddenFrom: k1Mechanical, name: named });
+    expect(res.json()).toEqual({ items: [] });
+    const busbarsNumber = await number(busbars);
+    for (const [target, label] of [
+      [busbars, "id"],
+      [busbarsNumber, "Document Number"],
+      ["Busbars", "Subject"],
+    ] as const) {
+      await expectHiddenFrom({ read: naming(linkedFromUrl(chillers), target), target, seenBy: k1Manager, hiddenFrom: k1Mechanical, name: named, label: `RP-1301-1, ${label}` });
+    }
     for (const path of ["", "/form", "/history", "/documents", "/links", "/linked-from"]) {
       const read = readById(`/v1/work-items/${busbars}${path}`);
       await expectHiddenFrom({ read, target: busbars, idOf: () => busbars, seenBy: k1Manager, hiddenFrom: k1Mechanical, name: named, label: path });
