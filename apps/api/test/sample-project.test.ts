@@ -4,7 +4,7 @@
 // scenarios RP-1217-1 to RP-1217-5), and that adding it again changes nothing.
 import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemHistory, WorkItemList } from "@rabaed/domain";
+import type { ChecklistTemplates, WorkItemHistory, WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
@@ -134,6 +134,30 @@ describe("its Scopes (RP-1305)", () => {
     // Ali (TMC) and Ahmed (the Consultant): both Project Members, so both read every Trade's Scopes.
     expect(await scopesOf(as.ali, projectId)).toEqual(plannedScopes);
     expect(await scopesOf(as.ahmed, projectId)).toEqual(plannedScopes);
+  });
+});
+
+describe("its Checklist Templates (RP-1315)", () => {
+  it("gives each Trade a whole-Trade template, and some a Scope's or a Sub-scope's", async () => {
+    const { trade } = (await as.ali.get(`/v1/projects/${projectId}/dimensions`)).json() as { trade: { id: string; code: string }[] };
+    const { scopes } = (await as.ali.get(`/v1/projects/${projectId}/scopes`)).json() as { scopes: { id: string; parentId: string | null; name: { en: string } }[] };
+    const res = await as.ahmed.get(`/v1/projects/${projectId}/checklist-templates`);
+    expect(res.statusCode, res.body).toBe(200);
+    const { templates } = res.json() as ChecklistTemplates;
+    const scopeName = (id: string | null) => {
+      const s = scopes.find((x) => x.id === id);
+      const parent = scopes.find((x) => x.id === s?.parentId);
+      return s ? (parent ? `${parent.name.en} > ${s.name.en}` : s.name.en) : "Whole Trade"; // not hidden-from: names the Scopes every Project Member reads (V16)
+    };
+    const listed = templates.map((t) => `${trade.find((v) => v.id === t.tradeId)?.code}: ${t.name.en} (${scopeName(t.scopeId)})`).sort(); // not hidden-from: the templates every Project Member reads (V20)
+    expect(listed).toEqual([
+      "CV: Concrete pour (Whole Trade)",
+      "CV: Waterproofing membrane (Waterproofing)",
+      "EL: Cable containment and wiring (Whole Trade)",
+      "EL: Emergency lighting (Lighting > Emergency lighting)",
+      "EL: Lighting installation (Lighting)",
+      "ME: Pipework installation (Whole Trade)",
+    ]);
   });
 });
 

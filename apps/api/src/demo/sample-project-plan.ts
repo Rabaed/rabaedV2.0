@@ -550,14 +550,47 @@ export interface SampleCheck {
   text: BilingualText;
 }
 
-/** Each Trade's Checklist Template on the sample Project, which its Inspections pick (RP-1220). */
-export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks: SampleCheck[] }> = {
+/**
+ * A Checklist Template on one Scope of its Trade, or on one Sub-scope of that Scope (RP-1315, ADR 0031), by the
+ * Scopes' English names in SAMPLE_SCOPES. A WIR ticking that Scope is offered it beside the whole-Trade one.
+ */
+export interface SampleScopedChecklist {
+  scope: string;
+  subScope?: string;
+  name: BilingualText;
+  checks: SampleCheck[];
+}
+
+/**
+ * Each Trade's Checklist Template on the sample Project, for the whole Trade, which its Inspections pick (RP-1220),
+ * and some Trades' templates on a Scope or Sub-scope (`scoped`, RP-1315).
+ */
+export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks: SampleCheck[]; scoped?: SampleScopedChecklist[] }> = {
   EL: {
     name: { en: "Cable containment and wiring", ar: "حوامل الكابلات والتمديدات" },
     checks: [
       { key: "supports", text: { en: "Supports at the spacing on the drawing", ar: "الدعامات بالمسافات المبينة في المخطط" } },
       { key: "earthing", text: { en: "Containment bonded to earth", ar: "الحوامل موصولة بالتأريض" } },
       { key: "labels", text: { en: "Cables labelled at both ends", ar: "الكابلات معلّمة من الطرفين" } },
+    ],
+    scoped: [
+      {
+        scope: "Lighting",
+        name: { en: "Lighting installation", ar: "تركيب الإنارة" },
+        checks: [
+          { key: "fixings", text: { en: "Luminaires fixed level and secure", ar: "وحدات الإنارة مثبتة مستوية ومحكمة" } },
+          { key: "circuits", text: { en: "Circuits as per the lighting layout", ar: "الدوائر حسب مخطط الإنارة" } },
+        ],
+      },
+      {
+        scope: "Lighting",
+        subScope: "Emergency lighting",
+        name: { en: "Emergency lighting", ar: "إنارة الطوارئ" },
+        checks: [
+          { key: "duration", text: { en: "Battery holds for three hours", ar: "البطارية تعمل لمدة ثلاث ساعات" } },
+          { key: "exit_signs", text: { en: "Exit signs lit and visible", ar: "لافتات المخارج مضاءة وظاهرة" } },
+        ],
+      },
     ],
   },
   ME: {
@@ -574,6 +607,17 @@ export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks:
       { key: "formwork", text: { en: "Formwork level, tight and clean", ar: "القوالب مستوية ومحكمة ونظيفة" } },
       { key: "rebar_cover", text: { en: "Rebar cover as per drawing", ar: "غطاء حديد التسليح حسب المخطط" } },
       { key: "embedded_items", text: { en: "Sleeves and embedded items in place", ar: "الأكمام والقطع المدفونة في أماكنها" } },
+    ],
+    scoped: [
+      {
+        scope: "Waterproofing",
+        name: { en: "Waterproofing membrane", ar: "غشاء العزل المائي" },
+        checks: [
+          { key: "substrate", text: { en: "Substrate dry and primed", ar: "السطح جاف ومعالج بالبرايمر" } },
+          { key: "laps", text: { en: "Laps of at least 100 mm, sealed", ar: "تراكبات لا تقل عن 100 مم ومحكمة" } },
+          { key: "flood_test", text: { en: "Flood test held for 24 hours", ar: "اختبار الغمر ثابت لمدة 24 ساعة" } },
+        ],
+      },
     ],
   },
 };

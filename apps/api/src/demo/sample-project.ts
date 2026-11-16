@@ -471,6 +471,18 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
     }
     checklist[t.code] = mine()!.versionId;
   }
+  // And the templates on one Scope or Sub-scope (RP-1315), each added unless its Trade has one of its name.
+  const { scopes } = await admin<{ scopes: { id: string; tradeId: string; parentId: string | null; name: BilingualText }[] }>("GET", `/v1/projects/${projectId}/scopes`);
+  for (const t of SAMPLE_TRADES) {
+    for (const s of SAMPLE_CHECKLISTS[t.code].scoped ?? []) {
+      if (listed.some((x) => x.tradeId === trade[t.code] && x.name.en === s.name.en)) continue;
+      const scope = scopes.find((x) => x.tradeId === trade[t.code] && x.parentId === null && x.name.en === s.scope);
+      const scopeId = s.subScope ? scopes.find((x) => x.parentId === scope?.id && x.name.en === s.subScope)?.id : scope?.id;
+      if (!scopeId) throw new Error(`Sample project: no Scope "${s.scope}${s.subScope ? ` > ${s.subScope}` : ""}" for ${t.code}`);
+      const items = s.checks.map((c) => ({ key: c.key, text: c.text, comment: "optional", on_negative: "none" }));
+      await admin("POST", `/v1/projects/${projectId}/checklist-templates`, { name: s.name, tradeId: trade[t.code], scopeId, items });
+    }
+  }
   return { trade, location, supplier, checklist };
 }
 

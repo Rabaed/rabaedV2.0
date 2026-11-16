@@ -8,12 +8,12 @@
 // Send Back lets the raiser edit the Form.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, publishProblems, type ChecklistTemplates, type FormVersion } from "@rabaed/domain";
 import { rabaedFormFile } from "@rabaed/admin/services";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { passChecklists } from "./support/checklist-template.ts";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { bilingual, buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -315,6 +315,15 @@ describe("a template's Scope (RP-1315)", () => {
     expect(await listed(moving)).toMatchObject({ versionNo: 3, scopeId: null });
   });
 
+  it("RP-1315-1: another Participant's Members read a template's Scope with the template, and nobody off the Project does", async () => {
+    const stranger = await api.authorizedPerson();
+    const scopesRead = (by: Caller) =>
+      readById<ChecklistTemplates>(`/v1/projects/${tower.projectId}/checklist-templates`)(by).then((lists) =>
+        lists.flatMap((l) => l.templates.filter((t) => t.id === concreteWorks).map((t) => ({ id: t.scopeId ?? "" }))),
+      );
+    await expectHiddenFrom({ read: scopesRead, target: concrete, seenBy: [tower.k1Manager, k1Engineer, tower.c1Engineer], hiddenFrom: [stranger.caller], label: "a template's Scope" });
+  });
+
   it("refuses another Trade's Scope, a deactivated one and a made-up one as scope_not_found (422)", async () => {
     const retired = await addScope(civil, null, "Retired");
     await ok(admin.request("PATCH", `/v1/scopes/${retired}`, { active: false }), 204);
@@ -350,8 +359,8 @@ describe("a template's Scope (RP-1315)", () => {
     expect((await detail(tower.c1Engineer, id)).checklistCopies.map((c) => c.versionId)).toEqual([picked]);
     await ok(saveWir(id, civil, { scopes: [concrete], checklist_template: picked }), 204);
     const cleared = await detail(tower.c1Engineer, id);
-    expect(cleared.answers.checklist_template).toBeUndefined();
-    expect(cleared.checklistCopies).toEqual([]);
+    expect(cleared.answers.checklist_template).toBeUndefined(); // not hidden-from: the raiser's own pick was cleared
+    expect(cleared.checklistCopies).toEqual([]); // not hidden-from: the raiser's own copy went with it
   });
 });
 

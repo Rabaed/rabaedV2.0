@@ -21,7 +21,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { expectHiddenFrom, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -312,7 +312,7 @@ describe("RP-1315: a template's Scope", () => {
     footing = (await scoped(c1.ap, civil, footings, "Footing")).template_id!;
   });
 
-  it("is read by every Project Member of every Participant, as the rest of the template", async () => {
+  it("RP-1315-1: is read by every Project Member of every Participant, as the rest of the template, and by no other Project's", async () => {
     for (const as of [c1.ap, c1Engineer, k1.ap, k1Engineer, c2.ap]) {
       const rows = await call<{ checklist_template_id: string; scope_id: string | null }>(
         as,
@@ -320,7 +320,9 @@ describe("RP-1315: a template's Scope", () => {
       );
       expect(Object.fromEntries(rows.map((r) => [r.checklist_template_id, r.scope_id])), as).toEqual({ [template]: null, [concreteWorks]: concrete, [footing]: footings });
     }
-    expect(await call(other.ap, sql<object>`select scope_id from checklist_template_version where checklist_template_id = ${concreteWorks}::uuid`)).toEqual([]);
+    // The Scope's own row too, which every Project Member already read (data-model.md §3).
+    const scopeRead = (as: string) => call<{ id: string }>(as, sql`select s.id from checklist_template_version v join scope s on s.id = v.scope_id where v.checklist_template_id = ${concreteWorks}::uuid`);
+    await expectHiddenFrom({ read: scopeRead, target: concrete, seenBy: [k1Engineer, c2.ap], hiddenFrom: [other.ap], label: "a template's Scope" });
   });
 
   it("is refused as 'scope_not_found' when it is another Trade's, another Project's, deactivated or made up", async () => {
