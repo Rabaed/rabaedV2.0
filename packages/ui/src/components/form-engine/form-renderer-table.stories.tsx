@@ -2,7 +2,7 @@ import { formSchema } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
-import { expectTouchTarget, phone } from "../../storybook/form.ts";
+import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
@@ -243,6 +243,102 @@ export const PhoneEdit: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   },
 };
+
+// The MAR Form Version 8's Items (RP-1298): Quantity is optional, and Unit is
+// required only in a row that has a Quantity. Story data only.
+const optionalQuantity = formSchema.parse({
+  sections: [
+    {
+      key: "quantities",
+      title: { en: "Items", ar: "البنود" },
+      fields: [
+        {
+          key: "items",
+          type: "table",
+          label: { en: "Items", ar: "البنود" },
+          columns: [
+            { key: "fixture_type", type: "text", required: true, label: { en: "Fixture type", ar: "نوع الوحدة" } },
+            { key: "description", type: "text", label: { en: "Description", ar: "الوصف" } },
+            { key: "quantity", type: "number", min: 0, decimals: 2, total: true, label: { en: "Quantity", ar: "الكمية" } },
+            {
+              key: "unit",
+              type: "select",
+              required: { field: "quantity", op: "not_empty" },
+              label: { en: "Unit", ar: "الوحدة" },
+              options: [
+                { value: "pcs", label: { en: "Pieces", ar: "قطعة" } },
+                { value: "m", label: { en: "Metres", ar: "متر" } },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+const unit = { en: "Unit", ar: "الوحدة" };
+const noQuantityRows = [
+  { fixture_type: "Panel light 600×600", description: "Quantity from the shop drawings" },
+  { fixture_type: "Emergency exit sign" },
+];
+
+/** Unit is asked for only in a row with a Quantity (RP-1298). */
+const unitRequired = (context: PlayContext, row: number) =>
+  within(rowGroup(context, row)).getByRole("combobox", { name: storyText(context, unit) }).getAttribute("aria-required") === "true";
+
+/** MAR Form Version 8: a row with no Quantity beside one with; the total adds up only the filled Quantities. */
+export const QuantityOptional: Story = {
+  args: { schema: optionalQuantity, answers: { items: [{ fixture_type: "Downlight", quantity: 240, unit: "pcs" }, noQuantityRows[0]] } },
+  render: function Render(args, context) {
+    const [values, setValues] = useState<Record<string, unknown>>(args.answers);
+    return (
+      <FormRenderer
+        {...args}
+        locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
+        answers={values}
+        onChange={(changes) => setValues((current) => ({ ...current, ...changes }))}
+      />
+    );
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    await expect(canvas.getByText(storyText(context, copy.totalQuantity)).nextElementSibling?.textContent).toBe("240.00");
+    await expect(within(rowGroup(context, 2)).getByLabelText(storyText(context, copy.quantity), { exact: false })).not.toBeRequired();
+    await expect(unitRequired(context, 1)).toBe(true);
+    await expect(unitRequired(context, 2)).toBe(false);
+  },
+};
+
+/** MAR Form Version 8 with no Quantity in any row: no total line, as the PDF already does. */
+export const NoQuantity: Story = {
+  args: { schema: optionalQuantity, answers: { items: noQuantityRows } },
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
+  play: async (context) => {
+    await expect(context.canvas.queryByText(storyText(context, copy.totalQuantity))).toBeNull();
+    await expect(unitRequired(context, 1)).toBe(false);
+  },
+};
+
+/** Read only, with no Quantity in any row: the table, and no total under it. */
+export const NoQuantityReadOnly: Story = {
+  args: { schema: optionalQuantity, mode: "read", answers: { items: noQuantityRows } },
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
+  play: async (context) => {
+    await expect(context.canvas.getByRole("table", { name: storyText(context, copy.items) })).toBeVisible();
+    await expect(context.canvas.queryByText(storyText(context, copy.totalQuantity))).toBeNull();
+  },
+};
+
+/** On a phone: the same Items, one with a Quantity and one without. */
+export const QuantityOptionalPhone: Story = { ...QuantityOptional, parameters: phone };
+
+/** On a tablet: the same Items, one with a Quantity and one without. */
+export const QuantityOptionalTablet: Story = { ...QuantityOptional, parameters: tablet };
+
+/** On a phone, no Quantity in any row: no total line. */
+export const NoQuantityPhone: Story = { ...NoQuantity, parameters: phone };
 
 /** On a phone, read only: the table scrolls inside its own region rather than widening the page. */
 export const PhoneReadOnly: Story = {
