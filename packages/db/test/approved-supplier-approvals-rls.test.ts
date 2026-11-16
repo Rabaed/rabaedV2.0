@@ -207,6 +207,9 @@ describe("scenario RP-1306-2 (seam 2): a viewer who can't see the SAR reads the 
   it("C2 gets no approval for the SAR it can't see, though C1 and K1 do", async () => {
     const { sar } = await approvedBySar("Hidden Approval Co", "شركة الاعتماد المخفي");
     await expectHiddenFrom({ read: approvalSars, target: sar, seenBy: [c1.member, k1.member], hiddenFrom: [c2.member, c2Pm], name: whoIs, label: "the SAR as an approval" });
+    // The positive control: C2 does read an approval, its own SAR's, which C1 in turn can't see.
+    const own = await closedItem(c2.member, c2Pm, TYPE, "C2 Own Supplies approval", { supplier_name_en: "C2 Own Supplies", supplier_name_ar: "توريدات سي 2" });
+    await expectHiddenFrom({ read: approvalSars, target: own, seenBy: [c2.member, k1.member], hiddenFrom: [c1.member, c1Viewer], name: whoIs, label: "C2's own SAR as an approval" });
   });
 
   it("an entry a Project Admin added by hand has no approval for anyone: only entries a seen SAR added are given", async () => {
@@ -216,14 +219,26 @@ describe("scenario RP-1306-2 (seam 2): a viewer who can't see the SAR reads the 
         ${projectId}::uuid, ${electrical}::uuid, null, '{"en": "By Hand Supplies", "ar": "توريدات يدوية"}'::jsonb, now())`,
     );
     expect(added!.outcome).toBe("added");
-    // Every C1 SAR's supplier, as the migrator reads them: C1 and K1 see each of those SARs.
+    // Every C1 SAR's supplier, as the migrator reads them: C1 sees each of those SARs (and K1 those and C2's).
     const bySar = (
-      await migrator.query<{ id: string }>("select id from approved_supplier where project_id = $1 and source = 'submittal'", [projectId])
+      await migrator.query<{ id: string }>(
+        `select s.id from approved_supplier s join work_item w on w.id = s.source_work_item_id
+         where s.project_id = $1 and w.raised_by_participant_id = $2`,
+        [projectId, participant.c1],
+      )
     ).rows.map((r) => r.id);
     expect(bySar.length).toBeGreaterThan(0);
-    for (const who of [c1.member, k1.member, k1Manager]) {
+    for (const who of [c1.member]) {
       // The exact set: the hand-added entry is not in it, nor any row of another Project.
       expect((await approvals(who)).map((r) => r.supplier_id).sort(), whoIs(who)).toEqual([...bySar].sort());
+    }
+    // K1 closed every SAR, C2's too: its exact set is every entry a SAR added, and still not the hand-added one.
+    const everySar = (
+      await migrator.query<{ id: string }>("select id from approved_supplier where project_id = $1 and source = 'submittal'", [projectId])
+    ).rows.map((r) => r.id);
+    expect(everySar.length).toBeGreaterThan(bySar.length);
+    for (const who of [k1.member, k1Manager]) {
+      expect((await approvals(who)).map((r) => r.supplier_id).sort(), whoIs(who)).toEqual([...everySar].sort());
     }
     // And the hand-added entry itself is on the list for everyone, by id.
     for (const who of [c1.member, c2.member]) {

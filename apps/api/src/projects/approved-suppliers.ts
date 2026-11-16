@@ -44,6 +44,8 @@ export function listApprovedSuppliers(
     const { rows: approvals } = await sql<{ supplier_id: string; work_item_id: string; document_number: string | null; subject: string }>`
       select supplier_id, work_item_id, document_number, subject from app.approved_supplier_approvals(${projectId}::uuid)
     `.execute(trx);
+    // A SAR closed at Code A or B has its Document Number (given at the first Submit); the column is
+    // nullable only for Drafts, so a row without one is left out rather than shown half.
     const approvalOf = new Map(
       approvals.flatMap((a) =>
         a.document_number === null ? [] : [[a.supplier_id, { workItemId: a.work_item_id, documentNumber: a.document_number, subject: a.subject }] as const],

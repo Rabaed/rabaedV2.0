@@ -1024,7 +1024,8 @@ export function FormRenderer({
     // The SAR that approved the supplier opens from its name, for a reader who sees that SAR (RP-1306, V10); the
     // name alone otherwise, exactly as for a supplier added by hand.
     const approval = field.type === "approved_supplier" ? suppliers.find((s) => s.id === value)?.approval : null;
-    const approvalHref = approval ? links.hrefFor(approval.workItemId) : null;
+    // Only where the page says how an item opens: the default `links` would open nothing ("#").
+    const approvalHref = approval && links !== noLinks ? links.hrefFor(approval.workItemId) : null;
     if (approval && approvalHref !== null && shown) {
       return <SupplierApprovalLink name={shown} approval={approval} href={approvalHref} linkAs={links.linkAs ?? "a"} />;
     }
