@@ -187,10 +187,10 @@ export function PackageNotReadyList({
       {items.length > 0 && (
         <ul className="flex flex-col gap-1.5">
           {items.map((i) => (
-            // On a phone the link is a full 44 px row (RP-1310), taking the row's top padding; 820 and wider as before.
+            // On a phone the link is a full 44 px row (RP-1310), taking the row's top padding; wider than a phone as before.
             <li key={i.id} data-not-ready={i.reason} className="flex flex-col rounded-sm bg-surface px-3 py-2 text-sm phone:pt-0">
               <Link href={itemHref(i.id)} className={cn("flex min-w-0 items-center gap-2 font-semibold text-text hover:text-brand-fg phone:min-h-11", focusRing)}>
-                {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="text-muted">{labels.numberOnSubmit}</span>}
+                {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="shrink-0 text-muted">{labels.numberOnSubmit}</span>}
                 <span dir="auto" className="truncate">
                   {i.title}
                 </span>

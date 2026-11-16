@@ -431,34 +431,32 @@ export const SubmitTaken: Story = {
   },
 };
 
+/** Two of the owner's submittals stop Submit Package when the PM tries it, and one they don't see. */
+const notReadyOnSubmit = fn<SubmitPackageCall>(async () => ({
+  ok: false,
+  reason: "package_not_ready",
+  notReady: [
+    { id: tiles.id, documentNumber: null, title: tiles.title, reason: "form_incomplete" },
+    { id: mixer.id, documentNumber: null, title: mixer.title, reason: "pick_up_first" },
+  ],
+  othersNotReady: true,
+}));
+
 /**
  * Not ready: nothing is Submitted; the pop-up names each submittal the viewer sees that stops it,
  * with why and a link to it, says one they don't see stops it too (never which), and Submit stays disabled.
  */
 export const SubmitNotReady: Story = {
   parameters: overlay,
-  args: {
-    onSubmit: fn<SubmitPackageCall>(async () => ({
-      ok: false,
-      reason: "package_not_ready",
-      notReady: [
-        { id: tiles.id, documentNumber: null, title: tiles.title, reason: "form_incomplete" },
-        { id: mixer.id, documentNumber: null, title: mixer.title, reason: "pick_up_first" },
-      ],
-      othersNotReady: true,
-    })),
-  },
+  args: { onSubmit: notReadyOnSubmit },
   play: async (context) => {
     const l = labelsOf(context);
-    await userEvent.click(context.canvas.getByRole("button", { name: l.submit.trigger }));
-    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
-    await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
-    const list = await within(dialog).findByRole("alert");
+    const list = await notReadyInThePopUp(context, "header");
     await expect(within(list).getByRole("link", { name: new RegExp(tiles.title) })).toHaveAttribute("href", `#${tiles.id}`);
     await expect(list).toHaveTextContent(l.submit.reasons.form_incomplete);
     await expect(list).toHaveTextContent(l.submit.reasons.pick_up_first);
     await expect(list).toHaveTextContent(l.submit.othersNotReady);
-    await expect(within(dialog).getByRole("button", { name: l.submit.confirm })).toBeDisabled();
+    await expect(within(screen.getByRole("dialog")).getByRole("button", { name: l.submit.confirm })).toBeDisabled();
   },
 };
 
@@ -734,17 +732,6 @@ export const SubmitFromTheBar: Story = {
     await expect(context.args.onSubmit).toHaveBeenCalledOnce();
   },
 };
-
-/** Two of the owner's submittals stop Submit Package when the PM tries it, and one they don't see. */
-const notReadyOnSubmit = fn<SubmitPackageCall>(async () => ({
-  ok: false,
-  reason: "package_not_ready",
-  notReady: [
-    { id: tiles.id, documentNumber: null, title: tiles.title, reason: "form_incomplete" },
-    { id: mixer.id, documentNumber: null, title: mixer.title, reason: "pick_up_first" },
-  ],
-  othersNotReady: true,
-}));
 
 /** The not-ready list in the Submit Package pop-up, once the PM has tried it: from the bottom action bar on a phone, the header from 820. */
 async function notReadyInThePopUp(context: Parameters<NonNullable<Story["play"]>>[0], from: "bar" | "header") {
