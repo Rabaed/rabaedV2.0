@@ -289,22 +289,23 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               <RememberedModuleLink href={listHref} className="text-brand-fg underline underline-offset-4">
                 {moduleNames.inspections[locale]}
               </RememberedModuleLink>
-              {item.documentNumber && (
-                <>
-                  <span aria-hidden="true" className="text-muted">
-                    ›
-                  </span>
-                  <span aria-current="page" className="font-semibold">
-                    <DocNo value={item.documentNumber} />
-                  </span>
-                </>
-              )}
+              <span aria-hidden="true" className="text-muted">
+                ›
+              </span>
+              {/* Before its first Submit it has none (ADR 0030): "No number yet". */}
+              <span aria-current="page" className="font-semibold">
+                {item.documentNumber ? <DocNo value={item.documentNumber} /> : t("noNumber")}
+              </span>
             </nav>
           )}
           {snag && (
             <div className="flex flex-wrap items-center gap-2">
               <SnagTypeChip code={item.type.code} name={item.type.name[locale]} />
-              {item.documentNumber && <DocNo value={item.documentNumber} locale={locale} className="font-ui text-[12.5px] font-bold text-muted" />}
+              {item.documentNumber ? (
+                <DocNo value={item.documentNumber} locale={locale} className="font-ui text-[12.5px] font-bold text-muted" />
+              ) : (
+                <span className="font-ui text-[12.5px] font-bold text-muted">{t("noNumber")}</span>
+              )}
             </div>
           )}
           <div className="flex flex-wrap items-start justify-between gap-3">

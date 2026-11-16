@@ -114,7 +114,8 @@ const listOf = (as: string, projectId: string) =>
   );
 const isOpen = (r: Listed) => r.category === "draft" || r.category === "in_progress";
 /** 4+ weeks (home.ts): my own Participant holds it, open and past its Draft, at its Step 4+ weeks as I see it (V14). */
-const isAged = (r: Listed) => r.category === "in_progress" && r.document_number !== null && r.held_by_own && r.entered_at !== null && Date.now() - r.entered_at.getTime() >= FOUR_WEEKS;
+// Past its Draft: a Step Age at all (app.step_as_seen gives a Draft none); an item in Internal Review has one before its number (ADR 0030).
+const isAged = (r: Listed) => r.category === "in_progress" && r.held_by_own && r.entered_at !== null && Date.now() - r.entered_at.getTime() >= FOUR_WEEKS;
 /** Waiting with others (home.ts): my own Participant raised it, it is open, and another Participant holds it. */
 const isWithOthers = (r: Listed) => r.raised_by_own && isOpen(r) && !r.held_by_own;
 

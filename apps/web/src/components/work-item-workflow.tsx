@@ -35,6 +35,7 @@ type Props = {
 export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: Props) {
   const t = useTranslations("workflowMap");
   const tRoles = useTranslations("projects.roles");
+  const tItems = useTranslations("workItems");
   const [view, setView] = useState<"map" | "list">("map");
   // A phone opens on the list: the canvas needs room.
   useEffect(() => {
@@ -86,7 +87,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
         </SheetTrigger>
         <SheetContent
           title={t("title", { name, version })}
-          description={documentNumber ? <DocNo value={documentNumber} /> : undefined}
+          description={documentNumber ? <DocNo value={documentNumber} /> : tItems("noNumber")}
           closeLabel={t("close")}
           className="flex max-w-none flex-col bg-canvas sm:w-[min(1100px,72vw)] sm:min-w-[640px]"
         >
