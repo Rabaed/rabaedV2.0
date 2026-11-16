@@ -18,4 +18,4 @@ A Checklist Template belongs to one Trade (RP-651), so in a broad Trade such as 
 - `checklist_template_version` gains an optional scope beside its Trade. Since the edit form has the Scope picker, an edit (the Template's next Version) may move it to another Scope or back to the whole Trade; a pick already made keeps its Version.
 - The pick stays fixed after the item's first Submit (form-engine.md §3.2), so an untick after a Send Back can't clear it. The build ticket confirms with the owner that the pick wins there.
 - Scopes are not a Visibility Dimension, and every Project Member already reads the Project's Scopes and Templates (V20), so nothing new reaches another Company.
-- The building PR turns the "decided, not built yet" notes in data-model.md and form-engine.md into "as built".
+- The building PR (RP-1315) writes the rule into data-model.md and form-engine.md §3.2, as built.
