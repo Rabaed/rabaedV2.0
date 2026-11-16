@@ -416,6 +416,7 @@ create or replace function app.work_item_links(p_work_item_id uuid)
         where l.from_id = p_work_item_id and app.sees_work_item(p_work_item_id)
           and app.item_row_seen(l.from_id, l.arrival, l.removed_at is not null)
           and not app.chain_item_hidden(p_work_item_id, t.id)
+        -- hidden-sort-key: main's order, unchanged; the order the Links were added, never a time: the time it gives is floored at the Creation Date (RP-399)
         order by l.created_at, t.document_number collate "C", l.id;
     end
   $$;
