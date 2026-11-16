@@ -142,7 +142,9 @@ export function AddPackageItemsDialog({
                 const taken = row.package !== undefined;
                 const id = `add-${row.id}`;
                 return (
-                  <li key={row.id} data-taken={taken ? "" : undefined} className={cn("flex min-w-0 items-center gap-3 px-3 py-2 text-sm not-first:border-t not-first:border-border-subtle", taken && "bg-surface-subtle")}>
+                  // On a phone the row is a few lines tall: the checkbox and pill line up with its Subject, as a card's first line, and
+                  // the padding above keeps the first checkbox's 44px hit area inside the scrolling list (RP-1311).
+                  <li key={row.id} data-taken={taken ? "" : undefined} className={cn("flex min-w-0 items-center gap-3 px-3 py-2 phone:items-start phone:py-3 text-sm not-first:border-t not-first:border-border-subtle", taken && "bg-surface-subtle")}>
                     <Checkbox
                       id={id}
                       aria-label={labels.choose(row.title)}
@@ -159,12 +161,13 @@ export function AddPackageItemsDialog({
                       <span dir="auto" className="truncate font-medium text-text">
                         {row.title}
                       </span>
-                      <span className="flex items-center gap-2 text-caption text-muted">
+                      {/* On a phone the Trade takes its own line under the number, whole, so nothing runs under the pill (RP-1311). */}
+                      <span className="flex items-center gap-2 text-caption text-muted phone:flex-wrap phone:gap-y-0.5">
                         {row.documentNumber ? <DocNo value={row.documentNumber} className="font-ui font-normal" /> : <span>{labels.numberOnSubmit}</span>}
                         <span translate="no" className="font-ui font-semibold">
                           {row.type.code}
                         </span>
-                        <span>{row.trade.name[locale]}</span>
+                        <span className="phone:basis-full">{row.trade.name[locale]}</span>
                       </span>
                     </label>
                     {taken ? (
