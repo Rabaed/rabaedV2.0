@@ -5,7 +5,9 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // The Approved Supplier List (RP-592, V10). Reads go through row-level security
 // and the table's column grants, so they can't carry what put a supplier there;
-// writes through the app.* functions of the approved_supplier_list migration.
+// the SAR behind an entry comes only through app.approved_supplier_approvals, to
+// a Member who sees that SAR (RP-1306). Writes through the app.* functions of the
+// approved_supplier_list migration.
 // Anyone but a Project Admin who tries to change it gets 'not_found'.
 
 const addRefusals = ["not_found", "project_closed", "trade_not_found", "scope_not_found", "supplier_exists"] as const;
@@ -38,7 +40,23 @@ export function listApprovedSuppliers(
       .orderBy(sql`lower(s.name ->> 'en')`)
       .orderBy("s.id")
       .execute();
-    return found.map((r) => ({ id: r.id, name: r.name, tradeId: r.trade_value_id, scopeId: r.scope_id, status: r.status }));
+    // The SAR behind an entry, only where the caller sees it now (RP-1306): none for an entry added by hand.
+    const { rows: approvals } = await sql<{ supplier_id: string; work_item_id: string; document_number: string | null; subject: string }>`
+      select supplier_id, work_item_id, document_number, subject from app.approved_supplier_approvals(${projectId}::uuid)
+    `.execute(trx);
+    const approvalOf = new Map(
+      approvals.flatMap((a) =>
+        a.document_number === null ? [] : [[a.supplier_id, { workItemId: a.work_item_id, documentNumber: a.document_number, subject: a.subject }] as const],
+      ),
+    );
+    return found.map((r) => ({
+      id: r.id,
+      name: r.name,
+      tradeId: r.trade_value_id,
+      scopeId: r.scope_id,
+      status: r.status,
+      approval: approvalOf.get(r.id) ?? null,
+    }));
   });
 }
 

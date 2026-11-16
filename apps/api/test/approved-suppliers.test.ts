@@ -4,8 +4,9 @@
 // status, never what put them there. Anyone else trying to change it gets a
 // 404 that names nothing, as the other settings commands do.
 // Scenarios RP-594-1 and RP-598-2 (seam 2: packages/db/test/sar-adds-supplier-rls.test.ts):
-// a SAR closed at Code A adds its supplier, which every Participant lists and a MAR names,
-// and nothing leads from the list or the MAR to the SAR.
+// a SAR closed at Code A adds its supplier, which every Participant lists and a MAR names;
+// only a Member who sees the SAR reads it as the entry's `approval` (RP-1306, V10 amended),
+// and nothing leads C2, which can't see it, from the list or the MAR to the SAR.
 import { randomUUID } from "node:crypto";
 import type { ApprovedSupplier } from "@rabaed/domain";
 import { expectHiddenFrom } from "@rabaed/db/test-support";
@@ -80,8 +81,8 @@ describe("The Approved Supplier List (RP-592-1)", () => {
       expect(res.statusCode, res.body).toBe(200);
       expect(res.json()).toEqual({
         suppliers: [
-          { id: najd, name: bilingual("Najd Electrical Supplies"), tradeId: trade.electrical, scopeId: lighting, status: "approved" },
-          { id: rimal, name: bilingual("Al-Rimal Building Materials"), tradeId: trade.mechanical, scopeId: null, status: "approved" },
+          { id: najd, name: bilingual("Najd Electrical Supplies"), tradeId: trade.electrical, scopeId: lighting, status: "approved", approval: null },
+          { id: rimal, name: bilingual("Al-Rimal Building Materials"), tradeId: trade.mechanical, scopeId: null, status: "approved", approval: null },
         ],
       });
     }
@@ -94,7 +95,7 @@ describe("The Approved Supplier List (RP-592-1)", () => {
     expect((await listSuppliers(engineer.caller, `?tradeId=${trade.electrical}`)).map((s) => s.id)).toEqual([najd, gone]);
     expect((await listSuppliers(engineer.caller, `?tradeId=${trade.electrical}&status=approved`)).map((s) => s.id)).toEqual([najd]);
     expect(await listSuppliers(engineer.caller, "?status=withdrawn")).toEqual([
-      { id: gone, name: bilingual("Old Cables Co"), tradeId: trade.electrical, scopeId: null, status: "withdrawn" },
+      { id: gone, name: bilingual("Old Cables Co"), tradeId: trade.electrical, scopeId: null, status: "withdrawn", approval: null },
     ]);
     expect((await engineer.caller.get(`/v1/projects/${projectId}/approved-suppliers?status=gone`)).statusCode).toBe(400);
   });
@@ -223,14 +224,19 @@ describe("a SAR closed at Code A adds its supplier (RP-594-1, RP-598-2)", () => 
     }
   });
 
-  it("RP-594-1: Najd Cables is listed for Electrical, approved, to every Participant's Members, with nothing of the SAR", async () => {
+  it("RP-594-1: Najd Cables is listed for Electrical, approved, to every Participant's Members; C2, which can't see the SAR, reads nothing of it", async () => {
     const sar = await closedSar({ en: "Najd Cables", ar: "كابلات نجد" }, "approve_a");
     const [najdCables] = await named("Najd Cables");
     const row = { id: najdCables!.id, name: { en: "Najd Cables", ar: "كابلات نجد" }, tradeId: at.electrical, scopeId: null, status: "approved" };
-    for (const by of [at.c1Engineer, k1Engineer, at.k1Manager, c2Engineer]) {
-      // The row as the list gives it: no source, SAR, person or time.
-      expect((await suppliersOf(at.projectId)(by)).find((s) => s.id === row.id), whoIs(by)).toEqual(row);
+    const { documentNumber, title } = await detail(at.c1Engineer, sar);
+    // The row as the list gives it: no source, person or time; the SAR only to who sees it (V10, RP-1306).
+    for (const by of [at.c1Engineer, k1Engineer, at.k1Manager]) {
+      expect((await suppliersOf(at.projectId)(by)).find((s) => s.id === row.id), whoIs(by)).toEqual({
+        ...row,
+        approval: { workItemId: sar, documentNumber, subject: title },
+      });
     }
+    expect((await suppliersOf(at.projectId)(c2Engineer)).find((s) => s.id === row.id), whoIs(c2Engineer)).toEqual({ ...row, approval: null });
     // C2 reads no SAR, no event of it and no Link of it, where C1 and K1 read each.
     for (const path of [`/v1/work-items/${sar}`, `/v1/work-items/${sar}/history`, `/v1/work-items/${sar}/links`]) {
       await expectHiddenFrom({
@@ -276,6 +282,7 @@ describe("a SAR closed at Code A adds its supplier (RP-594-1, RP-598-2)", () => 
       tradeId: at.electrical,
       scopeId: null,
       status: "approved",
+      approval: null,
     });
     // Nothing C2 reads of its MAR names the SAR, which C2 can't read (V1, V10).
     expect(JSON.stringify(read), "C2's MAR names the SAR").not.toContain(sar);

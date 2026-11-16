@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SupplierApproval } from "./approved-supplier.ts";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
 import { contentType, photoContentTypes } from "./document.ts";
@@ -692,8 +693,17 @@ export type ValidationContext = {
   checklistTemplates?: readonly ChecklistTemplateChoice[];
 };
 
-/** A supplier of the Approved Supplier List as the validator and the renderer read it; `name` is for display. */
-export type SupplierChoice = { id: string; tradeId: string; status: "approved" | "withdrawn"; name?: z.infer<typeof bilingualText> };
+/**
+ * A supplier of the Approved Supplier List as the validator and the renderer read it; `name` is for display,
+ * and `approval`, the SAR that approved it, only for a reader who sees that SAR (RP-1306): read mode links to it.
+ */
+export type SupplierChoice = {
+  id: string;
+  tradeId: string;
+  status: "approved" | "withdrawn";
+  name?: z.infer<typeof bilingualText>;
+  approval?: SupplierApproval | null;
+};
 
 /**
  * A Checklist Template Version as a `checklist_template` field reads it (RP-651),

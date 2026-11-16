@@ -12,7 +12,8 @@ const created = z.object({ id: z.uuid() });
 
 // The Approved Supplier List (Project Settings → Approved Supplier List, RP-592).
 // Every Project Member of every Participant lists it: names, Trade, Scope and
-// status, never what put a supplier there (V10). Only a Project Admin adds or
+// status; what put a supplier there only as the `approval` SAR, to a Member who
+// sees that SAR, and null otherwise (V10, RP-1306). Only a Project Admin adds or
 // withdraws one: anyone else gets a 404, exactly like a made-up id, so it names nothing.
 export const approvedSupplierRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>

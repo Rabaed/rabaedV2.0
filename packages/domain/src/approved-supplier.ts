@@ -2,8 +2,19 @@ import { z } from "zod";
 import { bilingualText } from "./company.ts";
 
 /**
+ * The Supplier Approval Request that put a supplier on the list (RP-1306, V10): its id, Document Number
+ * and Subject, given only to a Member who sees that SAR now.
+ */
+export const supplierApproval = z.object({
+  workItemId: z.uuid(),
+  documentNumber: z.string(),
+  subject: z.string(),
+});
+export type SupplierApproval = z.infer<typeof supplierApproval>;
+
+/**
  * A supplier or manufacturer on a Project's Approved Supplier List (RP-592), for
- * one of its Trades. Every Participant reads it, never what put it there (V10).
+ * one of its Trades. Every Participant reads it; what put it there only as `approval` (V10).
  */
 export const approvedSupplier = z.object({
   id: z.uuid(),
@@ -14,6 +25,11 @@ export const approvedSupplier = z.object({
   scopeId: z.uuid().nullable(),
   /** A withdrawn one stays on the items that already chose it; it can't be chosen again. */
   status: z.enum(["approved", "withdrawn"]),
+  /**
+   * The SAR that approved it, for a Member who sees that SAR. Null for an entry a Project Admin added
+   * by hand and for one whose SAR the reader can't see, so the two read the same.
+   */
+  approval: supplierApproval.nullable(),
 });
 export type ApprovedSupplier = z.infer<typeof approvedSupplier>;
 
