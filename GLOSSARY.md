@@ -287,7 +287,7 @@ A Transition that hands a Work Item back to the Participant that Submitted it, w
 _Avoid_: Return (which stays inside one Participant), RFI, Reject
 
 **Creation Date**:
-The date a Work Item got its Document Number, when it first left Draft (for a MAR, when the engineer sends it to their PM). Only the raiser's Participant sees it; other Companies see the Submission Date. When a Draft was first started is kept for audit, even if the Draft is cancelled or discarded. Once the item has its Document Number, that time is shown to nobody, in any form; while it is still a Draft, the Members working on it see each other's saves as they happen.
+The date a Work Item first left Draft (for a MAR, when the engineer sends it to their PM). It is not when the item got its Document Number, which comes at the first Submit. Only the raiser's Participant sees it; other Companies see the Submission Date. When a Draft was first started is kept for audit, even if the Draft is cancelled or discarded. Once the item has left Draft, that time is shown to nobody, in any form; while it is still a Draft, the Members working on it see each other's saves as they happen.
 
 **Submission Date**:
 The date a Work Item was first Submitted out of its raiser's Participant, such as from the Contractor to the Consultant. It is empty until then, a later Submit doesn't change it, and each Revision has its own. Other Companies see a Work Item from its Submission Date: before it, the item is the raiser's own work.
@@ -364,7 +364,7 @@ A resubmission of a Work Item that ended with Code C, such as a re-inspection: a
 _Avoid_: Version (reserved for Forms, Workflows, Screens and Numbering Patterns), resubmittal
 
 **Document Number**:
-The identifier a Work Item gets when it first leaves Draft (e.g. TWR-MAR-CCM-0001); numbers are never reused, built from the Project's Numbering Pattern. A Revision keeps the number of the one before it, with its revision suffix.
+The identifier a Work Item gets at its first Submit out of its raiser's Participant (e.g. TWR-MAR-CCM-0001), built from the Project's Numbering Pattern; numbers are never reused. Until then it has none. An item another Company's review raises, such as a Code B Comment or a Snag from a failed check item, gets its number when it is created, and an item whose Workflow has no Submit gets it when it first leaves Draft. A Revision keeps the number of the one before it, with its revision suffix, which it gets at its own first Submit.
 _Avoid_: ID, reference number
 
 **Numbering Pattern**:
