@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
+import { condition, evaluateCondition, isUnanswered, readsAttrs, type Condition } from "./condition.ts";
 import { contentType, photoContentTypes } from "./document.ts";
 import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
 import { moduleKeySchema, type ModuleKey } from "./module.ts";
@@ -182,7 +182,8 @@ export const checklistTemplateItems = checklistItems(checklistTemplateItem);
  */
 export const checklistItemFilesKey = (fieldKey: string, itemKey: string): string => `${fieldKey}.${itemKey}`;
 
-const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
+/** A column is required always, never, or while a condition on its own row's cells holds (RP-1298). */
+const columnBase = { key: formKey, label: bilingualText, required: z.union([z.boolean(), formCondition]).default(false) };
 
 /** How many levels the filler goes down in an Option List: 1 to the most a list has. */
 const optionDepth = z.number().int().min(1).max(OPTION_LIST_MAX_LEVELS).default(1);
@@ -874,8 +875,20 @@ export function formVisibility(schema: FormSchema, answers: Readonly<Record<stri
 export function isRequired(field: FormField, answers: Readonly<Record<string, unknown>>): boolean {
   if (!isAnswerField(field)) return false;
   if (field.type === "trade" || field.type === "location") return true;
-  return typeof field.required === "boolean" ? field.required : evaluateCondition(field.required, { fields: answers });
+  return requiredUnder(field.required, answers);
 }
+
+/**
+ * Whether a table cell must be filled to leave Draft: its column's `required`
+ * itself, or its condition over the cells of the same row (RP-1298).
+ */
+export function isCellRequired(column: TableColumn, row: Readonly<Record<string, unknown>>): boolean {
+  return requiredUnder(column.required, row);
+}
+
+/** A `required` flag, or whether its condition holds for `fields`. */
+const requiredUnder = (required: boolean | Condition, fields: Readonly<Record<string, unknown>>): boolean =>
+  typeof required === "boolean" ? required : evaluateCondition(required, { fields });
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
 const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
@@ -1127,14 +1140,15 @@ function checkTable(
     const cells: FormRow = {};
     for (const column of field.columns) {
       const cell = given[column.key];
+      const required = complete && isCellRequired(column, given);
       if (isUnanswered(cell)) {
-        if (complete && column.required) errors.push({ key, code: "required", row, column: column.key });
+        if (required) errors.push({ key, code: "required", row, column: column.key });
         continue;
       }
       const code =
         column.type === "option_list"
           ? checkOption(column, cell, complete, heldValues(context.held?.[field.key], column.key), lists)
-          : checkPlain(column, cell, complete && column.required);
+          : checkPlain(column, cell, required);
       if (code) errors.push({ key, code, row, column: column.key });
       else cells[column.key] = cell as string | number | boolean;
     }

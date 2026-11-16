@@ -119,6 +119,46 @@ describe("a cell", () => {
     ]);
     expect(errorsOf({ items: [{ ...row, quantity: 0 }] }, "complete")).toEqual([]);
   });
+
+  // RP-1298: the MAR's Unit is asked for only once its row has a Quantity.
+  describe("required while a condition on its own row holds", () => {
+    const unitNeedsQuantity = build([
+      {
+        ...itemsTable,
+        columns: [
+          { key: "fixture", type: "text", label: label("Fixture type"), required: true },
+          { key: "quantity", type: "number", label: label("Quantity"), total: true },
+          { key: "unit", type: "text", label: label("Unit"), required: { field: "quantity", op: "not_empty" } },
+        ],
+      },
+    ]);
+
+    it("is required in a row where the condition holds", () => {
+      expect(errorsOf({ items: [{ fixture: "Downlight", quantity: 12 }] }, "complete", unitNeedsQuantity)).toEqual([
+        { key: "items", code: "required", row: 0, column: "unit" },
+      ]);
+    });
+
+    it("may stay empty in a row where it doesn't, and in a draft", () => {
+      expect(errorsOf({ items: [{ fixture: "Downlight" }, { fixture: "Panel", quantity: 4, unit: "pcs" }] }, "complete", unitNeedsQuantity)).toEqual([]);
+      expect(errorsOf({ items: [{ fixture: "Downlight", quantity: 12 }] }, "draft", unitNeedsQuantity)).toEqual([]);
+    });
+
+    it("reads its own row's cells only: a condition on a key the table has no column for won't publish", () => {
+      const references = (on: FormSchema) => publishProblems(on).filter((p) => p.code === "unknown_reference");
+      expect(references(unitNeedsQuantity)).toEqual([]);
+      const unitRequiredBy = (required: unknown) =>
+        build([
+          { key: "remarks", type: "text", label: label("Remarks") },
+          { ...itemsTable, columns: [itemsTable.columns[0], { key: "unit", type: "text", label: label("Unit"), required }] },
+        ]);
+      expect(references(unitRequiredBy({ field: "remarks", op: "not_empty" }))).toEqual([{ key: "items", code: "unknown_reference" }]);
+      expect(references(unitRequiredBy({ any: [{ field: "fixture", op: "not_empty" }, { field: "missing", op: "empty" }] }))).toEqual([
+        { key: "items", code: "unknown_reference" },
+      ]);
+      expect(() => unitRequiredBy({ attr: "trade", op: "not_empty" })).toThrow();
+    });
+  });
 });
 
 describe("row limits", () => {
