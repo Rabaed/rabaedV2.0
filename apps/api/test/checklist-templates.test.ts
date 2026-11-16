@@ -281,6 +281,80 @@ describe("a WIR's Checklist Template (seam 1 acceptance)", () => {
   });
 });
 
+// RP-1315 (ADR 0031): a template names an optional Scope or Sub-scope of its Trade, and a WIR with
+// Scopes ticked is offered the whole-Trade templates and those on a ticked Scope.
+describe("a template's Scope (RP-1315)", () => {
+  let concrete = "";
+  let footings = "";
+  let masonry = "";
+  let wiring = "";
+  let whole = "";
+  let concreteWorks = "";
+  let footing = "";
+  const addScope = async (tradeId: string, parentId: string | null, en: string) =>
+    (await ok(admin.post(`/v1/projects/${tower.projectId}/scopes`, { tradeId, parentId, name: bilingual(en) }), 201)).json().id as string;
+  beforeAll(async () => {
+    concrete = await addScope(civil, null, "Concrete");
+    footings = await addScope(civil, concrete, "Footings");
+    masonry = await addScope(civil, null, "Masonry");
+    wiring = await addScope(tower.electrical, null, "Wiring");
+    whole = await createTemplate({ ...pour(civil), name: bilingual("Pour, any") });
+    concreteWorks = await createTemplate({ ...pour(civil), name: bilingual("Concrete works"), scopeId: concrete });
+    footing = await createTemplate({ ...pour(civil), name: bilingual("Footing"), scopeId: footings });
+  });
+
+  it("is created and read with the template, and an edit moves it to another Scope or back to the whole Trade", async () => {
+    const listed = (id: string) => templates(tower.k1Manager).then((l) => l.templates.find((t) => t.id === id)!);
+    expect(await listed(whole)).toMatchObject({ scopeId: null });
+    expect(await listed(concreteWorks)).toMatchObject({ scopeId: concrete });
+    expect(await listed(footing)).toMatchObject({ scopeId: footings });
+    const moving = await createTemplate({ ...pour(civil), name: bilingual("Moving"), scopeId: masonry });
+    await ok(admin.request("PUT", `/v1/checklist-templates/${moving}`, { ...pour(civil), name: bilingual("Moving"), scopeId: concrete }), 204);
+    expect(await listed(moving)).toMatchObject({ versionNo: 2, scopeId: concrete });
+    await ok(admin.request("PUT", `/v1/checklist-templates/${moving}`, { ...pour(civil), name: bilingual("Moving") }), 204);
+    expect(await listed(moving)).toMatchObject({ versionNo: 3, scopeId: null });
+  });
+
+  it("refuses another Trade's Scope, a deactivated one and a made-up one as scope_not_found (422)", async () => {
+    const retired = await addScope(civil, null, "Retired");
+    await ok(admin.request("PATCH", `/v1/scopes/${retired}`, { active: false }), 204);
+    for (const scopeId of [wiring, retired, randomUUID()]) {
+      const created = await admin.post(`/v1/projects/${tower.projectId}/checklist-templates`, { ...pour(civil), scopeId });
+      expect(created.statusCode, created.body).toBe(422);
+      expect(created.json()).toMatchObject({ error: "scope_not_found" });
+      const edited = await admin.request("PUT", `/v1/checklist-templates/${whole}`, { ...pour(civil), name: bilingual("Pour, any"), scopeId });
+      expect(edited.statusCode, edited.body).toBe(422);
+      expect(edited.json()).toMatchObject({ error: "scope_not_found" });
+    }
+  });
+
+  it("a WIR with no Scope ticked is offered every template of its Trade; with Scopes ticked the whole-Trade ones and a ticked Scope's", async () => {
+    const pick = async (scopes: string[], id: string) => createWir(civil, { scopes, checklist_template: await latestVersion(id) });
+    for (const id of [whole, concreteWorks, footing]) expect((await pick([], id)).statusCode).toBe(201);
+    expect((await pick([concrete], whole)).statusCode).toBe(201);
+    expect((await pick([concrete], concreteWorks)).statusCode).toBe(201);
+    expect((await pick([concrete, footings], footing)).statusCode).toBe(201);
+    for (const [scopes, id] of [[[concrete], footing], [[masonry], concreteWorks]] as const) {
+      const refused = await pick([...scopes], id);
+      expect(refused.statusCode, refused.body).toBe(422);
+      expect(refused.json()).toMatchObject({ error: "invalid_answers", fields: [{ key: "checklist_template", code: "unknown_option" }] });
+    }
+    const created = (await ok(pick([concrete, footings], footing), 201)).json().id as string;
+    expect((await detail(tower.c1Engineer, created)).checklistCopies.map((c) => c.templateId)).toEqual([footing]);
+  });
+
+  it("before the first Submit, unticking a Scope clears the pick and its copy; ticking one more keeps it", async () => {
+    const picked = await latestVersion(concreteWorks);
+    const id = (await ok(createWir(civil, { scopes: [concrete], checklist_template: picked }), 201)).json().id as string;
+    await ok(saveWir(id, civil, { scopes: [concrete, masonry], checklist_template: picked }), 204);
+    expect((await detail(tower.c1Engineer, id)).checklistCopies.map((c) => c.versionId)).toEqual([picked]);
+    await ok(saveWir(id, civil, { scopes: [concrete], checklist_template: picked }), 204);
+    const cleared = await detail(tower.c1Engineer, id);
+    expect(cleared.answers.checklist_template).toBeUndefined();
+    expect(cleared.checklistCopies).toEqual([]);
+  });
+});
+
 describe("after a Send Back that lets the raiser edit the Form, the pick stays fixed", () => {
   const TYPE = "CKTSB";
   const schema = {
@@ -322,6 +396,28 @@ describe("after a Send Back that lets the raiser edit the Form, the pick stays f
     }
     const item = await detail(tower.c1Engineer, id);
     expect(item.answers).toMatchObject({ model: "Columns C1-C9", checklist_template: picked });
+    expect(item.checklistCopies.map((c) => c.versionId)).toEqual([picked]);
+  });
+
+  it("unticking a Scope keeps the fixed pick and its copy (owner, RP-1315 comment 15917)", async () => {
+    const scope = async (en: string) =>
+      (await ok(admin.post(`/v1/projects/${tower.projectId}/scopes`, { tradeId: civil, name: bilingual(en) }), 201)).json().id as string;
+    const [beams, stairs] = [await scope("Beams"), await scope("Stairs")];
+    const beamWork = await createTemplate({ ...pour(civil), name: bilingual("Beam pour"), scopeId: beams });
+    const picked = await latestVersion(beamWork);
+    const answers = (extra: Record<string, unknown>) => ({ model: "Beams B1-B4", trade: civil, location: tower.buildingA, ...extra });
+    const id = (
+      await ok(tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, { type: TYPE, title: "Beams", answers: answers({ scopes: [beams, stairs], checklist_template: picked }) }), 201)
+    ).json().id as string;
+    await take(tower.c1Engineer, id, "send_for_review");
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.c1Pm, id, "submit");
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+    await take(k1Engineer, id, "send_back_to_draft");
+    // Beams unticked: the pick on Beams stays, as does its copy, and the save goes through.
+    await ok(tower.c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: answers({ scopes: [stairs], checklist_template: picked }) }), 204);
+    const item = await detail(tower.c1Engineer, id);
+    expect(item.answers).toMatchObject({ scopes: [stairs], checklist_template: picked });
     expect(item.checklistCopies.map((c) => c.versionId)).toEqual([picked]);
   });
 });

@@ -279,6 +279,109 @@ describe("RP-651-2: the copy on a WIR", () => {
   });
 });
 
+// RP-1315 (ADR 0031): a template names an optional Scope or Sub-scope of its Trade. Create and edit
+// refuse any other Scope as 'scope_not_found'; a new copy takes a Scope's template only when the WIR
+// ticks that Scope or one of its Sub-scopes, a Sub-scope's only when it ticks that Sub-scope, so the
+// API's rule can't be bypassed. Every Project Member still reads the template's Scope (V20).
+describe("RP-1315: a template's Scope", () => {
+  const scoped = (as: string, trade: string, scope: string | null, en: string) =>
+    call<{ outcome: string; template_id: string | null }>(
+      as,
+      sql`select outcome, template_id from app.create_checklist_template(${projectId}::uuid, ${name(en)}::jsonb, ${trade}::uuid, ${items}::jsonb, now(), ${scope}::uuid)`,
+    ).then((rows) => rows[0]!);
+  const moveTo = (id: string, scope: string | null) =>
+    outcome(c1.ap, sql`select outcome from app.edit_checklist_template(${id}::uuid, ${name("Moved")}::jsonb, ${civil}::uuid, ${items}::jsonb, now(), ${scope}::uuid)`);
+  const addScope = async (trade: string, parent: string | null, en: string) =>
+    (await call<{ outcome: string; scope_id: string }>(c1.ap, sql`select outcome, scope_id from app.add_scope(${projectId}::uuid, ${trade}::uuid, ${parent}::uuid, ${name(en)}::jsonb)`))[0]!.scope_id;
+  const latest = (id: string) =>
+    migrator.query("select v.id from checklist_template t join checklist_template_version v on v.checklist_template_id = t.id and v.version_no = t.version_no where t.id = $1", [id]).then((r) => r.rows[0].id as string);
+
+  let concrete = "";
+  let footings = "";
+  let slabs = "";
+  let masonry = "";
+  let concreteWorks = "";
+  let footing = "";
+
+  beforeAll(async () => {
+    concrete = await addScope(civil, null, "Concrete");
+    footings = await addScope(civil, concrete, "Footings");
+    slabs = await addScope(civil, concrete, "Slabs");
+    masonry = await addScope(civil, null, "Masonry");
+    concreteWorks = (await scoped(c1.ap, civil, concrete, "Concrete works")).template_id!;
+    footing = (await scoped(c1.ap, civil, footings, "Footing")).template_id!;
+  });
+
+  it("is read by every Project Member of every Participant, as the rest of the template", async () => {
+    for (const as of [c1.ap, c1Engineer, k1.ap, k1Engineer, c2.ap]) {
+      const rows = await call<{ checklist_template_id: string; scope_id: string | null }>(
+        as,
+        sql`select checklist_template_id, scope_id from checklist_template_version where checklist_template_id in (${concreteWorks}::uuid, ${footing}::uuid, ${template}::uuid) and version_no = 1`,
+      );
+      expect(Object.fromEntries(rows.map((r) => [r.checklist_template_id, r.scope_id])), as).toEqual({ [template]: null, [concreteWorks]: concrete, [footing]: footings });
+    }
+    expect(await call(other.ap, sql<object>`select scope_id from checklist_template_version where checklist_template_id = ${concreteWorks}::uuid`)).toEqual([]);
+  });
+
+  it("is refused as 'scope_not_found' when it is another Trade's, another Project's, deactivated or made up", async () => {
+    const electrical = (
+      await call<{ value_id: string }>(c1.ap, sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'EL', ${name("EL")}::jsonb)`)
+    )[0]!.value_id;
+    const wiring = await addScope(electrical, null, "Wiring");
+    const elsewhere = (await migrator.query("select id from scope where project_id <> $1 limit 1", [projectId])).rows[0]?.id as string | undefined;
+    const retired = await addScope(civil, null, "Retired scope");
+    expect(await outcome(c1.ap, sql`select app.update_scope(${retired}::uuid, ${name("Retired scope")}::jsonb, false, now()) as outcome`)).toBe("updated");
+    for (const scope of [wiring, retired, randomUUID(), ...(elsewhere ? [elsewhere] : [])]) {
+      expect((await scoped(c1.ap, civil, scope, "Refused")).outcome, scope).toBe("scope_not_found");
+      expect(await moveTo(concreteWorks, scope), scope).toBe("scope_not_found");
+    }
+    // Not a Project Admin: the plain not_found, before any Scope is looked at.
+    expect((await scoped(k1.ap, civil, wiring, "Refused")).outcome).toBe("not_found");
+  });
+
+  it("moves with an edit, to another Scope or back to the whole Trade; the earlier Version keeps its own", async () => {
+    expect(await moveTo(concreteWorks, slabs)).toBe("edited");
+    expect(await moveTo(concreteWorks, null)).toBe("edited");
+    expect(await moveTo(concreteWorks, concrete)).toBe("edited");
+    const { rows } = await migrator.query("select version_no, scope_id from checklist_template_version where checklist_template_id = $1 order by version_no", [concreteWorks]);
+    expect(rows).toEqual([
+      { version_no: 1, scope_id: concrete },
+      { version_no: 2, scope_id: slabs },
+      { version_no: 3, scope_id: null },
+      { version_no: 4, scope_id: concrete },
+    ]);
+  });
+
+  it("decides whether a new copy may take it: the WIR must tick that Scope, or for a Sub-scope's that Sub-scope", async () => {
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.ap,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Footing pour', app.latest_form_version(${TYPE}), '{}'::jsonb, ${civil}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const item = draft!.work_item_id;
+    const pick = async (ticked: string[], id: string) => {
+      const data = JSON.stringify({ checklist_template: await latest(id) });
+      expect(await outcome(c1.ap, sql`select app.save_work_item_answers(${item}::uuid, ${data}::jsonb, ${civil}::uuid, ${buildingA}::uuid, ${ticked}::uuid[], now()) as outcome`)).toBe("saved");
+      const result = await sync(c1.ap, item);
+      // Back to no pick, so the next one is a new copy.
+      await outcome(c1.ap, sql`select app.save_work_item_answers(${item}::uuid, '{}'::jsonb, ${civil}::uuid, ${buildingA}::uuid, '{}'::uuid[], now()) as outcome`);
+      expect(await sync(c1.ap, item)).toBe("synced");
+      return result;
+    };
+    // No Scope ticked: every template of the Trade, as before.
+    expect(await pick([], footing)).toBe("synced");
+    // A ticked Scope: the whole-Trade one and its own; a Sub-scope's needs that Sub-scope.
+    expect(await pick([concrete], template)).toBe("synced");
+    expect(await pick([concrete], concreteWorks)).toBe("synced");
+    expect(await pick([concrete], footing)).toBe("template_not_found");
+    expect(await pick([masonry], concreteWorks)).toBe("template_not_found");
+    // A ticked Sub-scope offers its Scope's and its own, never a sibling's.
+    expect(await pick([concrete, footings], concreteWorks)).toBe("synced");
+    expect(await pick([concrete, footings], footing)).toBe("synced");
+    expect(await pick([concrete, slabs], footing)).toBe("template_not_found");
+  });
+});
+
 // RP-1082 (epic review RP-676; CODING_STANDARDS "Row-level security on every Project table, keyed by project_id").
 describe("the copy on a WIR is keyed by its Project", () => {
   it("carries its item's Project, which the database holds it to", async () => {

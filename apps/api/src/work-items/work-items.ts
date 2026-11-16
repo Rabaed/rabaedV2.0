@@ -1807,6 +1807,8 @@ export function saveAnswers(
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
       suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
       checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
+      // Fixed after the first Submit: unticking a Scope then keeps the pick (RP-1315 comment 15917).
+      checklistTemplatesFixed: pinned.submitted,
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     // The Checklist Template picks, and so their copies, are fixed at the first Submit (RP-651),

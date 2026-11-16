@@ -42,6 +42,7 @@ const template = (over: Partial<ChecklistTemplate>): ChecklistTemplate => ({
   versionNo: 2,
   name: label("Concrete pour"),
   tradeId: civil,
+  scopeId: null,
   status: "active",
   items: parsedItems,
   ...over,
@@ -124,5 +125,75 @@ describe("the checklist_template field", () => {
     expect(formatFormValue(field, pourV1, "ar", undefined, [], {}, [], templates)).toBe("Concrete pour ع");
     expect(formatFormValue(field, pourV1, "en", undefined, [], {}, [], templates)).toBe("Concrete pour");
     expect(formatFormValue(field, "00000000-0000-4000-8000-0000000000ff", "en", undefined, [], {}, [], templates)).toBe("");
+  });
+});
+
+// RP-1315 (ADR 0031): a template may name a Scope or Sub-scope of its Trade. With Scopes ticked the pick
+// offers the whole-Trade templates and those on a ticked Scope: a Scope's when it or one of its Sub-scopes
+// is ticked, a Sub-scope's only when that Sub-scope is. Unticking a Scope clears the pick before the
+// item's first Submit; after it the pick is fixed (owner, RP-1315 comment 15917).
+describe("the checklist_template field with Scopes", () => {
+  const concrete = "00000000-0000-4000-8000-0000000005c1";
+  const footings = "00000000-0000-4000-8000-0000000005c2";
+  const slabs = "00000000-0000-4000-8000-0000000005c3";
+  const masonry = "00000000-0000-4000-8000-0000000005d1";
+  const scopes = [
+    { id: concrete, tradeId: civil, parentId: null },
+    { id: footings, tradeId: civil, parentId: concrete },
+    { id: slabs, tradeId: civil, parentId: concrete },
+    { id: masonry, tradeId: civil, parentId: null },
+  ];
+  const concreteWorks = "00000000-0000-4000-8000-0000000000b1";
+  const footing = "00000000-0000-4000-8000-0000000000b2";
+  const blocks = "00000000-0000-4000-8000-0000000000b3";
+  const scoped = checklistTemplateChoices([
+    template({}),
+    template({ id: "00000000-0000-4000-8000-0000000000f4", versionId: concreteWorks, versionNo: 1, name: label("Concrete works"), scopeId: concrete }),
+    template({ id: "00000000-0000-4000-8000-0000000000f5", versionId: footing, versionNo: 1, name: label("Footing"), scopeId: footings }),
+    template({ id: "00000000-0000-4000-8000-0000000000f6", versionId: blocks, versionNo: 1, name: label("Blockwork"), scopeId: masonry }),
+  ]);
+  const pick = (ticked: string[], value: string, context: ValidationContext = {}) =>
+    validateAnswers(schema, { trade: civil, location, scopes: ticked, checklist_template: value }, "draft", { checklistTemplates: scoped, scopes, ...context });
+  const refused = { ok: false, errors: [{ key: "checklist_template", code: "unknown_option" }] };
+
+  it("offers every active template of the Trade while no Scope is ticked", () => {
+    for (const value of [pourV2, concreteWorks, footing, blocks]) expect(pick([], value)).toMatchObject({ ok: true });
+  });
+
+  it("with a Scope ticked offers the whole-Trade templates and that Scope's, not its Sub-scopes' nor another Scope's", () => {
+    expect(pick([concrete], pourV2)).toMatchObject({ ok: true });
+    expect(pick([concrete], concreteWorks)).toMatchObject({ ok: true });
+    expect(pick([concrete], footing)).toEqual(refused);
+    expect(pick([concrete], blocks)).toEqual(refused);
+  });
+
+  it("with a Sub-scope ticked offers its Scope's template and its own, never a sibling Sub-scope's", () => {
+    expect(pick([concrete, footings], concreteWorks)).toMatchObject({ ok: true });
+    expect(pick([concrete, footings], footing)).toMatchObject({ ok: true });
+    expect(pick([concrete, slabs], footing)).toEqual(refused);
+    expect(pick([concrete, slabs], concreteWorks)).toMatchObject({ ok: true });
+  });
+
+  it("clears the held pick when a Scope is unticked, whichever template it is, as a Trade change does", () => {
+    for (const held of [blocks, pourV2]) {
+      const unticked = pick([concrete], held, { held: { scopes: [concrete, masonry], checklist_template: held } });
+      expect(unticked).toEqual({ ok: true, answers: { trade: civil, location, scopes: [concrete] } });
+    }
+    const subScope = pick([concrete], footing, { held: { scopes: [concrete, footings], checklist_template: footing } });
+    expect(subScope).toEqual({ ok: true, answers: { trade: civil, location, scopes: [concrete] } });
+  });
+
+  it("keeps the held pick when one more Scope is ticked, even one it would no longer be offered for", () => {
+    expect(pick([concrete, masonry], concreteWorks, { held: { scopes: [concrete], checklist_template: concreteWorks } })).toMatchObject({
+      ok: true,
+      answers: { checklist_template: concreteWorks },
+    });
+    expect(pick([concrete], blocks, { held: { scopes: [], checklist_template: blocks } })).toMatchObject({ ok: true, answers: { checklist_template: blocks } });
+  });
+
+  it("after the item's first Submit keeps the pick through an untick: it is fixed", () => {
+    const fixed = pick([concrete], blocks, { held: { scopes: [concrete, masonry], checklist_template: blocks }, checklistTemplatesFixed: true });
+    expect(fixed).toEqual({ ok: true, answers: { trade: civil, location, scopes: [concrete], checklist_template: blocks } });
+    expect(changedChecklistTemplates(schema, { checklist_template: blocks }, fixed.ok ? fixed.answers : {})).toEqual([]);
   });
 });
