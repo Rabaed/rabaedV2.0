@@ -28,7 +28,8 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/form-engine
   - **2.10 The MAR Form Version 3 (as built, RP-294)**: read when you need what MAR Form Version 3 added (References).
   - **2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)**: read when you work on the MAR, SAR or DAR Form.
   - **2.12 The `approved_supplier` field and the MAR Form Version 6 (as built, RP-595, spec RP-598)**: read when you touch the `approved_supplier` field.
-  - **2.12a The MAR Form Version 7 (as built, RP-1152)**: read when you need the MAR Form's current section order, or the SNG Form's (RP-1222).
+  - **2.12a The MAR Form Version 7 (as built, RP-1152)**: read when you need the MAR Form's section order, or the SNG Form's (RP-1222).
+  - **2.12b The MAR Form Version 8: an optional Quantity (as built, RP-1298)**: read when you touch the MAR's Items, a column's conditional `required`, or a table's totals line.
   - **2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)**: read when a link question limits its items by Module, Type or outcome, or a Project makes one required.
 - **3. Checklists**: read when you work on `checklist` fields and their check items.
   - **3.1 As built (RP-285)**: read when you need the built rules for check items, answers, comments and photos.
@@ -252,6 +253,16 @@ Settled with the owner (2026-10-15): a MAR's supplier must be approved. It is a 
 - Every field and section keeps its key, type and required flag, so answers and Documental Records carry over; Items' Quantity stays `total: true`. The supplier's choices still follow the `trade` answer, wherever its field sits (§2.12). It is Version 7 wherever Version 6 was published; a database seeded fresh numbers it 5 (§2.12). MARs on an earlier Version keep theirs.
 - Seam 1: `apps/api/test/mar-form-v7.test.ts`.
 - **The SNG Form, Classification first (as built, RP-1222 gap row 17).** `apps/admin/forms/SNG.json`'s next Version, published by `pnpm defaults:publish`, puts **Classification** (Trade, Location, Scopes) before **Snag** (Description, Photos), so the New Snag's short form asks the Trade and Location first and keeps them for the next Snag. Every field keeps its key, type and required flag; Snags on an earlier Version keep theirs. Seam 1: `apps/api/test/sng-form-classification-first.test.ts`.
+
+### 2.12b The MAR Form Version 8: an optional Quantity (as built, RP-1298)
+
+Found in UAT round 0 (SUB-03): many material approvals are raised before the quantity is known. Owner's decisions, 2026-11-16 (RP-1298 comment 15898):
+
+- **MAR Form Version 8** (`apps/admin/forms/MAR.json`, published by `pnpm defaults:publish`) is Version 7 with the Items table's `quantity` column no longer required, and its `unit` column required only in a row that has a Quantity: `"required": {"field": "quantity", "op": "not_empty"}`. Quantity stays `total: true`. Every other field, column and section keeps its key, type and required flag. It is Version 8 wherever Version 7 was published.
+- **New MARs only.** Versions are immutable (ADR 0006): a Draft or open MAR on Version 7 or earlier keeps its Version, so it still needs a Quantity and a Unit in every Item; no item is moved. UAT's seeded Draft "SUB-03 Panel lights – to fill in" is one of them, so SUB-03 raises a new Draft. The SAR is not changed: its Form has no Quantity. A Project with its own copy of the MAR Form keeps its copy; its Admin changes it there.
+- **A column's conditional `required` (the engine).** A table column's `required` is, like a field's (§1), always, never, or a condition, but its condition reads the cells of its own row by column key (`isCellRequired` in `packages/domain/src/form.ts`), never the Form's other fields or an attribute. `validateAnswers` checks it per row in `complete` mode only, so a Draft saves without it, and an empty row is still dropped, not checked. The publish checks refuse a column condition that reads a key its table has no column for (`unknown_reference`, on the table's key). On screen each row's cell shows the required mark for that row.
+- **The totals line.** A column with `total: true` has no "Total Quantity" line on screen when no row has a number in it, as the Documental Record's PDF already does (`tableTotals` skips empty cells); with some, it adds up only the filled ones.
+- Seam 1: `apps/api/test/mar-form-v8.test.ts`; seam 3: `packages/domain/src/form-table.test.ts`; stories: `form-renderer-table.stories.tsx` (`QuantityOptional`, `NoQuantity`).
 
 ### 2.13 A link question's `accepts`, the WIR Form Version 2 and Required links (as built, RP-82, spec RP-649)
 

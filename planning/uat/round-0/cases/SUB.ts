@@ -98,11 +98,19 @@ defineCase("SUB-02", async (t) => {
 defineCase("SUB-03", async (t) => {
   const tm = await H.team("hafiz");
   const hafiz = tm.api.hafiz!;
-  const id = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 form ${H.stamp()}`, await H.marAnswers(tm));
+  // A new Draft, so it is on the MAR Form Version 8 (RP-1298): a third Item has no Quantity and no Unit.
+  const base = await H.marAnswers(tm);
+  const items = [...(base.items as H.Json[]), { fixture_type: "Emergency exit sign", description: "Quantity from the shop drawings" }];
+  const id = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 form ${H.stamp()}`, { ...base, items });
   await H.addDatasheet(hafiz, id);
   await H.addPhoto(hafiz, id);
   const { page, text } = await H.viewItem(t, "hafiz", id, "form-total-docs", "en", { full: true });
+  t.check("The Item with no Quantity is kept", text.includes("Emergency exit sign"));
   t.check("The Items total reads 240", /Total Quantity\s*240(\.00)?/.test(text.replace(/\s+/g, " ")), text.match(/Total Quantity[^A-Z]*/)?.[0]);
+  const bare = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 no quantity ${H.stamp()}`, { ...base, items: [items[2]] });
+  await H.addDatasheet(hafiz, bare);
+  const sent = await H.move(hafiz, bare, "send_for_review");
+  t.check("A MAR whose only Item has no Quantity is sent for Review", sent.status < 300, sent.text);
   t.check("The Datasheet and the Sample photo are on the saved Draft", /UAT-datasheet\.pdf/.test(text) && /UAT-sample\.jpg|photo/i.test(text));
   // The panel shows a Draft read-only (Save and close comes with Edit), and the MAR Form has its own Links section (Related submittals) before the Attachments.
   const formEnd = text.indexOf("Related submittals");

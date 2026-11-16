@@ -67,11 +67,11 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-03 Panel lights – to fill in". Fill Description, Model "CoreLine Panel", Specification section "26 51 00".
-  2. Under Items, Add row twice: "Recessed panel" 200 Pieces and "Surface panel" 40 Pieces.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > Material Approval Request (a new Draft, on the MAR Form Version 8; not the Draft "SUB-03 Panel lights – to fill in", which stays on Version 7). Subject "UAT SUB-03 Panel lights", Trade Electrical Works, Location Tower A Level 02, Approved supplier Qassim Electrical Trading, Manufacturer Philips, Description, Model "CoreLine Panel", Specification section "26 51 00".
+  2. Under Items, Add row three times: "Recessed panel" 200 Pieces, "Surface panel" 40 Pieces, and "Emergency exit sign" with no Quantity and no Unit.
   3. Save and close, then open the Draft again from the list.
   4. Add a PDF under Datasheet (PDF) and a JPEG with EXIF under Sample photo.
-- **Expected result:** The total reads 240. Save and close returns to the Submittals list. The Datasheet and Sample photo can be added once the Draft is saved; the photo shows the time and place from its EXIF. The Attachments and Links System Fields sit below the Form.
+- **Expected result:** The total reads 240: the row with no Quantity adds nothing, and asks for no Unit (a row with a Quantity still asks for its Unit). Save and close returns to the Submittals list. The Datasheet and Sample photo can be added once the Draft is saved; the photo shows the time and place from its EXIF. The Attachments and Links System Fields sit below the Form.
 
 ### SUB-04 Send for Review numbers the item and Ali holds it at once
 
