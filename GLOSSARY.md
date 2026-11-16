@@ -173,7 +173,7 @@ A Form field made of predefined check items, each answered and optionally eviden
 _Avoid_: Tick list
 
 **Checklist Template**:
-A named, official set of check items, such as "Concrete pour" or "Blockwork", kept in the library. A Form's Checklist copies its items, or, on an Inspection, the Contractor picks one when requesting and its items are copied onto the item, fixed once it is Submitted.
+A named, official set of check items, such as "Concrete pour" or "Blockwork", kept in the library for one Trade, either the whole Trade or one Scope or Sub-scope of it. A Form's Checklist copies its items, or, on an Inspection, the Contractor picks one when requesting and its items are copied onto the item, fixed once it is Submitted.
 _Avoid_: Checklist type, inspection form
 
 **Snag List**:

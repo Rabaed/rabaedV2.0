@@ -218,7 +218,8 @@ export function PackagePage({
           {pkg.actions.delete && onDelete && (
             <DeletePackageDialog number={pkg.number} labels={labels.delete} close={labels.close} cancel={labels.cancel} refusals={labels.refusals} onDelete={onDelete} />
           )}
-          {submittable ? addItemsDialog : <PrimaryAction>{addItemsDialog}</PrimaryAction>}
+          {/* Secondary once Submit Package is offered, in place rather than moved: the same button, still focused (RP-1313). */}
+          <PrimaryAction primary={!submittable}>{addItemsDialog}</PrimaryAction>
           {submittable && (
             <PrimaryAction>
               <SubmitPackageDialog
