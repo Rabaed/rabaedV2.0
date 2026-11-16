@@ -47,9 +47,9 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > Material Approval Request.
-  2. Subject "UAT SUB-01 Lighting Fixtures", Trade Electrical Works, Location Tower A Level 02, Manufacturer Philips, Approved supplier Qassim Electrical Trading, Description empty.
+  2. Subject "UAT SUB-01 Lighting Fixtures", Trade Electrical Works, Location: open the picker and look at its top, then pick Tower A Level 02; Manufacturer Philips, Approved supplier Qassim Electrical Trading, Description empty.
   3. Save Draft.
-- **Expected result:** The Draft is listed in the Drafts Stage with "No number yet" and no Step Age dots. It is Hafiz's to edit.
+- **Expected result:** The Location picker offers Whole Project at the top, for an item that applies to the whole Project. The Draft is listed in the Drafts Stage with "No number yet" and no Step Age dots. It is Hafiz's to edit.
 
 ### SUB-02 Send for Review is refused while the Form is incomplete
 
@@ -120,10 +120,11 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0005, closed at Code C, and Create Revision.
-  2. The Draft reads Revision 1, No number yet; change the Model, Save and close.
-  3. Open the Revision drop-down.
-  4. Send for Review.
-- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. The drop-down lists the original and Revision 1 (no number yet); after the send Revision 1 reads UAT01-MAR-01-0005 Rev 1, whole and left to right, and is with Ali. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
+  2. The Draft reads UAT01-MAR-01-0005 Rev 1 · Draft; change the Model, Save and close.
+  3. In the List and on the Kanban, find the Draft beside UAT01-MAR-01-0005; then search the List for UAT01-MAR-01-0005.
+  4. Open the Draft and its Revision drop-down.
+  5. Send for Review.
+- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. From the start it reads UAT01-MAR-01-0005 Rev 1 · Draft, its base number left to right, in the Panel, the List and the Kanban, where it sits beside its chain; the search for UAT01-MAR-01-0005 finds it too. The Draft's drop-down lists the original and Revision 1; after the send Revision 1 reads UAT01-MAR-01-0005 Rev 1, whole and left to right, and is with Ali. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
 
 ### SUB-16 Delete discards a Draft only
 
@@ -141,9 +142,10 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, row menu > Duplicate.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: in the List, on UAT01-MAR-01-0009, closed at Code A after Mohammed answered it, open the row's ⋯ menu > Duplicate.
   2. Open the new Draft.
-- **Expected result:** A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. "Duplicated from" shows UAT01-MAR-01-0009 to TMC only.
+  3. Open UAT01-MAR-01-0009 again: Duplicate is also in the Submittal Panel's bar, beside Download PDF, at every panel size. Press it for another new Draft.
+- **Expected result:** A new Draft with the Subject, TMC's own answers and the Documents and photos TMC uploaded, as new files. None of Design Consultants' verification, Remarks or notes. "Duplicated from" shows UAT01-MAR-01-0009 to TMC only. Duplicate is in both places: the List row's ⋯ menu and the Submittal Panel's bar.
 
 ### SUB-19 Related submittals and free Links open the other item
 
