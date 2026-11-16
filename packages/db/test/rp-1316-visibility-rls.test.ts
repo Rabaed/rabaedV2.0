@@ -205,6 +205,11 @@ describe("visibility.md, Document Numbers (RP-1316)", () => {
     await expectHiddenFrom({ label: "C1's numbers", read: numberRows, target: nextNumber, seenBy: [c1.members.engineer, k1.members.manager, ow.members.representative], hiddenFrom: c2.members.engineer });
   });
 
+  it("keeps the Creation Date column from the app role: a later grant fails here (RP-1316, Main 6)", async () => {
+    const { rows } = await migrator.query("select has_column_privilege('rabaed_app', 'work_item', 'left_draft_at', 'select') as granted");
+    expect(rows[0].granted).toBe(false);
+  });
+
   it("RP-1316-2: before its first Submit, C1's item reaches nobody outside C1, with no number, count or gap", async () => {
     const id = await inReview("Before Submit: C1's own");
     const { c1, k1, ow, c2 } = tower;
