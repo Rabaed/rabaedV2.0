@@ -44,9 +44,11 @@ for (const locale of locales) {
       string,
       ReturnType<typeof composeStory>
     >;
+    // Rendered here at either width: the window's size is this file's, not the story's `phone` parameter.
     const NotSubmittableOnAPhone = stories.NotSubmittableOnAPhone!;
     const l = packagePageLabels[locale];
-    const submittable = packagePageStories.OnAPhone.args!.pkg;
+    // The Package that can be Submitted (the stories' `canSubmit`, not exported from a stories file).
+    const canSubmit = packagePageStories.OnAPhone.args!.pkg;
 
     const button = (where: HTMLElement | null, name: string) =>
       [...(where?.querySelectorAll("button") ?? [])].find((b) => b.textContent?.includes(name)) ?? null;
@@ -67,7 +69,7 @@ for (const locale of locales) {
       add.focus();
       await expect(document.activeElement).toBe(add);
 
-      root.render(<NotSubmittableOnAPhone pkg={submittable} />);
+      root.render(<NotSubmittableOnAPhone pkg={canSubmit} />);
       // Submit Package is offered, then "+ Add submittals" is where it now belongs.
       await expect.poll(() => button(document.body, l.submit.trigger)).not.toBeNull();
       await expect.poll(() => button(after(), l.addItems.trigger)).toBe(add);
