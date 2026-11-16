@@ -1,5 +1,5 @@
 // Seam 1 for RP-1309 (owner's decision 2026-11-14, after RP-1299; visibility.md V15, V18, V20;
-// scenarios RP-1309-1 to RP-1309-5): the Workflow reads with no Project in their path
+// scenarios RP-1309-1 to RP-1309-6): the Workflow reads with no Project in their path
 // (`GET /v1/workflows/:w`, `/map` and `/versions/:n`) follow RP-1299's rule. A Member reads a
 // Rabaed Default or a Project's Workflow only when Settings lists it to them on a Project they
 // are on: in use there (the one a Type runs, an exception's for whoever reads that exception),
@@ -99,7 +99,7 @@ describe("scenario RP-1309-3: a Project Admin keeps every Workflow the Project m
     const name = { en: "Tower MARs, short route", ar: "Tower MARs, short route" };
     const copy = (await ok(c1.caller.post(`/v1/workflows/${running}/duplicate`, { projectId: at.projectId, name }), 201)).json().id as string;
     await ok(c1.caller.post(`/v1/workflows/${copy}/publish`), 200);
-    await everyRead(copy, c1.caller, [at.c1Engineer, at.k1Manager, c2Engineer, other.c1Engineer], "a published copy no Type runs");
+    await everyRead(copy, c1.caller, [at.c1Engineer, at.k1Manager, c2Engineer, other.c1Engineer, onNoProject], "a published copy no Type runs");
 
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: copy }));
     try {
@@ -122,6 +122,14 @@ describe("scenario RP-1309-4: an exception's Workflow is read by its Participant
   });
 });
 
+describe("scenario RP-1309-5: a Library Workflow is read by its own Company's Members, as before (V18)", () => {
+  it("reads C2's Library copy to C2's Members, on no Project's account, and to no other Company", async () => {
+    const name = { en: "C2 MARs", ar: "C2 MARs" };
+    const saved = (await ok(c2.caller.post(`/v1/workflows/${running}/save-to-library`, { name }), 201)).json().id as string;
+    await everyRead(saved, [c2.caller, c2Engineer], [c1.caller, at.c1Engineer, at.k1Manager, onNoProject], "C2's Library Workflow");
+  });
+});
+
 describe("scenario RP-1309-6: a Project Admin of one Project who is only a Member of another", () => {
   it("reads the unused copies of the Project they administer, and gets the 404 for the other Project's", async () => {
     const name = (en: string) => ({ en, ar: en });
@@ -139,13 +147,5 @@ describe("scenario RP-1309-6: a Project Admin of one Project who is only a Membe
     const theirUnused = await publishedCopy(otherAdmin.caller, other.projectId, "Second Tower MARs, unused");
     await everyRead(ownUnused, c1.caller, [at.c1Engineer, otherAdmin.caller], "an unused copy of the Project they administer");
     await everyRead(theirUnused, otherAdmin.caller, [c1.caller, other.c1Engineer], "an unused copy of the Project they are only a Member of");
-  });
-});
-
-describe("scenario RP-1309-5:a Library Workflow is read by its own Company's Members, as before (V18)", () => {
-  it("reads C2's Library copy to C2's Members, on no Project's account, and to no other Company", async () => {
-    const name = { en: "C2 MARs", ar: "C2 MARs" };
-    const saved = (await ok(c2.caller.post(`/v1/workflows/${running}/save-to-library`, { name }), 201)).json().id as string;
-    await everyRead(saved, [c2.caller, c2Engineer], [c1.caller, at.c1Engineer, at.k1Manager, onNoProject], "C2's Library Workflow");
   });
 });
