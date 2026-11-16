@@ -4,7 +4,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
-import { expectCard, expectFooterPinned, expectFullScreen, overlay } from "../../storybook/overlay.ts";
+import { expectButtonsTouchable, expectCard, expectFooterPinned, expectFullScreen, overlay } from "../../storybook/overlay.ts";
 import { packagePageLabels } from "../../storybook/packages.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { PackagePage } from "./package-page.tsx";
@@ -704,9 +704,26 @@ export const ReadOnAPhone: Story = {
   },
 };
 
-/** A pop-up's buttons, its close button among them, each a 44 px target on a phone. */
-async function expectButtonsTouchable(dialog: HTMLElement) {
-  for (const button of within(dialog).getAllByRole("button")) await expectTouchTarget(button);
+/** Fourteen Drafts in no Package: more than "+ Add submittals" shows at once, so its list scrolls (RP-1312). */
+const manyDrafts = Array.from({ length: 14 }, (_, i) => draftOf(40 + i, `Floor drains – Level ${String(i + 1).padStart(2, "0")}`, { package: undefined }));
+
+/** "+ Add submittals" from the bottom action bar on a phone: its pop-up and its list of results, once loaded. */
+async function addItemsFromTheBar(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const l = labelsOf(context);
+  await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.addItems.trigger }));
+  const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
+  return { dialog, results: await within(dialog).findByRole("list", { name: l.addItems.results }) };
+}
+
+/** Submit Package from the bottom action bar on a phone: its pop-up, full screen with its footer at the foot (RP-1312). */
+async function submitFromTheBar(context: Parameters<NonNullable<Story["play"]>>[0]) {
+  const l = labelsOf(context);
+  await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
+  const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
+  await expectFullScreen(dialog);
+  await expectFooterPinned(dialog);
+  await expectButtonsTouchable(dialog);
+  return dialog;
 }
 
 /**
@@ -719,14 +736,25 @@ export const AddItemsFromTheBar: Story = {
   render: onItsPage,
   play: async (context) => {
     const l = labelsOf(context);
-    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.addItems.trigger }));
-    const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
-    const results = await within(dialog).findByRole("list", { name: l.addItems.results });
+    const { dialog, results } = await addItemsFromTheBar(context);
     await userEvent.click(within(results).getByRole("checkbox", { name: l.addItems.choose("Shower screens") }));
     await expect(within(dialog).getByRole("button", { name: l.addItems.add("1", 1) })).toBeEnabled();
     await expectFullScreen(dialog);
     await expectFooterPinned(dialog);
     await expectButtonsTouchable(dialog);
+  },
+};
+
+/** On a phone, a long list of results scrolls while Cancel and Add stay at the foot of the screen, on top (RP-1312). */
+export const AddManyItemsOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet, searchItems: fn<PackageItemSearch>(async () => manyDrafts) },
+  render: onItsPage,
+  play: async (context) => {
+    const { dialog, results } = await addItemsFromTheBar(context);
+    await expect(results.scrollHeight).toBeGreaterThan(results.clientHeight);
+    await expectFullScreen(dialog);
+    await expectFooterPinned(dialog);
   },
 };
 
@@ -739,13 +767,8 @@ export const SubmitFromTheBar: Story = {
   args: { pkg: canSubmit },
   render: onItsPage,
   play: async (context) => {
-    const l = labelsOf(context);
-    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
-    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
-    await expectFullScreen(dialog);
-    await expectFooterPinned(dialog);
-    await expectButtonsTouchable(dialog);
-    await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
+    const dialog = await submitFromTheBar(context);
+    await userEvent.click(within(dialog).getByRole("button", { name: labelsOf(context).submit.confirm }));
     await expect(context.args.onSubmit).toHaveBeenCalledOnce();
   },
 };
@@ -756,11 +779,19 @@ export const SubmitOnAPhone: Story = {
   args: { pkg: canSubmit },
   render: onItsPage,
   play: async (context) => {
-    const l = labelsOf(context);
-    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
-    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
-    await expectFullScreen(dialog);
-    await expectFooterPinned(dialog);
+    await submitFromTheBar(context);
+  },
+};
+
+/** On a phone, fourteen submittals to Submit: the list scrolls while Cancel and Submit stay at the foot of the screen (RP-1312). */
+export const SubmitManyOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: withItems(inProgress, manyDrafts) },
+  render: onItsPage,
+  play: async (context) => {
+    const dialog = await submitFromTheBar(context);
+    const list = within(dialog).getByRole("list");
+    await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
   },
 };
 

@@ -56,11 +56,12 @@ export function DialogContent({ phone = "full", className, ...props }: DialogCon
 
 // In a full-screen pop-up on a phone: stuck to the foot of the screen while the body scrolls, pushed there when the
 // body is short, and across the whole width whatever the panel's padding (50% is its parent's width, 50vw half the
-// screen's, which the panel fills). Its own background, the panel's, so the body never shows through it.
+// screen's, which the panel fills). Its background and border colour are base classes, the panel's own and drawn only
+// where a border has a width, so they change nothing from 768 wide and a caller's own (the Workflow pop-ups') wins.
 const footerOnPhone =
-  "phone:in-data-full-on-phone:sticky phone:in-data-full-on-phone:bottom-0 phone:in-data-full-on-phone:z-10 phone:in-data-full-on-phone:mt-auto phone:in-data-full-on-phone:mx-[calc(50%-50vw)] phone:in-data-full-on-phone:border-t phone:in-data-full-on-phone:border-border phone:in-data-full-on-phone:px-[max(1.25rem,calc(50vw-50%))] phone:in-data-full-on-phone:py-3";
+  "phone:in-data-full-on-phone:sticky phone:in-data-full-on-phone:bottom-0 phone:in-data-full-on-phone:z-10 phone:in-data-full-on-phone:mt-auto phone:in-data-full-on-phone:mx-[calc(50%-50vw)] phone:in-data-full-on-phone:border-t phone:in-data-full-on-phone:px-[max(1.25rem,calc(50vw-50%))] phone:in-data-full-on-phone:py-3";
 
 /** The action row at the bottom of a Dialog: actions at the end, primary last. On a phone, a full-screen pop-up's footer stays in view. */
 export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
-  return <ModalFooter data-dialog-footer="" className={cn("bg-surface", footerOnPhone, className)} {...props} />;
+  return <ModalFooter data-dialog-footer="" className={cn("border-border bg-surface", footerOnPhone, className)} {...props} />;
 }

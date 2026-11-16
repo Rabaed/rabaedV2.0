@@ -100,7 +100,8 @@ export function SubmitPackageDialog({
           <h3 id="package-to-submit" className="text-sm font-semibold text-text-secondary">
             {labels.count(formatNumber(items.length, locale), items.length)}
           </h3>
-          <ul className="flex max-h-72 flex-col overflow-y-auto rounded-md border border-border">
+          {/* Focusable, so a keyboard can scroll it when it holds more than it shows (axe: scrollable-region-focusable). */}
+          <ul tabIndex={0} aria-labelledby="package-to-submit" className={cn("flex max-h-72 flex-col overflow-y-auto rounded-md border border-border", focusRing)}>
             {items.map((i) => (
               <li key={i.id} className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm not-first:border-t not-first:border-border-subtle">
                 {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="shrink-0 text-muted">{labels.numberOnSubmit}</span>}

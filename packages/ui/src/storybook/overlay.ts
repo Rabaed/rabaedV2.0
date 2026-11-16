@@ -1,4 +1,5 @@
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
+import { expectTouchTarget } from "./form.ts";
 
 /** Focus starts inside `container`, and Tab and Shift+Tab keep it there however often they are pressed. */
 export async function expectFocusTrapped(container: Element) {
@@ -33,28 +34,37 @@ export async function expectFullScreen(panel: HTMLElement) {
   await expectNoSidewaysScroll(panel);
 }
 
+/** The panel and every box inside it that scrolls up and down: where a pop-up's body scrolls (a long form, or a long list in its own box). */
+function scrollersOf(panel: HTMLElement): HTMLElement[] {
+  const inside = [...panel.querySelectorAll<HTMLElement>("*")].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight);
+  return [panel, ...inside];
+}
+
 /**
  * A full-screen pop-up's footer stays at the foot of the screen with every button in view and on top, wherever its
- * body is scrolled (top, middle, end), across the whole width; the primary button is last, at the inline end (the
- * left in Arabic). Scrolls back to the top for the screenshot.
+ * body is scrolled (the panel and each scrolling box inside it, at the top, the middle and the end), across the whole
+ * width; the primary button is last, at the inline end (the left in Arabic). Scrolls back to the top for the screenshot.
  */
 export async function expectFooterPinned(panel: HTMLElement) {
   const footer = panel.querySelector<HTMLElement>("[data-dialog-footer]");
   await expect(footer).not.toBeNull();
   const buttons = [...footer!.querySelectorAll<HTMLElement>("button, a[href]")];
   await expect(buttons.length).toBeGreaterThan(0);
-  const scrollable = panel.scrollHeight - panel.clientHeight;
-  for (const top of [0, scrollable / 2, scrollable]) {
-    panel.scrollTop = top;
-    await nextFrame();
-    const box = footer!.getBoundingClientRect();
-    await expect({ top, bottom: Math.round(box.bottom) }).toEqual({ top, bottom: innerHeight });
-    await expect(box.width).toBeGreaterThanOrEqual(panel.clientWidth);
-    for (const button of buttons) {
-      const b = button.getBoundingClientRect();
-      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-      await expect({ top, name: button.textContent, onTop: hit !== null && button.contains(hit) }).toEqual({ top, name: button.textContent, onTop: true });
+  for (const [n, scroller] of scrollersOf(panel).entries()) {
+    const scrollable = scroller.scrollHeight - scroller.clientHeight;
+    for (const top of [0, scrollable / 2, scrollable]) {
+      scroller.scrollTop = top;
+      await nextFrame();
+      const box = footer!.getBoundingClientRect();
+      await expect({ n, top, bottom: Math.round(box.bottom) }).toEqual({ n, top, bottom: innerHeight });
+      await expect(box.width).toBeGreaterThanOrEqual(panel.clientWidth);
+      for (const button of buttons) {
+        const b = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        await expect({ n, top, name: button.textContent, onTop: hit !== null && button.contains(hit) }).toEqual({ n, top, name: button.textContent, onTop: true });
+      }
     }
+    scroller.scrollTop = 0;
   }
   if (buttons.length > 1) {
     const [primary, other] = [buttons[buttons.length - 1]!.getBoundingClientRect(), buttons[0]!.getBoundingClientRect()];
@@ -64,6 +74,11 @@ export async function expectFooterPinned(panel: HTMLElement) {
   panel.scrollTop = 0;
   await nextFrame();
   await expectNoSidewaysScroll(panel);
+}
+
+/** Every button in a pop-up, its close button among them, is a 44 px target (a phone story). */
+export async function expectButtonsTouchable(panel: HTMLElement) {
+  for (const button of within(panel).getAllByRole("button")) await expectTouchTarget(button);
 }
 
 /** A short confirm or cancel on a phone, and every pop-up from 768 wide: a centred card with rounded corners, the page around it. */

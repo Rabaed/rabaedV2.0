@@ -2,7 +2,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
-import { expectCard, expectFocusTrapped, expectFooterPinned, expectFullScreen, overlay } from "../../storybook/overlay.ts";
+import { expectButtonsTouchable, expectCard, expectFocusTrapped, expectFooterPinned, expectFullScreen, overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
@@ -110,14 +110,14 @@ const fields = [
   { en: "Name (English)", ar: "الاسم (بالإنجليزية)" },
   { en: "Name (Arabic)", ar: "الاسم (بالعربية)" },
   { en: "Code", ar: "الرمز" },
-  { en: "Client", ar: "العميل" },
+  { en: "Owner", ar: "المالك" },
   { en: "Consultant", ar: "الاستشاري" },
   { en: "Main Contractor", ar: "المقاول الرئيسي" },
   { en: "City", ar: "المدينة" },
   { en: "District", ar: "الحي" },
   { en: "Plot", ar: "رقم القطعة" },
   { en: "Contract number", ar: "رقم العقد" },
-  { en: "Project Manager", ar: "مدير المشروع" },
+  { en: "Site address", ar: "عنوان الموقع" },
   { en: "Notes", ar: "ملاحظات" },
 ];
 
@@ -151,7 +151,7 @@ export const PhoneLongBody: Story = {
     await expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
     await expectFullScreen(panel);
     await expectFooterPinned(panel);
-    for (const button of within(panel).getAllByRole("button")) await expectTouchTarget(button);
+    await expectButtonsTouchable(panel);
   },
 };
 
@@ -184,7 +184,7 @@ export const PhoneConfirm: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, confirm.trigger) }));
     const panel = await screen.findByRole("dialog", { name: storyText(context, confirm.title) });
     await expectCard(panel);
-    for (const button of within(panel).getAllByRole("button")) await expectTouchTarget(button);
+    await expectButtonsTouchable(panel);
   },
 };
 
