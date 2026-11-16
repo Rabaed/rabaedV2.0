@@ -231,7 +231,7 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
     -- (visibility.md "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so
     -- no row, count, cursor or card carries the time. It has no number and no Creation Date; an item in Internal
     -- Review has a Creation Date before its number (ADR 0030), and its Step Age.
-    cross join lateral (select case when w.document_number is null and w.creation_date is null then null else w.entered_at end as step_entered_at) e
+    cross join lateral (select case when ${neverLeftDraft(sql.ref("w.document_number"), sql.ref("w.creation_date"))} then null else w.entered_at end as step_entered_at) e
     -- A Revision not yet numbered reads its chain's base number from the start (RP-1300; owner's decision
     -- 2026-11-13): the original's, through app.revision_chain, which gives only Revisions the reader sees (V1).
     cross join lateral (
@@ -324,6 +324,14 @@ export function chainConditionSql(when: CodeCCondition): RawBuilder<boolean> {
   });
   return parts.length > 0 ? sql`(${sql.join(parts, sql` and `)})` : noFilter;
 }
+
+/**
+ * A Draft that never left Draft, as the api reads it (RP-1316): no Document Number and no Creation Date. An item
+ * in Internal Review has no number until its first Submit (ADR 0030) but has its Creation Date; app.left_draft is
+ * the database's one definition, over `left_draft_at`, which the app role doesn't read.
+ */
+export const neverLeftDraft = (documentNumber: RawBuilder<unknown>, creationDate: RawBuilder<unknown>): RawBuilder<boolean> =>
+  sql<boolean>`(${documentNumber} is null and ${creationDate} is null)`;
 
 /**
  * The Dashboard bucket of a row of `visibleRows` (as `r`), or null: the domain's

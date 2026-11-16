@@ -155,6 +155,20 @@ describe("the Document Number comes at the first Submit (ADR 0030)", () => {
     expect(row.left_draft_at).not.toBeNull();
   });
 
+  it("an item numbered at Send for Review before RP-1316 keeps its number at its Submit, and no counter moves (AC 5)", async () => {
+    const id = await inReview("Numbered before RP-1316");
+    // As the engine did before RP-1316, on leaving Draft: the number and numbered_at with the Creation Date.
+    await migrator.query("update work_item set document_number = app.issue_document_number(id, left_draft_at), numbered_at = left_draft_at where id = $1", [id]);
+    const before = await stored(id);
+    const counters = async () => (await migrator.query("select counter_key, last_value from numbering_counter where project_id = $1 order by counter_key", [tower.projectId])).rows;
+    const countersBefore = await counters();
+    await submit(id);
+    const after = await stored(id);
+    expect(after).toMatchObject({ document_number: before.document_number, numbered_at: before.numbered_at, left_draft_at: before.left_draft_at });
+    expect(after.submitted_at).not.toBeNull();
+    expect(await counters()).toEqual(countersBefore);
+  });
+
   it("two items Submitted at the same moment take consecutive numbers (ADR 0008)", async () => {
     const a = await inReview("At once: A");
     const b = await inReview("At once: B");

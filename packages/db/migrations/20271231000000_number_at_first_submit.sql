@@ -22,6 +22,15 @@ comment on column work_item.left_draft_at is
   'The Creation Date: when the item first left Draft (a follow-up item: when it was raised). Not granted to the app role; read through app.work_item_creation_date (RP-1316).';
 update work_item set left_draft_at = numbered_at where numbered_at is not null;
 
+-- Whether an item has left Draft: the one definition of it every rule below reads (CODING_STANDARDS.md, one
+-- definition per layer). A Creation Date, or a number: every item that left Draft before RP-1316 was numbered
+-- as it left, so a number alone still says it did (one given some other way than a Transition, too).
+-- A plain invoker sql helper with no search_path, so it is inlined where it is read (CODING_STANDARDS.md, RP-310).
+create function app.left_draft(p_left_draft_at timestamptz, p_document_number text) returns boolean
+  language sql immutable parallel safe
+  as $$ select p_left_draft_at is not null or p_document_number is not null $$;
+revoke all on function app.left_draft(timestamptz, text) from public;
+
 -- app.transition_effects ---------------------------------------------------------------
 -- The Document Number at the first Submit out of the raiser's Participant (ADR 0030), in the
 -- transaction and at the moment of its Submission Date; a Revision's " Rev n" the same way.
@@ -431,7 +440,7 @@ create or replace function app.step_as_seen_unchecked(p_work_item_id uuid, p_par
           case
             -- A Draft (never left its Draft Step): its Step began when it was started, which
             -- reaches nobody (ADR 0020; visibility.md "Creation Date").
-            when w.left_draft_at is null and w.document_number is null and app.is_draft_step(w.current_step_id) then null
+            when not app.left_draft(w.left_draft_at, w.document_number) and app.is_draft_step(w.current_step_id) then null
             when h.mine then w.step_entered_at
             else w.participant_entered_at
           end
@@ -522,7 +531,7 @@ create or replace function app.take_step_age_report(p_outbox_id uuid)
             and st.category in ('draft', 'in_progress')
             -- A Draft that never left Draft has no Step Age (scenario 76); an item in Internal Review
             -- has one, before its number (ADR 0030).
-            and (w.left_draft_at is not null or w.document_number is not null)
+            and app.left_draft(w.left_draft_at, w.document_number)
             and app.latest_visible_revision(w.id)
         ) i
         where m.id = v_member
@@ -638,7 +647,7 @@ create or replace function app.can_discard_draft(p_work_item_id uuid) returns bo
         from work_item w
         join project pr on pr.id = w.project_id and pr.status = 'active'
         where w.id = p_work_item_id
-          and w.closed_at is null and w.document_number is null and w.left_draft_at is null and app.is_draft_step(w.current_step_id)
+          and w.closed_at is null and not app.left_draft(w.left_draft_at, w.document_number) and app.is_draft_step(w.current_step_id)
       ) and app.can_save_answers(p_work_item_id);
     end
   $$;
@@ -658,7 +667,7 @@ create or replace function app.can_discard_revision(p_work_item_id uuid) returns
           join project pr on pr.id = w.project_id and pr.status = 'active'
           join app.acting_project_member(w.id) me on me.participant_id = w.raised_by_participant_id
           where w.id = p_work_item_id and w.revision_no > 0
-            and w.closed_at is null and w.document_number is null and w.left_draft_at is null and app.is_draft_step(w.current_step_id)
+            and w.closed_at is null and not app.left_draft(w.left_draft_at, w.document_number) and app.is_draft_step(w.current_step_id)
         )
       );
     end
@@ -674,7 +683,7 @@ create or replace function app.withdrawal_cancels(p_participant_id uuid) returns
     begin
       return query
         select w.id from work_item w
-        where w.raised_by_participant_id = p_participant_id and w.closed_at is null and (w.left_draft_at is not null or w.document_number is not null);
+        where w.raised_by_participant_id = p_participant_id and w.closed_at is null and app.left_draft(w.left_draft_at, w.document_number);
     end
   $$;
 
@@ -718,7 +727,7 @@ create or replace function app.withdraw_participant(p_participant_id uuid, p_now
 
       -- Its items: those that left Draft Cancelled by Rabaed with a Record, its Drafts and Draft Revisions with none.
       for v_item in
-        select w.id, w.current_step_id, (w.left_draft_at is null and w.document_number is null) as is_draft, cancelled.id as cancelled_step_id, cancelled.stage_key
+        select w.id, w.current_step_id, not app.left_draft(w.left_draft_at, w.document_number) as is_draft, cancelled.id as cancelled_step_id, cancelled.stage_key
         from work_item w
         join work_item_type t on t.id = w.work_item_type_id
         -- Where an item that left Draft goes, as a Member's Cancel takes it: its Version's Step in a cancelled
@@ -726,7 +735,7 @@ create or replace function app.withdraw_participant(p_participant_id uuid, p_now
         left join lateral (
           select s.id, s.stage_key from workflow_step s
           join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = s.stage_key
-          where s.workflow_version_id = w.workflow_version_id and st.category = 'cancelled' and (w.left_draft_at is not null or w.document_number is not null)
+          where s.workflow_version_id = w.workflow_version_id and st.category = 'cancelled' and app.left_draft(w.left_draft_at, w.document_number)
           order by s.id
           limit 1
         ) cancelled on true
@@ -819,7 +828,7 @@ create or replace function app.add_package_item(p_package_id uuid, p_work_item_i
         return 'in_another_package';
       end if;
       -- A Draft: never sent (GLOSSARY.md Draft). An item in Internal Review has no number yet either (ADR 0030).
-      if v_item.left_draft_at is null and v_item.document_number is null and not app.can_save_answers(p_work_item_id) then
+      if not app.left_draft(v_item.left_draft_at, v_item.document_number) and not app.can_save_answers(p_work_item_id) then
         return 'not_editable';
       end if;
       update work_item set package_id = p_package_id where id = p_work_item_id;
@@ -870,7 +879,7 @@ create or replace function app.sees_work_item(p_work_item_id uuid) returns boole
             and p.status = 'active' and p.company_id = v_company
             and (p.id = w.raised_by_participant_id or w.submitted_at is not null
               or app.actor_role(s.actor_rule, raiser_role.base_role) is distinct from raiser_role.base_role)
-            and (w.left_draft_at is not null or w.document_number is not null or s.drafts_visible_to is distinct from 'author'
+            and (app.left_draft(w.left_draft_at, w.document_number) or s.drafts_visible_to is distinct from 'author'
               or exists (
                 select 1 from step_assignment h
                 where h.work_item_id = w.id and h.status = 'picked_up' and h.assignee_member_id = pm.member_id))
@@ -938,6 +947,8 @@ create or replace function app.sees_work_item(p_work_item_id uuid) returns boole
 -- dated its Creation Date, as before: both keyed on numbered_at while the number came then, now
 -- on left_draft_at (the Revision's " Rev n" waits for its first Submit, ADR 0030). The notice
 -- reads "No number yet" until then; delivery still reaches only who sees the Revision (V1).
+-- The function and trigger names ("numbered") are kept: renaming them would drop and recreate the trigger
+-- for no change of behaviour; they now mean "left Draft".
 -- As in 20261219000000_draft_start_time.sql, except as said above.
 create or replace function app.outbox_revision_numbered() returns trigger
   language plpgsql security definer
@@ -980,5 +991,52 @@ create or replace function app.revision_created_once_numbered() returns trigger
       end if;
       new.created_at := v_left_draft_at;
       return new;
+    end
+  $$;
+
+-- app.set_work_item_paper_ref (RP-639): the Paper ref is changed only on a Draft that never left Draft, as before
+-- RP-1316 "no number" said. On MAR Workflow Version 2 a Return goes back to the Draft Step, and the item there
+-- now has no number yet but has left Draft.
+-- As in 20270916000000_register_import_values.sql, except as said above.
+create or replace function app.set_work_item_paper_ref(p_work_item_id uuid, p_paper_ref text, p_now timestamptz)
+  returns text
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    declare
+      v_ref text := nullif(btrim(coalesce(p_paper_ref, '')), '');
+      v_item record;
+    begin
+      if not app.sees_work_item(p_work_item_id) then
+        return 'not_found';
+      end if;
+      select w.id, w.project_id, w.raised_by_participant_id, w.document_number, w.left_draft_at, w.discarded_at, w.current_step_id
+      into v_item from work_item w where w.id = p_work_item_id
+      for update;
+      if exists (select 1 from project where id = v_item.project_id and status = 'closed') then
+        return 'project_closed';
+      end if;
+      if app.left_draft(v_item.left_draft_at, v_item.document_number) or v_item.discarded_at is not null
+        or not app.is_draft_step(v_item.current_step_id) or not app.can_save_answers(p_work_item_id)
+      then
+        return 'not_editable';
+      end if;
+      if length(v_ref) > 100 then
+        return 'paper_ref_too_long';
+      end if;
+      if v_ref is not null and exists (
+        select 1 from work_item w
+        where w.project_id = v_item.project_id and w.raised_by_participant_id = v_item.raised_by_participant_id
+          and lower(w.paper_ref) = lower(v_ref) and w.discarded_at is null and w.id <> p_work_item_id)
+      then
+        return 'paper_ref_taken';
+      end if;
+      begin
+        update work_item set paper_ref = v_ref, updated_at = greatest(p_now, now()) where id = p_work_item_id;
+      exception when unique_violation then
+        -- Taken by a write that committed while this one ran.
+        return 'paper_ref_taken';
+      end;
+      return 'saved';
     end
   $$;
