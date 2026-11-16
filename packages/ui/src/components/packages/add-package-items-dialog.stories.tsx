@@ -10,7 +10,7 @@ import { touchTargetOffenders } from "../../storybook/touch-target.ts";
 import { AddPackageItemsDialog, type PackageItemSearch } from "./add-package-items-dialog.tsx";
 
 // The "+ Add submittals" pop-up's rows with a long Trade name (RP-1311, under the responsive spec
-// RP-1158). On a phone (402) the Trade takes its own line under the Document Number and title, and
+// RP-1158). On a phone (402) the Trade takes its own line under the Subject and Document Number, and
 // the stage pill stays at the row's end, as the Packages view's cards do; at 820 and wider the Trade
 // stays beside the Document Number, as before. Never cut with an ellipsis. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
@@ -83,39 +83,46 @@ type Story = StoryObj<typeof meta>;
 
 type Context = Parameters<NonNullable<Story["play"]>>[0];
 
-/** Opens the pop-up and waits for its rows: each row's checkbox, its text, the Trade, its number line and its end (the stage pill, or "In PKG-002"). */
+/** The part of `li` that holds `element`: one of the row's three parts (checkbox, text, pill). */
+const partOf = (li: HTMLElement, element: HTMLElement) => [...li.children].find((part) => part.contains(element)) as HTMLElement;
+
+/**
+ * Opens the pop-up and waits for its rows: each row's checkbox, its text (the checkbox's label), the Trade, the
+ * Type's code and the pill at the row's end (its stage, or "In PKG-002" for one in another Package).
+ */
 async function openRows(context: Context) {
   const l = labelsOf(context);
   const locale = storyLocale(context);
   await userEvent.click(context.canvas.getByRole("button", { name: l.addItems.trigger }));
   const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
   const results = await within(dialog).findByRole("list", { name: l.addItems.results });
-  const rows = within(results)
-    .getAllByRole("listitem")
-    .map((li) => {
-      const checkbox = within(li).getByRole("checkbox");
-      const text = li.querySelector("label")!;
-      const trade = within(li).getByText(mep.name[locale]);
-      const end = text.nextElementSibling as HTMLElement;
-      // The Type's code, on the line with the Document Number (or "Number on submit").
-      const code = within(li).getByText(mar.code);
-      return { li, checkbox, text, trade, end, code };
-    });
-  await expect(rows).toHaveLength(found.length);
+  const items = within(results).getAllByRole("listitem");
+  await expect(items).toHaveLength(found.length);
+  const rows = items.map((li, i) => {
+    const item = found[i]!;
+    const checkbox = within(li).getByRole("checkbox", { name: l.addItems.choose(item.title) });
+    const text = (checkbox as HTMLButtonElement).labels[0]!;
+    const trade = within(li).getByText(mep.name[locale]);
+    // The Type's code, on the line with the Document Number (or "Number on submit").
+    const code = within(li).getByText(mar.code);
+    const pill = partOf(li, within(li).getByText(item.package ? l.addItems.inOther(item.package.number) : item.stage.name[locale]));
+    const subject = within(li).getByText(item.title);
+    return { li, checkbox, text, subject, trade, code, pill };
+  });
   return { dialog, results, rows };
 }
 
-/** Every part of the row's text (title, number, Type, Trade) stays inside its own column: none runs under the pill, or past the row. */
-async function expectTextBesideTheEnd({ text, end }: { text: HTMLElement; end: HTMLElement }) {
+/** Every part of the row's text (Subject, number, Type, Trade) stays inside its own column: none runs under the pill, or past the row. */
+async function expectTextBesideThePill({ text, pill }: { text: HTMLElement; pill: HTMLElement }) {
   const column = text.getBoundingClientRect();
-  const pill = end.getBoundingClientRect();
-  // Element boxes, not text ranges: the title's clipped tail (cut with an ellipsis, as before) is not on screen.
+  const end = pill.getBoundingClientRect();
+  // Element boxes, not text ranges: the Subject's clipped tail (cut with an ellipsis, as before) is not on screen.
   for (const part of text.querySelectorAll("*")) {
     const box = part.getBoundingClientRect();
     await expect({ part: part.textContent, left: box.left >= column.left - 0.5, right: box.right <= column.right + 0.5 }).toEqual({ part: part.textContent, left: true, right: true });
   }
   // The text's column and the pill share no screen width.
-  await expect(column.right <= pill.left + 0.5 || pill.right <= column.left + 0.5).toBe(true);
+  await expect(column.right <= end.left + 0.5 || end.right <= column.left + 0.5).toBe(true);
 }
 
 /** Nothing scrolls sideways: not the page, the pop-up, nor its list. */
@@ -126,8 +133,8 @@ async function expectNoSidewaysScroll(dialog: HTMLElement, results: HTMLElement)
 }
 
 /** In reading order: the checkbox, then the text, then the pill at the row's end (mirrored in Arabic). */
-async function expectInReadingOrder(context: Context, { checkbox, text, end }: { checkbox: HTMLElement; text: HTMLElement; end: HTMLElement }) {
-  const [c, t, e] = [checkbox, text, end].map((el) => el.getBoundingClientRect());
+async function expectInReadingOrder(context: Context, { checkbox, text, pill }: { checkbox: HTMLElement; text: HTMLElement; pill: HTMLElement }) {
+  const [c, t, e] = [checkbox, text, pill].map((el) => el.getBoundingClientRect());
   if (storyLocale(context) === "ar") {
     await expect(c!.left).toBeGreaterThanOrEqual(t!.right - 0.5);
     await expect(t!.left).toBeGreaterThanOrEqual(e!.right - 0.5);
@@ -139,7 +146,7 @@ async function expectInReadingOrder(context: Context, { checkbox, text, end }: {
 
 /**
  * On a phone (402), a long Trade ("Mechanical, Electrical and Plumbing"): it takes its own line under the
- * Document Number and title, never cut short, and the stage pill (or "In PKG-002") stays at the row's end,
+ * Subject and Document Number, never cut short, and the stage pill (or "In PKG-002") stays at the row's end,
  * with no text under it and nothing scrolling sideways. Document Numbers stay left to right; Arabic is
  * mirrored. Each row's checkbox is a full touch target. Left open for the screenshot.
  */
@@ -152,7 +159,15 @@ export const LongTradeOnAPhone: Story = {
       await expect(r.trade.getBoundingClientRect().top).toBeGreaterThanOrEqual(r.code.getBoundingClientRect().bottom - 0.5);
       // Whole: no ellipsis.
       await expect(r.trade.scrollWidth).toBeLessThanOrEqual(r.trade.clientWidth);
-      await expectTextBesideTheEnd(r);
+      // The checkbox and the pill line up with the Subject, the row's first line, as a card's first line.
+      const subject = r.subject.getBoundingClientRect();
+      for (const side of [r.checkbox, r.pill]) {
+        const box = side.getBoundingClientRect();
+        await expect(box.top).toBeLessThan(subject.bottom);
+        await expect(box.bottom).toBeGreaterThan(subject.top);
+        await expect(box.top).toBeLessThan(r.code.getBoundingClientRect().top);
+      }
+      await expectTextBesideThePill(r);
       await expectInReadingOrder(context, r);
     }
     for (const docNo of results.querySelectorAll("bdi")) await expectLaidOutLeftToRight(docNo);
@@ -171,7 +186,7 @@ export const LongTradeOnATablet: Story = {
       const code = r.code.getBoundingClientRect();
       // On one line with the number and the Type's code.
       await expect(Math.abs(trade.top + trade.height / 2 - (code.top + code.height / 2))).toBeLessThan(2);
-      await expectTextBesideTheEnd(r);
+      await expectTextBesideThePill(r);
       await expectInReadingOrder(context, r);
     }
     await expectNoSidewaysScroll(dialog, results);

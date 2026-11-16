@@ -142,7 +142,9 @@ export function AddPackageItemsDialog({
                 const taken = row.package !== undefined;
                 const id = `add-${row.id}`;
                 return (
-                  <li key={row.id} data-taken={taken ? "" : undefined} className={cn("flex min-w-0 items-center gap-3 px-3 py-2 text-sm not-first:border-t not-first:border-border-subtle", taken && "bg-surface-subtle")}>
+                  // On a phone the row is a few lines tall: the checkbox and pill line up with its Subject, as a card's first line, and
+                  // the padding above keeps the first checkbox's 44px hit area inside the scrolling list (RP-1311).
+                  <li key={row.id} data-taken={taken ? "" : undefined} className={cn("flex min-w-0 items-center gap-3 px-3 py-2 phone:items-start phone:py-3 text-sm not-first:border-t not-first:border-border-subtle", taken && "bg-surface-subtle")}>
                     <Checkbox
                       id={id}
                       aria-label={labels.choose(row.title)}
