@@ -183,6 +183,15 @@ export {
   type SettingsSectionProps,
 } from "./components/settings/settings-layout.tsx";
 export { WatermarkSetting, type WatermarkSettingLabels, type WatermarkSettingProps, type WatermarkText } from "./components/settings/watermark-setting.tsx";
+export {
+  ChecklistTemplateGroups,
+  ChecklistTemplateScopeField,
+  checklistTemplateGroups,
+  type ChecklistTemplateGroup,
+  type ChecklistTemplateGroupsLabels,
+  type ChecklistTemplateScope,
+  type ChecklistTemplateScopeFieldLabels,
+} from "./components/settings/checklist-template-groups.tsx";
 export { cn } from "./lib/cn.ts";
 export { useMediaQuery } from "./lib/use-media-query.ts";
 export { PHONE, TABLET } from "./lib/widths.ts";

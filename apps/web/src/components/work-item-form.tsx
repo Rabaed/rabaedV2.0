@@ -67,6 +67,11 @@ type WorkItemFormState = {
   suppliers: readonly SupplierChoice[];
   /** The Project's Checklist Templates and the Versions the item holds, for its `checklist_template` fields (RP-651). */
   checklistTemplates: readonly ChecklistTemplateChoice[];
+  /**
+   * Its Checklist Template pick is fixed: it has been Submitted, since only the first Draft autosaves.
+   * Unticking a Scope then keeps the pick (RP-1315 comment 15917).
+   */
+  checklistTemplateFixed: boolean;
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
   /** The item's Document Number; none while it is a Draft (a Revision Draft included). */
@@ -306,6 +311,7 @@ export function WorkItemFormProvider({
         optionLists,
         suppliers,
         checklistTemplates,
+        checklistTemplateFixed: !autosave,
         projectId,
         documentNumber,
         linkTargets,
@@ -412,6 +418,7 @@ export function WorkItemAnswers({
         optionLists={form.optionLists}
         suppliers={form.suppliers}
         checklistTemplates={form.checklistTemplates}
+        checklistTemplateFixed={form.checklistTemplateFixed}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}

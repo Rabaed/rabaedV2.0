@@ -4,7 +4,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ChecklistTemplateEditor } from "@/components/checklist-templates";
 import { redirect } from "@/i18n/navigation";
-import { getChecklistTemplates, getMe, getProject, getProjectDimensions } from "@/lib/session";
+import { treeOrder } from "@/lib/dimension-tree";
+import { getChecklistTemplates, getMe, getProject, getProjectDimensions, getProjectScopes } from "@/lib/session";
 
 type Params = { locale: Locale; projectId: string; templateId: string };
 
@@ -19,9 +20,15 @@ export default async function ChecklistTemplatePage({ params }: { params: Promis
   setRequestLocale(locale);
   const t = await getTranslations("projectSettings.checklistTemplates");
   const ts = await getTranslations("settings");
-  const [me, project, dimensions, list] = await Promise.all([getMe(), getProject(projectId), getProjectDimensions(projectId), getChecklistTemplates(projectId)]);
+  const [me, project, dimensions, scopes, list] = await Promise.all([
+    getMe(),
+    getProject(projectId),
+    getProjectDimensions(projectId),
+    getProjectScopes(projectId),
+    getChecklistTemplates(projectId),
+  ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !dimensions || !list) notFound();
+  if (!project || !dimensions || !scopes || !list) notFound();
   const creating = templateId === "new";
   const template = creating ? null : list.templates.find((x) => x.id === templateId);
   // Only a Project Admin starts a new one; a template is the Project's own.
@@ -52,6 +59,7 @@ export default async function ChecklistTemplatePage({ params }: { params: Promis
         template={template}
         canEdit={list.canEdit}
         trades={trades}
+        scopes={treeOrder(scopes.scopes)}
       />
     </>
   );

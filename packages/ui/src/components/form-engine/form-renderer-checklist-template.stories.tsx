@@ -1,6 +1,6 @@
 import { checklistTemplateItems, formSchema, type ChecklistTemplateChoice, type Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
@@ -218,6 +218,144 @@ export const Preview: Story = {
     await expect(context.canvas.getByText(storyText(context, cardCopy.meta))).toBeVisible();
     await expect(context.canvas.getByText(storyText(context, cardCopy.notice))).toBeVisible();
     await expect(context.canvas.getAllByRole("listitem")).toHaveLength(2);
+  },
+};
+
+// RP-1315 (ADR 0031): a template may name a Scope or Sub-scope of its Trade. With Scopes ticked the pick
+// offers the whole-Trade templates and a ticked Scope's: a Scope's when it or one of its Sub-scopes is ticked,
+// a Sub-scope's only when that Sub-scope is. Unticking a Scope clears the pick, until the item's first Submit.
+const scope = { concrete: "00000000-0000-4000-8000-0000000005c1", footings: "00000000-0000-4000-8000-0000000005c2", masonry: "00000000-0000-4000-8000-0000000005d1" };
+const scoped = { works: "00000000-0000-4000-8000-0000000000b1", footing: "00000000-0000-4000-8000-0000000000b2", blocks: "00000000-0000-4000-8000-0000000000b3" };
+const scopedTemplates: ChecklistTemplateChoice[] = [
+  { ...templates[0]!, versionNo: 5 },
+  { id: scoped.works, tradeId: civil, scopeId: scope.concrete, offered: true, versionNo: 2, name: { en: "Concrete works", ar: "أعمال الخرسانة" }, items },
+  { id: scoped.footing, tradeId: civil, scopeId: scope.footings, offered: true, versionNo: 1, name: { en: "Footing pour", ar: "صب القواعد" }, items: items.slice(0, 2) },
+  { id: scoped.blocks, tradeId: civil, scopeId: scope.masonry, offered: true, versionNo: 1, name: { en: "Blockwork", ar: "أعمال البلوك" }, items: items.slice(0, 1) },
+];
+const scopeChoices = (locale: Locale) => ({
+  trades: [{ id: civil, label: locale === "ar" ? "مدني" : "Civil" }],
+  locations: [],
+  scopes: [
+    { id: scope.concrete, tradeId: civil, parentId: null, label: locale === "ar" ? "الخرسانة" : "Concrete" },
+    { id: scope.footings, tradeId: civil, parentId: scope.concrete, label: locale === "ar" ? "القواعد" : "Footings" },
+    { id: scope.masonry, tradeId: civil, parentId: null, label: locale === "ar" ? "المباني" : "Masonry" },
+  ],
+});
+const scopedSchema = formSchema.parse({
+  sections: [
+    {
+      key: "classification",
+      title: { en: "Classification", ar: "التصنيف" },
+      fields: [{ key: "scopes", type: "scopes", label: { en: "Scopes", ar: "النطاقات" } }],
+    },
+    ...schema.sections,
+  ],
+});
+const scopedNames: Record<Locale, { pour: string; works: string; footing: string }> = {
+  en: { pour: "Concrete pour", works: "Concrete works", footing: "Footing pour" },
+  ar: { pour: "صب الخرسانة", works: "أعمال الخرسانة", footing: "صب القواعد" },
+};
+const concreteLabel = { en: "Concrete", ar: "الخرسانة" };
+
+/** The Form with its Scopes ticked as `scopes` and the Checklist Template picked as `picked`, both kept as the filler changes them. */
+function ScopedForm({
+  args,
+  locale,
+  scopes,
+  picked,
+  offered = scopedTemplates,
+}: {
+  args: Story["args"];
+  locale: Locale;
+  scopes: string[];
+  picked?: string;
+  offered?: ChecklistTemplateChoice[];
+}) {
+  const [values, setValues] = useState<Record<string, unknown>>({ trade: civil, location, scopes, ...(picked ? { checklist_template: picked } : {}) });
+  return (
+    <FormRenderer
+      {...(args as ComponentProps<typeof FormRenderer>)}
+      schema={scopedSchema}
+      checklistTemplates={offered}
+      choices={scopeChoices(locale)}
+      locale={locale}
+      labels={formRendererLabels[locale]}
+      answers={values}
+      onChange={(changes) => {
+        args?.onChange?.(changes);
+        setValues((current) => ({ ...current, ...changes }));
+      }}
+    />
+  );
+}
+
+/**
+ * A Scope ticked (wide): the whole-Trade template and that Scope's are offered, not its Sub-scope's nor another
+ * Scope's. Unticking the Scope clears the pick, and the raiser picks again.
+ */
+export const WithAScopeTicked: Story = {
+  parameters: { wide: true },
+  render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete]} picked={scoped.works} />,
+  play: async (context) => {
+    const { canvas, args } = context;
+    const locale = storyLocale(context);
+    await userEvent.click(canvas.getByRole("combobox", { name: new RegExp(storyText(context, copy.label)) }));
+    // In the viewer's alphabet: "Concrete pour", "Concrete works"; «أعمال الخرسانة»، «صب الخرسانة».
+    const offered = locale === "ar" ? [scopedNames.ar.works, scopedNames.ar.pour] : [scopedNames.en.pour, scopedNames.en.works];
+    await expect(within(document.body).getAllByRole("option").map((o) => o.textContent)).toEqual(offered);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(canvas.getByRole("checkbox", { name: storyText(context, concreteLabel) }));
+    await expect(args.onChange).toHaveBeenLastCalledWith({ scopes: [], checklist_template: undefined });
+  },
+};
+
+/** A Sub-scope ticked, on a phone: its Scope's template and its own, beside the whole-Trade one; another Scope's stays hidden. */
+export const WithASubScopeTickedOnAPhone: Story = {
+  parameters: { phone: true },
+  render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete, scope.footings]} />,
+  play: async (context) => {
+    const locale = storyLocale(context);
+    await userEvent.click(context.canvas.getByRole("combobox", { name: new RegExp(storyText(context, copy.label)) }));
+    // In the viewer's alphabet: "Concrete pour", "Concrete works", "Footing pour"; «أعمال الخرسانة»، «صب الخرسانة»، «صب القواعد».
+    const offered = locale === "ar" ? [scopedNames.ar.works, scopedNames.ar.pour, scopedNames.ar.footing] : [scopedNames.en.pour, scopedNames.en.works, scopedNames.en.footing];
+    await expect(within(document.body).getAllByRole("option").map((o) => o.textContent)).toEqual(offered);
+    await userEvent.keyboard("{Escape}");
+  },
+};
+
+/** The WIR request's cards (wide), a Sub-scope ticked: the same three templates as cards, another Scope's hidden. */
+export const ScopedCards: Story = {
+  parameters: { wide: true },
+  args: { look: { sections: "cards", checklistTemplate: "cards" } },
+  render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete, scope.footings]} picked={scoped.footing} />,
+  play: async (context) => {
+    await expect(context.canvas.getAllByRole("radio")).toHaveLength(3);
+    await expect(context.canvas.getByRole("radio", { name: new RegExp(storyText(context, { en: "Footing pour", ar: "صب القواعد" })) })).toBeChecked();
+    await expect(context.canvas.queryByRole("radio", { name: new RegExp(storyText(context, { en: "Blockwork", ar: "أعمال البلوك" })) })).toBeNull();
+  },
+};
+
+/** The Trade has templates, but none for the ticked Scope, on a phone: the field says so. */
+export const NoneForTheTickedScopes: Story = {
+  parameters: { phone: true },
+  render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete]} offered={scopedTemplates.filter((t) => t.id === scoped.blocks)} />,
+  play: async (context) => {
+    await expect(context.canvas.getByText(storyText(context, { en: "No Checklist Template for the ticked Scopes yet", ar: "لا يوجد قالب قائمة تحقق للنطاقات المحددة بعد" }))).toBeVisible();
+  },
+};
+
+/** After the first Submit (a Send Back to the raiser), wide: the pick is fixed, so unticking its Scope keeps it. */
+export const FixedAfterSubmit: Story = {
+  parameters: { wide: true },
+  args: { checklistTemplateFixed: true },
+  render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete, scope.masonry]} picked={scoped.works} />,
+  play: async (context) => {
+    const { canvas, args } = context;
+    const locale = storyLocale(context);
+    await userEvent.click(canvas.getByRole("checkbox", { name: storyText(context, concreteLabel) }));
+    await expect(args.onChange).toHaveBeenLastCalledWith({ scopes: [scope.masonry] });
+    // Still the pick, now marked as picked since Masonry alone doesn't offer it.
+    await expect(canvas.getByRole("combobox", { name: new RegExp(storyText(context, copy.label)) })).toHaveTextContent(scopedNames[locale].works);
   },
 };
 
