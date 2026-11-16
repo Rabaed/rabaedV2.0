@@ -253,7 +253,6 @@ function uat03(): Staged[] {
  */
 function uat04(): Staged[] {
   const tmc = series("UAT04", "MAR", "01");
-  const beta = series("UAT04", "MAR", "02");
   const snag = series("UAT04", "SNG", "03");
   const wir = series("UAT04", "WIR", "01");
   return [

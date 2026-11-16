@@ -198,7 +198,7 @@ describe("a Trade or Location the Document Number uses (RP-581)", () => {
     const t = await tower("NFI");
     await t.pattern([...base, { kind: "trade" }, { kind: "location", level: 1 }]);
     const item = await t.inReview();
-    expect(await t.fixed(item)).toEqual([]);
+    expect(await t.fixed(item)).toEqual([]); // not hidden-from: the fields the number fixes, read as the migrator, not a row anyone reads
     expect(await t.check(item, t.pl, t.b2)).toBe("ok");
   });
 

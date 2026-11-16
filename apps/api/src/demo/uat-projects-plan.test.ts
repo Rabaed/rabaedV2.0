@@ -20,7 +20,9 @@ function numbersInOrder(code: string, staged: Staged[]): Map<string, string> {
   for (const s of staged) {
     // A DAR (RP-1250) is TMC's, and numbers in its own series as a SAR does.
     const item = s.kind === "submittal" ? s.item : s.kind === "dar" ? { ...s.item, type: "DAR", owner: "tmc" as const } : undefined;
-    if (!item || item.end === "draft") continue;
+    // Numbered at the first Submit (ADR 0030): none for a Draft, nor for an item still in Internal Review or
+    // cancelled there (the seed cancels at the PM's Step, `cancel_review`).
+    if (!item || ["draft", "with_pm", "returned", "cancelled"].includes(item.end)) continue;
     const owner = item.owner ?? "tmc";
     const key = `${owner}:${item.type}`;
     next.set(key, (next.get(key) ?? 0) + 1);

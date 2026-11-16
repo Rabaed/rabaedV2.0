@@ -6,7 +6,8 @@
 // C2 see run with no gap. The Creation Date stays at the first exit from Draft, its Step Age counts there.
 import { workItemSearchParams, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
+import { expectHiddenFrom } from "@rabaed/db/test-support";
+import { createTestApi, readById, type Caller, type TestApi } from "./support/harness.ts";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 let api: TestApi;
@@ -94,21 +95,22 @@ describe("visibility.md, Document Numbers (RP-1316)", () => {
     expect((await detail(at.c1Engineer, cancelled)).documentNumber, "the cancelled one never had a number").toBeNull();
     for (const by of [at.k1Manager, orEngineer]) {
       expect((await detail(by, next)).documentNumber).toBe(nextNumber);
-      await expectHidden(by.get(`/v1/work-items/${cancelled}`), "the cancelled one");
       const numbers = (await list(by)).items.map((r) => r.documentNumber).filter((n): n is string => n?.startsWith(firstNumber.slice(0, -4)) ?? false);
       const sorted = numbers.map(seq).sort((a, b) => a - b);
       for (let i = 1; i < sorted.length; i++) expect(sorted[i]! - sorted[i - 1]!, "C1's numbers they read run with no gap").toBe(1);
     }
-    // C2 reads none of C1's items (V3).
-    for (const id of [first, cancelled, next]) await expectHidden(c2Engineer.get(`/v1/work-items/${id}`), "C2");
+    // The cancelled one is C1's alone; C2 reads none of C1's items (V3).
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${cancelled}`), target: cancelled, seenBy: at.c1Engineer, hiddenFrom: [at.k1Manager, orEngineer, c2Engineer], label: "the cancelled one" });
+    for (const id of [first, next]) {
+      await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: [at.c1Engineer, at.k1Manager, orEngineer], hiddenFrom: c2Engineer, label: "C2" });
+    }
   });
 
   it("RP-1316-2: before its first Submit, C1's MAR reaches no other Company: no item, no number, no count", async () => {
     const id = await inReview("Before Submit: C1's own");
-    for (const by of [at.k1Manager, orEngineer, c2Engineer]) {
-      await expectHidden(by.get(`/v1/work-items/${id}`));
-      expect((await list(by, "Before Submit")).items.map((r) => r.id)).not.toContain(id);
-    }
-    expect((await list(at.c1Engineer, "Before Submit")).items.map((r) => r.id)).toContain(id);
+    const others = [at.k1Manager, orEngineer, c2Engineer];
+    await expectHiddenFrom({ read: readById(`/v1/work-items/${id}`), target: id, seenBy: [at.c1Engineer, at.c1Pm], hiddenFrom: others, label: "the item" });
+    await expectHiddenFrom({ read: async (by: Caller) => (await list(by, "Before Submit")).items, target: id, seenBy: [at.c1Engineer, at.c1Pm], hiddenFrom: others, label: "search by Subject" });
+    await expectHiddenFrom({ read: async (by: Caller) => (await list(by)).items, target: id, seenBy: at.c1Pm, hiddenFrom: others, label: "the List" });
   });
 });

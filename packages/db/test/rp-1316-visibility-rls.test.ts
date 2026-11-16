@@ -180,12 +180,15 @@ describe("visibility.md, Document Numbers (RP-1316)", () => {
     for (const as of [k1.members.manager, ow.members.representative]) {
       const seen = await listOf(as);
       expect(seen.find((r) => r.id === next), "reads the next item").toEqual({ id: next, document_number: nextNumber });
-      expect(seen.map((r) => r.id), "never the cancelled one").not.toContain(cancelled);
       // Every number they read anywhere runs on: none is missing between two they read.
       const theirs = (await numbersOf(as)).filter((n) => n.startsWith(firstNumber.slice(0, -4))).map(seq);
       for (let i = 1; i < theirs.length; i++) expect(theirs[i]! - theirs[i - 1]!, `${as}'s numbers run with no gap`).toBe(1);
     }
-    expect(await numbersOf(c2.members.engineer), "C2 reads none of C1's numbers (V3)").not.toContain(nextNumber);
+    const { c1 } = tower;
+    await expectHiddenFrom({ label: "the cancelled one", read: listOf, target: cancelled, seenBy: c1.members.engineer, hiddenFrom: [k1.members.manager, ow.members.representative, c2.members.engineer] });
+    // C2 reads none of C1's numbers (V3): each number as a row, read from the List and every event.
+    const numberRows = async (as: string) => (await numbersOf(as)).map((n) => ({ id: n }));
+    await expectHiddenFrom({ label: "C1's numbers", read: numberRows, target: nextNumber, seenBy: [c1.members.engineer, k1.members.manager, ow.members.representative], hiddenFrom: c2.members.engineer });
   });
 
   it("RP-1316-2: before its first Submit, C1's item reaches nobody outside C1, with no number, count or gap", async () => {
