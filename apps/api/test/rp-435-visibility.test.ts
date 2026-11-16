@@ -146,12 +146,10 @@ describe("scenario RP-435-1: a replacement of C1's MAR that K1 closed with Code 
     await expectHiddenFrom({ read: item(replacement), target: replacement, seenBy: engineer, hiddenFrom: [k1Manager, owPm], name: named, label: "the replacement" });
   });
 
-  it("takes a new Document Number at its first Send, with no Rev, and stays C1's in its review", async () => {
+  it("has no Document Number at its first Send (ADR 0030: the Submit gives it), and stays C1's in its review", async () => {
     await take(engineer, replacement, "send_for_review");
     const d = await detail(engineer, replacement);
-    expect(d.documentNumber).not.toBe(base);
-    expect(d.documentNumber).not.toContain("Rev"); // not hidden-from: the number's own text, a new number and not a Revision's
-    expect(d.documentNumber).toMatch(/-\d{4}$/);
+    expect(d.documentNumber).toBeNull();
     expect(d.revisionNo).toBe(0);
     await expectHiddenFrom({ read: item(replacement), target: replacement, seenBy: [engineer, pm], hiddenFrom: [k1Engineer, k1Manager, owPm], name: named, label: "in C1's review" });
     // Its Send is the first event of it the Activity Feed lists: C1's alone.
@@ -163,6 +161,10 @@ describe("scenario RP-435-1: a replacement of C1's MAR that K1 closed with Code 
     await ok(pm.post(`/v1/work-items/${replacement}/pick-up`));
     await take(pm, replacement, "submit");
     const number = (await detail(engineer, replacement)).documentNumber!;
+    // A new number of its own, with no Rev: not the rejected MAR's.
+    expect(number).not.toBe(base);
+    expect(number).not.toContain("Rev"); // not hidden-from: the number's own text, a new number and not a Revision's
+    expect(number).toMatch(/-\d{4}$/);
     for (const who of [engineer, k1Manager, owPm]) {
       expect(await detail(who, replacement), named(who)).toMatchObject({ id: replacement, documentNumber: number });
       expect((await linkedFrom(who, rejected)).items, named(who)).toEqual([{ documentNumber: number, subject: SUBJECT, workItemId: replacement }]);

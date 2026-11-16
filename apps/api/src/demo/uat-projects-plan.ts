@@ -38,8 +38,9 @@ export interface UatPackage {
 }
 
 /**
- * One item the seed stages, and the sheet's cases that use it. `number` is the Document Number it is given when
- * it leaves Draft, in the order the seed raises them; none for a Draft, which the sheet names by its Subject.
+ * One item the seed stages, and the sheet's cases that use it. `number` is the Document Number it is given at its
+ * first Submit (ADR 0030, RP-1316), in the order the seed Submits them; none for a Draft or an item still in its
+ * raiser's Internal Review ("No number yet"), which the sheet names by its Subject.
  * `mustNotSee` marks another Company's work the role must not see: no case acts on it, its visibility cases look for it.
  */
 export type Staged = { cases: string[]; number?: string; mustNotSee?: true } & (
@@ -104,7 +105,8 @@ const hidden = (cases: string[], item: SampleSubmittal, number?: string): Staged
 
 /**
  * UAT 01, Hafiz (Contractor Engineer, TMC): what his cases act on, waiting at him, and what he must not see.
- * TMC's MARs are numbered in this order; Beta Build's own come between them, so VIS-39 sees TMC's run on with no gaps.
+ * TMC's MARs are numbered in this order as they are Submitted (the ones still in Internal Review have none yet); Beta
+ * Build's own come between them, so VIS-39 sees TMC's run on with no gaps.
  */
 function uat01(): Staged[] {
   const tmc = series("UAT01", "MAR", "01");
@@ -113,24 +115,24 @@ function uat01(): Staged[] {
   const betaHidden = (item: SampleSubmittal, number?: string): Staged => ({ ...s(["VIS-19"], { ...item, owner: "beta" }, number), mustNotSee: true });
   return [
     // Back with Hafiz after Ali's Return, each for one case that acts on it.
-    s(["SUB-05"], mar("SUB-05 Emergency luminaires – returned by Ali", "A02", "returned", P.luminaires), tmc(1)),
-    s(["SUB-06"], mar("SUB-06 LED downlights – change the Datasheet", "A03", "returned", P.downlights), tmc(2)),
+    s(["SUB-05"], mar("SUB-05 Emergency luminaires – returned by Ali", "A02", "returned", P.luminaires)),
+    s(["SUB-06"], mar("SUB-06 LED downlights – change the Datasheet", "A03", "returned", P.downlights)),
     betaHidden(mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator)),
-    betaHidden(mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers), beta(1)),
-    s(["WF-16"], mar("WF-16 Wiring devices – Cancel at your Step", "A04", "returned", P.wiring), tmc(3)),
+    betaHidden(mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers)),
+    s(["WF-16"], mar("WF-16 Wiring devices – Cancel at your Step", "A04", "returned", P.wiring)),
     // Closed by Design Consultants: a Code D to replace, a Code C to revise, and records to download.
-    s(["SUB-14"], mar("SUB-14 Smoke detectors – Code D", "A02", "code_d", P.smoke, { recommendedCode: "D" }), tmc(4)),
-    s(["SUB-15"], mar("SUB-15 Cable trays – Code C", "A03", "code_c", P.trays, { recommendedCode: "C" }), tmc(5)),
-    betaHidden(mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear), beta(2)),
-    s(["SIG-05"], mar("SIG-05 Fire alarm control unit – Code C", "A05", "code_c", P.fireAlarm, { recommendedCode: "C" }), tmc(6)),
-    s(["SIG-05"], mar("SIG-05 LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(7)),
-    s(["SIG-05"], mar("SIG-05 Earthing – Cancelled", "A06", "cancelled", P.earthing), tmc(8)),
+    s(["SUB-14"], mar("SUB-14 Smoke detectors – Code D", "A02", "code_d", P.smoke, { recommendedCode: "D" }), tmc(1)),
+    s(["SUB-15"], mar("SUB-15 Cable trays – Code C", "A03", "code_c", P.trays, { recommendedCode: "C" }), tmc(2)),
+    betaHidden(mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear), beta(1)),
+    s(["SIG-05"], mar("SIG-05 Fire alarm control unit – Code C", "A05", "code_c", P.fireAlarm, { recommendedCode: "C" }), tmc(3)),
+    s(["SIG-05"], mar("SIG-05 LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(4)),
+    s(["SIG-05"], mar("SIG-05 Earthing – Cancelled", "A06", "cancelled", P.earthing)),
     // Read only, shared: closed at Code A; the Consultant's internal notes on a Code C; Submitted and still open.
-    s(["SUB-17", "SUB-19", "INS-04"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(9)),
-    betaHidden(mar("Beta Build – busbar trunking, Code A", "PGF", "code_a", P.busbar, { recommendedCode: "A" }), beta(3)),
-    s(["VIS-04", "INS-04"], mar("VIS-04 Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(10)),
-    s(["FRM-07", "WF-16", "INS-04", "UX-06"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(11)),
-    s(["SUB-19", "FRM-05", "VIS-11"], mar("Emergency lighting control panel – Tower A Level 02", "A02", "with_consultant_engineer", P.controlPanel, { links: ["Main distribution board – Code A"] }), tmc(12)),
+    s(["SUB-17", "SUB-19", "INS-04"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(5)),
+    betaHidden(mar("Beta Build – busbar trunking, Code A", "PGF", "code_a", P.busbar, { recommendedCode: "A" }), beta(2)),
+    s(["VIS-04", "INS-04"], mar("VIS-04 Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(6)),
+    s(["FRM-07", "WF-16", "INS-04", "UX-06"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(7)),
+    s(["SUB-19", "FRM-05", "VIS-11"], mar("Emergency lighting control panel – Tower A Level 02", "A02", "with_consultant_engineer", P.controlPanel, { links: ["Main distribution board – Code A"] }), tmc(8)),
     // Drafts of Hafiz's own, one per case that changes it; the sheet names each by its Subject.
     s(["SUB-04"], mar("SUB-04 Lighting control panel – ready to send", "P01", "draft", P.lightingPanel)),
     s(["SUB-02"], mar("SUB-02 Lighting fixtures – incomplete", "A02", "draft", P.fixtures, { bare: true })),
@@ -170,30 +172,30 @@ function uat02(): Staged[] {
   const snag = series("UAT02", "SNG", "03");
   return [
     // With Ali in Internal Review, each for one case that moves it.
-    s(["SUB-07"], mar("SUB-07 Wiring devices – ready to Submit", "A02", "with_pm", P.wiring), tmc(1)),
-    s(["SIG-01"], mar("SIG-01 Cable trays – Submit in its pop-up", "A03", "with_pm", P.trays), tmc(2)),
-    s(["SUB-25"], mar("SUB-25 Emergency luminaires – move on the Kanban", "A04", "with_pm", P.luminaires), tmc(3)),
+    s(["SUB-07"], mar("SUB-07 Wiring devices – ready to Submit", "A02", "with_pm", P.wiring)),
+    s(["SIG-01"], mar("SIG-01 Cable trays – Submit in its pop-up", "A03", "with_pm", P.trays)),
+    s(["SUB-25"], mar("SUB-25 Emergency luminaires – move on the Kanban", "A04", "with_pm", P.luminaires)),
     hidden(["VIS-57"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
-    hidden(["VIS-57"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
+    hidden(["VIS-57"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" })),
     // Submitted to Design Consultants, read only: Watch, the workflow map, a Working Copy.
-    s(["SUB-18", "SUB-22", "WF-02", "SIG-16", "VIS-25", "VIS-38"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(4)),
+    s(["SUB-18", "SUB-22", "WF-02", "SIG-16", "VIS-25", "VIS-38"], mar("Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns), tmc(1)),
     // In the In Progress Package PKG-08 reads: one still with Design Consultants, one closed at Code B with two Comments open with TMC.
-    s(["PKG-08"], mar("PKG-08 Fire alarm control unit – Submitted, in a Package", "A05", "with_consultant_engineer", P.fireAlarm), tmc(5)),
+    s(["PKG-08"], mar("PKG-08 Fire alarm control unit – Submitted, in a Package", "A05", "with_consultant_engineer", P.fireAlarm), tmc(2)),
     s(["PKG-11", "SNG-06"], mar("PKG-11 Lighting control panel – Code B", "P01", "code_b", P.lightingPanel, {
       recommendedCode: "B",
       comments: [
         { comment: "Submit the factory test certificates before delivery: lighting control panel.", reference: "Datasheet p. 2", end: "open" },
         { comment: "Show the cable entry on the shop drawing: lighting control panel.", reference: "Shop drawing", end: "open" },
       ],
-    }), tmc(6)),
+    }), tmc(3)),
     // Closed by Design Consultants, read only: the Documental Records.
-    s(["SIG-02", "SIG-03", "SIG-08", "SIG-12", "SIG-13", "VIS-08", "UX-26"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(7)),
-    s(["SIG-12", "VIS-20"], mar("Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(8)),
-    s(["SIG-12"], mar("LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(9)),
-    hidden(["VIS-57"], mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(2)),
-    s(["PKG-03"], mar("PKG-03 Smoke detectors – in Internal Review", "A06", "with_pm", P.smoke), tmc(10)),
+    s(["SIG-02", "SIG-03", "SIG-08", "SIG-12", "SIG-13", "VIS-08", "UX-26"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A", samplePhoto: true }), tmc(4)),
+    s(["SIG-12", "VIS-20"], mar("Sub-distribution boards – Code C", "P01", "code_c", P.sdb, { recommendedCode: "C" }), tmc(5)),
+    s(["SIG-12"], mar("LV power cables – Code D", "A05", "code_d", P.cables, { recommendedCode: "D" }), tmc(6)),
+    hidden(["VIS-57"], mar("Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(1)),
+    s(["PKG-03"], mar("PKG-03 Smoke detectors – in Internal Review", "A06", "with_pm", P.smoke)),
     // In the In Progress Package PKG-07 adds to and renames.
-    s(["PKG-07"], mar("PKG-07 Cable trays – Submitted, in a Package", "A04", "with_consultant_engineer", P.trays), tmc(11)),
+    s(["PKG-07"], mar("PKG-07 Cable trays – Submitted, in a Package", "A04", "with_consultant_engineer", P.trays), tmc(7)),
     // Hafiz's Drafts, which TMC reads: one to download, one whose Subject reads as a formula, and those for the Packages.
     s(["SUB-18"], mar("SUB-18 LED downlights – TMC Draft", "A03", "draft", P.downlights)),
     s(["SUB-24"], mar("=1+1 SUB-24 Subject that looks like a formula", "A04", "draft", P.fixtures)),
@@ -266,11 +268,11 @@ function uat04(): Staged[] {
       comments: [{ comment: "Confirm the socket heights with the Architect: wiring devices.", reference: "Room finishes drawing", end: "open" }],
     }), tmc(6)),
     // TMC's own, before the Submit, and Beta Build's: none of it reaches Design Consultants (V1). TMC's item in Internal Review
-    // takes TMC's last number, so the numbers Ahmed reads (0001 to 0006) run on with no gap.
-    hidden(["VIS-01"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(7)),
+    // has no number yet (ADR 0030), so the numbers Ahmed reads (0001 to 0006) run on with no gap.
+    hidden(["VIS-01"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays)),
     hidden(["VIS-01"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
     hidden(["VIS-01"], mar("Beta Build – standby generator, Draft", "P01", "draft", P.generator, { owner: "beta" })),
-    hidden(["VIS-01"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" }), beta(1)),
+    hidden(["VIS-01"], mar("Beta Build – dry type transformers, with Beta Build's PM", "P01", "with_pm", P.transformers, { owner: "beta" })),
     // Raised by Ahmed on TMC: one resolved by TMC, back with him at Verify; one still Open with TMC.
     { kind: "snag", cases: ["VIS-51", "UX-17"], number: snag(1), item: { title: "VIS-51 Unlabelled circuit breakers – resolved by TMC", type: "SNG", trade: "EL", location: "A05", end: "resolved", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات." } },
     { kind: "snag", cases: ["UX-17"], number: snag(2), item: { title: "UX-17 Cracked light diffuser", type: "SNG", trade: "EL", location: "A06", end: "open", raisedBy: "ahmed", description: "A downlight diffuser is cracked. / غطاء ناشر الضوء مكسور.", photos: 1 } },
@@ -356,8 +358,8 @@ function uat07(): Staged[] {
   return [
     s(["VIS-07", "I18N-03"], mar("Main distribution board – Code A", "PB1", "code_a", P.mdb, { recommendedCode: "A" }), tmc(1)),
     s(["VIS-02", "I18N-03"], mar("VIS-02 Exit signs – Submitted to Design Consultants", "A02", "with_consultant_engineer", P.exitSigns, { links: ["Main distribution board – Code A"] }), tmc(2)),
-    // TMC's own before its Submit: its item in Internal Review takes TMC's last number, so Noura's run 0001 to 0002 with no gap.
-    hidden(["VIS-02"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays), tmc(3)),
+    // TMC's own before its Submit: its item in Internal Review has no number yet (ADR 0030), so Noura's run 0001 to 0002 with no gap.
+    hidden(["VIS-02"], mar("TMC – cable trays, in Internal Review", "A06", "with_pm", P.trays)),
     hidden(["VIS-02"], mar("TMC – wiring devices, Draft not sent", "A06", "draft", P.wiring)),
     dar(["SUB-21"], { title: "SUB-21 Cable schedule – recommended Code A", trade: "EL", location: "A03", documentType: "report", recommendedCode: "A", end: "with_owner" }, dars(1)),
     dar(["VIS-24"], {
@@ -385,8 +387,8 @@ function uat08(): Staged[] {
   return [
     // Beta Build's own: his Draft, one with him as its PM, one Submitted to Design Consultants.
     s(["VIS-18"], mar("VIS-18 Beta Build – earthing, your Draft", "A04", "draft", P.earthing, { owner: "beta" })),
-    s(["VIS-18"], mar("VIS-18 Beta Build – busbar trunking, with you as PM", "A05", "with_pm", P.busbar, { owner: "beta" }), beta(1)),
-    s(["VIS-18"], mar("VIS-18 Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(2)),
+    s(["VIS-18"], mar("VIS-18 Beta Build – busbar trunking, with you as PM", "A05", "with_pm", P.busbar, { owner: "beta" })),
+    s(["VIS-18"], mar("VIS-18 Beta Build – MV switchgear, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(1)),
     // TMC's, in the same Trade and Locations: none of it reaches Beta Build.
     hidden(["VIS-18"], mar("TMC – downlights, Submitted", "A04", "with_consultant_engineer", P.downlights), tmc(1)),
     hidden(["VIS-05"], mar("TMC – lighting control panel, Code B", "P01", "code_b", P.lightingPanel, {
@@ -404,8 +406,8 @@ function uat08(): Staged[] {
       consultantEngineer: "ahmed",
       recommendedCode: "A",
     }, series("UAT08", "SAR", "01")(1)),
-    // TMC's last number: its item in Internal Review.
-    hidden(["VIS-18"], mar("TMC – smoke detectors, in Internal Review", "A05", "with_pm", P.smoke), tmc(3)),
+    // TMC's item in Internal Review: no number yet (ADR 0030).
+    hidden(["VIS-18"], mar("TMC – smoke detectors, in Internal Review", "A05", "with_pm", P.smoke)),
     hidden(["VIS-18"], mar("TMC – wiring devices, Draft not sent", "A05", "draft", P.wiring)),
     // Snags held by TMC: raised by Design Consultants (one In Progress, one Returned to Open) and by TMC on itself, Closed.
     { kind: "snag", cases: ["VIS-50"], mustNotSee: true, number: dcl(1), item: { title: "TMC – unlabelled breakers, In Progress with TMC", type: "SNG", trade: "EL", location: "A05", end: "in_progress", raisedBy: "ahmed", description: "The sub-distribution board's breakers carry no labels. / قواطع اللوحة الفرعية بلا ملصقات.", photos: 1 } },
@@ -423,9 +425,9 @@ function uat09(): Staged[] {
   const tmc = series("UAT09", "MAR", "01");
   const beta = series("UAT09", "MAR", "02");
   return [
-    s(["WF-12"], mar("WF-12 Lighting control panel – returned by Ali to Hafiz", "P01", "returned", P.lightingPanel), tmc(1)),
-    hidden(["VIS-09"], mar("VIS-09 Exit signs – Tower A Level 02, Submitted", "A02", "with_consultant_engineer", P.exitSigns), tmc(2)),
-    s(["VIS-09"], mar("VIS-09 Emergency lighting control panel – Podium, links the exit signs", "PGF", "with_consultant_engineer", P.controlPanel, { links: ["VIS-09 Exit signs – Tower A Level 02, Submitted"] }), tmc(3)),
+    s(["WF-12"], mar("WF-12 Lighting control panel – returned by Ali to Hafiz", "P01", "returned", P.lightingPanel)),
+    hidden(["VIS-09"], mar("VIS-09 Exit signs – Tower A Level 02, Submitted", "A02", "with_consultant_engineer", P.exitSigns), tmc(1)),
+    s(["VIS-09"], mar("VIS-09 Emergency lighting control panel – Podium, links the exit signs", "PGF", "with_consultant_engineer", P.controlPanel, { links: ["VIS-09 Exit signs – Tower A Level 02, Submitted"] }), tmc(2)),
     hidden(["VIS-09"], mar("Beta Build – MV switchgear, Podium, Submitted", "PGF", "with_consultant_engineer", P.switchgear, { owner: "beta" }), beta(1)),
   ];
 }

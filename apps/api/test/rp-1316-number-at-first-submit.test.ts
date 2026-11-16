@@ -21,6 +21,8 @@ beforeAll(async () => {
   const c2 = await api.authorizedPerson();
   const or = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "NFS");
+  // The current MAR's Submit reaches the Consultant's engineer.
+  await projectMember(api, k1, at.k1ParticipantId!, ["engineer"]);
   const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);

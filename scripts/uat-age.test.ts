@@ -15,6 +15,8 @@ const item = (documentNumber: string | null, subject: string, more: Partial<AgeC
   id: `id-${documentNumber ?? subject}`,
   documentNumber,
   subject,
+  // A number means it left Draft; an item in Internal Review has left it with none (ADR 0030), set by `more`.
+  leftDraft: documentNumber !== null,
   closed: false,
   stepEnteredAt: ago(2 * HOUR),
   participantEnteredAt: ago(3 * HOUR),
@@ -100,6 +102,12 @@ describe("ageChanges", () => {
     expect(plan(["Draft lintel", "TWR-MAR-01-0001"], 4, [draft, closed])).toEqual({
       errors: ['"Draft lintel" is a Draft: a Draft has no Step Age (ADR 0020)', "TWR-MAR-01-0001 is closed: a closed item has no Step Age"],
     });
+  });
+
+  it("ages an item in Internal Review, which has no number before its first Submit (ADR 0030), named by its Subject", () => {
+    const inReview = item(null, "Lintel in review", { leftDraft: true });
+    const changes = plan(["Lintel in review"], 4, [inReview]);
+    expect(changes).toMatchObject({ items: [{ id: inReview.id, documentNumber: null, subject: "Lintel in review" }] });
   });
 
   it("refuses an item already at Step Age N or more: it only moves times back", () => {

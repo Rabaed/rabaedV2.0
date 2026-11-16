@@ -322,7 +322,9 @@ describe("a new Revision (scenario 75)", () => {
     await drain();
     await poll(riyadh(18));
     const entry = itemsTo(pm.email).find((i) => i.workItemId === rev);
-    expect(entry?.documentNumber).toMatch(/ Rev 1$/);
+    // Its " Rev 1" comes at its first Submit (ADR 0030): until then it has no number.
+    expect(entry).toBeDefined();
+    expect(entry!.documentNumber).toBeNull();
     expect(entry?.entries.map((e) => e.event?.type)).toContain("revision_created");
   });
 });

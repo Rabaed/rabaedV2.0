@@ -99,11 +99,16 @@ describe("the sample Project, as its Contractor reads it", () => {
   });
 
   it("numbers every Submittal through the Project's own Document Numbering", async () => {
-    // One row a chain: the 4 revised Code C items read as their Rev 1. A Draft has no number yet.
-    const items = (await listed(as.ali, "submittals")).filter((i) => i.documentNumber !== null);
-    expect(items.length).toBe(103);
-    expect(items.filter((i) => i.documentNumber?.endsWith(" Rev 1")).length).toBe(4);
-    expect(items.every((i) => /^NKD-(MAR|SAR)-\d{2}-\d{4}( Rev 1)?$/.test(i.documentNumber ?? ""))).toBe(true);
+    // One row a chain: the 4 revised Code C items read as their Rev 1. A Draft has no number yet, nor
+    // has an item in Internal Review before its first Submit (ADR 0030): the 12 there, the 4 Rev 1s
+    // among them, which show their chain's base number instead (RP-1300).
+    const all = await listed(as.ali, "submittals");
+    const items = all.filter((i) => i.documentNumber !== null);
+    expect(items.length).toBe(103 - 12);
+    expect(items.every((i) => /^NKD-(MAR|SAR)-\d{2}-\d{4}$/.test(i.documentNumber ?? ""))).toBe(true);
+    const revisions = all.filter((i) => i.documentNumber === null && i.baseNumber !== undefined);
+    expect(revisions.length).toBe(4);
+    expect(revisions.every((i) => /^NKD-(MAR|SAR)-\d{2}-\d{4}$/.test(i.baseNumber ?? ""))).toBe(true);
   });
 
   it("fills the Snag List: Snags at every Stage, Site Observations and Code B's Comments", async () => {

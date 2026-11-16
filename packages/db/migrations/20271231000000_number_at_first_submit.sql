@@ -932,3 +932,53 @@ create or replace function app.sees_work_item(p_work_item_id uuid) returns boole
       );
     end
   $$;
+
+-- revision_created -----------------------------------------------------------------------
+-- A new Revision's `created` event goes out to the chain's watchers when it first leaves Draft,
+-- dated its Creation Date, as before: both keyed on numbered_at while the number came then, now
+-- on left_draft_at (the Revision's " Rev n" waits for its first Submit, ADR 0030). The notice
+-- reads "No number yet" until then; delivery still reaches only who sees the Revision (V1).
+-- As in 20261219000000_draft_start_time.sql, except as said above.
+create or replace function app.outbox_revision_numbered() returns trigger
+  language plpgsql security definer
+  set search_path = pg_catalog, public
+  as $$
+    declare
+      v_event record;
+    begin
+      select e.id, e.actor_member_id into v_event from work_item_event e
+      where e.work_item_id = new.id and e.type = 'created';
+      if v_event.id is not null and exists (
+        select 1 from work_item_watch ww
+        where ww.root_id = new.root_id and ww.member_id is distinct from v_event.actor_member_id
+      ) then
+        insert into outbox (kind, project_id, payload, created_at, available_at)
+        values ('notification', new.project_id,
+          jsonb_strip_nulls(jsonb_build_object('work_item_id', new.id, 'work_item_event_id', v_event.id,
+            'actor_member_id', v_event.actor_member_id)),
+          new.left_draft_at, now());
+      end if;
+      return null;
+    end
+  $$;
+drop trigger work_item_revision_numbered on work_item;
+create trigger work_item_revision_numbered after update of left_draft_at on work_item
+  for each row when (old.left_draft_at is null and new.left_draft_at is not null and new.revision_no > 0)
+  execute function app.outbox_revision_numbered();
+
+-- As in 20261219000000_draft_start_time.sql, except as said above.
+create or replace function app.revision_created_once_numbered() returns trigger
+  language plpgsql security definer
+  set search_path = pg_catalog, public
+  as $$
+    declare
+      v_left_draft_at timestamptz;
+    begin
+      select w.left_draft_at into v_left_draft_at from work_item w where w.id = new.work_item_id;
+      if v_left_draft_at is null then
+        return null;
+      end if;
+      new.created_at := v_left_draft_at;
+      return new;
+    end
+  $$;

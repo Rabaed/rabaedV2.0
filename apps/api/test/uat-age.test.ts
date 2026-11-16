@@ -31,8 +31,8 @@ async function age(number: string, weeks: number): Promise<void> {
 
 /** What the database holds: the migrator reads every column. */
 async function recorded(id: string) {
-  const { rows } = await sql<{ document_number: string; numbered_at: Date; submitted_at: Date | null }>`
-    select document_number, numbered_at, submitted_at from work_item where id = ${id}::uuid`.execute(migrator);
+  const { rows } = await sql<{ document_number: string | null; title: string; left_draft_at: Date; submitted_at: Date | null }>`
+    select document_number, title, left_draft_at, submitted_at from work_item where id = ${id}::uuid`.execute(migrator);
   return rows[0]!;
 }
 
@@ -73,8 +73,8 @@ describe("Step Age through the api after uat:age (test 3)", () => {
     three = await submitted(tw, tw.c1Engineer, tw.c1Pm, "Aged to three");
     fresh = await submitted(tw, tw.c1Engineer, tw.c1Pm, "Not aged");
     longAtStepBefore = (await home(tw.k1Manager)).counts.longAtStep;
-    await age((await recorded(four)).document_number, 4);
-    await age((await recorded(three)).document_number, 3);
+    await age((await recorded(four)).document_number!, 4);
+    await age((await recorded(three)).document_number!, 3);
   });
 
   it("the holder's List row reads Step Age 4, and so does the raiser's: moved alike", async () => {
@@ -111,12 +111,14 @@ describe("the Creation Date after uat:age (test 4)", () => {
     const id = await inInternalReview(tw, tw.c1Engineer, "Aged in internal review");
     await ok(tw.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     const before = await recorded(id);
-    await age(before.document_number, 4);
+    // No number before its first Submit (ADR 0030): named by its Subject.
+    expect(before.document_number).toBeNull();
+    await age(before.title, 4);
     const after = await recorded(id);
-    expect(after.numbered_at.getTime()).toBeLessThan(before.numbered_at.getTime());
+    expect(after.left_draft_at.getTime()).toBeLessThan(before.left_draft_at.getTime());
 
     const read = await detail(tw.c1Pm, id);
-    expect(read.creationDate).toBe(after.numbered_at.toISOString());
+    expect(read.creationDate).toBe(after.left_draft_at.toISOString());
     const creation = Date.parse(read.creationDate!);
     const { documents } = (await ok(tw.c1Pm.get(`/v1/work-items/${id}/documents`), 200)).json() as DocumentList;
     const times = [...Object.values(read.fieldTimes).map((t) => t.at), ...documents.map((d) => d.uploadedAt)];
@@ -126,10 +128,10 @@ describe("the Creation Date after uat:age (test 4)", () => {
 
   it("another Company reads the moved Submission Date and still no Creation Date", async () => {
     const id = await submitted(tw, tw.c1Engineer, tw.c1Pm, "Aged at K1");
-    await age((await recorded(id)).document_number, 4);
+    await age((await recorded(id)).document_number!, 4);
     const read = await detail(tw.k1Manager, id);
     expect(read.creationDate).toBeNull();
     expect(read.submissionDate).toBe((await recorded(id)).submitted_at!.toISOString());
-    expect((await detail(tw.c1Engineer, id)).creationDate).toBe((await recorded(id)).numbered_at.toISOString());
+    expect((await detail(tw.c1Engineer, id)).creationDate).toBe((await recorded(id)).left_draft_at.toISOString());
   });
 });

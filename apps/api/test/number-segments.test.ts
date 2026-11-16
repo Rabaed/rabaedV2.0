@@ -74,6 +74,9 @@ describe("the item read's numberSegments", () => {
     await take(t.k1Manager, first, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
     const revision = (await ok(t.c1Engineer.post(`/v1/work-items/${first}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     await take(t.c1Engineer, revision, "send_for_review");
+    // Its " Rev 1" comes at its own first Submit (ADR 0030).
+    await ok(t.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
+    await take(t.c1Pm, revision, "submit");
 
     const read = await detail(t.c1Engineer, revision);
     expect(read.documentNumber).toBe("SGC-MARV-01-0001 Rev 1");

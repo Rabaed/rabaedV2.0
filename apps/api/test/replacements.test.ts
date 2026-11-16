@@ -282,21 +282,21 @@ describe("C1 creates a replacement of a MAR that got Code D", () => {
     expect({ status: reused.statusCode, body: reused.json() }).toEqual({ status: 422, body: { error: "idempotency_key_reused" } });
   });
 
-  it("takes a NEW Document Number when it first leaves Draft, not the rejected item's with a Rev", async () => {
-    const before = await counters();
+  it("has no Document Number at Send for Review (ADR 0030)", async () => {
     await take(engineer, replacement, "send_for_review");
-    const number = (await detail(engineer, replacement)).documentNumber!;
-    expect(number).not.toBe(base);
-    expect(number).not.toContain("Rev"); // not hidden-from: the number's text, which its raiser reads
-    expect(number).toMatch(/-\d{4}$/);
-    expect(await counters()).not.toEqual(before);
-    expect((await detail(engineer, replacement)).revisionNo).toBe(0);
+    expect(await detail(engineer, replacement)).toMatchObject({ documentNumber: null, revisionNo: 0 });
   });
 
-  it("shows the replacement and the rejected item to each other once it is Submitted (E1, E3)", async () => {
+  it("takes a NEW Document Number at its first Submit, not the rejected item's with a Rev, and shows the replacement and the rejected item to each other then (E1, E3)", async () => {
     await itemHidden(replacement, [engineer, pm], k1Manager);
+    const before = await counters();
     await ok(pm.post(`/v1/work-items/${replacement}/pick-up`));
     await take(pm, replacement, "submit");
+    const own = (await detail(engineer, replacement)).documentNumber!;
+    expect(own).not.toBe(base);
+    expect(own).not.toContain("Rev"); // not hidden-from: the number's text, which its raiser reads
+    expect(own).toMatch(/-\d{4}$/);
+    expect(await counters()).not.toEqual(before);
     const number = (await detail(k1Manager, replacement)).documentNumber!;
     for (const who of [engineer, k1Manager, orEngineer]) {
       expect((await links(who, replacement)).links).toEqual([expect.objectContaining({ kind: "replaces", documentNumber: base, workItemId: rejected })]);

@@ -603,7 +603,7 @@ export const workItemActions = z.object({
    * Workflow's Draft Step allows.
    */
   createReplacement: z.boolean(),
-  /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
+  /** Discard this Revision: still in Draft, never left it, for the raiser's Company. */
   discardRevision: z.boolean(),
   /**
    * Duplicate (RP-409, the List's row menu): a new Draft of the same Type with only what the
@@ -612,7 +612,8 @@ export const workItemActions = z.object({
   duplicate: z.boolean(),
   /**
    * Delete (RP-409, the List's row menu): discard the viewer's own Draft, an original or a
-   * Revision, while it has no Document Number, for a Member of the raiser's Participant.
+   * Revision, while it has never left Draft (no number, no Creation Date: an item in Internal
+   * Review has no number either, ADR 0030), for a Member of the raiser's Participant.
    */
   discardDraft: z.boolean(),
   /** Change the Paper ref (RP-639): the viewer may edit the Draft now, and it has no Document Number. */

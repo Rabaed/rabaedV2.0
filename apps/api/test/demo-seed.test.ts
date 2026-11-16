@@ -471,7 +471,8 @@ describe("the README walkthrough", () => {
     await drainOutbox(worker);
     const notifications = (await ali.get("/v1/notifications")).json().notifications;
     expect(notifications.map((n: { workItemId: string }) => n.workItemId)).toContain(mar);
-    expect((await detail(ali, mar)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
+    // No number yet: the Submit gives it (ADR 0030).
+    expect((await detail(ali, mar)).documentNumber).toBeNull();
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);
   });
@@ -495,6 +496,7 @@ describe("the README walkthrough", () => {
 
   it("6. Ali Submits it with a Cover Note: With Design Consultants LLC; the Consultant and Al Waha read the Cover Note by TMC, Beta Build sees nothing", async () => {
     await take(ali, mar, "submit", { answers: { cover_note: "Panels for Level 2, as drawing E-201" }, internalNote: "Quantities checked against the BOQ" });
+    expect((await detail(hafiz, mar)).documentNumber, "numbered at the Submit").toMatch(/^TWR-MAR-01-\d{4}$/);
     expect((await detail(hafiz, mar)).heldBy).toEqual({
       companyName: { en: "Design Consultants LLC", ar: "المصممون الاستشاريون ذ.م.م" },
       memberName: null,
