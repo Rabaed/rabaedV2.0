@@ -144,12 +144,15 @@ describe("the Library is private to its Company (scenario RP-442-1, V18)", () =>
   });
 
   it("shows another Company the copy only once it is in a Project it is on, and it can save that to its own Library", async () => {
-    // Tower's own Workflow is read by every Participant (V20), so Beta Build can keep a copy.
-    // Its Authorized Person works on Tower too.
+    // Tower's own Workflow is read by every Participant once a Type runs it (V20; RP-1309: until then
+    // its Project Admin's only), so Beta Build can keep a copy. Its Authorized Person works on Tower too.
     const participants = (await ok(tmc.caller.get(`/v1/projects/${at.projectId}/participants`), 200)).json().participants as { id: string; isOwnCompany: boolean }[];
     const k1Participant = participants.find((p) => !p.isOwnCompany)!;
     const k1Me = (await ok(k1.caller.get("/v1/me"), 200)).json();
     await api.addProjectMember(k1.caller, k1Participant.id, k1Me.member.id);
+    await expectHidden(k1.caller.get(`/v1/workflows/${towerRoute}/map`)); // not hidden-from: RP-1309-3 tests this rule; no Type runs the copy yet
+    const marTypeId = (await ok(tmc.caller.get(`/v1/projects/${at.projectId}/workflow-settings`), 200)).json().types.find((t: { code: string }) => t.code === "MAR").id as string;
+    await ok(tmc.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: towerRoute }));
     const map: WorkflowMapRead = (await ok(k1.caller.get(`/v1/workflows/${towerRoute}/map`), 200)).json();
     expect(map.workflow.name).toEqual(TOWER_ROUTE);
     expect(map.workflow.canAuthor).toBe(false);
