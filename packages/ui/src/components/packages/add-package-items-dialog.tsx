@@ -159,12 +159,13 @@ export function AddPackageItemsDialog({
                       <span dir="auto" className="truncate font-medium text-text">
                         {row.title}
                       </span>
-                      <span className="flex items-center gap-2 text-caption text-muted">
+                      {/* On a phone the Trade takes its own line under the number, whole, so nothing runs under the pill (RP-1311). */}
+                      <span className="flex items-center gap-2 text-caption text-muted phone:flex-wrap phone:gap-y-0.5">
                         {row.documentNumber ? <DocNo value={row.documentNumber} className="font-ui font-normal" /> : <span>{labels.numberOnSubmit}</span>}
                         <span translate="no" className="font-ui font-semibold">
                           {row.type.code}
                         </span>
-                        <span>{row.trade.name[locale]}</span>
+                        <span className="phone:basis-full">{row.trade.name[locale]}</span>
                       </span>
                     </label>
                     {taken ? (
