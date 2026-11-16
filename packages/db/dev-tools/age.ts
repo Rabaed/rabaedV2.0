@@ -33,7 +33,7 @@ const AUDIT = "kept: the audit trail keeps the true history";
 export const ITEM_TIMES: Readonly<Record<string, TableTimes>> = {
   work_item: {
     rows: (item) => sql`id = ${item}::uuid`,
-    moved: ["created_at", "numbered_at", "submitted_at", "participant_entered_at", "step_entered_at", "updated_at"],
+    moved: ["created_at", "numbered_at", "left_draft_at", "submitted_at", "participant_entered_at", "step_entered_at", "updated_at"],
     kept: { closed_at: "kept: only open items are aged", discarded_at: "kept: only open items are aged" },
   },
   document: {

@@ -570,7 +570,7 @@ type SummaryRow = {
   location_id: string | null;
   location_code: string | null;
   location_name: BilingualText | null;
-  /** Null for a Draft with no number: its Step began when it was started, which nobody sees. */
+  /** Null for a Draft that never left Draft: its Step began when it was started, which nobody sees. */
   step_entered_at: Date | null;
   /** A Revision Draft's chain base number (RP-1300); null for every other item. */
   base_number: string | null;
@@ -583,7 +583,8 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
+      -- No number and no Creation Date: a Draft that never left Draft (an item in Internal Review has the date first, RP-1316).
+      case when w.document_number is null and app.work_item_creation_date(w.id) is null then null else seen.entered_at end as step_entered_at,
       -- A Revision not yet numbered reads its chain's base number from the start (RP-1300): the original's,
       -- through app.revision_chain, which gives only Revisions the reader sees (V1).
       case when w.document_number is null and w.revision_no > 0

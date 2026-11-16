@@ -206,7 +206,8 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
       ${closedStageCategory(sql.ref("st.category"))} as closed,
       to_char(e.step_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
       -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
-      -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
+      -- left_draft_at (the first exit from Draft, RP-1316), which app.work_item_creation_date gives to the raiser's own
+      -- Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
       w.creation_date,
       -- At the Owner's review, no holder for those who read "Owner review": no name, filter, search or lane names it
@@ -226,10 +227,11 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
       coalesce(w.holder_participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
     from ${seen} w
-    -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
-    -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
-    -- count, cursor or card carries the time. numbered_at is set with the Document Number.
-    cross join lateral (select case when w.document_number is null then null else w.entered_at end as step_entered_at) e
+    -- A Draft that never left Draft has never moved, so its Step began when it was started: nobody sees that
+    -- (visibility.md "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so
+    -- no row, count, cursor or card carries the time. It has no number and no Creation Date; an item in Internal
+    -- Review has a Creation Date before its number (ADR 0030), and its Step Age.
+    cross join lateral (select case when w.document_number is null and w.creation_date is null then null else w.entered_at end as step_entered_at) e
     -- A Revision not yet numbered reads its chain's base number from the start (RP-1300; owner's decision
     -- 2026-11-13): the original's, through app.revision_chain, which gives only Revisions the reader sees (V1).
     cross join lateral (

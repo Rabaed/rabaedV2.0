@@ -132,9 +132,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const issuing = wir && offered.codes.length > 0;
   // A WIR's page lists only the actions its bars don't hold: Send to Manager is in the Engineer's bar, Return and the codes in the Manager's.
   const editing = editable && !!mine && !!scopes;
-  // The WIR request (RP-655): a WIR its raiser's Company fills in before it has a number. Two columns
-  // on a wide screen, and a sticky bar holding Save draft and the move that sends it on.
-  const requesting = wir && editing && item.documentNumber === null;
+  // The WIR request (RP-655): a WIR its raiser's Company fills in as a Draft. Two columns on a wide
+  // screen, and a sticky bar holding Save draft and the move that sends it on. Not in Internal Review,
+  // though it has no number there either until its first Submit (ADR 0030, RP-1316).
+  const requesting = wir && editing && item.documentNumber === null && item.stage.category === "draft";
   const request = requestActions(item.actions.transitions);
   const actions = !wir
     ? item.actions

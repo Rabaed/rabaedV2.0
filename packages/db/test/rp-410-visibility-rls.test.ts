@@ -142,7 +142,7 @@ describe("scenario RP-410-1: the filter panel's Owner, Role and Created date, an
   });
 
   it("Created date: the Creation Date to C1 only; K1 reads the Submission Date, and nothing of how long C1 worked on it", async () => {
-    const { numbered_at: numberedAt, submitted_at: submittedAt } = (await migrator.query("select numbered_at, submitted_at from work_item where id = $1", [withK1])).rows[0];
+    const { left_draft_at: leftDraftAt, submitted_at: submittedAt } = (await migrator.query("select left_draft_at, submitted_at from work_item where id = $1", [withK1])).rows[0];
     await expectHiddenFrom({
       read: async (as: string) => (await seen(as)).filter((r) => r.creation_date !== null),
       target: withK1,
@@ -151,7 +151,7 @@ describe("scenario RP-410-1: the filter panel's Owner, Role and Created date, an
       name: named,
       label: "the Creation Date",
     });
-    expect((await seen(c1Engineer)).find((r) => r.id === withK1)).toMatchObject({ creation_date: numberedAt, submitted_at: submittedAt });
+    expect((await seen(c1Engineer)).find((r) => r.id === withK1)).toMatchObject({ creation_date: leftDraftAt, submitted_at: submittedAt });
     expect((await seen(k1Engineer)).find((r) => r.id === withK1)).toMatchObject({ creation_date: null, submitted_at: submittedAt });
   });
 

@@ -55,13 +55,13 @@ const dates = async (by: Caller, id: string) => {
 };
 /** What the database recorded for the item, for the test to compare with (the migrator reads every column). */
 const recorded = async (id: string) => {
-  const { rows } = await sql<{ created_at: Date; numbered_at: Date | null; submitted_at: Date | null }>`
-    select created_at, numbered_at, submitted_at from work_item where id = ${id}::uuid
+  const { rows } = await sql<{ created_at: Date; left_draft_at: Date | null; submitted_at: Date | null }>`
+    select created_at, left_draft_at, submitted_at from work_item where id = ${id}::uuid
   `.execute(migrator);
   const row = rows[0]!;
   return {
     createdAt: row.created_at.toISOString(),
-    numberedAt: row.numbered_at?.toISOString() ?? null,
+    leftDraftAt: row.left_draft_at?.toISOString() ?? null,
     submittedAt: row.submitted_at?.toISOString() ?? null,
   };
 };
@@ -225,16 +225,16 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
     const started = Math.min(...(await answerTimes(engineer, draft)));
     await api.later(DAY);
     // Not numbered: the times are as stamped, not raised to anything.
-    expect(await recorded(draft)).toMatchObject({ numberedAt: null });
+    expect(await recorded(draft)).toMatchObject({ leftDraftAt: null });
     expect(await answerTimes(engineer, draft)).toContain(started);
   });
 
   it("reads none earlier for the PM at Internal Review, who reads them though he doesn't edit the Form (RP-525)", async () => {
-    const { numberedAt } = await recorded(id);
-    expect(Date.parse(numberedAt!) - draftSaved).toBeGreaterThanOrEqual(2 * DAY);
+    const { leftDraftAt } = await recorded(id);
+    expect(Date.parse(leftDraftAt!) - draftSaved).toBeGreaterThanOrEqual(2 * DAY);
     const times = await answerTimes(pm, id);
     expect(times.length).toBeGreaterThan(0);
-    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(leftDraftAt!));
   });
 
   it("reads none for the raiser after a Send Back either", async () => {
@@ -242,11 +242,11 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
     await submit(id);
     await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back_to_draft");
-    const { numberedAt } = await recorded(id);
+    const { leftDraftAt } = await recorded(id);
     expect(await detail(engineer, id)).toMatchObject({ step: { key: "draft" } });
     const times = await answerTimes(engineer, id);
     expect(times.length).toBeGreaterThan(0);
-    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(leftDraftAt!));
   });
 
   it("still autosaves after the Send Back, on the times it read", async () => {
@@ -258,14 +258,14 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
     );
     expect(res.json().keptFromOthers).toEqual([]);
     expect((await detail(engineer, id)).answers).toMatchObject({ model: "RP-392 edited" });
-    const { numberedAt } = await recorded(id);
-    for (const t of await answerTimes(engineer, id)) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+    const { leftDraftAt } = await recorded(id);
+    for (const t of await answerTimes(engineer, id)) expect(t).toBeGreaterThanOrEqual(Date.parse(leftDraftAt!));
   });
 
   it("keeps the stored times for audit", async () => {
     const { rows } = await sql<{ field_times: Record<string, { at: string }> }>`select field_times from work_item where id = ${id}::uuid`.execute(migrator);
-    const { numberedAt } = await recorded(id);
-    expect(Math.min(...Object.values(rows[0]!.field_times).map((t) => Date.parse(t.at)))).toBeLessThan(Date.parse(numberedAt!));
+    const { leftDraftAt } = await recorded(id);
+    expect(Math.min(...Object.values(rows[0]!.field_times).map((t) => Date.parse(t.at)))).toBeLessThan(Date.parse(leftDraftAt!));
   });
 });
 
@@ -280,13 +280,13 @@ describe("C1 starts a Draft, sends it for review two days later, and Submits it 
   });
 
   it("shows C1 the Creation Date (sent for review) and the Submission Date", async () => {
-    const { numberedAt, submittedAt, createdAt } = await recorded(id);
+    const { leftDraftAt, submittedAt, createdAt } = await recorded(id);
     for (const c1Member of [engineer, pm]) {
-      expect(await dates(c1Member, id)).toEqual({ creationDate: numberedAt, submissionDate: submittedAt });
+      expect(await dates(c1Member, id)).toEqual({ creationDate: leftDraftAt, submissionDate: submittedAt });
     }
     // Two days after the Draft was started, and 17 before the Submit.
-    expect(Date.parse(numberedAt!) - Date.parse(createdAt)).toBeGreaterThanOrEqual(2 * DAY);
-    expect(Date.parse(submittedAt!) - Date.parse(numberedAt!)).toBeGreaterThanOrEqual(17 * DAY);
+    expect(Date.parse(leftDraftAt!) - Date.parse(createdAt)).toBeGreaterThanOrEqual(2 * DAY);
+    expect(Date.parse(submittedAt!) - Date.parse(leftDraftAt!)).toBeGreaterThanOrEqual(17 * DAY);
   });
 
   it("shows K1 and OR only the Submission Date", async () => {
