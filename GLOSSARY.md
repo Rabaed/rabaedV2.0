@@ -380,7 +380,7 @@ A named group of submittals, numbered in sequence per Project and owning Partici
 _Avoid_: bundle, batch, transmittal
 
 **Approved Supplier List**:
-A Project's register of suppliers and manufacturers that may be used, per Trade: a Supplier Approval Request closed at Code A or B adds its supplier, and a Project Admin can add one by hand or withdraw one. A Material Approval Request chooses its supplier from it; every Participant sees who is on it, never the submittal that put them there.
+A Project's register of suppliers and manufacturers that may be used, per Trade: a Supplier Approval Request closed at Code A or B adds its supplier, and a Project Admin can add one by hand or withdraw one. A Material Approval Request chooses its supplier from it; every Participant sees who is on it, and the submittal that put them there only a Member who already sees that submittal.
 _Avoid_: Vendor list, AVL
 
 **Chat**:
