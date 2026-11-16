@@ -33,7 +33,8 @@ export const workflowSettingsRoutes =
       return visibleOrNotFound(readScreenPins(ctx.db, memberId, idOrNotFound(request.params.projectId)));
     });
 
-    // The Workflow's own read: whoever reads the Workflow (V20; Rabaed Defaults every Company).
+    // The Workflow's own read: whoever reads the Workflow off any Project (V20; RP-1309: to anyone but
+    // a Project Admin only one in use on a Project they are on, else the same 404).
     app.get("/v1/workflows/:workflowId/versions/:versionNo", { schema: { params: versionParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
       const versionNo = versionNoOrNotFound(request.params.versionNo);

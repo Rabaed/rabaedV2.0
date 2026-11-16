@@ -29,10 +29,14 @@ import { refusal } from "../refusals.ts";
 const workflowParams = z.object({ workflowId: z.string() });
 const projectParams = z.object({ projectId: z.string() });
 
-// Workflow authoring (RP-427, WF-4; workflow-engine.md §1 "Authoring"). Every Member of a
-// Project reads its Workflows, and a Company its Library (V18, V20); only their authors
-// (the Project Admins, the Authorized Person) read a draft or change them. Anyone else,
-// and a made-up id, gets the same 404.
+// Workflow authoring (RP-427, WF-4; workflow-engine.md §1 "Authoring"). A Company reads its
+// Library (V18); a Member reads a Project's Workflow or a Rabaed Default only when it is in
+// use on a Project they are on, or they are a Project Admin there and it may be bound
+// (RP-1309, V20: RP-1299's rule, readsWorkflowOffProject). Only their authors (the Project
+// Admins, the Authorized Person) read a draft or change them: builder, draft, validate and
+// publish ask app.can_author_workflow; duplicate and save-to-library ask app.duplicate_workflow
+// for a Project Admin of the target Project or the Authorized Person. Anyone else, and a
+// made-up id, gets the same 404.
 export const workflowRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
@@ -47,7 +51,7 @@ export const workflowRoutes =
       return visibleOrNotFound(readWorkflowBuilder(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
     });
 
-    // A Workflow to look at (RP-442, WF-19): whoever reads it, the draft only for its authors.
+    // A Workflow to look at (RP-442, WF-19): whoever reads it (as above), the draft only for its authors.
     app.get("/v1/workflows/:workflowId/map", { schema: { params: workflowParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
       return visibleOrNotFound(readWorkflowMap(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
