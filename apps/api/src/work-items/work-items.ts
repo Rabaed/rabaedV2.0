@@ -859,6 +859,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       replyChecklists: await heldReplyChecklists(trx, workItemId),
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
+      // As saveAnswers judges it (pinned.submitted): the picks are fixed from the first Submit on.
+      checklistTemplatesFixed: d.submitted_at !== null,
       sentBackForComment: d.sent_back_for_comment,
       scopes,
       // Another Company's Step is never named, not even the one the item arrived at (V14).

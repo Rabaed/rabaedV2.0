@@ -418,15 +418,24 @@ describe("after a Send Back that lets the raiser edit the Form, the pick stays f
     const id = (
       await ok(tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, { type: TYPE, title: "Beams", answers: answers({ scopes: [beams, stairs], checklist_template: picked }) }), 201)
     ).json().id as string;
+    // A Draft never Submitted: its picks aren't fixed yet, as the item read tells the web.
+    expect((await detail(tower.c1Engineer, id)).checklistTemplatesFixed).toBe(false);
     await take(tower.c1Engineer, id, "send_for_review");
     await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit");
     await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back_to_draft");
+    expect((await detail(tower.c1Engineer, id)).checklistTemplatesFixed).toBe(true);
     // Beams unticked: the pick on Beams stays, as does its copy, and the save goes through.
-    await ok(tower.c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: answers({ scopes: [stairs], checklist_template: picked }) }), 204);
+    const save = (extra: Record<string, unknown>) => tower.c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: answers(extra) });
+    await ok(save({ scopes: [stairs], checklist_template: picked }), 204);
     const item = await detail(tower.c1Engineer, id);
     expect(item.answers).toMatchObject({ scopes: [stairs], checklist_template: picked });
     expect(item.checklistCopies.map((c) => c.versionId)).toEqual([picked]);
+    // Still fixed: a whole-Trade template, though offered for Stairs, can't replace it.
+    const other = await latestVersion(await createTemplate({ ...pour(civil), name: bilingual("Any pour") }));
+    const refused = await save({ scopes: [stairs], checklist_template: other });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json()).toMatchObject({ error: "not_editable" });
   });
 });

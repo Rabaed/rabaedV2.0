@@ -21,6 +21,7 @@ import {
   isAnnotatedCopy,
   withAnnotatedCopies,
   scopesFittingTrade,
+  unticksAScope,
   toLatinDigits,
   toProjectWallTime,
   type AnswerField,
@@ -243,7 +244,7 @@ export type FormRendererProps = {
    * The item has been Submitted, so its Checklist Template pick is fixed (RP-651): unticking a
    * Scope then keeps it (owner, RP-1315 comment 15917).
    */
-  checklistTemplateFixed?: boolean;
+  checklistTemplatesFixed?: boolean;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -698,7 +699,7 @@ export function FormRenderer({
   links = noLinks,
   suppliers = noSuppliers,
   checklistTemplates = noTemplates,
-  checklistTemplateFixed = false,
+  checklistTemplatesFixed = false,
   onChange,
   idPrefix = "form",
   sectionTitles = "shown",
@@ -764,16 +765,16 @@ export function FormRenderer({
               scopes={choices.scopes}
               labels={labels.builtIn}
               // Unticking a Scope clears the Checklist Template picked, as a new Trade does (RP-1315).
-              onChange={(scopes) => onChange?.({ scopes, ...(idsOf(answers.scopes).some((id) => !scopes.includes(id)) ? checklistTemplatePicks() : {}) })}
+              onChange={(scopes) => onChange?.({ scopes, ...(unticksAScope(answers.scopes, scopes) ? clearedChecklistTemplates() : {}) })}
             />
           ),
         };
     }
   }
 
-  /** Clears every Checklist Template picked, unless the pick is fixed (after the item's first Submit). */
-  function checklistTemplatePicks(): Record<string, undefined> {
-    if (checklistTemplateFixed) return {};
+  /** Every Checklist Template picked, cleared; none while the picks are fixed (after the item's first Submit). */
+  function clearedChecklistTemplates(): Record<string, undefined> {
+    if (checklistTemplatesFixed) return {};
     const cleared: Record<string, undefined> = {};
     for (const field of byKey.values()) if (field.type === "checklist_template" && answers[field.key] !== undefined) cleared[field.key] = undefined;
     return cleared;

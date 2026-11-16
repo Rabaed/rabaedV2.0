@@ -133,6 +133,16 @@ create function app.edit_checklist_template(
     end
   $$;
 
+-- A dropped function takes its grants with it: as 20270630000000_checklist_templates.sql gave them.
+revoke all on function
+  app.create_checklist_template(uuid, jsonb, uuid, jsonb, timestamptz, uuid),
+  app.edit_checklist_template(uuid, jsonb, uuid, jsonb, timestamptz, uuid)
+  from public;
+grant execute on function
+  app.create_checklist_template(uuid, jsonb, uuid, jsonb, timestamptz, uuid),
+  app.edit_checklist_template(uuid, jsonb, uuid, jsonb, timestamptz, uuid)
+  to rabaed_app;
+
 -- From 20271102000000_inspections_cleanup.sql, with the Scope rule on a new copy.
 create or replace function app.sync_work_item_checklists(p_work_item_id uuid, p_now timestamptz)
   returns text

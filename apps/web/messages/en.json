@@ -2352,7 +2352,6 @@
         "retired": "Retired"
       },
       "activeCount": "{count, plural, =0 {No active templates} one {1 active} other {{n} active}}",
-      "tableLabel": "Checklist Templates for {trade}",
       "noTemplates": "No templates for this Trade yet.",
       "noTrades": "This Project has no Trades yet. Add them in Trades & Locations first.",
       "open": "Open",

@@ -43,6 +43,7 @@ let k1Engineer = ""; // A K1 Project Member who is no Project Admin.
 let c1Engineer = ""; // A C1 Project Member who is no Project Admin.
 let projectId = "";
 let otherProjectId = "";
+let otherCivil = ""; // The other Project's own Civil Trade.
 let civil = "";
 let buildingA = "";
 let template = "";
@@ -171,7 +172,8 @@ beforeAll(async () => {
   expect(created.outcome).toBe("created");
   template = created.template_id!;
   // Another Project's own template, which nobody here reads.
-  expect((await create(other.ap, otherProjectId, await value("trade", "CV", otherProjectId, other.ap), "Elsewhere")).outcome).toBe("created");
+  otherCivil = await value("trade", "CV", otherProjectId, other.ap);
+  expect((await create(other.ap, otherProjectId, otherCivil, "Elsewhere")).outcome).toBe("created");
 
   const [item] = await call<{ outcome: string; work_item_id: string }>(
     c1.ap,
@@ -330,10 +332,15 @@ describe("RP-1315: a template's Scope", () => {
       await call<{ value_id: string }>(c1.ap, sql`select value_id from app.add_dimension_value(${projectId}::uuid, 'trade', null, 'EL', ${name("EL")}::jsonb)`)
     )[0]!.value_id;
     const wiring = await addScope(electrical, null, "Wiring");
-    const elsewhere = (await migrator.query("select id from scope where project_id <> $1 limit 1", [projectId])).rows[0]?.id as string | undefined;
+    // Another Project's own Scope, made here by its Project Admin.
+    const [made] = await call<{ outcome: string; scope_id: string }>(
+      other.ap,
+      sql`select outcome, scope_id from app.add_scope(${otherProjectId}::uuid, ${otherCivil}::uuid, null, ${name("Elsewhere")}::jsonb)`,
+    );
+    expect(made!.outcome).toBe("added");
     const retired = await addScope(civil, null, "Retired scope");
     expect(await outcome(c1.ap, sql`select app.update_scope(${retired}::uuid, ${name("Retired scope")}::jsonb, false, now()) as outcome`)).toBe("updated");
-    for (const scope of [wiring, retired, randomUUID(), ...(elsewhere ? [elsewhere] : [])]) {
+    for (const scope of [wiring, made!.scope_id, retired, randomUUID()]) {
       expect((await scoped(c1.ap, civil, scope, "Refused")).outcome, scope).toBe("scope_not_found");
       expect(await moveTo(concreteWorks, scope), scope).toBe("scope_not_found");
     }

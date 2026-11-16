@@ -955,6 +955,15 @@ const isId = (value: unknown): value is string => typeof value === "string" && z
 /** The strings of an answer that should be a list of ids, such as the Scopes; none when it isn't a list. */
 const idsIn = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
+/**
+ * Whether the Scopes answer `after` unticks one of `before`'s: what clears a Checklist Template pick before the
+ * item's first Submit (RP-1315), in the validator and the renderer alike. Ticking more unticks nothing.
+ */
+export function unticksAScope(before: unknown, after: unknown): boolean {
+  const ticked = idsIn(after);
+  return idsIn(before).some((id) => !ticked.includes(id));
+}
+
 const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** The Option Lists of a validation context by id; undefined when it has none. */
@@ -1306,15 +1315,14 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
  * clears its Checklist Template too (RP-1315), unless the pick is fixed
  * (`checklistTemplatesFixed`, after the item's first Submit).
  */
-function clearChoicesOfOtherTrades(
+function clearStaleChoices(
   fields: readonly AnswerField[],
   answers: Record<string, unknown>,
   context: ValidationContext,
 ): Record<string, unknown> {
   if (!context.held) return answers;
   const out = { ...answers };
-  const ticked = idsIn(out.scopes);
-  const unticked = idsIn(context.held.scopes).some((id) => !ticked.includes(id));
+  const unticked = unticksAScope(context.held.scopes, out.scopes);
   for (const field of fields) {
     const choices = field.type === "approved_supplier" ? context.suppliers : field.type === "checklist_template" ? context.checklistTemplates : undefined;
     const value = out[field.key];
@@ -1357,7 +1365,7 @@ export function validateAnswers(
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
   const fields = answerFields(schema);
-  const given = clearChoicesOfOtherTrades(fields, answers as Record<string, unknown>, context);
+  const given = clearStaleChoices(fields, answers as Record<string, unknown>, context);
   const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};

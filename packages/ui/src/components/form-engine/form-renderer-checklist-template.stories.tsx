@@ -347,7 +347,7 @@ export const NoneForTheTickedScopes: Story = {
 /** After the first Submit (a Send Back to the raiser), wide: the pick is fixed, so unticking its Scope keeps it. */
 export const FixedAfterSubmit: Story = {
   parameters: { wide: true },
-  args: { checklistTemplateFixed: true },
+  args: { checklistTemplatesFixed: true },
   render: (args, context) => <ScopedForm args={args} locale={storyLocale(context)} scopes={[scope.concrete, scope.masonry]} picked={scoped.works} />,
   play: async (context) => {
     const { canvas, args } = context;

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@rabaed/db";
-import type { BaseRole, BilingualText, DimensionValues, ParticipantMembers, StartedDocumentUpload, Visibility, VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
+import type { BaseRole, BilingualText, DimensionValues, ParticipantMembers, Scopes, StartedDocumentUpload, Visibility, VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { demoPdf } from "./demo-pdf.ts";
@@ -472,7 +472,7 @@ async function setUp(as: SignedIn, projectId: string, which: SampleProjectName, 
     checklist[t.code] = mine()!.versionId;
   }
   // And the templates on one Scope or Sub-scope (RP-1315), each added unless its Trade has one of its name.
-  const { scopes } = await admin<{ scopes: { id: string; tradeId: string; parentId: string | null; name: BilingualText }[] }>("GET", `/v1/projects/${projectId}/scopes`);
+  const { scopes } = await admin<Scopes>("GET", `/v1/projects/${projectId}/scopes`);
   for (const t of SAMPLE_TRADES) {
     for (const s of SAMPLE_CHECKLISTS[t.code].scoped ?? []) {
       if (listed.some((x) => x.tradeId === trade[t.code] && x.name.en === s.name.en)) continue;

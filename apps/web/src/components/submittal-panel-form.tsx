@@ -144,6 +144,7 @@ export function SubmittalPanelForm({
       optionLists={reads.optionLists}
       suppliers={reads.suppliers}
       checklistTemplates={reads.checklistTemplates}
+      checklistTemplatesFixed={item.checklistTemplatesFixed}
       answers={item.answers}
       named={item.namedAnswers}
       editable={editable}
