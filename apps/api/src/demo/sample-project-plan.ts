@@ -579,7 +579,7 @@ export const SAMPLE_CHECKLISTS: Record<TradeCode, { name: BilingualText; checks:
         name: { en: "Lighting installation", ar: "تركيب الإنارة" },
         checks: [
           { key: "fixings", text: { en: "Luminaires fixed level and secure", ar: "وحدات الإنارة مثبتة مستوية ومحكمة" } },
-          { key: "circuits", text: { en: "Circuits as per the lighting layout", ar: "الدوائر حسب مخطط الإنارة" } },
+          { key: "circuits", text: { en: "Circuits as per the lighting drawing", ar: "الدوائر حسب مخطط الإنارة" } },
         ],
       },
       {
