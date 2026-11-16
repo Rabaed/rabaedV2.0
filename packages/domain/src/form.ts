@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
+import { condition, evaluateCondition, isUnanswered, readsAttrs, type Condition } from "./condition.ts";
 import { contentType, photoContentTypes } from "./document.ts";
 import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
 import { moduleKeySchema, type ModuleKey } from "./module.ts";
@@ -875,7 +875,7 @@ export function formVisibility(schema: FormSchema, answers: Readonly<Record<stri
 export function isRequired(field: FormField, answers: Readonly<Record<string, unknown>>): boolean {
   if (!isAnswerField(field)) return false;
   if (field.type === "trade" || field.type === "location") return true;
-  return typeof field.required === "boolean" ? field.required : evaluateCondition(field.required, { fields: answers });
+  return requiredUnder(field.required, answers);
 }
 
 /**
@@ -883,8 +883,12 @@ export function isRequired(field: FormField, answers: Readonly<Record<string, un
  * itself, or its condition over the cells of the same row (RP-1298).
  */
 export function isCellRequired(column: TableColumn, row: Readonly<Record<string, unknown>>): boolean {
-  return typeof column.required === "boolean" ? column.required : evaluateCondition(column.required, { fields: row });
+  return requiredUnder(column.required, row);
 }
+
+/** A `required` flag, or whether its condition holds for `fields`. */
+const requiredUnder = (required: boolean | Condition, fields: Readonly<Record<string, unknown>>): boolean =>
+  typeof required === "boolean" ? required : evaluateCondition(required, { fields });
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
 const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;

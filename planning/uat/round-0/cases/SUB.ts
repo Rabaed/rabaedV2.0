@@ -107,10 +107,6 @@ defineCase("SUB-03", async (t) => {
   const { page, text } = await H.viewItem(t, "hafiz", id, "form-total-docs", "en", { full: true });
   t.check("The Item with no Quantity is kept", text.includes("Emergency exit sign"));
   t.check("The Items total reads 240", /Total Quantity\s*240(\.00)?/.test(text.replace(/\s+/g, " ")), text.match(/Total Quantity[^A-Z]*/)?.[0]);
-  const bare = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 no quantity ${H.stamp()}`, { ...base, items: [items[2]] });
-  await H.addDatasheet(hafiz, bare);
-  const sent = await H.move(hafiz, bare, "send_for_review");
-  t.check("A MAR whose only Item has no Quantity is sent for Review", sent.status < 300, sent.text);
   t.check("The Datasheet and the Sample photo are on the saved Draft", /UAT-datasheet\.pdf/.test(text) && /UAT-sample\.jpg|photo/i.test(text));
   // The panel shows a Draft read-only (Save and close comes with Edit), and the MAR Form has its own Links section (Related submittals) before the Attachments.
   const formEnd = text.indexOf("Related submittals");

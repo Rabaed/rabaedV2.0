@@ -308,6 +308,16 @@ export const QuantityOptional: Story = {
     await expect(within(rowGroup(context, 2)).getByLabelText(storyText(context, copy.quantity), { exact: false })).not.toBeRequired();
     await expect(unitRequired(context, 1)).toBe(true);
     await expect(unitRequired(context, 2)).toBe(false);
+    // Only the optional Unit offers "None", so a Unit picked by mistake can be taken back.
+    const unitOptions = async (row: number) => {
+      await userEvent.click(within(rowGroup(context, row)).getByRole("combobox", { name: storyText(context, unit) }));
+      const names = within(document.body).getAllByRole("option").map((o) => o.textContent);
+      await userEvent.keyboard("{Escape}");
+      return names;
+    };
+    const none = storyText(context, { en: "None", ar: "بدون" });
+    await expect(await unitOptions(1)).not.toContain(none);
+    await expect(await unitOptions(2)).toContain(none);
   },
 };
 

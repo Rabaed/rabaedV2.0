@@ -65,7 +65,7 @@ describe("the MAR Form Version 8", () => {
     const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
     expect(column(form.schema, "quantity")).toMatchObject({ type: "number", total: true, required: false });
     expect(column(form.schema, "unit")).toMatchObject({ type: "select", required: { field: "quantity", op: "not_empty" } });
-    // Every other column, field and section keeps Version 7's key and required flag.
+    // Every other column, field and Form Section keeps Version 7's key and required flag.
     expect(itemsOf(form.schema).columns.map((c) => c.key)).toEqual(["fixture_type", "description", "quantity", "unit"]);
     expect(column(form.schema, "fixture_type")).toMatchObject({ required: true });
     expect(form.schema.sections.map((s) => s.key)).toEqual(["classification", "material", "quantities", "documents", "references"]);
@@ -91,9 +91,10 @@ describe("an Item's Quantity on a MAR (seam 1 acceptance)", () => {
     expect(refused.json()).toMatchObject({ error: "form_incomplete", fields: [{ key: "items", code: "required", row: 0, column: "unit" }] });
   });
 
-  it("is still required on a MAR on Version 7, which keeps its Version", async () => {
+  it("is still required on a MAR on the Version before (Version 7 wherever it was published), which keeps its Version", async () => {
     const id = await create([{ fixture_type: "Emergency exit sign" }]);
-    // As a Draft raised before Version 8 is: pinned to the Version before.
+    // As a Draft raised before Version 8 is: pinned to the Version before. A database seeded fresh numbers
+    // this document 5, so the Version before is migration Version 4 there; both require Quantity and Unit.
     const previous = (await marVersions()).at(-2)!;
     await sql`update work_item set form_version_id = ${previous.id}::uuid where id = ${id}::uuid`.execute(migrator);
     const refused = await tryTake(engineer, id, "send_for_review");

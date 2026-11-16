@@ -151,7 +151,10 @@ export function TableInput({
                 </p>
               )}
               <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
-                {field.columns.map((column) => {
+                {field.columns.map((given) => {
+                  // A conditional `required` resolved for this row (RP-1298), so the cell's control
+                  // sees a plain flag too: an optional select offers "None" to take a choice back.
+                  const column = { ...given, required: isCellRequired(given, row) };
                   const error = errors.find((e) => e.row === i && e.column === column.key);
                   const { element, group } = cell(column, i, row[column.key], (v) => setCell(i, column.key, v));
                   return (
@@ -159,7 +162,7 @@ export function TableInput({
                       key={column.key}
                       id={`${id}-r${i}-${column.key}`}
                       label={column.label[locale]}
-                      required={isCellRequired(column, row)}
+                      required={column.required}
                       error={error && cellError(column, error)}
                       group={group}
                     >
