@@ -916,7 +916,7 @@ function WorkItemListBody({
           {rowActions && (
             // Delete asks first: a Draft deleted is gone for everyone.
             <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
-              <DialogContent title={labels.rowMenu.deleteTitle} description={deleting ? labels.rowMenu.deleteBody(deleting.title) : undefined} closeLabel={t("close")}>
+              <DialogContent phone="card" title={labels.rowMenu.deleteTitle} description={deleting ? labels.rowMenu.deleteBody(deleting.title) : undefined} closeLabel={t("close")}>
                 <DialogFooter>
                   <DialogClose asChild>
                     <Button variant="secondary">{labels.rowMenu.cancel}</Button>

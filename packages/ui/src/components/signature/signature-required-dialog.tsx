@@ -28,7 +28,7 @@ export type SignatureRequiredDialogProps = {
 export function SignatureRequiredDialog({ labels, open, onOpenChange, addSignature }: SignatureRequiredDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={labels.title} description={labels.body} closeLabel={labels.close}>
+      <DialogContent phone="card" title={labels.title} description={labels.body} closeLabel={labels.close}>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="ghost">{labels.notNow}</Button>

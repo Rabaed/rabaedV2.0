@@ -4,7 +4,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { expectTouchTarget, phone, tablet } from "../../storybook/form.ts";
-import { overlay } from "../../storybook/overlay.ts";
+import { expectCard, expectFooterPinned, expectFullScreen, overlay } from "../../storybook/overlay.ts";
 import { packagePageLabels } from "../../storybook/packages.ts";
 import { StoryProjectPage } from "../../storybook/shell.tsx";
 import { PackagePage } from "./package-page.tsx";
@@ -704,7 +704,15 @@ export const ReadOnAPhone: Story = {
   },
 };
 
-/** On a phone, "+ Add submittals" opens its pop-up from the bottom action bar, and adds the chosen ones. Left open for the screenshot. */
+/** A pop-up's buttons, its close button among them, each a 44 px target on a phone. */
+async function expectButtonsTouchable(dialog: HTMLElement) {
+  for (const button of within(dialog).getAllByRole("button")) await expectTouchTarget(button);
+}
+
+/**
+ * On a phone, "+ Add submittals" opens its pop-up from the bottom action bar full screen, Cancel and Add in a footer
+ * that stays at the foot of the screen (RP-1312), and adds the chosen ones. Left open for the screenshot.
+ */
 export const AddItemsFromTheBar: Story = {
   parameters: { ...phone, ...overlay, layout: "fullscreen" },
   args: { pkg: cannotSubmitYet },
@@ -716,10 +724,16 @@ export const AddItemsFromTheBar: Story = {
     const results = await within(dialog).findByRole("list", { name: l.addItems.results });
     await userEvent.click(within(results).getByRole("checkbox", { name: l.addItems.choose("Shower screens") }));
     await expect(within(dialog).getByRole("button", { name: l.addItems.add("1", 1) })).toBeEnabled();
+    await expectFullScreen(dialog);
+    await expectFooterPinned(dialog);
+    await expectButtonsTouchable(dialog);
   },
 };
 
-/** On a phone, Submit Package opens its pop-up from the bottom action bar, and Submits. */
+/**
+ * On a phone, Submit Package opens its pop-up from the bottom action bar full screen, Cancel and Submit in a footer
+ * that stays at the foot of the screen (RP-1312), and Submits.
+ */
 export const SubmitFromTheBar: Story = {
   parameters: { ...phone, layout: "fullscreen" },
   args: { pkg: canSubmit },
@@ -728,8 +742,66 @@ export const SubmitFromTheBar: Story = {
     const l = labelsOf(context);
     await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
     const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
+    await expectFullScreen(dialog);
+    await expectFooterPinned(dialog);
+    await expectButtonsTouchable(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: l.submit.confirm }));
     await expect(context.args.onSubmit).toHaveBeenCalledOnce();
+  },
+};
+
+/** On a phone, Submit Package's pop-up full screen, left open for the screenshot (RP-1312). */
+export const SubmitOnAPhone: Story = {
+  parameters: { ...phone, ...overlay, layout: "fullscreen" },
+  args: { pkg: canSubmit },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(await filledBarOf(context)).getByRole("button", { name: l.submit.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.submit.title("PKG-001") });
+    await expectFullScreen(dialog);
+    await expectFooterPinned(dialog);
+  },
+};
+
+/** At 820, the same pop-up as today: a centred card. Left open for the screenshot (RP-1312). */
+export const SubmitOnATablet: Story = {
+  parameters: { ...tablet, ...overlay, layout: "fullscreen" },
+  args: { pkg: canSubmit },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(actionsOf(context)).getByRole("button", { name: l.submit.trigger }));
+    await expectCard(await screen.findByRole("dialog", { name: l.submit.title("PKG-001") }));
+  },
+};
+
+/** On a phone, Delete is a short confirm: it stays a centred card, its buttons 44 px (RP-1312). Left open for the screenshot. */
+export const DeleteOnAPhone: Story = {
+  parameters: { ...phone, ...overlay, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(actionsOf(context)).getByRole("button", { name: l.delete.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.delete.title("PKG-001") });
+    await expectCard(dialog);
+    await expectButtonsTouchable(dialog);
+  },
+};
+
+/** On a phone, Rename is a form: full screen, Cancel and Save at the foot of the screen (RP-1312). */
+export const RenameOnAPhone: Story = {
+  parameters: { ...phone, layout: "fullscreen" },
+  args: { pkg: cannotSubmitYet },
+  render: onItsPage,
+  play: async (context) => {
+    const l = labelsOf(context);
+    await userEvent.click(within(actionsOf(context)).getByRole("button", { name: l.rename.trigger }));
+    const dialog = await screen.findByRole("dialog", { name: l.rename.title });
+    await expectFullScreen(dialog);
+    await expectFooterPinned(dialog);
+    await expectButtonsTouchable(dialog);
   },
 };
 

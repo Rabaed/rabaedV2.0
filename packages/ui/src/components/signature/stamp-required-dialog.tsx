@@ -30,7 +30,7 @@ export type StampRequiredDialogProps = {
 export function StampRequiredDialog({ labels, open, onOpenChange, addStamp }: StampRequiredDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={labels.title} description={labels.body} closeLabel={labels.close}>
+      <DialogContent phone="card" title={labels.title} description={labels.body} closeLabel={labels.close}>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant={addStamp ? "ghost" : "primary"}>{labels.dismiss}</Button>
