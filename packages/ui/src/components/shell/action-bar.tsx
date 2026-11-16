@@ -19,10 +19,14 @@ const neverChanges = () => () => {};
  *
  * The action is mounted once and its node moves between the two places, so crossing the phone width (a tablet
  * turned) keeps its state: a dialog it opened stays open with what was typed (RP-1290).
+ *
+ * `primary={false}`: a secondary action for now, in place on a phone too. A page whose primary action changes
+ * (the Package page's "+ Add submittals" once Submit Package is offered) flips it rather than moving the action
+ * out of `PrimaryAction`, so the action is the same node and keeps its focus (RP-1313).
  */
-export function PrimaryAction({ children }: { children: ReactNode }) {
+export function PrimaryAction({ children, primary = true }: { children: ReactNode; primary?: boolean }) {
   const shell = useContext(ActionBarContext);
-  const bar = shell?.bar ?? null;
+  const bar = primary ? (shell?.bar ?? null) : null;
   // Nothing to show: no bar that is filled but empty.
   const show = children !== null && children !== undefined && children !== false;
   // False on the server and while hydrating its markup, which has the action in place; true after, and on the client.
@@ -47,11 +51,12 @@ export function PrimaryAction({ children }: { children: ReactNode }) {
 
   if (!show) return null;
   if (!shell) return children;
-  // In the shell, a phone shows it only in the bar: hidden where it is until the bar takes it, so it doesn't paint
-  // in place first and then jump (the server's render can't tell a phone).
-  if (!hydrated || !box) return <span className="contents phone:hidden">{children}</span>;
+  // In the shell, a phone shows a primary action only in the bar: hidden where it is until the bar takes it, so it
+  // doesn't paint in place first and then jump (the server's render can't tell a phone).
+  const className = primary ? "contents phone:hidden" : "contents";
+  if (!hydrated || !box) return <span className={className}>{children}</span>;
   return (
-    <span ref={place} className="contents phone:hidden">
+    <span ref={place} className={className}>
       {createPortal(children, box)}
     </span>
   );
