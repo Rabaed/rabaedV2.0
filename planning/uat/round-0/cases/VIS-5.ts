@@ -123,7 +123,9 @@ defineCase("VIS-27", async (t) => {
     for (const who of ["ali", "ahmed", "yousef"]) {
       const r = await sees(who);
       t.check(`${who} cannot read the draft or its rename; the builder is 404`, r.bld.status === 404 && !r.wf.text.includes(renamed), `${r.bld.status}`);
-      t.check(`${who} reads the exception Workflow as a definition (published Version whole)`, r.wf.status === 200 && r.wf.text.includes("steps"), `${r.wf.status}`);
+      // RP-1309 (after RP-1299): the exception's Workflow is read only by those who read the exception (V15).
+      if (who === "yousef") t.check("Yousef reads the exception Workflow as a definition (published Version whole)", r.wf.status === 200 && r.wf.text.includes("steps"), `${r.wf.status}`);
+      else t.check(`${who} gets the plain 404 for the exception Workflow, as for a made-up id (RP-1309, V15)`, r.wf.status === 404, `${r.wf.status}`);
       const ex = (r.mar?.exceptions ?? []).length;
       if (who === "yousef") t.check("Yousef (the bound Participant) learns of the binding", (r.mar?.exceptions ?? []).some((e) => e.participantId === beta), `${ex}`);
       else t.check(`${who} never learns of the binding (no exception row, no Participant)`, ex === 0 && !JSON.stringify(r.ws).includes(beta) && !JSON.stringify(r.ws).includes("Beta Build"), `${ex}`);
@@ -173,7 +175,8 @@ defineCase("VIS-28", async (t) => {
   if (used.status === 201) await publishCopy(saeed, (used.body as any).id);
   t.check("Saeed uses it on Tower (a Project copy)", used.status === 201, `${used.status}`);
   const readByAli = await (await crew.as("ali")).get(`/workflows/${(used.body as any)?.id}`);
-  t.check("Once used on Tower, every Tower Member reads the Project copy", readByAli.status === 200, `${readByAli.status}`);
+  // A Project copy no Type runs is the Project Admin's only (RP-1299, RP-1309).
+  t.check("Used on Tower but run by no Type, the Project copy is the plain 404 to Ali (RP-1309)", readByAli.status === 404, `${readByAli.status}`);
   const { context, page } = await pageAs("layla");
   try {
     const nf = await pageIsNotFound(page, `/library/workflows/${libId}`);
@@ -218,8 +221,8 @@ defineCase("VIS-29", async (t) => {
     t.check("Non-authors (Ali, Yousef) read no Change Note", note(a) === null && note(y) === null && !a.r.text.includes("UAT VIS-29 short route") && !y.r.text.includes("UAT VIS-29 short route"), `${a.r.status}/${y.r.status}`);
     const running = (x: { body: any }) => (x.body?.history ?? []).find((h: any) => h.versionNo === versionNo)?.running;
     t.check("Running counts cover only items the reader sees (Yousef counts his own Draft; Saeed does not count Yousef's)", typeof running(y) === "number" && typeof running(s) === "number" && running(y) >= 1 && running(s) <= running(y) + 5, `yousef ${running(y)}, saeed ${running(s)}, ali ${running(a)}`);
-    t.note(`Hafiz's Draft ${hafizDraft} (TMC, default Workflow) and Yousef's Draft ${yousefDraft} (exception Workflow v${versionNo}) were raised; Ali's running count for the exception Workflow is ${running(a)} (he sees none of Beta Build's items).`);
-    t.check("Ali counts none of Yousef's items on the exception Workflow", running(a) === 0, `${running(a)}`);
+    t.note(`Hafiz's Draft ${hafizDraft} (TMC, default Workflow) and Yousef's Draft ${yousefDraft} (exception Workflow v${versionNo}) were raised; Ali reads no Version of the exception Workflow (${a.r.status}).`);
+    t.check("Ali gets the plain 404 for Beta Build's exception Workflow's Versions, so counts none of Yousef's items (RP-1309, V15)", a.r.status === 404, `${a.r.status}`);
     const { context, page } = await pageAs("ali");
     try {
       await page.goto(`${webUrl}/en/projects/${pid}/settings/workflows/${copy.id}/versions/${versionNo}`, { waitUntil: "networkidle" });

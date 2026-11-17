@@ -33,6 +33,8 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
+// workflow-settings.ts imports runningByVersion from here: both are called at run time only, so the cycle is harmless.
+import { readsWorkflowOffProject } from "./workflow-settings.ts";
 
 // Workflow authoring (RP-427, WF-4; workflow-engine.md §1 "Authoring"; ADR 0016). A
 // Project Admin authors the Project's own Workflows and its bindings; an Authorized
@@ -41,9 +43,13 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // transaction that publishes, on the draft app.workflow_draft has locked. Anyone who
 // may not author the Workflow gets 'not_found', exactly like a made-up id.
 
-/** A Workflow as the Member reads it (V18, V20); null when they don't, as for one only its authors read yet. */
+/**
+ * A Workflow as the Member reads it (V18, V20) with no Project in the path: to a Member who is not a
+ * Project Admin only one in use on a Project they are on (`readsWorkflowOffProject`, RP-1309); null
+ * when they don't read it, as for one only its authors read yet or a made-up id.
+ */
 export function readWorkflow(db: Db, memberId: string, definitionId: string): Promise<WorkflowRead | null> {
-  return withMember(db, memberId, (trx) => workflowRead(trx, definitionId));
+  return withMember(db, memberId, async (trx) => ((await readsWorkflowOffProject(trx, definitionId)) ? workflowRead(trx, definitionId) : null));
 }
 
 /**
@@ -120,11 +126,11 @@ export async function runningByVersion(trx: Db, definitionId: string): Promise<{
 }
 
 /**
- * A Workflow to look at (RP-442, WF-19), for whoever reads it (V18, V20): the map the builder
- * opens on, its draft only when the Member authors it; null when they don't read it.
+ * A Workflow to look at (RP-442, WF-19), for whoever reads it (V18, V20; RP-1309 as `readWorkflow`):
+ * the map the builder opens on, its draft only when the Member authors it; null when they don't read it.
  */
 export function readWorkflowMap(db: Db, memberId: string, definitionId: string): Promise<WorkflowMapRead | null> {
-  return withMember(db, memberId, (trx) => workflowMap(trx, definitionId));
+  return withMember(db, memberId, async (trx) => ((await readsWorkflowOffProject(trx, definitionId)) ? workflowMap(trx, definitionId) : null));
 }
 
 async function workflowMap(trx: Db, definitionId: string, canAuthorKnown?: boolean): Promise<WorkflowMapRead | null> {

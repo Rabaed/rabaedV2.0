@@ -165,14 +165,16 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: saved }), 200);
     const published = await ok(c1.caller.post(`/v1/workflows/${route}/publish`), 200);
     expect(published.json()).toMatchObject({ versionNo: 1 });
-    const asMember = await read(k1Engineer, route);
-    expect(asMember).toMatchObject({ publishedVersions: [1], published: { versionNo: 1, definition: saved }, draft: null });
+    // No Type runs it yet, so it is the Project Admin's only (RP-1309); every Member reads it once bound, below.
+    await expectHidden(k1Engineer.get(`/v1/workflows/${route}`)); // not hidden-from: RP-1309-3 tests this rule
     expect(await read(c1.caller, route)).toMatchObject({ draft: null });
   });
 
   it("binds the MAR to it: new items run it, earlier ones keep theirs", async () => {
     const before = await draft(at, at.c1Engineer, "Before the binding");
     await ok(bind(c1.caller, at.projectId, route));
+    const saved = (await read(c1.caller, route)).published!.definition;
+    expect(await read(k1Engineer, route)).toMatchObject({ publishedVersions: [1], published: { versionNo: 1, definition: saved }, draft: null });
     const after = await draft(at, at.c1Engineer, "After the binding");
     expect((await detail(at.c1Engineer, after)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });
     expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
