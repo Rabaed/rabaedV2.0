@@ -10,6 +10,7 @@ import {
   type FormField,
   type FormSchema,
   type FormSection,
+  type TableField,
 } from "./form.ts";
 import { editableAtProblem, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
 
@@ -146,9 +147,16 @@ function unknownReferences(schema: FormSchema): string[] {
     .filter(
       (item) =>
         rulesOf(item).some((rule) => conditionFields(rule).some((key) => !answerKeys.has(key))) ||
-        ("type" in item && isCalculatedField(item) && !calculatedReferences(item).every(holdsNumbers)),
+        ("type" in item && isCalculatedField(item) && !calculatedReferences(item).every(holdsNumbers)) ||
+        ("type" in item && item.type === "table" && columnRulesReadOtherKeys(item)),
     )
     .map((item) => item.key);
+}
+
+/** Whether a column's conditional `required` reads a key that isn't a column of its own table: it reads its own row only (RP-1298). */
+function columnRulesReadOtherKeys(table: TableField): boolean {
+  const columnKeys = new Set(table.columns.map((c) => c.key));
+  return table.columns.some((c) => typeof c.required === "object" && conditionFields(c.required).some((key) => !columnKeys.has(key)));
 }
 
 /** Whether `start` is reached again by following `dependsOn` from it. */

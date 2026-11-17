@@ -151,7 +151,7 @@
               },
               "total": true,
               "decimals": 2,
-              "required": true
+              "required": false
             },
             {
               "key": "unit",
@@ -190,7 +190,10 @@
                   "value": "set"
                 }
               ],
-              "required": true
+              "required": {
+                "op": "not_empty",
+                "field": "quantity"
+              }
             }
           ],
           "required": false

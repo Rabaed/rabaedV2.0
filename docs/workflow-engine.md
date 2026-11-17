@@ -102,7 +102,7 @@ As built (RP-437, WF-14): the Rabaed Default Workflows, Forms and Screens are JS
 
 | Type | Module | Workflow | Form | Outcomes |
 |---|---|---|---|---|
-| MAR, Material Approval Request | Submittals | `submittal-2-2.json` (2→2), Version 3 | `MAR.json`, Version 7 (RP-1152) | Review Codes |
+| MAR, Material Approval Request | Submittals | `submittal-2-2.json` (2→2), Version 3 | `MAR.json`, Version 8 (RP-1298) | Review Codes |
 | SAR, Supplier Approval Request | Submittals | `submittal-2-2.json` (2→2) | `SAR.json` (RP-591) | Review Codes |
 | DAR, Document Approval Request | Submittals | `submittal-1-1-owner.json` (1→1 → Owner review) | `DAR.json` (RP-591) | Review Codes |
 | WIR, Work Inspection Request | Inspections | `WIR.json`, Version 3 (RP-673, ADR 0025), the submittal 2→2 shape: Draft → Contractor PM (Return to Contractor Engineer) → Submit (Cover Note) → Consultant Engineer (Recommended Code A–D, Internal Note) → Send to Manager (Return to Engineer) → Consultant Manager (Positions `manager`) → Codes A, B (its `items_to_create` rows become Comments), C (Revise & Resubmit, re-inspection by Revision) or D (Rejected), through the submittal's Screens `code_a` to `code_d`; the Consultant Steps sit in Pending Approval. Version 2 (`WIR-2.json`, RP-170: the same shape issuing Passed, Passed with Comments or Failed, with a Recommended Result) and Version 1 (`WIR-1.json`: one Consultant inspection Step) stay published for the items on them, which still finish with an Inspection Result | `WIR.json` | Review Codes (and the Inspection Results of Versions 1 and 2) |

@@ -98,10 +98,14 @@ defineCase("SUB-02", async (t) => {
 defineCase("SUB-03", async (t) => {
   const tm = await H.team("hafiz");
   const hafiz = tm.api.hafiz!;
-  const id = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 form ${H.stamp()}`, await H.marAnswers(tm));
+  // A new Draft, so it is on the MAR Form Version 8 (RP-1298): a third Item has no Quantity and no Unit.
+  const base = await H.marAnswers(tm);
+  const items = [...(base.items as H.Json[]), { fixture_type: "Emergency exit sign", description: "Quantity from the shop drawings" }];
+  const id = await H.createItem(hafiz, tm, "MAR", `UAT SUB-03 form ${H.stamp()}`, { ...base, items });
   await H.addDatasheet(hafiz, id);
   await H.addPhoto(hafiz, id);
   const { page, text } = await H.viewItem(t, "hafiz", id, "form-total-docs", "en", { full: true });
+  t.check("The Item with no Quantity is kept", text.includes("Emergency exit sign"));
   t.check("The Items total reads 240", /Total Quantity\s*240(\.00)?/.test(text.replace(/\s+/g, " ")), text.match(/Total Quantity[^A-Z]*/)?.[0]);
   t.check("The Datasheet and the Sample photo are on the saved Draft", /UAT-datasheet\.pdf/.test(text) && /UAT-sample\.jpg|photo/i.test(text));
   // The panel shows a Draft read-only (Save and close comes with Edit), and the MAR Form has its own Links section (Related submittals) before the Attachments.
@@ -394,13 +398,16 @@ defineCase("SUB-15", async (t) => {
   t.check("Create Revision makes a Draft", r.status === 201, r.text);
   const revId = (r.body as H.Json).id as string;
   const rev = await H.detail(hafiz, revId);
-  t.check("The Draft is Revision 1 with no number yet", rev.revisionNo === 1 && rev.stage.key === "draft", `rev ${rev.revisionNo} number ${rev.documentNumber}`);
+  // RP-1300: a Revision Draft keeps its base number from the start; only its own " Rev 1" waits for the Submit.
+  t.check("The Draft is Revision 1 under the base number", rev.revisionNo === 1 && rev.stage.key === "draft" && rev.documentNumber === null && rev.baseNumber === orig.documentNumber, `rev ${rev.revisionNo} number ${rev.documentNumber} base ${rev.baseNumber}`);
   t.check("It starts with TMC's answers", rev.answers.manufacturer === "Philips" && rev.answers.model === "CoreLine Panel");
   const docs = ((await hafiz.get(`/work-items/${revId}/documents`)).body as H.Json).documents.map((x: H.Json) => x.fileName);
   t.check("The Datasheet is copied", docs.includes("UAT-datasheet.pdf"), docs.join(","));
   await hafiz.put(`/work-items/${revId}/answers`, { answers: { ...rev.answers, model: "CoreLine Panel HDG" } });
   const { page: before, text: bt } = await H.viewItem(t, "hafiz", revId, "revision-draft");
-  t.check("The Draft page shows Revision 1 and No number yet", /No number yet\s*Rev 1\b/.test(bt), bt.slice(0, 200).replace(/\n/g, " | "));
+  t.check("The Draft page reads the base number, Rev 1 · Draft", bt.includes(orig.documentNumber) && /Rev 1\s*·\s*Draft\b/.test(bt), bt.slice(0, 200).replace(/\n/g, " | "));
+  const draftChain = JSON.stringify((await hafiz.get(`/work-items/${revId}/revisions`)).body);
+  t.check("The Draft lists its Revision chain", draftChain.includes(orig.documentNumber), draftChain.slice(0, 400));
   void before;
   await H.must(hafiz, revId, "send_for_review");
   await H.pickUp(tm.api.ali!, revId);

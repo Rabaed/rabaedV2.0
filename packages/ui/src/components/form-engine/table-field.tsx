@@ -4,6 +4,7 @@ import {
   directionOf,
   formatNumber,
   formatTableCell,
+  isCellRequired,
   isUnanswered,
   maxTableRows,
   tableTotals,
@@ -47,11 +48,14 @@ export const rowsOf = (value: unknown): FormRow[] => (Array.isArray(value) ? val
 
 const isNumeric = (column: TableColumn) => column.type === "number" || column.type === "currency";
 
-/** The totals under a table, one line per column that asks for one: "Total Quantity: 42". */
+/**
+ * The totals under a table, one line per column that asks for one: "Total Quantity: 42". A column
+ * with no number in any row has no line, as in the PDF (RP-1298: the MAR's Quantity is optional).
+ */
 function Totals({ field, rows, locale, text }: { field: TableField; rows: FormRow[]; locale: Locale; text: TableFieldLabels }) {
   const totals = tableTotals(field, rows);
-  const columns = field.columns.filter((c) => (c.type === "number" || c.type === "currency") && c.total);
-  if (columns.length === 0 || rows.length === 0) return null;
+  const columns = field.columns.filter((c) => totals[c.key] !== undefined);
+  if (columns.length === 0) return null;
   return (
     // Read out as the rows change, so a filler hears the new total.
     <dl aria-live="polite" className="flex flex-wrap gap-x-6 gap-y-1 text-body">
@@ -59,7 +63,7 @@ function Totals({ field, rows, locale, text }: { field: TableField; rows: FormRo
         <div key={column.key} className="flex gap-2">
           <dt className="font-medium text-muted">{text.total(column.label[locale])}</dt>
           <dd className="font-semibold text-text">
-            <bdi dir={directionOf(locale)}>{formatTableCell(column, totals[column.key] ?? 0, locale)}</bdi>
+            <bdi dir={directionOf(locale)}>{formatTableCell(column, totals[column.key], locale)}</bdi>
           </dd>
         </div>
       ))}
@@ -147,7 +151,10 @@ export function TableInput({
                 </p>
               )}
               <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
-                {field.columns.map((column) => {
+                {field.columns.map((given) => {
+                  // A conditional `required` resolved for this row (RP-1298), so the cell's control
+                  // sees a plain flag too: an optional select offers "None" to take a choice back.
+                  const column = { ...given, required: isCellRequired(given, row) };
                   const error = errors.find((e) => e.row === i && e.column === column.key);
                   const { element, group } = cell(column, i, row[column.key], (v) => setCell(i, column.key, v));
                   return (
