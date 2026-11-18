@@ -155,15 +155,18 @@ async function settingsAsMember(trx: Db, projectId: string): Promise<WorkflowSet
   };
 }
 
-/** Published Version `versionNo` of Workflow `workflowId`, whole, with the Stages and Positions to draw it, for whoever reads the Workflow (V20); null for anyone else. */
+/**
+ * Published Version `versionNo` of Workflow `workflowId`, whole, with the Stages and Positions to draw it,
+ * for whoever reads the Workflow off any Project (V20, `readsWorkflowOffProject`, RP-1309); null for anyone else.
+ */
 export function readWorkflowVersion(db: Db, memberId: string, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
-  return withMember(db, memberId, (trx) => versionAsMember(trx, workflowId, versionNo));
+  return withMember(db, memberId, async (trx) => ((await readsWorkflowOffProject(trx, workflowId)) ? versionAsMember(trx, workflowId, versionNo) : null));
 }
 
 /**
  * The same, as Project `projectId`'s Settings opens it (RP-1299): only a Workflow Settings lists
  * to the Member there, so to anyone but a Project Admin only one in use; null otherwise, as for a
- * made-up id. The Workflow's own read above stays open to whoever reads the Workflow (V20).
+ * made-up id.
  */
 export function readProjectWorkflowVersion(db: Db, memberId: string, projectId: string, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
   return withMember(db, memberId, async (trx) => {
@@ -171,6 +174,28 @@ export function readProjectWorkflowVersion(db: Db, memberId: string, projectId: 
     if (!settings || !listedWorkflowIds(settings).has(workflowId)) return null;
     return versionAsMember(trx, workflowId, versionNo);
   });
+}
+
+/**
+ * Whether the acting Member reads Workflow `workflowId` through a read with no Project in its path
+ * (`GET /v1/workflows/:w`, its map and its Versions; RP-1309, owner's decision 2026-11-14): their own
+ * Company's Library Workflow, as row-level security gives it them (V18); any other only when Settings
+ * lists it to them on a Project they are on (RP-1299's rule, `listedWorkflowIds`): in use there, or,
+ * where they are a Project Admin, every Rabaed Default of its Types and its copies. Anyone else gets
+ * the 404 of a made-up id. Row-level security still decides first, so this never widens a read.
+ */
+export async function readsWorkflowOffProject(trx: Db, workflowId: string): Promise<boolean> {
+  const definition = await trx.selectFrom("workflow_definition").select(["owner_kind", "project_id"]).where("id", "=", workflowId).executeTakeFirst();
+  if (!definition) return false;
+  if (definition.owner_kind === "company") return true;
+  // The Projects the Member is on; a Project's own Workflow's Project first, where it is most likely listed.
+  const ids = (await trx.selectFrom("project").select("id").orderBy("created_at").orderBy("id").execute()).map((p) => p.id);
+  const own = definition.project_id;
+  for (const projectId of own && ids.includes(own) ? [own, ...ids.filter((id) => id !== own)] : ids) {
+    const settings = await settingsAsMember(trx, projectId);
+    if (settings && listedWorkflowIds(settings).has(workflowId)) return true;
+  }
+  return false;
 }
 
 async function versionAsMember(trx: Db, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {

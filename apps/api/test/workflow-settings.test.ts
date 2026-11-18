@@ -146,8 +146,11 @@ describe("View versions", () => {
     expect(v1).toMatchObject({ name: label("Tower MARs"), versionNo: 1, publishedVersions: [1] });
     expect(v1.definition.steps.length).toBeGreaterThan(3);
     expect(v1.stages.length).toBeGreaterThan(3);
-    // A Rabaed Default's Versions too, with the Rabaed Stage set.
-    const mar: WorkflowVersionRead = (await ok(at.k1Manager.get(`/v1/workflows/${marWorkflowId}/versions/1`), 200)).json();
+    // A Rabaed Default's Versions too, with the Rabaed Stage set, read by the Project Admin: the Tower's MAR now
+    // runs its own copy, and a Workflow not in use is the Project Admin's only (RP-1309). Whether K1 still reads
+    // this one hangs on other files' Rabaed test Types, which run MAR's Default on every Project, so RP-1309-1
+    // tests the 404 on a Default no Type runs.
+    const mar: WorkflowVersionRead = (await ok(c1.caller.get(`/v1/workflows/${marWorkflowId}/versions/1`), 200)).json();
     expect(mar.versionNo).toBe(1);
     expect(mar.publishedVersions).toEqual([1, 2, 3]);
   });

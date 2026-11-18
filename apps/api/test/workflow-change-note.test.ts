@@ -8,7 +8,7 @@ import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowBuilderRead, WorkflowDefinition, WorkflowVersionRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, readById, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller } from "./support/harness.ts";
 import { all, buildTower, draft, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -57,8 +57,8 @@ describe("the change note", () => {
     await ok(c1.caller.post(`/v1/workflows/${route}/publish`, { changeNote: "  Tower's own route for MARs.  " }), 200);
     const history = (await versions(c1.caller, 1)).history;
     expect(history).toEqual([{ versionNo: 1, publishedAt: expect.any(String), changeNote: "Tower's own route for MARs.", running: 0 }]);
-    // Every Project Member reads the Version (V20), but not its Change Note: an exception's could name whom it is for (V15).
-    expect((await versions(at.c1Engineer, 1)).history).toEqual([{ versionNo: 1, publishedAt: expect.any(String), changeNote: null, running: 0 }]);
+    // No Type runs it yet, so it is the Project Admin's only (RP-1309); the Members' read is below, once it is bound.
+    await expectHidden(at.c1Engineer.get(`/v1/workflows/${route}/versions/1`)); // not hidden-from: RP-1309-3 tests this rule
   });
 
   it("is refused when blank, and nothing is published", async () => {
@@ -102,6 +102,8 @@ describe("on an exception's Workflow", () => {
 describe("RP-555-1: items that keep their Version", () => {
   it("are counted as each reader sees them: the Project Admin counts no Draft it doesn't see", async () => {
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: route }));
+    // Once the MAR runs it, every Project Member reads the Version (V20), but not its Change Note: an exception's could name whom it is for (V15).
+    expect((await versions(at.c1Engineer, 1)).history).toEqual([{ versionNo: 1, publishedAt: expect.any(String), changeNote: null, running: 0 }]);
     // The MAR itself (`draft` raises the legacy MAR by default, RP-437), which the route is bound for.
     const own = await draft(at, at.c1Engineer, "C1's MAR on the noted route", { type: "MAR" });
     const other = await draft(at, c2Engineer, "C2's MAR on the noted route", { type: "MAR" });

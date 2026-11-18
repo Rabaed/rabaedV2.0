@@ -364,6 +364,7 @@ export function TradesLocations({ projectId, canEdit, trades, locations, scopes 
       {archiving && (
         <Dialog open onOpenChange={(open) => !open && setArchiving(null)}>
           <DialogContent
+            phone="card"
             closeLabel={t("close")}
             title={t("archiveTitle", { name: archiving.code && archiving.kind === "trade" ? `${archiving.name[locale]} (${archiving.code})` : archiving.name[locale] })}
             description={t("archiveBody")}

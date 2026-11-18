@@ -40,7 +40,7 @@ export type SubmittalPanelReads = {
   /** The Submitted items linking here that the viewer sees (RP-1301); null when that read failed, so none is shown. */
   linkedFrom: readonly LinkedFromItem[] | null;
   optionLists: OptionList[];
-  suppliers: { id: string; tradeId: string; status: ApprovedSuppliers["suppliers"][number]["status"]; name: ApprovedSuppliers["suppliers"][number]["name"] }[];
+  suppliers: Pick<ApprovedSuppliers["suppliers"][number], "id" | "tradeId" | "status" | "name" | "approval">[];
   checklistTemplates: ReturnType<typeof checklistTemplateChoices>;
   /** The Built-in Fields' offer while the viewer may edit; null otherwise (they then name the item's own values). */
   filling: { mine: DimensionValues; scopes: Scopes["scopes"] } | null;
@@ -96,7 +96,7 @@ export function useSubmittalPanelReads(item: WorkItemDetail | null, refreshKey: 
         linkedFrom: linkedFrom?.items ?? null,
         chain,
         optionLists: lists?.optionLists ?? [],
-        suppliers: (suppliers?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name })),
+        suppliers: (suppliers?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name, approval: s.approval })),
         checklistTemplates: checklistTemplateChoices(templates?.templates ?? [], JSON.parse(copies) as WorkItemDetail["checklistCopies"]),
         filling: mine && scopes ? { mine, scopes: scopes.scopes } : null,
       });

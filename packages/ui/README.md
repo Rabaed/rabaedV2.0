@@ -134,7 +134,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 
 | Component | Use for |
 |---|---|
-| `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. |
+| `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. A centred card from 768 wide; on a phone it fills the screen, its body scrolling under a `DialogFooter` that stays at the foot (RP-1312). A short confirm or cancel (Delete, Withdraw, a single yes or no) passes `phone="card"` to stay a card. |
 | `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic; `side="start"` for navigation. Same focus rules as Dialog. |
 | `Popover` | A small non-modal panel anchored to a button, aligned to its start edge (mirrors in Arabic). Name it with `aria-label`. |
 | `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). `side`: `top` (default), `bottom`, or `start` / `end`, which mirror in Arabic. |

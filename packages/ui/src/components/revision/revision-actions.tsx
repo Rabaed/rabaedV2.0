@@ -93,7 +93,7 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
               </Button>
             )}
           </DialogTrigger>
-          <DialogContent title={labels.discardTitle} description={labels.discardIntro} closeLabel={labels.close}>
+          <DialogContent phone="card" title={labels.discardTitle} description={labels.discardIntro} closeLabel={labels.close}>
             {error && (
               <p role="alert" className="text-sm text-danger-fg">
                 {error}

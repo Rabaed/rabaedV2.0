@@ -316,7 +316,7 @@ function InvitationItem({ projectId, invitation }: { projectId: string; invitati
       </Button>
       {confirming && (
         <Dialog open onOpenChange={(open) => !open && setConfirming(false)}>
-          <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("withdrawTitle")} description={t("withdrawBody", { cr: invitation.crNumber })}>
+          <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("withdrawTitle")} description={t("withdrawBody", { cr: invitation.crNumber })}>
             {error && (
               <p role="alert" className="text-sm text-danger-fg">
                 {t("unavailable")}
@@ -463,7 +463,7 @@ export function AddParticipantButton({ projectId }: { projectId: string }) {
         <Icon name="person-add" size={16} />
         {t("addParticipant")}
       </Button>
-      <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
+      <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
         <form onSubmit={submit} className="grid gap-4" noValidate>
           <Field label={t("crNumber")} id="add-participant-cr" required>
             <Input name="crNumber" dir="ltr" inputMode="numeric" maxLength={10} autoFocus className="font-mono" />
