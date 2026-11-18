@@ -189,7 +189,7 @@ export async function readsWorkflowOffProject(trx: Db, workflowId: string): Prom
   const definition = await trx.selectFrom("workflow_definition").select(["owner_kind"]).where("id", "=", workflowId).executeTakeFirst();
   if (!definition) return false;
   if (definition.owner_kind === "company") return true;
-  for (const projectId of await mayListWorkflow(trx, workflowId)) {
+  for (const projectId of await projectsThatMayListWorkflow(trx, workflowId)) {
     const settings = await settingsAsMember(trx, projectId);
     if (settings && listedWorkflowIds(settings).has(workflowId)) return true;
   }
@@ -205,7 +205,7 @@ export async function readsWorkflowOffProject(trx: Db, workflowId: string): Prom
  * `settingsAsMember` lists a Workflow passes it, and `listedWorkflowIds` still decides, so the
  * rule stays RP-1299's. A Workflow listed nowhere costs this query, not one Settings per Project.
  */
-async function mayListWorkflow(trx: Db, workflowId: string): Promise<string[]> {
+async function projectsThatMayListWorkflow(trx: Db, workflowId: string): Promise<string[]> {
   const { rows } = await sql<{ id: string }>`
     select p.id
     from workflow_definition d cross join project p

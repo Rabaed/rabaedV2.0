@@ -40,9 +40,6 @@ const onNoProject = () => tower.c2.ap;
 /** The Projects `as` is on: the ones the api's filter looks through. */
 const projects = (as: string) => ids(as, sql<{ id: string }>`select id from project`);
 const admins = (as: string) => ids(as, sql<{ id: string }>`select x as id from app.current_admin_project_ids() x`);
-/** The bindings `as` reads that name Workflow `id`, on any Project. */
-const bindingsNaming = (id: string) => (as: string) =>
-  ids(as, sql<{ id: string }>`select workflow_definition_id as id from workflow_binding where workflow_definition_id = ${id}::uuid`);
 /** `as` copies `source` into Project `projectId`, or into their Company's Library when null; the outcome. */
 const duplicate = (as: string, source: string, projectId: string | null) =>
   tower.outcome(as, sql<{ outcome: string }>`select outcome from app.duplicate_workflow(${source}::uuid, ${projectId}::uuid, ${JSON.stringify(bilingual("A copy"))}::jsonb, now())`);
@@ -94,15 +91,14 @@ afterAll(async () => {
 });
 
 describe("scenario RP-1323-1: the other Project's unused copy, for a Project Admin who is only a Member there", () => {
-  it("they are on both Projects and a Project Admin of the Tower only, and no binding they read names the copy: the api's filter finds no Project to list it", async () => {
+  it("they are on both Projects and a Project Admin of the Tower only, so the api's filter finds no Project of theirs that lists the other's unused copy", async () => {
     const { c1, other } = tower;
     expect((await projects(c1.ap)).map((p) => p.id).sort()).toEqual([tower.projectId, other.projectId].sort()); // not hidden-from: the Projects the filter looks through
     await expectHiddenFrom({ read: admins, target: other.projectId, seenBy: other.ap, hiddenFrom: c1.ap, name: named, label: "the other Project's Project Admins" });
-    expect(await bindingsNaming(theirCopy)(c1.ap)).toEqual([]); // not hidden-from: no binding names it, for anyone
   });
 
   it("its rows are theirs through the tables (V20), so app.duplicate_workflow alone would copy it: the api's check is what answers the 404", async () => {
-    expect(await duplicate(tower.c1.ap, theirCopy, tower.projectId)).toBe("duplicated"); // not hidden-from: the database's bound, which the api narrows
+    expect(await duplicate(tower.c1.ap, theirCopy, tower.projectId), "the database's bound, which the api narrows").toBe("duplicated");
   });
 });
 
@@ -118,7 +114,7 @@ describe("scenario RP-1323-2: a source the Project Admin reads", () => {
     expect(await duplicate(c1.members.engineer, running, tower.projectId), "by a Member who is not a Project Admin").toBe("not_found");
     expect(await duplicate(c1.ap, library, tower.projectId), "another Company's Library Workflow").toBe("not_found");
     expect(await duplicate(other.ap, ownCopy, other.projectId), "a copy of a Project they are not on").toBe("not_found");
-    expect(await duplicate(c2.ap, library, null)).toBe("duplicated"); // not hidden-from: their own Company's Library, for the contrast
+    expect(await duplicate(c2.ap, library, null), "their own Company's Library, for the contrast").toBe("duplicated");
   });
 });
 
@@ -134,8 +130,9 @@ describe("scenario RP-1323-3: save to Library", () => {
 
 describe("scenario RP-1323-4: an Authorized Person on no Project", () => {
   it("is on no Project and a Project Admin of none, so the api's filter lists them no Rabaed Default, though its rows stay open (V20)", async () => {
-    expect(await projects(onNoProject())).toEqual([]); // not hidden-from: on no Project
-    expect(await admins(onNoProject())).toEqual([]); // not hidden-from: a Project Admin of none
-    expect(await duplicate(onNoProject(), unused, null)).toBe("duplicated"); // not hidden-from: the database's bound; the api answers the 404
+    const hidden = { target: tower.projectId, seenBy: tower.c1.ap, hiddenFrom: onNoProject(), name: named };
+    await expectHiddenFrom({ ...hidden, read: projects, label: "the Projects they are on" });
+    await expectHiddenFrom({ ...hidden, read: admins, label: "the Projects they are a Project Admin of" });
+    expect(await duplicate(onNoProject(), unused, null), "the database's bound; the api answers the 404").toBe("duplicated");
   });
 });

@@ -7,7 +7,7 @@
 // Library's "Use on Project", and saving a Project's Workflow to the Library.
 // The seam suites' global setup runs the demo seed, which publishes the eight submittal Defaults.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowSettings, WorkflowSettingsType } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -38,6 +38,17 @@ const copiesSeen = async (by: Caller, projectIds: string[]) => ({
   library: await library(by),
 });
 
+const callers = new Map<Caller, string>();
+const who = (by: Caller) => callers.get(by) ?? "a caller";
+
+/** A read for expectHiddenFrom: `send(by)` copies `source` ([{ id: source }], its 201) or answers the plain 404 ([]); anything else fails. */
+const copies = (source: string, send: (by: Caller) => ReturnType<Caller["post"]>) => async (by: Caller) => {
+  const res = await send(by);
+  if (res.statusCode === 201) return [{ id: source }];
+  await expectHidden(res, `${who(by)} copying ${source}`); // not hidden-from: the read expectHiddenFrom runs, its seenBy copying first
+  return [];
+};
+
 let c1: Company;
 let k1: Company;
 let otherAdmin: Company;
@@ -58,6 +69,11 @@ beforeAll(async () => {
   otherAdmin = await api.projectCreator();
   other = await buildTower(api, { c1: otherAdmin, k1: await api.authorizedPerson() }, "RIY");
   onNoProject = (await api.authorizedPerson()).caller;
+  callers
+    .set(c1.caller, "C1's Authorized Person, the Tower's Project Admin")
+    .set(k1.caller, "K1's Authorized Person")
+    .set(otherAdmin.caller, "the second Tower's Project Admin")
+    .set(onNoProject, "an Authorized Person on no Project");
 
   const mar = marOf(await settings(c1.caller, at.projectId));
   running = mar.workflow.id;
@@ -82,8 +98,11 @@ describe("scenario RP-1323-1: a Project Admin of one Project cannot copy the oth
     const before = await copiesSeen(c1.caller, [at.projectId, other.projectId]);
     const madeUp = crypto.randomUUID();
     await expectHidden(duplicate(c1.caller, madeUp, at.projectId), "a made-up id"); // not hidden-from: the answer the hidden source must match
-    await expectHidden(duplicate(c1.caller, theirUnused, at.projectId), "the second Tower's unused copy, into the Tower");
-    await expectHidden(duplicate(c1.caller, theirUnused, null), "the second Tower's unused copy, into C1's Library");
+    // Each into a Project they administer: the second Tower's Project Admin copies it there, C1's gets the 404 into the Tower.
+    const theirProject = (by: Caller) => (by === c1.caller ? at.projectId : other.projectId);
+    const hidden = { target: theirUnused, seenBy: otherAdmin.caller, hiddenFrom: c1.caller, name: who };
+    await expectHiddenFrom({ ...hidden, read: copies(theirUnused, (by) => duplicate(by, theirUnused, theirProject(by))), label: "the second Tower's unused copy, into a Project" });
+    await expectHiddenFrom({ ...hidden, read: copies(theirUnused, (by) => duplicate(by, theirUnused, null)), label: "the second Tower's unused copy, into their Library" });
     expect(await copiesSeen(c1.caller, [at.projectId, other.projectId])).toEqual(before);
   });
 
@@ -91,7 +110,7 @@ describe("scenario RP-1323-1: a Project Admin of one Project cannot copy the oth
     const closing = await buildTower(api, { c1, k1 }, "RIZ");
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing.projectId}::uuid`.execute(migrator);
     await expectHidden(duplicate(c1.caller, crypto.randomUUID(), closing.projectId), "a made-up id, into the closed Project"); // not hidden-from: the answer the hidden source must match
-    await expectHidden(duplicate(c1.caller, theirUnused, closing.projectId), "the second Tower's unused copy, into the closed Project");
+    await expectHidden(duplicate(c1.caller, theirUnused, closing.projectId), "the second Tower's unused copy, into the closed Project"); // not hidden-from: nobody copies into a closed Project; the contrast is the made-up id above and the 409 below, and RP-1323-1's first case proves the source is copied by its own Project Admin
     const closed = await duplicate(c1.caller, running, closing.projectId);
     expect({ status: closed.statusCode, body: closed.json() }, "a source they read, into the closed Project").toEqual({ status: 409, body: { error: "project_closed" } });
   });
@@ -114,7 +133,7 @@ describe("scenario RP-1323-3: save to Library takes only a source the Authorized
   it("answers C1's Authorized Person the 404 of a made-up id for the second Tower's unused copy, and saves nothing", async () => {
     const before = await library(c1.caller);
     await expectHidden(saveToLibrary(c1.caller, crypto.randomUUID()), "a made-up id"); // not hidden-from: the answer the hidden source must match
-    await expectHidden(saveToLibrary(c1.caller, theirUnused), "the second Tower's unused copy");
+    await expectHiddenFrom({ read: copies(theirUnused, (by) => saveToLibrary(by, theirUnused)), target: theirUnused, seenBy: otherAdmin.caller, hiddenFrom: c1.caller, name: who, label: "the second Tower's unused copy" });
     expect(await library(c1.caller)).toEqual(before);
   });
 
@@ -129,8 +148,10 @@ describe("scenario RP-1323-4: an Authorized Person who is not a Project Admin sa
     await api.addProjectMember(k1.caller, at.k1ParticipantId!, k1.company.authorizedPerson.id);
     expect((await settings(k1.caller, at.projectId)).canEdit).toBe(false);
     const before = await library(k1.caller);
-    await expectHidden(saveToLibrary(k1.caller, unused), "an unused Rabaed Default");
-    await expectHidden(duplicate(k1.caller, unused, null), "an unused Rabaed Default, by duplicate into the Library");
+    // The Tower's Project Admin, whose Settings lists it, saves it; K1's Authorized Person gets the 404.
+    const hidden = { target: unused, seenBy: c1.caller, hiddenFrom: k1.caller, name: who };
+    await expectHiddenFrom({ ...hidden, read: copies(unused, (by) => saveToLibrary(by, unused)), label: "an unused Rabaed Default" });
+    await expectHiddenFrom({ ...hidden, read: copies(unused, (by) => duplicate(by, unused, null)), label: "an unused Rabaed Default, by duplicate into the Library" });
     expect(await library(k1.caller)).toEqual(before);
     await ok(saveToLibrary(k1.caller, running), 201);
   });
@@ -138,8 +159,9 @@ describe("scenario RP-1323-4: an Authorized Person who is not a Project Admin sa
   it("answers an Authorized Person on no Project the 404 for every Rabaed Default", async () => {
     const before = await library(onNoProject);
     for (const source of [running, unused]) {
-      await expectHidden(saveToLibrary(onNoProject, source), "a Rabaed Default, to a Member on no Project");
-      await expectHidden(duplicate(onNoProject, source, null), "a Rabaed Default, by duplicate, to a Member on no Project");
+      const hidden = { target: source, seenBy: c1.caller, hiddenFrom: onNoProject, name: who };
+      await expectHiddenFrom({ ...hidden, read: copies(source, (by) => saveToLibrary(by, source)), label: "a Rabaed Default, saved" });
+      await expectHiddenFrom({ ...hidden, read: copies(source, (by) => duplicate(by, source, null)), label: "a Rabaed Default, by duplicate into the Library" });
     }
     expect(await library(onNoProject)).toEqual(before);
   });
