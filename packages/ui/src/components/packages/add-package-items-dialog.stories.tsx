@@ -12,7 +12,8 @@ import { AddPackageItemsDialog, type PackageItemSearch } from "./add-package-ite
 // The "+ Add submittals" pop-up's rows with a long Trade name (RP-1311, under the responsive spec
 // RP-1158). On a phone (402) the Trade takes its own line under the Subject and Document Number, and
 // the stage pill stays at the row's end, as the Packages view's cards do; at 820 and wider the Trade
-// stays beside the Document Number, as before. Never cut with an ellipsis. Story data only.
+// stays beside the Document Number. The Trade is never cut with an ellipsis. A long Subject (RP-1317)
+// takes up to two lines on a phone, then an ellipsis, and one line at 820 and wider. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const labelsOf = (context: { globals: Record<string, unknown> }) => packagePageLabels[storyLocale(context)];
 
@@ -41,6 +42,8 @@ const row = (n: number, title: string, rest: Partial<WorkItemRow> = {}): WorkIte
   ...rest,
 });
 
+const inOtherPackage = { package: { id: "00000000-0000-4000-8000-0000000000f2", number: "PKG-002", name: b("Fire fighting", "مكافحة الحريق"), companyName: ownCompany } };
+
 const found: WorkItemRow[] = [
   // Submitted, so it has its Document Number, at a long stage.
   row(31, "Chilled water pumps"),
@@ -54,9 +57,24 @@ const found: WorkItemRow[] = [
     creationDate: null,
   }),
   // Already in another Package: marked, and can't be picked.
-  row(33, "Fire sprinkler heads", { package: { id: "00000000-0000-4000-8000-0000000000f2", number: "PKG-002", name: b("Fire fighting", "مكافحة الحريق"), companyName: ownCompany } }),
+  row(33, "Fire sprinkler heads", inOtherPackage),
 ];
 const search: PackageItemSearch = async () => found;
+
+// Long Subjects (RP-1317): one Submitted, one already in another Package, in the story's language.
+// The second starts with a model code longer than the row is wide, which must wrap, not run out sideways.
+const longCode = "ZCVB1B3SPRINKLERZONECONTROLVALVE2026XL";
+const longSubjects = {
+  en: [
+    row(34, "Chilled water pumps for the podium plant room, with variable speed drives, vibration isolators and flexible connectors"),
+    row(35, `${longCode} fire sprinkler heads and pipework for the basement car park levels B1 to B3`, inOtherPackage),
+  ],
+  ar: [
+    row(34, "مضخات المياه المبردة لغرفة المعدات في المنصة مع محركات متغيرة السرعة وعوازل الاهتزاز والوصلات المرنة"),
+    row(35, `${longCode} رشاشات الحريق وأنابيبها لمواقف السيارات في الأقبية من الأول إلى الثالث`, inOtherPackage),
+  ],
+};
+const longSubjectSearch: Record<keyof typeof longSubjects, PackageItemSearch> = { en: async () => longSubjects.en, ar: async () => longSubjects.ar };
 
 const meta = {
   title: "Packages/AddPackageItemsDialog",
@@ -90,16 +108,16 @@ const partOf = (li: HTMLElement, element: HTMLElement) => [...li.children].find(
  * Opens the pop-up and waits for its rows: each row's checkbox, its text (the checkbox's label), the Trade, the
  * Type's code and the pill at the row's end (its stage, or "In PKG-002" for one in another Package).
  */
-async function openRows(context: Context) {
+async function openRows(context: Context, shown: WorkItemRow[] = found) {
   const l = labelsOf(context);
   const locale = storyLocale(context);
   await userEvent.click(context.canvas.getByRole("button", { name: l.addItems.trigger }));
   const dialog = await screen.findByRole("dialog", { name: l.addItems.title });
   const results = await within(dialog).findByRole("list", { name: l.addItems.results });
   const items = within(results).getAllByRole("listitem");
-  await expect(items).toHaveLength(found.length);
+  await expect(items).toHaveLength(shown.length);
   const rows = items.map((li, i) => {
-    const item = found[i]!;
+    const item = shown[i]!;
     const checkbox = within(li).getByRole("checkbox", { name: l.addItems.choose(item.title) });
     const text = (checkbox as HTMLButtonElement).labels[0]!;
     const trade = within(li).getByText(mep.name[locale]);
@@ -186,6 +204,64 @@ export const LongTradeOnATablet: Story = {
       const code = r.code.getBoundingClientRect();
       // On one line with the number and the Type's code.
       await expect(Math.abs(trade.top + trade.height / 2 - (code.top + code.height / 2))).toBeLessThan(2);
+      await expectTextBesideThePill(r);
+      await expectInReadingOrder(context, r);
+    }
+    await expectNoSidewaysScroll(dialog, results);
+  },
+};
+
+/** The long Subjects' rows, in the story's language. */
+const withLongSubjects: Story["render"] = (args, context) => meta.render({ ...args, search: longSubjectSearch[storyLocale(context)] }, context);
+
+/** How many lines `element`'s box holds. */
+const linesOf = (element: HTMLElement) => Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight));
+
+/**
+ * On a phone (402), a long Subject (RP-1317): two lines, then an ellipsis, so similar
+ * submittals can be told apart. The whole Subject stays in the page for screen readers, and in the checkbox's
+ * name. The Trade keeps its own line under the number (RP-1311), the pill stays at the row's end, nothing runs
+ * under it or scrolls sideways, and each checkbox is a full touch target. Left open for the screenshot.
+ */
+export const LongSubjectOnAPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  render: withLongSubjects,
+  play: async (context) => {
+    const shown = longSubjects[storyLocale(context)];
+    const { dialog, results, rows } = await openRows(context, shown);
+    for (const [i, r] of rows.entries()) {
+      // Two lines, then cut: no more.
+      await expect(linesOf(r.subject)).toBe(2);
+      await expect(r.subject.scrollHeight).toBeGreaterThan(r.subject.clientHeight);
+      // Cut only at the second line's end: a long code wraps instead of running out sideways.
+      await expect(r.subject.scrollWidth).toBeLessThanOrEqual(r.subject.clientWidth);
+      // Cut on screen only: the whole Subject is still there for screen readers.
+      await expect(r.subject.textContent).toBe(shown[i]!.title);
+      // The number's line and the Trade's line come under the Subject's two lines, not over them.
+      const subject = r.subject.getBoundingClientRect();
+      await expect(r.code.getBoundingClientRect().top).toBeGreaterThanOrEqual(subject.bottom - 0.5);
+      await expect(r.trade.getBoundingClientRect().top).toBeGreaterThanOrEqual(r.code.getBoundingClientRect().bottom - 0.5);
+      // The checkbox and the pill line up with the Subject's first line, not its middle.
+      for (const side of [r.checkbox, r.pill]) await expect(side.getBoundingClientRect().top).toBeLessThan(subject.top + subject.height / 2);
+      await expectTextBesideThePill(r);
+      await expectInReadingOrder(context, r);
+    }
+    for (const docNo of results.querySelectorAll("bdi")) await expectLaidOutLeftToRight(docNo);
+    await expectNoSidewaysScroll(dialog, results);
+    await expect(touchTargetOffenders(results)).toEqual([]);
+  },
+};
+
+/** At 820 a long Subject keeps one line, cut with an ellipsis. */
+export const LongSubjectOnATablet: Story = {
+  parameters: { ...tablet, ...overlay },
+  render: withLongSubjects,
+  play: async (context) => {
+    const shown = longSubjects[storyLocale(context)];
+    const { dialog, results, rows } = await openRows(context, shown);
+    for (const r of rows) {
+      await expect(linesOf(r.subject)).toBe(1);
+      await expect(r.subject.scrollWidth).toBeGreaterThan(r.subject.clientWidth);
       await expectTextBesideThePill(r);
       await expectInReadingOrder(context, r);
     }
