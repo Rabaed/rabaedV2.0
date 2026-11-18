@@ -325,8 +325,10 @@ defineCase("WF-07", async (t) => {
   t.check("Saeed reads the Versions newest first with Change Notes", hist.length >= 1 && hist[0].changeNote !== undefined && (hist.length < 2 || hist[0].versionNo > hist[1].versionNo), JSON.stringify(hist).slice(0, 300));
   t.check("The running figure is present (counts only items the reader sees)", hist.every((h) => typeof h.running === "number"));
   t.check("Saeed sees the Change Notes", hist.some((h) => /UAT WF-07/.test(String(h.changeNote))), JSON.stringify(hist).slice(0, 200));
-  const h = await v(tm.api.hafiz!, 1);
-  const hh = (h.history as H.Json[]) ?? [];
+  // A Member who is not a Project Admin reads a Workflow only while it is in use for them (RP-1299, RP-1309):
+  // the copy is TMC's MAR exception for the read, as in WF-06, so the Project's MAR binding is never switched.
+  t.check("Hafiz gets the plain 404 for the Versions while no Type runs the copy (RP-1309)", (await tm.api.hafiz!.get(`/workflows/${wf}/versions/1`)).status === 404);
+  const hh = await withException(saeed, tm.projectId, wf, "TMC Constructions", async () => ((await v(tm.api.hafiz!, 1)).history as H.Json[]) ?? []);
   t.check("Hafiz sees the Versions but no Change Note", hh.length === hist.length && hh.every((x) => !x.changeNote), JSON.stringify(hh).slice(0, 200));
   const { page, text } = await H.viewPath(t, "saeed", `/projects/${tm.projectId}/settings/workflows/${wf}/versions/${hist[0]?.versionNo ?? 2}`, "versions-page");
   t.check("The Versions page lists the published Versions with their Change Notes", /UAT WF-07 (first|second) note/.test(text), text.slice(0, 200).replace(/\n/g, " | "));

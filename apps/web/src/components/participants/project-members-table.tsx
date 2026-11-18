@@ -176,7 +176,7 @@ export function ProjectMembersTable({
 
       <Dialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         {removing && (
-          <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("removeTitle", { name: removing.name, project })} description={t("removeBody")}>
+          <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("removeTitle", { name: removing.name, project })} description={t("removeBody")}>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="secondary">{t("cancel")}</Button>
@@ -225,7 +225,7 @@ function PositionsDialog({
     });
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("positionsTitle", { name: member.name })} description={t("positionsHint", { project })}>
+      <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("positionsTitle", { name: member.name })} description={t("positionsHint", { project })}>
         <fieldset className="space-y-2">
           <legend className="sr-only">{t("positions")}</legend>
           {positions.map((p) => (
@@ -310,7 +310,7 @@ export function AddMemberDialog({
         <Icon name="person-add" size={16} />
         {t("addTitle")}
       </Button>
-      <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
+      <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("addTitle")} description={t("addHint")}>
         {candidates.length === 0 ? (
           <p className="text-sm text-muted">{t("noCandidates")}</p>
         ) : (

@@ -551,7 +551,7 @@ export type DiscardDraftDialogProps = {
 export function DiscardDraftDialog({ open, onOpenChange, onDiscard, labels }: DiscardDraftDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent role="alertdialog" title={labels.title} description={labels.description} closeLabel={labels.close}>
+      <DialogContent phone="card" role="alertdialog" title={labels.title} description={labels.description} closeLabel={labels.close}>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="ghost">{labels.keep}</Button>

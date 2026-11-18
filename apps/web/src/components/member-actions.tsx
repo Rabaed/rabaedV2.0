@@ -110,6 +110,7 @@ export function MemberActions({ member }: { member: CompanyMember }) {
       <RowActionsMenu label={t("menuFor", { name })} items={items} busy={pending || handover.pending} />
       <Dialog open={asking !== null} onOpenChange={(open) => !open && !pending && setAsking(null)}>
         <DialogContent
+          phone="card"
           title={asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}
           description={t(asking === "reactivate" ? "confirmReactivate" : "confirmDeactivate", { name })}
           closeLabel={t("close")}

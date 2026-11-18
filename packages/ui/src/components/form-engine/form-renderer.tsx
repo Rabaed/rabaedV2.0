@@ -40,12 +40,14 @@ import {
   type NamedAnswers,
   type DocumentSummary,
   type OptionList,
+  type SupplierApproval,
   type SupplierChoice,
   type ChecklistTemplateChoice,
   type TableColumn,
 } from "@rabaed/domain";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { DocNo } from "../doc-no/doc-no.tsx";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field, useFieldControl } from "../form/field.tsx";
@@ -455,6 +457,24 @@ function currencySymbol(currency: string, locale: Locale): string {
 const noPeople: FormChoices = { members: [], participants: [] };
 const noOptionLists: readonly OptionList[] = [];
 const noSuppliers: readonly SupplierChoice[] = [];
+
+/**
+ * An approved supplier's name opening the SAR that approved it, with that SAR's Document Number (always left to
+ * right) and Subject under it (RP-1306). Given only for a reader who sees that SAR.
+ */
+function SupplierApprovalLink({ name, approval, href, linkAs: Anchor }: { name: string; approval: SupplierApproval; href: string; linkAs: ElementType }) {
+  return (
+    <Anchor href={href} className={cn("inline-flex min-h-11 max-w-full flex-col items-start justify-center gap-0.5 rounded-sm text-start", focusRing)}>
+      <span className="font-medium text-brand-fg underline underline-offset-4">
+        <bdi>{name}</bdi>
+      </span>
+      <span className="flex max-w-full flex-wrap items-baseline gap-x-2 text-sm text-muted">
+        <DocNo value={approval.documentNumber} className="whitespace-nowrap" />
+        <bdi className="min-w-0">{approval.subject}</bdi>
+      </span>
+    </Anchor>
+  );
+}
 const noTemplates: readonly ChecklistTemplateChoice[] = [];
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
@@ -1023,6 +1043,14 @@ export function FormRenderer({
     if (isUnanswered(value) && !naming) return null;
     if (field.type === "table") return <TableRead field={field} value={value} locale={locale} labels={labels.table} optionLists={optionLists} {...(pageAnswers ? { look: "page" as const } : {})} />;
     const shown = formatFormValue(field, value, locale, naming, optionLists, {}, suppliers);
+    // The SAR that approved the supplier opens from its name, for a reader who sees that SAR (RP-1306, V10); the
+    // name alone otherwise, exactly as for a supplier added by hand.
+    const approval = field.type === "approved_supplier" ? suppliers.find((s) => s.id === value)?.approval : null;
+    // Only where the page says how an item opens: the default `links` would open nothing ("#").
+    const approvalHref = approval && links !== noLinks ? links.hrefFor(approval.workItemId) : null;
+    if (approval && approvalHref !== null && shown) {
+      return <SupplierApprovalLink name={shown} approval={approval} href={approvalHref} linkAs={links.linkAs ?? "a"} />;
+    }
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency" || field.type === "calculated") {
       return <bdi dir={directionOf(locale)}>{shown}</bdi>;

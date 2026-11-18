@@ -135,7 +135,7 @@ describe("the supplier of a MAR (seam 1 acceptance)", () => {
     await take(engineer, id, "send_for_review");
     // Another Company reads the answer as the id the list names: never what approved it (V10).
     const names = await suppliersOf(consultant);
-    expect(names.find((s) => s.id === other)).toEqual({ id: other, name: bilingual("Soon Gone Cement"), tradeId: trade.civil, scopeId: null, status: "withdrawn" });
+    expect(names.find((s) => s.id === other)).toEqual({ id: other, name: bilingual("Soon Gone Cement"), tradeId: trade.civil, scopeId: null, status: "withdrawn", approval: null });
   });
 
   it("clears the supplier when the Trade changes to another's", async () => {

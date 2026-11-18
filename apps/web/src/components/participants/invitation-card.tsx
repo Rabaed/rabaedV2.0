@@ -74,7 +74,7 @@ export function InvitationCard({ id, project, host, company, role, ago }: Invita
         </Button>
       </div>
       <Dialog open={declining} onOpenChange={setDeclining}>
-        <DialogContent className={sheetOnPhone} closeLabel={t("close")} title={t("declineTitle")} description={t("declineBody", { company, project, host })}>
+        <DialogContent phone="card" className={sheetOnPhone} closeLabel={t("close")} title={t("declineTitle")} description={t("declineBody", { company, project, host })}>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="secondary">{t("keepInvitation")}</Button>

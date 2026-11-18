@@ -362,7 +362,7 @@ function Retire({ template }: { template: ChecklistTemplate }) {
       <DialogTrigger asChild>
         <Button variant="ghost">{t("retire")}</Button>
       </DialogTrigger>
-      <DialogContent title={t("retireTitle", { name })} description={t("retireHelp")} closeLabel={t("close")}>
+      <DialogContent phone="card" title={t("retireTitle", { name })} description={t("retireHelp")} closeLabel={t("close")}>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="ghost">{t("cancel")}</Button>

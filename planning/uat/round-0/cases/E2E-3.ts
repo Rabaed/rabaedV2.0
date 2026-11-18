@@ -311,7 +311,7 @@ defineCase("J8", async (t) => {
   const sv = (await v1(saeed)).body as any;
   const yv = await v1(yousef);
   t.check("[WF-07] Hand-over 3: Saeed reads the Version with its Change Note", (sv?.history ?? []).some((h: Json) => /UAT J8/.test(String(h.changeNote))), JSON.stringify(sv?.history)?.slice(0, 160));
-  t.check("[WF-07][VIS] Yousef (a Project Member of Beta Build) reads the published Version whole but no Change Note (V20)", yv.status === 200 && ((yv.body as any).definition?.steps?.length ?? 0) >= 7 && ((yv.body as any).history ?? []).every((h: Json) => !h.changeNote), `${yv.status}`);
+  t.check("[WF-07][VIS] Yousef (a Project Member of Beta Build) gets the plain 404 for the Version while no Type runs it (RP-1309)", yv.status === 404, `${yv.status}`);
   t.check("[WF-07][VIS] Layla and Nasser (not Project Members) get the plain 404 for the Version", (await v1(layla)).status === 404 && (await v1(nasser)).status === 404, "");
   await lookClosed(t, "saeed", `/projects/${projectId}/settings/workflows/${wf}/versions/1`, "4-saeed-version-page");
 
@@ -323,6 +323,8 @@ defineCase("J8", async (t) => {
   t.check("[WF-03] The J7 Project now runs the copy at Version 1 for MAR", after.name.en === name && after.versionNo === 1, JSON.stringify(after));
   const yAfter = marOf(await workflowSettings(yousef, projectId)).workflow;
   t.check("[WF-03][VIS] Hand-over 4: Yousef reads which Workflow the Project runs (V20) - the published copy by name", yAfter.name.en === name, yAfter.name?.en);
+  const yRun = await v1(yousef);
+  t.check("[WF-07][VIS] Once the Project runs it, Yousef reads the published Version whole but no Change Note (V20)", yRun.status === 200 && ((yRun.body as any).definition?.steps?.length ?? 0) >= 7 && ((yRun.body as any).history ?? []).every((h: Json) => !h.changeNote), `${yRun.status}`);
   const towerAfter = marOf(await workflowSettings(saeed, tower)).workflow;
   t.check("[WF-09] Riyadh Gate Tower's MAR binding is unchanged", towerAfter.id === towerBefore.id && towerAfter.name.en === towerBefore.name.en, `${towerBefore.name.en} -> ${towerAfter.name.en}`);
   await lookClosed(t, "saeed", `/projects/${projectId}/settings/workflows`, "5-saeed-bound");
