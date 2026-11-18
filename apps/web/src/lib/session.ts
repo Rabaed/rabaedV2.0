@@ -172,11 +172,12 @@ export function getApprovedSuppliers(projectId: string): Promise<ApprovedSupplie
 
 /**
  * The Project's Approved Supplier List as an `approved_supplier` field reads it (RP-595): every
- * supplier, withdrawn too, with its Trade and name; empty for anyone who isn't a Member.
+ * supplier, withdrawn too, with its Trade and name, and the SAR behind it for a reader who sees that SAR
+ * (RP-1306); empty for anyone who isn't a Member.
  */
 export async function getSupplierChoices(projectId: string): Promise<SupplierChoice[]> {
   const list = await getApprovedSuppliers(projectId);
-  return (list?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name }));
+  return (list?.suppliers ?? []).map((s) => ({ id: s.id, tradeId: s.tradeId, status: s.status, name: s.name, approval: s.approval }));
 }
 
 /** Project Settings → Required links (RP-82): the Project's link questions and which it makes required; null for anyone not on it. */
