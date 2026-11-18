@@ -243,7 +243,7 @@ defineCase("J1", async (t) => {
   s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it with no Pick up", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.heldBy?.memberName?.en === "Ali Sonour" && sent.actions.pickUp === false, `${sent.documentNumber}`);
   const number = sent.documentNumber as string;
   const aliSend = await s.open("ali", id, "ali-holds-after-send");
-  s.ck("SUB-04", "Ali's page reads the number and With Ali Sonour - TMC Constructions", aliSend.includes(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliSend));
+  s.ck("SUB-04", "Ali's page reads the number and With Ali Sonour", aliSend.includes(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliSend));
   s.ck("SUB-04", "The Document Number is left to right on the page", (await s.page("ali").locator(`[dir="ltr"]`, { hasText: number }).count()) > 0);
   await s.hidden("VIS-01", "Hand-over 2, in TMC's Internal Review", id, ["yousef", "ahmed", "faisal", "noura"], true);
 

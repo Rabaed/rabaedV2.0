@@ -1,6 +1,6 @@
 # Rabaed UAT test sheet: System UAT with Ahmed
 
-Built 2026-11-08. 263 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
+Built 2026-11-18. 263 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
 
 ## How to use this file
 
@@ -81,7 +81,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-04 Lighting control panel – ready to send" (complete, with its Datasheet).
   2. Send for Review.
-- **Expected result:** The item gets the next number in TMC's MAR sequence (UAT01-MAR-01-0013 if no other case has sent one yet), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour - TMC Constructions", no Pick up button. Nothing outside TMC.
+- **Expected result:** The item gets the next number in TMC's MAR sequence (UAT01-MAR-01-0013 if no other case has sent one yet), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour", no Pick up button. Nothing outside TMC.
 
 ### SUB-05 A Return stays in Internal Review
 
@@ -90,7 +90,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0001 "SUB-05 Emergency luminaires – returned by Ali". Ali Returned it with the reason "Add the model's test certificate and resend."
-- **Expected result:** The item is in the Internal Review Stage at the Contractor Engineer Step, keeps its Document Number UAT01-MAR-01-0001 and is with Hafiz ("With Hafiz Hamdan - TMC Constructions"); it is never a Draft again. Ali's reason is in TMC's history, marked internal. Step Age counts from the Return.
+- **Expected result:** The item is in the Internal Review Stage at the Contractor Engineer Step, keeps its Document Number UAT01-MAR-01-0001 and is with Hafiz ("With Hafiz Hamdan"); it is never a Draft again. Ali's reason is in TMC's history, marked internal. Step Age counts from the Return.
 
 ### SUB-06 Documents change until the Submit
 
@@ -101,7 +101,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0002, returned to Hafiz.
   2. Remove the Datasheet and add a corrected PDF.
   3. Send for Review again.
-- **Expected result:** Hafiz can swap Documents while the item is in TMC: the corrected PDF replaces the old one. After the send the item keeps UAT01-MAR-01-0002 and is with Ali ("With Ali Sonour - TMC Constructions"). Documents freeze at the Submit, not before.
+- **Expected result:** Hafiz can swap Documents while the item is in TMC: the corrected PDF replaces the old one. After the send the item keeps UAT01-MAR-01-0002 and is with Ali ("With Ali Sonour"). Documents freeze at the Submit, not before.
 
 ### SUB-14 Code D offers a replacement, not a Revision
 
@@ -206,9 +206,9 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > MAR: pick Location Block A, then Tower A, then Tower A Level 02.
-  2. Open Scopes.
+  2. Open Scopes, then pick Trade Electrical Works and open Scopes again.
   3. Try to remove Trade from the Form view.
-- **Expected result:** Locations nest Zone > Building > Floor (Block A > Tower A > Tower A Level 02); Scopes belong to the Trade, and UAT 01 has none, so Scopes offers nothing. Trade, Location and Scopes cannot be removed or made optional.
+- **Expected result:** Locations nest Zone > Building > Floor (Block A > Tower A > Tower A Level 02); Scopes belong to the Trade: before a Trade is picked Scopes offers nothing, and for Electrical Works it offers only that Trade's Scopes (Lighting with Emergency lighting and External lighting under it, Power distribution, Earthing and lightning protection, Cable containment, Fire alarm), in English and Arabic. Trade, Location and Scopes cannot be removed or made optional.
 
 ### FRM-05 Related submittals offers only Submitted items Hafiz sees
 
@@ -756,7 +756,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-03 Package to fill" > Add items.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-03 Package to fill" > Add submittals.
   2. Pick the Drafts "PKG-03 Earthing – Draft 1" and "PKG-03 Busbar trunking – Draft 2" and UAT02-MAR-01-0010 "PKG-03 Smoke detectors – in Internal Review".
   3. Try to add "PKG-03 Wiring devices – in another Package", which is in "PKG-03 Package holding a Draft".
 - **Expected result:** Only TMC's own submittals Ali can see are offered, with search and a Trade filter. The Draft already in PKG-03 Package holding a Draft is marked and cannot be picked: a submittal belongs to at most one Package.
@@ -779,7 +779,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-05 Package to submit" > Add items: the Draft "PKG-05 Lighting fixtures – Datasheet missing".
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-05 Package to submit" > Add submittals: the Draft "PKG-05 Lighting fixtures – Datasheet missing".
   2. Open Submit Package.
   3. Remove that Draft again, then Submit Package and confirm.
 - **Expected result:** A not-ready list names "PKG-05 Lighting fixtures – Datasheet missing" with each required answer it lacks (its Description, Items and Datasheet) and links to it; Submit is disabled until the list is empty. After the removal one confirm submits "PKG-05 Exit signs – ready Draft", which gets the next Document Number in TMC's MAR series; the Package is In Progress. If any item fails, none is submitted.
