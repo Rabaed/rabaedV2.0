@@ -120,6 +120,7 @@ export function checklistTemplateLabels(t: Translate): FormRendererLabels["check
     none: t("checklistTemplateField.none"),
     chooseTradeFirst: t("checklistTemplateField.chooseTradeFirst"),
     noneForTrade: t("checklistTemplateField.noneForTrade"),
+    noneForScopes: t("checklistTemplateField.noneForScopes"),
     kept: (name) => t("checklistTemplateField.kept", { name }),
     checks: (n, count) => t("checklistTemplateField.checks", { n, count }),
     filledOnSite: t("checklistTemplateField.filledOnSite"),

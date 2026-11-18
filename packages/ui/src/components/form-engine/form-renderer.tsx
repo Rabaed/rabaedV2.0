@@ -21,6 +21,7 @@ import {
   isAnnotatedCopy,
   withAnnotatedCopies,
   scopesFittingTrade,
+  unticksAScope,
   toLatinDigits,
   toProjectWallTime,
   type AnswerField,
@@ -236,9 +237,16 @@ export type FormRendererProps = {
   /**
    * The Project's Checklist Templates (each one's latest Version) and the Versions the
    * item holds, for `checklist_template` fields (RP-651): the active ones of the chosen
-   * Trade are offered (edit mode), and the picked one's name and items are shown.
+   * Trade are offered (edit mode), and the picked one's name and items are shown. With
+   * Scopes ticked, only the whole-Trade ones and a ticked Scope's (RP-1315), and unticking
+   * a Scope clears the pick.
    */
   checklistTemplates?: readonly ChecklistTemplateChoice[];
+  /**
+   * The item has been Submitted, so its Checklist Template pick is fixed (RP-651): unticking a
+   * Scope then keeps it (owner, RP-1315 comment 15917).
+   */
+  checklistTemplatesFixed?: boolean;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -711,6 +719,7 @@ export function FormRenderer({
   links = noLinks,
   suppliers = noSuppliers,
   checklistTemplates = noTemplates,
+  checklistTemplatesFixed = false,
   onChange,
   idPrefix = "form",
   sectionTitles = "shown",
@@ -775,11 +784,20 @@ export function FormRenderer({
               tradeId={textOf(answers.trade)}
               scopes={choices.scopes}
               labels={labels.builtIn}
-              onChange={(scopes) => onChange?.({ scopes })}
+              // Unticking a Scope clears the Checklist Template picked, as a new Trade does (RP-1315).
+              onChange={(scopes) => onChange?.({ scopes, ...(unticksAScope(answers.scopes, scopes) ? clearedChecklistTemplates() : {}) })}
             />
           ),
         };
     }
+  }
+
+  /** Every Checklist Template picked, cleared; none while the picks are fixed (after the item's first Submit). */
+  function clearedChecklistTemplates(): Record<string, undefined> {
+    if (checklistTemplatesFixed) return {};
+    const cleared: Record<string, undefined> = {};
+    for (const field of byKey.values()) if (field.type === "checklist_template" && answers[field.key] !== undefined) cleared[field.key] = undefined;
+    return cleared;
   }
 
   /** An `attachments` field's files, to upload and remove while they may change; a group when there is no file input. */
@@ -821,12 +839,16 @@ export function FormRenderer({
   function checklistTemplateControl(field: Extract<AnswerField, { type: "checklist_template" }>): { element: ReactNode; group?: boolean } {
     return {
       // The Field labels the select; the cards, or with nothing to offer the line saying why, are a group it names.
-      group: templateCards || templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate).length === 0,
+      group:
+        templateCards ||
+        templateOptions(answers[field.key], textOf(answers.trade), checklistTemplates, locale, labels.checklistTemplate, idsOf(answers.scopes), choices.scopes).length === 0,
       element: (
         <ChecklistTemplateField
           name={field.key}
           value={answers[field.key]}
           tradeId={textOf(answers.trade)}
+          scopeIds={idsOf(answers.scopes)}
+          scopes={choices.scopes}
           tradeName={choices.trades.find((t) => t.id === textOf(answers.trade))?.label}
           choices={checklistTemplates}
           required={field.required === true}

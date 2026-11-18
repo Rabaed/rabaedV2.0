@@ -21,10 +21,10 @@ import { isProjectAdmin } from "./project-admin.ts";
 
 type Trx = Transaction<Database>;
 
-const createRefusals = ["not_found", "project_closed", "trade_not_found"] as const;
+const createRefusals = ["not_found", "project_closed", "trade_not_found", "scope_not_found"] as const;
 export type CreateChecklistTemplateResult = { ok: true; id: string } | { ok: false; reason: (typeof createRefusals)[number] };
 
-const editRefusals = ["not_found", "project_closed", "template_retired", "trade_not_found"] as const;
+const editRefusals = ["not_found", "project_closed", "template_retired", "trade_not_found", "scope_not_found"] as const;
 export type EditChecklistTemplateResult = { ok: true } | { ok: false; reason: (typeof editRefusals)[number] };
 
 const retireRefusals = ["not_found", "project_closed"] as const;
@@ -38,10 +38,11 @@ export async function projectChecklistTemplates(trx: Trx, projectId: string): Pr
     version_no: number;
     name: ChecklistTemplate["name"];
     trade_value_id: string;
+    scope_id: string | null;
     status: ChecklistTemplate["status"];
     items: unknown;
   }>`
-    select t.id, v.id as version_id, v.version_no, v.name, v.trade_value_id, t.status, v.items
+    select t.id, v.id as version_id, v.version_no, v.name, v.trade_value_id, v.scope_id, t.status, v.items
     from checklist_template t
     join checklist_template_version v on v.checklist_template_id = t.id and v.version_no = t.version_no
     join dimension_value tv on tv.id = v.trade_value_id
@@ -54,6 +55,7 @@ export async function projectChecklistTemplates(trx: Trx, projectId: string): Pr
     versionNo: r.version_no,
     name: r.name,
     tradeId: r.trade_value_id,
+    scopeId: r.scope_id,
     status: r.status,
     items: checklistTemplateItems.parse(r.items),
   }));
@@ -109,7 +111,7 @@ export function createChecklistTemplate(
   return withMember(db, memberId, async (trx): Promise<CreateChecklistTemplateResult> => {
     const { rows } = await sql<{ outcome: string; template_id: string | null }>`
       select outcome, template_id from app.create_checklist_template(
-        ${projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${input.tradeId}::uuid, ${JSON.stringify(input.items)}::jsonb, ${now})
+        ${projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${input.tradeId}::uuid, ${JSON.stringify(input.items)}::jsonb, ${now}, ${input.scopeId}::uuid)
     `.execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createRefusals]);
     return outcome === "created" ? { ok: true, id: rows[0]!.template_id! } : { ok: false, reason: outcome };
@@ -127,7 +129,7 @@ export function editChecklistTemplate(
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
       select outcome from app.edit_checklist_template(
-        ${templateId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${input.tradeId}::uuid, ${JSON.stringify(input.items)}::jsonb, ${now})
+        ${templateId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${input.tradeId}::uuid, ${JSON.stringify(input.items)}::jsonb, ${now}, ${input.scopeId}::uuid)
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "edited", editRefusals);
   });

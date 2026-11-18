@@ -67,6 +67,8 @@ type WorkItemFormState = {
   suppliers: readonly SupplierChoice[];
   /** The Project's Checklist Templates and the Versions the item holds, for its `checklist_template` fields (RP-651). */
   checklistTemplates: readonly ChecklistTemplateChoice[];
+  /** It has been Submitted, so its Checklist Template picks are fixed: unticking a Scope keeps them (RP-1315 comment 15917). */
+  checklistTemplatesFixed: boolean;
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
   /** The item's Document Number; none until its first Submit (ADR 0030), a Draft's included. */
@@ -151,6 +153,7 @@ export function WorkItemFormProvider({
   optionLists,
   suppliers = [],
   checklistTemplates = [],
+  checklistTemplatesFixed = false,
   editable,
   editableSections,
   fixedByNumber = [],
@@ -172,6 +175,8 @@ export function WorkItemFormProvider({
   optionLists: readonly OptionList[];
   suppliers?: readonly SupplierChoice[];
   checklistTemplates?: readonly ChecklistTemplateChoice[];
+  /** The item has been Submitted (detail.checklistTemplatesFixed); a new item's never are. */
+  checklistTemplatesFixed?: boolean;
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   editableSections: readonly string[];
@@ -308,6 +313,7 @@ export function WorkItemFormProvider({
         optionLists,
         suppliers,
         checklistTemplates,
+        checklistTemplatesFixed,
         projectId,
         documentNumber,
         firstDraft: isFirstDraft({ workItemId, documentNumber, autosave }),
@@ -415,6 +421,7 @@ export function WorkItemAnswers({
         optionLists={form.optionLists}
         suppliers={form.suppliers}
         checklistTemplates={form.checklistTemplates}
+        checklistTemplatesFixed={form.checklistTemplatesFixed}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}

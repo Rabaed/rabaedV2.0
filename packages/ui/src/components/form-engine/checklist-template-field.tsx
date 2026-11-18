@@ -3,12 +3,14 @@
 import {
   checklistAnswerLabels,
   checklistAnswerSets,
+  checklistTemplateFitsScopes,
   formatNumber,
   intlLocaleOf,
   isNegativeAnswer,
   type ChecklistTemplateChoice,
   type ChecklistTemplateItem,
   type Locale,
+  type ScopeChoice,
 } from "@rabaed/domain";
 import { useState } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -32,6 +34,8 @@ export type ChecklistTemplateFieldLabels = {
   chooseTradeFirst: string;
   /** Shown in place of the choice when the Trade has no Checklist Template yet. */
   noneForTrade: string;
+  /** Shown in place of the choice when the Trade has templates, but none for the ticked Scopes (RP-1315). */
+  noneForScopes: string;
   /** A held Version no longer offered (edited or retired since), named: it stays the choice until another is picked. */
   kept: (name: string) => string;
   /** How many checks the picked template has. */
@@ -121,6 +125,12 @@ export type ChecklistTemplateFieldProps = {
   value: unknown;
   /** The item's Trade, whose templates are offered. */
   tradeId: string;
+  /**
+   * The item's ticked Scopes and Sub-scopes, and the Project's Scopes (RP-1315): with any ticked, only the
+   * whole-Trade templates and those on a ticked Scope are offered (checklistTemplateFitsScopes).
+   */
+  scopeIds?: readonly string[];
+  scopes?: readonly ScopeChoice[];
   /** The Project's templates (each one's latest Version) and the Versions the item holds. */
   choices: readonly ChecklistTemplateChoice[];
   /** The field is required: no "None" to take the pick back. */
@@ -144,9 +154,9 @@ export type ChecklistTemplateFieldProps = {
 const noChoice = "-";
 
 /**
- * What the select offers: the active templates of the Trade, sorted in the viewer's
- * alphabet, and first the one already picked when it isn't one of them any more. None
- * means there is no select, only a line saying why.
+ * What the select offers: the active templates of the Trade that fit the ticked Scopes
+ * `scopeIds`, sorted in the viewer's alphabet, and first the one already picked when it
+ * isn't one of them any more. None means there is no select, only a line saying why.
  */
 export function templateOptions(
   value: unknown,
@@ -154,12 +164,14 @@ export function templateOptions(
   choices: readonly ChecklistTemplateChoice[],
   locale: Locale,
   text: ChecklistTemplateFieldLabels,
+  scopeIds: readonly string[] = [],
+  scopes: readonly ScopeChoice[] = [],
 ): { value: string; label: string }[] {
   const current = typeof value === "string" ? value : "";
   const picked = choices.find((c) => c.id === current);
   const collator = new Intl.Collator(intlLocaleOf(locale));
   const options = choices
-    .filter((c) => c.offered && c.tradeId === tradeId && c.name)
+    .filter((c) => c.offered && c.tradeId === tradeId && c.name && checklistTemplateFitsScopes(c, scopeIds, scopes))
     .map((c) => ({ value: c.id, label: c.name![locale] }))
     .toSorted((a, b) => collator.compare(a.label, b.label));
   if (picked?.name && !options.some((o) => o.value === current)) options.unshift({ value: current, label: text.kept(picked.name[locale]) });
@@ -231,10 +243,12 @@ function TemplateCards({
   name,
   onChange,
   previewAlways = false,
+  scopeIds,
+  scopes,
 }: Omit<ChecklistTemplateFieldProps, "mode" | "look"> & { previewAlways?: boolean }) {
   const [itemsShown, setItemsShown] = useState(true);
   const current = typeof value === "string" ? value : "";
-  const options = templateOptions(value, tradeId, choices, locale, text);
+  const options = templateOptions(value, tradeId, choices, locale, text, scopeIds, scopes);
   const hidden = choices.filter((c) => c.offered && c.name && c.tradeId !== tradeId).length;
   const picked = choices.find((c) => c.id === current && c.name);
   const cards = required ? options : [{ value: noChoice, label: text.none }, ...options];
@@ -314,7 +328,21 @@ export function PickedTemplateItems({ value, choices, locale, labels }: { value:
  * Version's items after the field (PickedTemplateItems), below its help. In read mode,
  * the picked template's name and its items.
  */
-export function ChecklistTemplateField({ value, tradeId, choices, required, mode, locale, labels: text, name, onChange, look = "select", tradeName }: ChecklistTemplateFieldProps) {
+export function ChecklistTemplateField({
+  value,
+  tradeId,
+  choices,
+  required,
+  mode,
+  locale,
+  labels: text,
+  name,
+  onChange,
+  look = "select",
+  tradeName,
+  scopeIds,
+  scopes,
+}: ChecklistTemplateFieldProps) {
   const current = typeof value === "string" ? value : "";
   const picked = choices.find((c) => c.id === current);
   const items = <PickedTemplateItems value={value} choices={choices} locale={locale} labels={text} />;
@@ -330,8 +358,12 @@ export function ChecklistTemplateField({ value, tradeId, choices, required, mode
     );
   }
 
-  const options = templateOptions(value, tradeId, choices, locale, text);
-  if (options.length === 0) return <p className="text-body text-muted">{tradeId === "" ? text.chooseTradeFirst : text.noneForTrade}</p>;
+  const options = templateOptions(value, tradeId, choices, locale, text, scopeIds, scopes);
+  if (options.length === 0) {
+    // The Trade has templates, but none fits the ticked Scopes.
+    const narrowed = templateOptions(value, tradeId, choices, locale, text).length > 0;
+    return <p className="text-body text-muted">{tradeId === "" ? text.chooseTradeFirst : narrowed ? text.noneForScopes : text.noneForTrade}</p>;
+  }
   if (look !== "select") {
     return (
       <TemplateCards
@@ -345,6 +377,8 @@ export function ChecklistTemplateField({ value, tradeId, choices, required, mode
         name={name}
         onChange={onChange}
         previewAlways={look === "cards-preview"}
+        scopeIds={scopeIds}
+        scopes={scopes}
       />
     );
   }

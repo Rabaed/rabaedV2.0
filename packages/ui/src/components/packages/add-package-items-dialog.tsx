@@ -158,7 +158,9 @@ export function AddPackageItemsDialog({
                       }}
                     />
                     <label htmlFor={id} className={cn("flex min-w-0 flex-1 flex-col", taken ? "text-muted" : "cursor-pointer")}>
-                      <span dir="auto" className="truncate font-medium text-text">
+                      {/* On a phone the Subject takes up to two lines, then an ellipsis; the whole of it stays in the page for
+                          screen readers (RP-1317). Wider, one line. */}
+                      <span dir="auto" className="truncate font-medium text-text phone:line-clamp-2 phone:break-words phone:whitespace-normal">
                         {row.title}
                       </span>
                       {/* On a phone the Trade takes its own line under the number, whole, so nothing runs under the pill (RP-1311). */}

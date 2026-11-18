@@ -399,6 +399,8 @@ export interface ChecklistTemplateVersionTable {
   version_no: number;
   name: ColumnType<Bilingual, string, string>;
   trade_value_id: string;
+  /** A Scope or Sub-scope of that Trade (RP-1315); null for the whole Trade. */
+  scope_id: string | null;
   items: ColumnType<unknown, string, string>;
 }
 

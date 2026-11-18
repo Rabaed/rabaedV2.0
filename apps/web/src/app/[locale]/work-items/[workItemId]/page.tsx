@@ -264,6 +264,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       optionLists={optionLists}
       suppliers={suppliers}
       checklistTemplates={checklistTemplates}
+      checklistTemplatesFixed={item.checklistTemplatesFixed}
       answers={item.answers}
       named={item.namedAnswers}
       editable={editing}
