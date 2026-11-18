@@ -12,7 +12,8 @@ import { AddPackageItemsDialog, type PackageItemSearch } from "./add-package-ite
 // The "+ Add submittals" pop-up's rows with a long Trade name (RP-1311, under the responsive spec
 // RP-1158). On a phone (402) the Trade takes its own line under the Subject and Document Number, and
 // the stage pill stays at the row's end, as the Packages view's cards do; at 820 and wider the Trade
-// stays beside the Document Number, as before. Never cut with an ellipsis. Story data only.
+// stays beside the Document Number. The Trade is never cut with an ellipsis. A long Subject (RP-1317)
+// takes up to two lines on a phone, then an ellipsis, and one line at 820 and wider. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const labelsOf = (context: { globals: Record<string, unknown> }) => packagePageLabels[storyLocale(context)];
 
@@ -61,14 +62,16 @@ const found: WorkItemRow[] = [
 const search: PackageItemSearch = async () => found;
 
 // Long Subjects (RP-1317): one Submitted, one already in another Package, in the story's language.
+// The second starts with a model code longer than the row is wide, which must wrap, not run out sideways.
+const longCode = "ZCVB1B3SPRINKLERZONECONTROLVALVE2026XL";
 const longSubjects = {
   en: [
     row(34, "Chilled water pumps for the podium plant room, with variable speed drives, vibration isolators and flexible connectors"),
-    row(35, "Fire sprinkler heads and pipework for the basement car park levels B1 to B3, with the zone control valves", inOtherPackage),
+    row(35, `${longCode} fire sprinkler heads and pipework for the basement car park levels B1 to B3`, inOtherPackage),
   ],
   ar: [
     row(34, "مضخات المياه المبردة لغرفة المعدات في المنصة مع محركات متغيرة السرعة وعوازل الاهتزاز والوصلات المرنة"),
-    row(35, "رشاشات الحريق وأنابيبها لمواقف السيارات في الأقبية من الأول إلى الثالث مع صمامات التحكم بالمناطق", inOtherPackage),
+    row(35, `${longCode} رشاشات الحريق وأنابيبها لمواقف السيارات في الأقبية من الأول إلى الثالث`, inOtherPackage),
   ],
 };
 const longSubjectSearch: Record<keyof typeof longSubjects, PackageItemSearch> = { en: async () => longSubjects.en, ar: async () => longSubjects.ar };
@@ -209,17 +212,13 @@ export const LongTradeOnATablet: Story = {
 };
 
 /** The long Subjects' rows, in the story's language. */
-const withLongSubjects: Story["render"] = (args, context) => {
-  const l = labelsOf(context);
-  const locale = storyLocale(context);
-  return <AddPackageItemsDialog {...args} search={longSubjectSearch[locale]} locale={locale} labels={l.addItems} close={l.close} cancel={l.cancel} refusals={l.refusals} />;
-};
+const withLongSubjects: Story["render"] = (args, context) => meta.render({ ...args, search: longSubjectSearch[storyLocale(context)] }, context);
 
 /** How many lines `element`'s box holds. */
 const linesOf = (element: HTMLElement) => Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight));
 
 /**
- * On a phone (402), a long Subject (RP-1317, the owner's answer (a)): two lines, then an ellipsis, so similar
+ * On a phone (402), a long Subject (RP-1317): two lines, then an ellipsis, so similar
  * submittals can be told apart. The whole Subject stays in the page for screen readers, and in the checkbox's
  * name. The Trade keeps its own line under the number (RP-1311), the pill stays at the row's end, nothing runs
  * under it or scrolls sideways, and each checkbox is a full touch target. Left open for the screenshot.
@@ -234,15 +233,16 @@ export const LongSubjectOnAPhone: Story = {
       // Two lines, then cut: no more.
       await expect(linesOf(r.subject)).toBe(2);
       await expect(r.subject.scrollHeight).toBeGreaterThan(r.subject.clientHeight);
+      // Cut only at the second line's end: a long code wraps instead of running out sideways.
+      await expect(r.subject.scrollWidth).toBeLessThanOrEqual(r.subject.clientWidth);
       // Cut on screen only: the whole Subject is still there for screen readers.
       await expect(r.subject.textContent).toBe(shown[i]!.title);
       // The number's line and the Trade's line come under the Subject's two lines, not over them.
       const subject = r.subject.getBoundingClientRect();
       await expect(r.code.getBoundingClientRect().top).toBeGreaterThanOrEqual(subject.bottom - 0.5);
       await expect(r.trade.getBoundingClientRect().top).toBeGreaterThanOrEqual(r.code.getBoundingClientRect().bottom - 0.5);
-      // The pill lines up with the Subject's first line.
-      const pill = r.pill.getBoundingClientRect();
-      await expect(pill.top).toBeLessThan(subject.top + subject.height / 2);
+      // The checkbox and the pill line up with the Subject's first line, not its middle.
+      for (const side of [r.checkbox, r.pill]) await expect(side.getBoundingClientRect().top).toBeLessThan(subject.top + subject.height / 2);
       await expectTextBesideThePill(r);
       await expectInReadingOrder(context, r);
     }
@@ -252,7 +252,7 @@ export const LongSubjectOnAPhone: Story = {
   },
 };
 
-/** At 820, unchanged: a long Subject keeps its one line, cut with an ellipsis, as before RP-1317. */
+/** At 820 a long Subject keeps one line, cut with an ellipsis. */
 export const LongSubjectOnATablet: Story = {
   parameters: { ...tablet, ...overlay },
   render: withLongSubjects,
