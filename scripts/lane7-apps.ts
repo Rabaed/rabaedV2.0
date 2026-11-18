@@ -127,7 +127,8 @@ export async function supervise(services: Service[], { stopFile, delayMs = resta
       failures = Date.now() - startedAt >= STABLE_MS ? 1 : failures + 1;
       const wait = delayMs(failures);
       stamp(`${service.name} exited with code ${code}; starting it again in ${wait / 1000} s.`);
-      await new Promise((r) => setTimeout(r, wait));
+      // In slices, so a stop requested while it waits ends it at once (`stop` gives up after 20 s; the wait can be 30).
+      for (let waited = 0; waited < wait && !stopping; waited += 250) await new Promise((r) => setTimeout(r, Math.min(250, wait - waited)));
     }
   };
 
