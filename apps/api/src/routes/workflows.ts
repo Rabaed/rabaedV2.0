@@ -35,8 +35,8 @@ const projectParams = z.object({ projectId: z.string() });
 // (RP-1309, V20: RP-1299's rule, readsWorkflowOffProject). Only their authors (the Project
 // Admins, the Authorized Person) read a draft or change them: builder, draft, validate and
 // publish ask app.can_author_workflow; duplicate and save-to-library ask app.duplicate_workflow
-// for a Project Admin of the target Project or the Authorized Person. Anyone else, and a
-// made-up id, gets the same 404.
+// for a Project Admin of the target Project or the Authorized Person, from a source those
+// reads give them (RP-1323). Anyone else, and a made-up id, gets the same 404.
 export const workflowRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {

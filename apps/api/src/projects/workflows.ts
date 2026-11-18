@@ -286,6 +286,9 @@ async function duplicateIn(
   input: DuplicateWorkflowRequest,
   now: Date,
 ): Promise<{ ok: true; id: string } | { ok: false; reason: (typeof duplicateRefusals)[number] }> {
+  // The source is only one the Member reads through the Workflow's own reads (RP-1323, after RP-1309):
+  // anything else is the 404 of a made-up id, before app.duplicate_workflow copies or refuses anything else.
+  if (!(await readsWorkflowOffProject(trx, sourceId))) return { ok: false, reason: "not_found" };
   const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
     select outcome, workflow_definition_id from app.duplicate_workflow(
       ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})

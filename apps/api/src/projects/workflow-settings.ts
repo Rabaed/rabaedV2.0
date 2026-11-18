@@ -183,19 +183,47 @@ export function readProjectWorkflowVersion(db: Db, memberId: string, projectId: 
  * lists it to them on a Project they are on (RP-1299's rule, `listedWorkflowIds`): in use there, or,
  * where they are a Project Admin, every Rabaed Default of its Types and its copies. Anyone else gets
  * the 404 of a made-up id. Row-level security still decides first, so this never widens a read.
+ * Duplicate and save to Library take only such a source (RP-1323).
  */
 export async function readsWorkflowOffProject(trx: Db, workflowId: string): Promise<boolean> {
-  const definition = await trx.selectFrom("workflow_definition").select(["owner_kind", "project_id"]).where("id", "=", workflowId).executeTakeFirst();
+  const definition = await trx.selectFrom("workflow_definition").select(["owner_kind"]).where("id", "=", workflowId).executeTakeFirst();
   if (!definition) return false;
   if (definition.owner_kind === "company") return true;
-  // The Projects the Member is on; a Project's own Workflow's Project first, where it is most likely listed.
-  const ids = (await trx.selectFrom("project").select("id").orderBy("created_at").orderBy("id").execute()).map((p) => p.id);
-  const own = definition.project_id;
-  for (const projectId of own && ids.includes(own) ? [own, ...ids.filter((id) => id !== own)] : ids) {
+  for (const projectId of await mayListWorkflow(trx, workflowId)) {
     const settings = await settingsAsMember(trx, projectId);
     if (settings && listedWorkflowIds(settings).has(workflowId)) return true;
   }
   return false;
+}
+
+/**
+ * The Projects the Member is on whose Settings may list Workflow `workflowId` to them, in one query
+ * (RP-1323), its own Project first: those where a binding they read names it (a Type's, or an
+ * exception's, V15), where a Type of the Project runs it by default (the Project's own Type of
+ * that code first, and no binding for the Type), and those they are a Project Admin of where it
+ * is one of its copies or a Rabaed Default of a Rabaed Type. It is only a filter: every way
+ * `settingsAsMember` lists a Workflow passes it, and `listedWorkflowIds` still decides, so the
+ * rule stays RP-1299's. A Workflow listed nowhere costs this query, not one Settings per Project.
+ */
+async function mayListWorkflow(trx: Db, workflowId: string): Promise<string[]> {
+  const { rows } = await sql<{ id: string }>`
+    select p.id
+    from workflow_definition d cross join project p
+    where d.id = ${workflowId}::uuid
+      and (
+        exists (select 1 from workflow_binding b where b.project_id = p.id and b.workflow_definition_id = d.id)
+        or exists (
+          select 1 from work_item_type t
+          where t.workflow_definition_id = d.id and (t.project_id is null or t.project_id = p.id)
+            and not exists (select 1 from work_item_type o where t.project_id is null and o.project_id = p.id and o.code = t.code)
+            and not exists (select 1 from workflow_binding b where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is null))
+        or (p.id in (select app.current_admin_project_ids()) and (
+          (d.owner_kind = 'project' and d.project_id = p.id)
+          or (d.owner_kind = 'rabaed' and exists (select 1 from work_item_type t where t.id = d.work_item_type_id and t.project_id is null))))
+      )
+    order by p.id is distinct from d.project_id, p.created_at, p.id
+  `.execute(trx);
+  return rows.map((r) => r.id);
 }
 
 async function versionAsMember(trx: Db, workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
