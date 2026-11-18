@@ -70,6 +70,7 @@ export function WithdrawParticipantDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        phone="card"
         closeLabel={labels.close}
         title={
           <span className="flex items-start gap-3">

@@ -187,7 +187,7 @@ export function DeletePackageDialog({
           {labels.trigger}
         </Button>
       </DialogTrigger>
-      <DialogContent title={labels.title(number)} description={labels.description} closeLabel={close}>
+      <DialogContent phone="card" title={labels.title(number)} description={labels.description} closeLabel={close}>
         {error && (
           <p role="alert" className="text-sm text-danger-fg">
             {error}

@@ -146,7 +146,7 @@ function Withdraw({ supplier }: { supplier: ApprovedSupplier }) {
           {t("withdraw")}
         </Button>
       </DialogTrigger>
-      <DialogContent title={t("withdrawTitle", { supplier: name })} description={t("withdrawHelp")} closeLabel={t("close")}>
+      <DialogContent phone="card" title={t("withdrawTitle", { supplier: name })} description={t("withdrawHelp")} closeLabel={t("close")}>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="ghost">{t("cancel")}</Button>
