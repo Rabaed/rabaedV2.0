@@ -125,6 +125,8 @@ describe("scenario RP-1309-4: an exception's Workflow is read by its Participant
 describe("scenario RP-1309-5: a Library Workflow is read by its own Company's Members, as before (V18)", () => {
   it("reads C2's Library copy to C2's Members, on no Project's account, and to no other Company", async () => {
     const name = { en: "C2 MARs", ar: "C2 MARs" };
+    // Save to Library takes only a source the Authorized Person reads (RP-1323): MAR's, as a Member of the Tower.
+    await api.addProjectMember(c2.caller, c2ParticipantId, c2.company.authorizedPerson.id);
     const saved = (await ok(c2.caller.post(`/v1/workflows/${running}/save-to-library`, { name }), 201)).json().id as string;
     await everyRead(saved, [c2.caller, c2Engineer], [c1.caller, at.c1Engineer, at.k1Manager, onNoProject], "C2's Library Workflow");
   });
