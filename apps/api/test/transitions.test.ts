@@ -128,7 +128,7 @@ describe("Send for Review", () => {
     expect(buttons(await detail(pm1, id))).toEqual([]); // not hidden-from: the PM reads the Draft, with no button on it
   });
 
-  it("moves the Draft to Internal Review, held by the PM pool, and assigns the Document Number", async () => {
+  it("moves the Draft to Internal Review, held by the PM pool, with no Document Number yet (ADR 0030)", async () => {
     await ok(tryTake(engineer, id, "send_for_review"));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({
@@ -137,7 +137,8 @@ describe("Send for Review", () => {
       heldBy: { companyName: { en: "Test Constructions" }, memberName: null },
       stepAgeWeeks: 1,
     });
-    expect(d.documentNumber).toBe("TWR-MARV-01-0001");
+    expect(d.documentNumber, "the first Submit numbers it").toBeNull();
+    expect(d.creationDate, "it has left Draft").not.toBeNull();
     expect(buttons(d)).toEqual([]); // not hidden-from: the Engineer reads the item they sent, with no button on it
     expect(buttons(await detail(pm1, id))).toEqual(["pick_up"]);
   });
@@ -219,18 +220,21 @@ describe("Pick up, Return and re-send", () => {
     expect((await tryTake(pm1, id, "no_such_thing")).statusCode).toBe(409);
   });
 
-  it("Returns it to the Engineer who sent it, with the reason, keeping the Document Number", async () => {
+  it("Returns it to the Engineer who sent it, with the reason, still with no Document Number (ADR 0030)", async () => {
     const number = (await detail(pm1, id)).documentNumber;
-    expect(number).toMatch(/^TWR-MARV-01-\d{4}$/);
+    expect(number).toBeNull();
     await ok(tryTake(pm1, id, "return", { reason: "Wrong tray size" }));
     const d = await detail(engineer, id);
-    expect(d).toMatchObject({ stage: { key: "draft" }, documentNumber: number });
+    // Back at the Draft Step on this older Version, but it has left Draft: it keeps its Creation Date and isn't a Draft to delete.
+    expect(d).toMatchObject({ stage: { key: "draft" }, documentNumber: null });
+    expect(d.creationDate).not.toBeNull();
+    expect(d.actions.discardDraft, "no Delete for an item that left Draft").toBe(false);
     expect(d.heldBy?.memberName).not.toBeNull();
     expect(buttons(d)).toEqual(["send_for_review"]);
     expect(buttons(await detail(pm1, id))).toEqual([]); // not hidden-from: the PM reads the returned Draft, with no button on it
 
     await ok(tryTake(engineer, id, "send_for_review"));
-    expect((await detail(engineer, id)).documentNumber).toBe(number);
+    expect((await detail(engineer, id)).documentNumber).toBeNull();
     expect((await detail(pm1, id)).stage.key).toBe("internal_review");
   });
 
@@ -246,9 +250,10 @@ describe("Pick up, Return and re-send", () => {
     expect(events[0]).toMatchObject({
       fromStep: { en: "Draft" },
       toStep: { en: "Contractor review" },
-      documentNumber: expect.stringMatching(/^TWR-MARV-01-/),
       by: { companyName: { en: "Test Constructions" }, memberName: { en: "Test Member" } },
     });
+    // Send for Review numbers nothing (ADR 0030): no move here carries a Document Number.
+    expect(events.map((e) => e.documentNumber ?? null)).toEqual([null, null, null, null]);
     expect(events[2]!.reason).toBe("Wrong tray size");
     expect(events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
   });
@@ -267,15 +272,15 @@ describe("Pick up, Return and re-send", () => {
 });
 
 describe("the Document Number", () => {
-  it("counts on per Participant, and not before leaving Draft", async () => {
+  // The count itself comes at the first Submit (ADR 0030), which this Project's Consultant can't take
+  // (above): numbering.test.ts (scenario 53) and rp-1316-number-at-first-submit.test.ts count it.
+  it("is not given before the first Submit: neither a Draft nor Send for Review numbers an item (ADR 0030)", async () => {
     const a = await createDraft(engineer, "Switchgear");
     const b = await createDraft(engineer, "Busbars");
     expect((await detail(engineer, a)).documentNumber).toBeNull();
-    await ok(tryTake(engineer, b, "send_for_review"));
     await ok(tryTake(engineer, a, "send_for_review"));
-    const nb = (await detail(engineer, b)).documentNumber!;
-    const na = (await detail(engineer, a)).documentNumber!;
-    expect(Number(na.slice(-4))).toBe(Number(nb.slice(-4)) + 1);
+    await ok(tryTake(engineer, b, "send_for_review"));
+    for (const id of [a, b]) expect((await detail(engineer, id)).documentNumber, "Send for Review numbers nothing").toBeNull();
   });
 
   it("is the second Contractor's own series", async () => {

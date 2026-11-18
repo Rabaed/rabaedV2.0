@@ -2062,6 +2062,7 @@
     "group": "Group by Project",
     "watching": "Watching",
     "poolHint": "Goes away if a colleague picks it up",
+    "noNumber": "No number yet",
     "emptyTitle": "No notifications yet",
     "emptyText": "When an item reaches you, or an item you watch moves, it shows here.",
     "caughtUpTitle": "You’re all caught up",

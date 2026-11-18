@@ -26,14 +26,12 @@ const byName = (by: HistoryText["by"], locale: Locale) => [by.memberName?.[local
  */
 export function InspectionMeta({ item, locale }: { item: WorkItemDetail; locale: Locale }) {
   const t = useTranslations("workItems.inspection");
+  const tItems = useTranslations("workItems");
   const requested = plainDateTime(item.answers.requested_for, locale);
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text">
-      {item.documentNumber && (
-        <li>
-          <DocNo value={item.documentNumber} />
-        </li>
-      )}
+      {/* Before its first Submit a WIR has no number (ADR 0030): "No number yet". */}
+      <li>{item.documentNumber ? <DocNo value={item.documentNumber} /> : tItems("noNumber")}</li>
       {item.location && (
         <li className="flex items-center gap-1">
           <Icon name="map-pin" size={16} className="text-muted" />

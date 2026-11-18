@@ -114,7 +114,7 @@ describe("deactivating a Member who holds a Step (seam 1)", () => {
         assignmentId: expect.any(String),
         project: { id: t.at.projectId, name: expect.anything() },
         step: expect.objectContaining({ en: "Contractor review" }),
-        item: { id, documentNumber: expect.any(String), title: "Cable trays" },
+        item: { id, documentNumber: null, title: "Cable trays" }, // in Internal Review: no number until its first Submit (ADR 0030)
         holder: { id: t.ali.id, fullName: bilingual("Ali Sonour") },
         candidates: [{ id: khalid.id, fullName: bilingual("Khalid Bakr") }],
       },

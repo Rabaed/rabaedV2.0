@@ -218,6 +218,7 @@ describe("No Stamp, no Transition (RP-23-5)", () => {
     const signed = await createDraft("With a Stamp");
     expect((await detail(engineer.caller, signed)).actions.stampRequired).toBe(false);
     await take(engineer.caller, signed, "send_for_review");
-    expect(await detail(engineer.caller, signed)).toMatchObject({ documentNumber: expect.any(String) });
+    // It moved: Internal Review, with no number until its first Submit (ADR 0030).
+    expect(await detail(engineer.caller, signed)).toMatchObject({ stage: { key: "internal_review" }, documentNumber: null });
   });
 });

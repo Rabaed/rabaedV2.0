@@ -54,18 +54,26 @@ async function tower(code: string) {
     return draft!.work_item_id;
   }
 
-  /** `as` raises a MAR in B1 and sends it for review; returns its id and Document Number. */
-  async function numbered(as: string): Promise<{ id: string; number: string }> {
+  /** `as` raises a MAR in B1 and sends it for review: no number yet (ADR 0030). */
+  async function inReview(as: string): Promise<string> {
     const id = await drafted(as);
     expect(await t.take(as, id, "send_for_review")).toBe("applied");
-    const number = (await migrator.query("select document_number from work_item where id = $1", [id])).rows[0].document_number as string;
-    return { id, number };
+    return id;
   }
 
-  /** C1's Project Manager picks the item up in C1's internal review and Submits it to K1. */
-  async function submitted(item: string) {
-    expect(await t.pickUp(c1.members.project_manager, item)).toBe("picked_up");
-    expect(await t.take(c1.members.project_manager, item, "submit")).toBe("applied");
+  /** `pm` (C1's Project Manager unless given) picks the item up in its internal review and Submits it to K1, which numbers it. */
+  async function submitted(item: string, pm: string = c1.members.project_manager) {
+    expect(await t.pickUp(pm, item)).toBe("picked_up");
+    expect(await t.take(pm, item, "submit")).toBe("applied");
+  }
+
+  const numberOf = async (id: string) => (await migrator.query("select document_number from work_item where id = $1", [id])).rows[0].document_number as string;
+
+  /** `as` raises a MAR in B1, and it is Submitted (by `pm`); returns its id and Document Number. */
+  async function numbered(as: string, pm?: string): Promise<{ id: string; number: string }> {
+    const id = await inReview(as);
+    await submitted(id, pm);
+    return { id, number: await numberOf(id) };
   }
 
   /** Adds a Numbering Pattern row as the migrator, set by C1's Authorized Person. */
@@ -77,7 +85,7 @@ async function tower(code: string) {
     );
   }
 
-  return { ...t, segmentsOf, drafted, numbered, submitted, pattern };
+  return { ...t, segmentsOf, drafted, inReview, numbered, submitted, numberOf, pattern };
 }
 
 beforeAll(async () => {
@@ -188,7 +196,7 @@ describe("app.work_item_number_segments", () => {
 describe("visibility.md, Document Numbers", () => {
   it("RP-1065-1: whoever sees the item reads the same segments, only what its number prints; anyone else reads none", async () => {
     const t = await tower("NSV");
-    const { id, number } = await t.numbered(t.c1.members.engineer);
+    const id = await t.inReview(t.c1.members.engineer);
     // C2 reads the segments of an item it does see, its own once numbered (the positive control):
     // the refusals below are about C1's item, not a C2 Member who reaches nothing at all. C2's
     // internal review needs a Project Manager, which the Tower's C2 lacks: its Engineer is one here.
@@ -198,13 +206,15 @@ describe("visibility.md, Document Numbers", () => {
         sql`select app.set_project_member_positions(${t.c2.participantId}::uuid, ${t.c2.members.engineer}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`,
       ),
     ).toBe("set");
-    const theirs = await t.numbered(t.c2.members.engineer);
+    const theirs = await t.numbered(t.c2.members.engineer, t.c2.members.engineer);
     const theirSegments = await t.segmentsOf(t.c2.members.engineer, theirs.id);
     expect(theirSegments?.segments.map((s) => s.value).join(theirSegments.separator)).toBe(theirs.number);
 
-    // Still in C1's internal review: K1 and C2 don't see it, so they read nothing of it.
-    for (const who of [t.k1.members.engineer, t.k1.ap, t.c2.members.engineer, t.c2.ap]) expect(await t.segmentsOf(who, id), who).toBeNull();
+    // Still in C1's internal review: it has no number yet (ADR 0030), so nobody reads segments, and
+    // K1 and C2 don't see it at all.
+    for (const who of [t.c1.members.engineer, t.k1.members.engineer, t.k1.ap, t.c2.members.engineer, t.c2.ap]) expect(await t.segmentsOf(who, id), who).toBeNull();
     await t.submitted(id);
+    const number = await t.numberOf(id);
 
     const own = await t.segmentsOf(t.c1.members.engineer, id);
     expect(own).not.toBeNull();

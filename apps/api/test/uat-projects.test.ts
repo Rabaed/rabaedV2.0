@@ -308,7 +308,7 @@ describe("UAT 06–10's people and what they must not read (RP-1250)", () => {
     const uat09 = await projectOf("UAT09");
     const staged = roleOf("09").staged();
     const podium = staged.find((s) => s.cases.includes("VIS-09") && !s.mustNotSee)!.item.title;
-    expect((await detail(as.omar, (await idsOn(uat09, podium))[0]!)).documentNumber).toBe("UAT09-MAR-01-0003");
+    expect((await detail(as.omar, (await idsOn(uat09, podium))[0]!)).documentNumber).toBe("UAT09-MAR-01-0002"); // WF-12, still in Internal Review, has no number yet (ADR 0030)
     const [towerA] = await idsOn(uat09, "VIS-09 Exit signs – Tower A Level 02, Submitted");
     await expectHiddenFrom({ read: readById(`/v1/work-items/${towerA}`), target: towerA!, seenBy: as.hafiz, hiddenFrom: as.omar, name: nameOf, label: "RP-1250 VIS-09 Tower A item" });
   });

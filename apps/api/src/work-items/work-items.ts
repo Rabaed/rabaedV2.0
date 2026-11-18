@@ -71,7 +71,7 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
 import { arrivalRecommendedCode, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
-import { itemRaisedFrom } from "./query.ts";
+import { itemRaisedFrom, neverLeftDraft } from "./query.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -570,7 +570,7 @@ type SummaryRow = {
   location_id: string | null;
   location_code: string | null;
   location_name: BilingualText | null;
-  /** Null for a Draft with no number: its Step began when it was started, which nobody sees. */
+  /** Null for a Draft that never left Draft: its Step began when it was started, which nobody sees. */
   step_entered_at: Date | null;
   /** A Revision Draft's chain base number (RP-1300); null for every other item. */
   base_number: string | null;
@@ -583,7 +583,8 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
+      -- No number and no Creation Date: a Draft that never left Draft (an item in Internal Review has the date first, RP-1316).
+      case when ${neverLeftDraft(sql.ref("w.document_number"), sql`app.work_item_creation_date(w.id)`)} then null else seen.entered_at end as step_entered_at,
       -- A Revision not yet numbered reads its chain's base number from the start (RP-1300): the original's,
       -- through app.revision_chain, which gives only Revisions the reader sees (V1).
       case when w.document_number is null and w.revision_no > 0
@@ -903,8 +904,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         discardRevision: d.can_discard_revision,
         duplicate: d.can_duplicate,
         discardDraft: d.can_discard_draft,
-        // As app.set_work_item_paper_ref decides it: a Draft never numbered, which they may edit now.
-        editPaperRef: d.can_save_answers && d.draft_step && row.document_number === null,
+        // As app.set_work_item_paper_ref decides it: a Draft that never left Draft (no number and no Creation Date,
+        // RP-1316: on an older Version a Return goes back to the Draft Step), which they may edit now.
+        editPaperRef: d.can_save_answers && d.draft_step && row.document_number === null && d.creation_date === null,
       },
     };
   });

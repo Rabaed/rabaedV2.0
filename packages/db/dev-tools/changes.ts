@@ -9,7 +9,8 @@ const HOUR = 3_600_000;
 
 export interface AgedItem {
   id: string;
-  documentNumber: string;
+  /** Null for an item in Internal Review before its first Submit (ADR 0030): it is named by its Subject. */
+  documentNumber: string | null;
   subject: string;
   /** How far back each of its times moves. */
   shiftMs: number;
@@ -85,7 +86,7 @@ export function ageChanges(
       continue;
     }
     seen.add(c.id);
-    if (c.documentNumber === null) {
+    if (!c.leftDraft) {
       errors.push(`${label} is a Draft: a Draft has no Step Age (ADR 0020)`);
       continue;
     }

@@ -83,7 +83,8 @@ async function tower(code: string) {
   for (const [co, p, positions] of [
     [c1, p1, ["engineer", "project_manager"]],
     [c2, p2, ["engineer", "project_manager"]],
-    [k1, pk, ["manager"]],
+    // The engineer holds the Consultant review a Submit reaches (ADR 0030: the Submit numbers the item).
+    [k1, pk, ["engineer", "manager"]],
   ] as const) {
     expect(await outcome(co.ap, sql`select app.add_project_member(${p}::uuid, ${co.member}::uuid, now()) as outcome`)).toBe("added");
     for (const kind of ["trade", "location"]) {
@@ -97,7 +98,7 @@ async function tower(code: string) {
     ).toBe("set");
   }
 
-  /** `as` raises a MAR in B1 and sends it for review; returns its Document Number. */
+  /** `as` raises a MAR in B1, sends it for review, picks it up as its PM and Submits it to K1, which numbers it (ADR 0030); returns its Document Number. */
   async function numbered(as: string): Promise<string> {
     const [draft] = await call<{ outcome: string; work_item_id: string }>(
       as,
@@ -111,6 +112,13 @@ async function tower(code: string) {
       await outcome(
         as,
         sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+      ),
+    ).toBe("applied");
+    expect(await outcome(as, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
+    expect(
+      await outcome(
+        as,
+        sql`select app.take_transition(${item}::uuid, 'submit', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
       ),
     ).toBe("applied");
     return (await migrator.query("select document_number from work_item where id = $1", [item])).rows[0].document_number as string;

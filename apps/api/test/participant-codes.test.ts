@@ -24,8 +24,12 @@ beforeAll(async () => {
 const code = (by: Caller, participantId: string, value: string) =>
   by.request("PUT", `/v1/participants/${participantId}/code`, { code: value });
 
-const sendForReview = (by: Caller, id: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
+/** `by` Sends the MAR for Review and C1's PM Submits it to K1: the Submit numbers it (ADR 0030). */
+const submitted = async (at: Tower, by: Caller, id: string) => {
+  await ok(by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/transitions`, { transition: "submit", confirmed: true, idempotencyKey: randomUUID() }));
+};
 
 const numberOf = async (by: Caller, id: string) => (await by.get(`/v1/work-items/${id}`)).json().documentNumber;
 
@@ -35,6 +39,8 @@ async function project(projectCode: string): Promise<Tower & { k1ParticipantId: 
   const c2ParticipantId = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   const listed = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants;
   const k1ParticipantId = listed.find((p: { company: { id: string } }) => p.company.id === k1.company.companyId).id;
+  // The current MAR's Submit reaches the Consultant's engineer.
+  await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   return { ...at, k1ParticipantId, c2ParticipantId };
 }
 
@@ -142,7 +148,7 @@ describe("Document Numbers", () => {
   it("print the ordinal while no code is set, which fixes it: a code is refused after, and the numbers stay on 01", async () => {
     const at = await project("PC7");
     const first = await draft(at, at.c1Engineer, "Before the code", { type: "MAR" });
-    await sendForReview(at.c1Engineer, first);
+    await submitted(at, at.c1Engineer, first);
     expect(await numberOf(at.c1Engineer, first)).toBe("PC7-MAR-01-0001");
 
     const set = await code(c1.caller, at.c1ParticipantId, "ccm");
@@ -156,7 +162,7 @@ describe("Document Numbers", () => {
     expect(listed.find((p) => p.id === at.k1ParticipantId)).toMatchObject({ code: null, codeLocked: false });
 
     const second = await draft(at, at.c1Engineer, "After the refused code", { type: "MAR" });
-    await sendForReview(at.c1Engineer, second);
+    await submitted(at, at.c1Engineer, second);
     expect(await numberOf(at.c1Engineer, second)).toBe("PC7-MAR-01-0002");
   });
 
@@ -166,7 +172,7 @@ describe("Document Numbers", () => {
     // A code nothing used yet can still change.
     await ok(code(c1.caller, at.c1ParticipantId, "CMC"));
     const id = await draft(at, at.c1Engineer, "Uses the code", { type: "MAR" });
-    await sendForReview(at.c1Engineer, id);
+    await submitted(at, at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC8-MAR-CMC-0001");
 
     const changed = await code(c1.caller, at.c1ParticipantId, "CCM");
@@ -192,7 +198,7 @@ describe("Document Numbers", () => {
     };
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/numbering`, noParticipant));
     const id = await draft(at, at.c1Engineer, "Numbered without the Participant", { type: "MAR" });
-    await sendForReview(at.c1Engineer, id);
+    await submitted(at, at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC9-MAR-0001");
     await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
     await ok(code(c1.caller, at.c1ParticipantId, "CC2"));
@@ -231,7 +237,7 @@ describe("a starting number", () => {
     expect({ status: set.statusCode, body: set.json() }).toEqual({ status: 409, body: { error: "code_in_use" } });
     expect((await codesOf(c1.caller, at.projectId))[at.c1ParticipantId]).toBeNull();
     const id = await draft(at, at.c1Engineer, "Continues the register", { type: "MAR" });
-    await sendForReview(at.c1Engineer, id);
+    await submitted(at, at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC12-MAR-01-0144");
   });
 

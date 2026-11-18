@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -77,9 +77,26 @@ async function tower(code: string) {
   expect(
     await outcome(c1.ap, sql`select app.set_project_member_positions(${p1}::uuid, ${c1.member}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`),
   ).toBe("set");
+  // K1, the Consultant the MAR is Submitted to: the Submit numbers it (ADR 0030).
+  const k1 = await company("K1");
+  const p2 = await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap);
+  for (const kind of ["trade", "location"]) {
+    expect(await outcome(c1.ap, sql`select app.set_participant_visibility(${p2}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+  }
+  expect(await outcome(k1.ap, sql`select app.add_project_member(${p2}::uuid, ${k1.member}::uuid, now()) as outcome`)).toBe("added");
+  for (const kind of ["trade", "location"]) {
+    expect(await outcome(k1.ap, sql`select app.set_member_visibility(${p2}::uuid, ${k1.member}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+  }
+  expect(await outcome(k1.ap, sql`select app.set_project_member_positions(${p2}::uuid, ${k1.member}::uuid, ${["engineer", "manager"]}::text[]) as outcome`)).toBe("set");
 
-  /** The engineer raises a MAR at EL, B1 and sends it for review, which numbers it. */
-  async function numbered(): Promise<string> {
+  const take = (item: string, transition: string) =>
+    outcome(
+      c1.member,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+    );
+
+  /** The engineer raises a MAR at EL, B1 and sends it for review, which gives it no number yet (ADR 0030). */
+  async function inReview(): Promise<string> {
     const [draft] = await call<{ outcome: string; work_item_id: string }>(
       c1.member,
       sql`select outcome, work_item_id from app.create_work_item(
@@ -88,12 +105,15 @@ async function tower(code: string) {
     );
     expect(draft!.outcome).toBe("created");
     const item = draft!.work_item_id;
-    expect(
-      await outcome(
-        c1.member,
-        sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
-      ),
-    ).toBe("applied");
+    expect(await take(item, "send_for_review")).toBe("applied");
+    return item;
+  }
+
+  /** As inReview, then the same Member, as PM, picks it up and Submits it to K1, which numbers it. */
+  async function numbered(): Promise<string> {
+    const item = await inReview();
+    expect(await outcome(c1.member, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
+    expect(await take(item, "submit")).toBe("applied");
     return item;
   }
 
@@ -120,7 +140,7 @@ async function tower(code: string) {
   const fixed = async (item: string): Promise<string[]> =>
     (await migrator.query("select app.number_fixed_fields($1) as fields", [item])).rows[0].fields as string[];
 
-  return { projectId, raiser: c1.member, el, pl, b1, b2, numbered, pattern, check, fixed };
+  return { projectId, raiser: c1.member, el, pl, b1, b2, inReview, numbered, pattern, check, fixed };
 }
 
 beforeAll(async () => {
@@ -172,6 +192,14 @@ describe("a Trade or Location the Document Number uses (RP-581)", () => {
     await t.pattern(base, "now");
     expect(await t.fixed(item)).toEqual(["trade"]);
     expect(await t.check(item, t.pl, t.b1)).toBe("number_part_fixed");
+  });
+
+  it("leaves an item in Internal Review free until its first Submit: the lock starts at the number (ADR 0030, RP-1316)", async () => {
+    const t = await tower("NFI");
+    await t.pattern([...base, { kind: "trade" }, { kind: "location", level: 1 }]);
+    const item = await t.inReview();
+    expect(await t.fixed(item)).toEqual([]); // not hidden-from: the fields the number fixes, read as the migrator, not a row anyone reads
+    expect(await t.check(item, t.pl, t.b2)).toBe("ok");
   });
 
   it("leaves a Draft never numbered free, with nothing fixed", async () => {

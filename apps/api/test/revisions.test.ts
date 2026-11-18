@@ -243,18 +243,21 @@ describe("the Revision's Document Number", () => {
     rev1 = await revisionOf(closed);
   });
 
-  it("is the chain's base number with ' Rev 1' once it first leaves Draft, and no counter moves", async () => {
+  it("is not given at Send for Review: the Revision shows its base number, not yet issued (ADR 0030, RP-1300)", async () => {
     const before = await counters();
     await take(engineer, rev1, "send_for_review");
-    expect((await detail(engineer, rev1)).documentNumber).toBe(`${base} Rev 1`);
+    expect(await detail(engineer, rev1)).toMatchObject({ documentNumber: null, baseNumber: base });
     expect(await counters()).toEqual(before);
   });
 
-  it("reaches K1 when Submitted, with a related Link from the closed item", async () => {
+  it("is the chain's base number with ' Rev 1' at its own first Submit, and no counter moves; it reaches K1 then, with a related Link from the closed item", async () => {
+    const before = await counters();
     await expectHiddenFrom({ read: item(rev1), target: rev1, seenBy: [engineer, pm], hiddenFrom: k1Manager, name: named, label: "Rev 1 in C1's review" });
     for (const who of [engineer, k1Manager]) expect((await linksOf(closed)(who)).map((l) => l.id), named(who)).not.toContain(rev1); // not hidden-from: nobody reads the Link before Submit, C1 included; the same read gives it below
     await ok(pm.post(`/v1/work-items/${rev1}/pick-up`));
     await take(pm, rev1, "submit");
+    expect((await detail(engineer, rev1)).documentNumber).toBe(`${base} Rev 1`);
+    expect(await counters()).toEqual(before);
     expect(await detail(k1Manager, rev1)).toMatchObject({ documentNumber: `${base} Rev 1`, revisionNo: 1 });
     // Scenario 75: K1 sees the copied Documents with their original upload times.
     const uploaded = async (id: string) =>
@@ -273,6 +276,9 @@ describe("the Revision's Document Number", () => {
     const rev2 = await revisionOf(rev1);
     expect((await detail(engineer, rev2)).revisionNo).toBe(2);
     await take(engineer, rev2, "send_for_review");
+    expect((await detail(engineer, rev2)).documentNumber).toBeNull();
+    await ok(pm.post(`/v1/work-items/${rev2}/pick-up`));
+    await take(pm, rev2, "submit");
     expect((await detail(engineer, rev2)).documentNumber).toBe(`${base} Rev 2`);
   });
 });

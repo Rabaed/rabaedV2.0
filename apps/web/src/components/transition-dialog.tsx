@@ -311,6 +311,7 @@ export function TransitionDialog({
 }) {
   const t = useTranslations("workItems.actions");
   const tInspection = useTranslations("workItems.inspection");
+  const tItems = useTranslations("workItems");
   const actionFormLabels = useActionFormLabels();
   const itemForm = useWorkItemForm();
   // On a WIR's page, its own pop-ups (RP-655); null on any other item's.
@@ -425,13 +426,12 @@ export function TransitionDialog({
             {heading.code && <CodeTile code={heading.code} look={heading.look} size="lg" />}
             <div className="min-w-0 flex-1">
               <h2 className="text-[16px] font-bold">{title}</h2>
-              {(heading.documentNumber || (sheet?.line ?? heading.goesTo)) && (
-                <p className="text-[12.5px] text-muted">
-                  {heading.documentNumber && <DocNo value={heading.documentNumber} />}
-                  {heading.documentNumber && (sheet?.line ?? heading.goesTo) && " · "}
-                  {sheet?.line ?? heading.goesTo}
-                </p>
-              )}
+              {/* An item not yet Submitted reads "No number yet" here too (ADR 0030). */}
+              <p className="text-[12.5px] text-muted">
+                {heading.documentNumber ? <DocNo value={heading.documentNumber} /> : tItems("noNumber")}
+                {(sheet?.line ?? heading.goesTo) && " · "}
+                {sheet?.line ?? heading.goesTo}
+              </p>
             </div>
             <IconButton label={t("cancel")} onClick={() => dialog.current?.close()}>
               <Icon name="x" size={20} />
@@ -442,11 +442,7 @@ export function TransitionDialog({
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5">
               <h2 className="text-h6 font-semibold">{title}</h2>
-              {inspection.documentNumber && (
-                <p className="text-sm text-muted">
-                  <DocNo value={inspection.documentNumber} />
-                </p>
-              )}
+              <p className="text-sm text-muted">{inspection.documentNumber ? <DocNo value={inspection.documentNumber} /> : tItems("noNumber")}</p>
             </div>
             <IconButton label={t("cancel")} onClick={() => dialog.current?.close()}>
               <Icon name="x" size={20} />

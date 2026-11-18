@@ -1,6 +1,6 @@
 // Seam 2 for answer times and the Creation Date (RP-392; visibility.md "Creation Date", scenarios 61 and 75,
 // scenarios RP-392-1 and RP-392-2), as the app role. app.work_item_field_times, the only read that hands out
-// answer times, reads any time earlier than the item's own Creation Date (numbered_at) as that date once it
+// answer times, reads any time earlier than the item's own Creation Date (left_draft_at) as that date once it
 // is numbered, through Send Backs too, and a Revision is judged by its own. While it is a Draft the times are
 // as stored. work_item.field_times keeps the stored times for audit, and the app role has no grant on it.
 // The days are faked by moving the stored times back with the migrator. Seam 1 (the API's fieldTimes and
@@ -31,8 +31,8 @@ const timesOf = async (as: string, id: string) =>
   (await t.call<{ times: Times }>(as, sql`select app.work_item_field_times(${id}::uuid) as times`))[0]!.times;
 const atsOf = (times: Times) => Object.values(times ?? {}).map((v) => Date.parse(v.at));
 const stored = async (id: string) => {
-  const row = (await migrator.query("select field_times, numbered_at from work_item where id = $1", [id])).rows[0];
-  return { ats: Object.values(row.field_times as Record<string, { at: string }>).map((v) => Date.parse(v.at)), numberedAt: row.numbered_at as Date | null };
+  const row = (await migrator.query("select field_times, left_draft_at from work_item where id = $1", [id])).rows[0];
+  return { ats: Object.values(row.field_times as Record<string, { at: string }>).map((v) => Date.parse(v.at)), leftDraftAt: row.left_draft_at as Date | null };
 };
 /** Moves every stored answer time of `id` back by `days`: the answers were saved that long ago. */
 const backDate = (id: string, days: number) =>
@@ -68,12 +68,12 @@ async function toK1(id: string) {
 
 /** Every time `as` reads of `id` is at or after its Creation Date, and some stored one was earlier. */
 async function expectFloored(as: string, id: string) {
-  const { ats, numberedAt } = await stored(id);
-  expect(numberedAt, "numbered").not.toBeNull();
-  expect(Math.min(...ats), "a stored time earlier than the Creation Date").toBeLessThan(numberedAt!.getTime());
+  const { ats, leftDraftAt } = await stored(id);
+  expect(leftDraftAt, "numbered").not.toBeNull();
+  expect(Math.min(...ats), "a stored time earlier than the Creation Date").toBeLessThan(leftDraftAt!.getTime());
   const read = atsOf(await timesOf(as, id));
   expect(read.length, "times read").toBeGreaterThan(0);
-  for (const at of read) expect(at).toBeGreaterThanOrEqual(numberedAt!.getTime());
+  for (const at of read) expect(at).toBeGreaterThanOrEqual(leftDraftAt!.getTime());
 }
 
 beforeAll(async () => {
@@ -107,8 +107,8 @@ describe("scenario RP-392-1: a Draft saved on day 1, numbered on day 3, later se
   it("gives co-editors the real times while it is still a Draft", async () => {
     const id = await draft("Still a Draft");
     await backDate(id, 2);
-    const { ats, numberedAt } = await stored(id);
-    expect(numberedAt).toBeNull();
+    const { ats, leftDraftAt } = await stored(id);
+    expect(leftDraftAt).toBeNull();
     expect(atsOf(await timesOf(engineer, id)).sort()).toEqual([...ats].sort());
   });
 
@@ -156,15 +156,15 @@ describe("scenario RP-392-2: a Revision created on day 5 and sent for review on 
     if (held?.assignee_member_id !== manager) expect(await t.pickUp(manager, original)).toBe("picked_up");
     expect(await t.take(manager, original, "revise_c")).toBe("applied");
     // The original was numbered six days before the Revision's review.
-    await migrator.query("update work_item set numbered_at = numbered_at - interval '6 days' where id = $1", [original]);
+    await migrator.query("update work_item set left_draft_at = left_draft_at - interval '6 days' where id = $1", [original]);
     const [created] = await t.call<{ outcome: string; work_item_id: string }>(engineer, sql`select outcome, work_item_id from app.create_revision(${original}::uuid, ${randomUUID()}::uuid, now())`);
     expect(created!.outcome).toBe("created");
     const revision = created!.work_item_id;
     // Its answers were saved before even the original's Creation Date.
     await backDate(revision, 10);
     expect(await t.take(engineer, revision, "send_for_review")).toBe("applied");
-    const own = (await stored(revision)).numberedAt!;
-    const originals = (await stored(original)).numberedAt!;
+    const own = (await stored(revision)).leftDraftAt!;
+    const originals = (await stored(original)).leftDraftAt!;
     expect(own.getTime() - originals.getTime()).toBeGreaterThanOrEqual(6 * DAY - 60_000);
     await expectFloored(pm, revision);
     // Floored by the original's date the times would read 6 days early.
