@@ -19,6 +19,8 @@ export const checklistTemplate = z.object({
   versionNo: z.number().int().positive(),
   name: bilingualText,
   tradeId: z.uuid(),
+  /** A Scope or Sub-scope of its Trade (RP-1315, ADR 0031); null for the whole Trade. */
+  scopeId: z.uuid().nullable(),
   /** A retired one is offered to no new pick; the items that copied it keep their copy. */
   status: z.enum(["active", "retired"]),
   items: z.array(checklistTemplateItem),
@@ -33,8 +35,16 @@ export const checklistTemplates = z.object({
 });
 export type ChecklistTemplates = z.infer<typeof checklistTemplates>;
 
-/** A Project Admin creates a template, or edits one into its next Version: its names, Trade and items. */
-export const checklistTemplateRequest = z.strictObject({ name: templateName, tradeId: z.uuid(), items: checklistTemplateItems });
+/**
+ * A Project Admin creates a template, or edits one into its next Version: its names, Trade, an optional
+ * Scope or Sub-scope of that Trade (none, or null, for the whole Trade; RP-1315) and items.
+ */
+export const checklistTemplateRequest = z.strictObject({
+  name: templateName,
+  tradeId: z.uuid(),
+  scopeId: z.uuid().nullable().default(null),
+  items: checklistTemplateItems,
+});
 export type ChecklistTemplateRequest = z.infer<typeof checklistTemplateRequest>;
 
 /**
@@ -62,6 +72,7 @@ export function checklistTemplateChoices(templates: readonly ChecklistTemplate[]
   const choices: ChecklistTemplateChoice[] = templates.map((t) => ({
     id: t.versionId,
     tradeId: t.tradeId,
+    scopeId: t.scopeId,
     offered: t.status === "active",
     name: t.name,
     items: t.items,

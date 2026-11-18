@@ -859,6 +859,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       replyChecklists: await heldReplyChecklists(trx, workItemId),
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
+      // As saveAnswers judges it (pinned.submitted): the picks are fixed from the first Submit on.
+      checklistTemplatesFixed: d.submitted_at !== null,
       sentBackForComment: d.sent_back_for_comment,
       scopes,
       // Another Company's Step is never named, not even the one the item arrived at (V14).
@@ -1807,6 +1809,8 @@ export function saveAnswers(
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
       suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
       checklistTemplates: await checklistTemplatesFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
+      // Fixed after the first Submit: unticking a Scope then keeps the pick (RP-1315 comment 15917).
+      checklistTemplatesFixed: pinned.submitted,
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     // The Checklist Template picks, and so their copies, are fixed at the first Submit (RP-651),

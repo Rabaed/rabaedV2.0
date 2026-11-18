@@ -770,6 +770,11 @@ export const workItemDetail = workItemSummary.extend({
   /** The web autosaves it: only the first Draft, where saves write no history. */
   autosave: z.boolean(),
   /**
+   * It has been Submitted, so its Checklist Template picks are fixed (RP-651): a save changing one is
+   * `not_editable`, and unticking a Scope keeps it (RP-1315 comment 15917). Absent reads as not fixed.
+   */
+  checklistTemplatesFixed: z.boolean().optional(),
+  /**
    * It is back at the raiser after a Send Back to a Step that says "Comment only" (ADR
    * 0021): its Form, Documents and checklist are read-only, and the raiser replies and
    * Submits again. Only for a Member of the raiser's Participant; false for everyone else.

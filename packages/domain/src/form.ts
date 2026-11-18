@@ -686,10 +686,16 @@ export type ValidationContext = {
    */
   suppliers?: readonly SupplierChoice[];
   /**
+   * The item has been Submitted, so its Checklist Template picks are fixed (RP-651): unticking a
+   * Scope then keeps the pick instead of clearing it (owner, RP-1315 comment 15917).
+   */
+  checklistTemplatesFixed?: boolean;
+  /**
    * The Project's Checklist Template Versions a `checklist_template` field may
    * hold, for this item (RP-651): the latest Version of each template, and the one
-   * the item already holds. Without it an answer is only checked to be an id; the
-   * server always passes it.
+   * the item already holds. A new choice must fit the item's ticked Scopes
+   * (checklistTemplateFitsScopes, RP-1315). Without it an answer is only checked
+   * to be an id; the server always passes it.
    */
   checklistTemplates?: readonly ChecklistTemplateChoice[];
 };
@@ -714,12 +720,25 @@ export type SupplierChoice = {
 export type ChecklistTemplateChoice = {
   id: string;
   tradeId: string;
+  /** The Scope or Sub-scope of its Trade it is for (RP-1315); null or absent for the whole Trade. */
+  scopeId?: string | null;
   offered: boolean;
   name?: z.infer<typeof bilingualText>;
   items?: readonly ChecklistTemplateItem[];
   /** The Version's number ("v3"), where known. */
   versionNo?: number;
 };
+
+/**
+ * Whether a Checklist Template Version fits the item's ticked Scopes `ticked` (RP-1315, ADR 0031): a
+ * whole-Trade one always; with no Scope ticked, every one; else one on a ticked Scope or Sub-scope, or
+ * on the Scope of a ticked Sub-scope. A Sub-scope's never fits its Scope alone, nor a sibling Sub-scope.
+ * app.sync_work_item_checklists applies the same rule to a new copy.
+ */
+export function checklistTemplateFitsScopes(choice: Pick<ChecklistTemplateChoice, "scopeId">, ticked: readonly string[], scopes: readonly ScopeChoice[]): boolean {
+  if (!choice.scopeId || ticked.length === 0 || ticked.includes(choice.scopeId)) return true;
+  return scopes.some((s) => s.parentId === choice.scopeId && ticked.includes(s.id));
+}
 
 /**
  * The schema with the link questions `keys` names always required: those its
@@ -956,6 +975,18 @@ function checkNumber(value: unknown, field: { min?: number; max?: number }, deci
 
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
+/** The strings of an answer that should be a list of ids, such as the Scopes; none when it isn't a list. */
+const idsIn = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+
+/**
+ * Whether the Scopes answer `after` unticks one of `before`'s: what clears a Checklist Template pick before the
+ * item's first Submit (RP-1315), in the validator and the renderer alike. Ticking more unticks nothing.
+ */
+export function unticksAScope(before: unknown, after: unknown): boolean {
+  const ticked = idsIn(after);
+  return idsIn(before).some((id) => !ticked.includes(id));
+}
+
 const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** The Option Lists of a validation context by id; undefined when it has none. */
@@ -1093,7 +1124,9 @@ function checkValue(
       const version = context.checklistTemplates.find((t) => t.id === value);
       // Another Trade's template is refused (a held one was cleared before this check).
       if (!version || version.tradeId !== given.trade) return "unknown_option";
-      return version.offered || context.held?.[field.key] === value ? null : "unknown_option";
+      // Kept: the one held stays (an untick cleared it before this check, RP-1315); a new one is offered for the ticked Scopes.
+      if (context.held?.[field.key] === value) return null;
+      return version.offered && checklistTemplateFitsScopes(version, idsIn(given.scopes), context.scopes ?? []) ? null : "unknown_option";
     }
     case "work_item_ref": {
       if (!Array.isArray(value) || !value.every((v) => isId(v) || isHiddenLinkChoice(v))) return "wrong_type";
@@ -1302,20 +1335,25 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
  * `answers` without the supplier an `approved_supplier` field, or the Checklist
  * Template a `checklist_template` field, already holds when the Trade has changed
  * to another than its own: changing the Trade clears it. One given anew for
- * another Trade is not cleared but refused.
+ * another Trade is not cleared but refused. Unticking a Scope the item held
+ * clears its Checklist Template too (RP-1315), unless the pick is fixed
+ * (`checklistTemplatesFixed`, after the item's first Submit).
  */
-function clearChoicesOfOtherTrades(
+function clearStaleChoices(
   fields: readonly AnswerField[],
   answers: Record<string, unknown>,
   context: ValidationContext,
 ): Record<string, unknown> {
   if (!context.held) return answers;
   const out = { ...answers };
+  const unticked = unticksAScope(context.held.scopes, out.scopes);
   for (const field of fields) {
     const choices = field.type === "approved_supplier" ? context.suppliers : field.type === "checklist_template" ? context.checklistTemplates : undefined;
     const value = out[field.key];
     const held = choices && typeof value === "string" ? choices.find((c) => c.id === value) : undefined;
-    if (held && context.held[field.key] === value && held.tradeId !== out.trade) delete out[field.key];
+    if (!held || context.held[field.key] !== value) continue;
+    if (held.tradeId !== out.trade) delete out[field.key];
+    else if (field.type === "checklist_template" && unticked && !context.checklistTemplatesFixed) delete out[field.key];
   }
   return out;
 }
@@ -1351,7 +1389,7 @@ export function validateAnswers(
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
   const fields = answerFields(schema);
-  const given = clearChoicesOfOtherTrades(fields, answers as Record<string, unknown>, context);
+  const given = clearStaleChoices(fields, answers as Record<string, unknown>, context);
   const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};

@@ -4,7 +4,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ChecklistTemplateList } from "@/components/checklist-templates";
 import { Link, redirect } from "@/i18n/navigation";
-import { getChecklistTemplates, getMe, getProject, getProjectDimensions } from "@/lib/session";
+import { treeOrder } from "@/lib/dimension-tree";
+import { getChecklistTemplates, getMe, getProject, getProjectDimensions, getProjectScopes } from "@/lib/session";
 
 /**
  * Project → Settings → Checklist Templates (RP-651; form-engine.md §3.2): the Project's
@@ -17,9 +18,15 @@ export default async function ChecklistTemplatesPage({ params }: { params: Promi
   setRequestLocale(locale);
   const t = await getTranslations("projectSettings.checklistTemplates");
   const ts = await getTranslations("settings");
-  const [me, project, dimensions, list] = await Promise.all([getMe(), getProject(projectId), getProjectDimensions(projectId), getChecklistTemplates(projectId)]);
+  const [me, project, dimensions, scopes, list] = await Promise.all([
+    getMe(),
+    getProject(projectId),
+    getProjectDimensions(projectId),
+    getProjectScopes(projectId),
+    getChecklistTemplates(projectId),
+  ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !dimensions || !list) notFound();
+  if (!project || !dimensions || !scopes || !list) notFound();
 
   const trades = dimensions.trade.map((v) => ({ id: v.id, code: v.code, name: v.name, active: v.active }));
   return (
@@ -38,7 +45,7 @@ export default async function ChecklistTemplatesPage({ params }: { params: Promi
           ) : undefined
         }
       />
-      <ChecklistTemplateList projectId={project.id} canEdit={list.canEdit} trades={trades} templates={list.templates} />
+      <ChecklistTemplateList projectId={project.id} canEdit={list.canEdit} trades={trades} scopes={treeOrder(scopes.scopes)} templates={list.templates} />
     </>
   );
 }

@@ -11,11 +11,14 @@ import {
   type ChecklistTemplateItem,
   type EvidenceRule,
   type Locale,
+  type Scope,
 } from "@rabaed/domain";
 import {
   Badge,
   Button,
+  ChecklistTemplateGroups,
   ChecklistTemplateItems,
+  ChecklistTemplateScopeField,
   Dialog,
   DialogClose,
   DialogContent,
@@ -27,12 +30,6 @@ import {
   Input,
   Select,
   SettingsSection,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   useToast,
 } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -46,24 +43,29 @@ import { createdId, refusalMessage, setupCall } from "@/lib/setup-call";
 /** What a refused command says, in the page's words. */
 function useRefusal() {
   const t = useTranslations("projectSettings.checklistTemplates");
-  return (error: string) => refusalMessage(t, { trade_not_found: "tradeNotFound", template_retired: "retired", invalid_body: "invalid" }, error);
+  return (error: string) =>
+    refusalMessage(t, { trade_not_found: "tradeNotFound", scope_not_found: "scopeNotFound", template_retired: "retired", invalid_body: "invalid" }, error);
 }
 
 /**
- * Project → Settings → Checklist Templates (RP-651): one card per Trade, each a table of its
- * templates with their checks, Version and status, active ones first. Every Project Member
- * reads them; a Project Admin opens one to edit it, and adds one with the header's "New
- * template". Who wrote one, and when, is never shown: the API doesn't carry it.
+ * Project → Settings → Checklist Templates (RP-651): one card per Trade, its templates grouped
+ * "Whole Trade" first, then by Scope (RP-1315), each a table of templates with their checks,
+ * Version and status, active ones first. Every Project Member reads them; a Project Admin opens
+ * one to edit it, and adds one with the header's "New template". Who wrote one, and when, is
+ * never shown: the API doesn't carry it.
  */
 export function ChecklistTemplateList({
   projectId,
   canEdit,
   trades,
+  scopes,
   templates,
 }: {
   projectId: string;
   canEdit: boolean;
   trades: SettingsTrade[];
+  /** The Project's Scopes and Sub-scopes, in tree order. */
+  scopes: (Scope & { level: number })[];
   templates: ChecklistTemplate[];
 }) {
   const t = useTranslations("projectSettings.checklistTemplates");
@@ -77,8 +79,7 @@ export function ChecklistTemplateList({
     <>
       {cards.length === 0 && <p className="text-sm text-muted">{t("noTrades")}</p>}
       {cards.map((trade) => {
-        // Active first, each group in the API's order (by name).
-        const listed = templates.filter((x) => x.tradeId === trade.id).sort((a, b) => Number(a.status === "retired") - Number(b.status === "retired"));
+        const listed = templates.filter((x) => x.tradeId === trade.id);
         const active = listed.filter((x) => x.status === "active").length;
         const title = trade.name[locale];
         return (
@@ -92,40 +93,32 @@ export function ChecklistTemplateList({
             {listed.length === 0 ? (
               <p className="text-sm text-muted">{t("noTemplates")}</p>
             ) : (
-              <Table label={t("tableLabel", { trade: title })} className="min-w-[36rem] table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("name")}</TableHead>
-                    <TableHead className="w-[7rem]">{t("checks")}</TableHead>
-                    <TableHead className="w-[7rem]">{t("version")}</TableHead>
-                    <TableHead className="w-[8rem]">{t("status")}</TableHead>
-                    <TableHead align="end" className="w-[7rem]">
-                      <span className="sr-only">{t("open")}</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {listed.map((x) => (
-                    <TableRow key={x.id} data-testid="template-row">
-                      <TableCell className={`truncate ${x.status === "retired" ? "text-muted" : "font-semibold"}`}>{x.name[locale]}</TableCell>
-                      <TableCell className="text-text-secondary">{formatNumber(x.items.length, locale)}</TableCell>
-                      <TableCell className="text-text-secondary">{t("versionNo", { n: formatNumber(x.versionNo, locale) })}</TableCell>
-                      <TableCell>
-                        <Badge tone={x.status === "active" ? "success" : "neutral"}>{t(`statuses.${x.status}`)}</Badge>
-                      </TableCell>
-                      <TableCell align="end">
-                        <Link
-                          href={`/projects/${projectId}/settings/checklist-templates/${x.id}`}
-                          className="text-sm font-semibold text-brand-fg hover:underline"
-                          aria-label={t(canEdit && x.status === "active" ? "editNamed" : "viewNamed", { name: x.name[locale] })}
-                        >
-                          {t(canEdit && x.status === "active" ? "edit" : "view")}
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ChecklistTemplateGroups
+                templates={listed}
+                scopes={scopes.filter((s) => s.tradeId === trade.id)}
+                locale={locale}
+                labels={{
+                  wholeTrade: t("wholeTrade"),
+                  subScopeOf: (scope) => t("subScopeOf", { scope }),
+                  tableLabel: (group) => t("groupTableLabel", { trade: title, group }),
+                  name: t("name"),
+                  checks: t("checks"),
+                  version: t("version"),
+                  status: t("status"),
+                  open: t("open"),
+                  versionNo: (n) => t("versionNo", { n }),
+                  statuses: { active: t("statuses.active"), retired: t("statuses.retired") },
+                }}
+                open={(x) => (
+                  <Link
+                    href={`/projects/${projectId}/settings/checklist-templates/${x.id}`}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-end text-sm font-semibold text-brand-fg hover:underline"
+                    aria-label={t(canEdit && x.status === "active" ? "editNamed" : "viewNamed", { name: x.name[locale] })}
+                  >
+                    {t(canEdit && x.status === "active" ? "edit" : "view")}
+                  </Link>
+                )}
+              />
             )}
           </SettingsSection>
         );
@@ -161,11 +154,14 @@ export function ChecklistTemplateEditor({
   template,
   canEdit,
   trades,
+  scopes,
 }: {
   projectId: string;
   template: ChecklistTemplate | null;
   canEdit: boolean;
   trades: SettingsTrade[];
+  /** The Project's Scopes and Sub-scopes, in tree order: the picker offers the chosen Trade's (RP-1315). */
+  scopes: (Scope & { level: number })[];
 }) {
   const t = useTranslations("projectSettings.checklistTemplates");
   // The preview speaks the WIR's own words for its checks.
@@ -180,10 +176,12 @@ export function ChecklistTemplateEditor({
   const options = tradeOptions(trades, locale, tl("archived"), template?.tradeId);
   const [name, setName] = useState<BilingualText>(template?.name ?? { en: "", ar: "" });
   const [tradeId, setTradeId] = useState(template?.tradeId ?? options[0]?.value ?? "");
+  // Null for the whole Trade; a new Trade starts on it again.
+  const [scopeId, setScopeId] = useState<string | null>(template?.scopeId ?? null);
   const [items, setItems] = useState<ChecklistTemplateItem[]>(() => (template ? template.items : [newItem([])]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const request = { name, tradeId, items };
+  const request = { name, tradeId, scopeId, items };
   const valid = checklistTemplateRequest.safeParse(request).success;
   const setItem = (index: number, change: Partial<ChecklistTemplateItem>) => setItems(items.map((item, i) => (i === index ? { ...item, ...change } : item)));
   const move = (index: number, delta: -1 | 1) => {
@@ -223,10 +221,22 @@ export function ChecklistTemplateEditor({
               <Select
                 value={tradeId}
                 disabled={!editable}
-                onValueChange={setTradeId}
+                onValueChange={(v) => {
+                  setTradeId(v);
+                  setScopeId(null);
+                }}
                 options={options}
               />
             </Field>
+            <ChecklistTemplateScopeField
+              value={scopeId}
+              // The Trade's Scopes; the template's own, even deactivated since, so a save keeps it.
+              scopes={scopes.filter((s) => s.tradeId === tradeId)}
+              locale={locale}
+              labels={{ label: t("scope"), help: t("scopeHelp"), wholeTrade: t("wholeTrade"), archived: tl("archived") }}
+              disabled={!editable}
+              onChange={setScopeId}
+            />
           </div>
         </SettingsSection>
 
