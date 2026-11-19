@@ -552,11 +552,11 @@ describe("Documents and Links added during the Draft, through the app role (scen
 
   it("read no earlier than the Creation Date once numbered, for C1 and K1 alike, and after a Send Back", async () => {
     await submit(id);
-    const numberedAt = (await migrator.query("select numbered_at from work_item where id = $1", [id])).rows[0].numbered_at as Date;
+    const leftDraftAt = (await migrator.query("select left_draft_at from work_item where id = $1", [id])).rows[0].left_draft_at as Date;
     const check = async () => {
       for (const as of [c1.member, c1Pm, k1.member, ow.member]) {
-        expect(await uploadedAt(as)).toEqual([numberedAt]);
-        expect(await linkedAt(as)).toEqual([numberedAt]);
+        expect(await uploadedAt(as)).toEqual([leftDraftAt]);
+        expect(await linkedAt(as)).toEqual([leftDraftAt]);
       }
     };
     await check();

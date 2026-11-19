@@ -40,6 +40,8 @@ export function NotificationItem({ n, now, layout, onOpen }: { n: Notification; 
       tone={look.tone}
       what={t(`what.${what.key}`, what.values)}
       documentNumber={number}
+      // An item not yet Submitted has no number (ADR 0030): it reads "No number yet", as everywhere else.
+      noNumber={n.kind === "package_submitted" || n.kind === "participant_withdrawn" ? undefined : t("noNumber")}
       subject={subject}
       project={n.project.name[locale]}
       watching={n.kind === "watched_event" ? t("watching") : undefined}

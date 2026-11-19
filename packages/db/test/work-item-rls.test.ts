@@ -482,11 +482,14 @@ describe("Send for Review and Return", () => {
     expect(rows.map((r) => r.type)).toEqual(["created", "transition", "assigned", "transition", "transition", "assigned"]);
     expect(rows.every((r) => r.audience === "internal" && r.audience_participant_id === participant.c1)).toBe(true);
     expect(rows[3].payload).toEqual({ reason: "Wrong rating" });
-    expect(rows[1].payload.document_number).toMatch(/^TWR-MARV-01-\d{4}$/);
+    // Send for Review numbers nothing (ADR 0030): the first Submit does, on its shared event.
+    expect(rows.map((r) => r.payload.document_number ?? null)).toEqual([null, null, null, null, null, null]);
     expect((await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok).toBe(true);
   });
 
   it("never lets the app role read counters or idempotency keys, or write Positions", async () => {
+    // The item is still in Internal Review, so it has numbered nothing (ADR 0030): the Tower's counter row, as the migrator.
+    await migrator.query("insert into numbering_counter (project_id, counter_key, last_value) values ($1, 'TWR-MARV-01', 1) on conflict do nothing", [projectId]);
     for (const table of ["numbering_counter", "command_idempotency"]) {
       // The Tower's rows are there (the migrator reads them), so the empty read is the role's, not an empty table.
       const { rows } = await migrator.query(`select count(*)::int as n from ${table} where project_id = $1`, [projectId]);
@@ -770,8 +773,9 @@ describe("Internal Note", () => {
       { internal_note: "returned note" },
       { internal_note: "submitted note" },
     ]);
+    // The Submit carries the Document Number it gave (ADR 0030), which they read on the item anyway.
     for (const who of [k1.member, manager, or.member]) {
-      expect(await visible(who), who).toEqual([{ type: "transition", payload: {} }]);
+      expect(await visible(who), who).toEqual([{ type: "transition", payload: { document_number: expect.stringMatching(/^TWR-MARV-01-\d{4}$/) } }]);
     }
     const notes = await eventIds("internal_note");
     expect(notes.length, "the item's Internal Notes").toBe(3);

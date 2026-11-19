@@ -143,19 +143,58 @@ describe("stackProblems", () => {
   });
 });
 
+describe("stackProblems: the web (RP-1183)", () => {
+  // Lane 7's web ran from Main 7's session and went down with it while the api and db stayed up.
+  const withWeb = (webPort: number, apiPort: number, dbPort: number) => ({ ...target(apiPort, dbPort), webUrl: `http://127.0.0.1:${webPort}` });
+  /** A web whose / answers `status` (a redirect to the sign-in page counts as up). */
+  const web = (status: number) =>
+    listen(
+      createHttpServer((_req, res) => {
+        res.writeHead(status, status >= 300 && status < 400 ? { location: "/en/sign-in" } : {});
+        res.end("page");
+      }),
+    );
+
+  it("finds none when the web answers, even with a redirect", async () => {
+    const [a, db, w, redirecting] = await Promise.all([api(200, healthy), postgres(), web(200), web(307)]);
+    expect(await stackProblems(withWeb(portOf(w), portOf(a), portOf(db)), fast)).toEqual([]);
+    expect(await stackProblems(withWeb(portOf(redirecting), portOf(a), portOf(db)), fast)).toEqual([]);
+  });
+
+  it("names only the web when it is the one thing down", async () => {
+    const [a, db, port] = await Promise.all([api(200, healthy), postgres(), closedPort()]);
+    const problems = await stackProblems(withWeb(port, portOf(a), portOf(db)), fast);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(new RegExp(`^web at http://127[.]0[.]0[.]1:${port} is not answering`));
+  });
+
+  it("names the web when it answers with a server error, or never answers", async () => {
+    const [a, db, broken, quiet] = await Promise.all([api(200, healthy), postgres(), web(500), silent()]);
+    expect(await stackProblems(withWeb(portOf(broken), portOf(a), portOf(db)), fast)).toEqual([`web at http://127.0.0.1:${portOf(broken)} answers / with 500`]);
+    expect(await stackProblems(withWeb(portOf(quiet), portOf(a), portOf(db)), fast)).toEqual([`web at http://127.0.0.1:${portOf(quiet)} is not answering (no answer in 0.4 s)`]);
+  });
+
+  it("lists the api, the web and the db in that order when all are down", async () => {
+    const [apiPort, webPort, dbPort] = await Promise.all([closedPort(), closedPort(), closedPort()]);
+    const problems = await stackProblems(withWeb(webPort, apiPort, dbPort), fast);
+    expect(problems.map((p) => p.split(" ")[0])).toEqual(["api", "web", "db"]);
+  });
+});
+
 describe("targets", () => {
   it("reads a lane's ports: lane 7 is the UAT harness stack", () => {
-    expect(targetOfLane(7)).toEqual({ apiUrl: "http://127.0.0.1:4700", dbHost: "127.0.0.1", dbPort: 6132 });
+    expect(targetOfLane(7)).toEqual({ apiUrl: "http://127.0.0.1:4700", webUrl: "http://127.0.0.1:3700", dbHost: "127.0.0.1", dbPort: 6132 });
   });
 
   it("reads API_URL and POSTGRES_PORT from a lane's .env, and falls back to lane 7", () => {
-    expect(targetOfEnv({ API_URL: "http://127.0.0.1:4530/", POSTGRES_PORT: "5962" })).toEqual({ apiUrl: "http://127.0.0.1:4530", dbHost: "127.0.0.1", dbPort: 5962 });
+    expect(targetOfEnv({ API_URL: "http://127.0.0.1:4530/", WEB_URL: "http://127.0.0.1:3530/", POSTGRES_PORT: "5962" })).toEqual({ apiUrl: "http://127.0.0.1:4530", webUrl: "http://127.0.0.1:3530", dbHost: "127.0.0.1", dbPort: 5962 });
     expect(targetOfEnv({})).toEqual(targetOfLane(7));
   });
 
   it("refuses an .env value that names no stack, instead of checking a wrong one", () => {
     expect(() => targetOfEnv({ POSTGRES_PORT: "abc" })).toThrow(/POSTGRES_PORT "abc" is not a port/);
     expect(() => targetOfEnv({ API_URL: "" })).toThrow(/API_URL "" is not an http address/);
+    expect(() => targetOfEnv({ WEB_URL: "3530" })).toThrow(/WEB_URL "3530" is not an http address/);
   });
 });
 

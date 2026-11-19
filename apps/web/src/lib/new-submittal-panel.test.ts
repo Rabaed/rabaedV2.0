@@ -120,6 +120,7 @@ describe("the saved Draft a reload reopens (row 38)", () => {
     projectId: "p1",
     type: { code: "MAR" },
     documentNumber: null,
+    creationDate: null,
     revisionNo: 0,
     stage: { category: "draft" as const },
     actions: { saveAnswers: true },
@@ -137,6 +138,8 @@ describe("the saved Draft a reload reopens (row 38)", () => {
     expect(resumableDraft({ ...draft, stage: { category: "in_progress" as const } }, { projectId: "p1", types })).toBe(false);
     expect(resumableDraft({ ...draft, documentNumber: "P1-MAR-0001" }, { projectId: "p1", types })).toBe(false);
     expect(resumableDraft({ ...draft, revisionNo: 1 }, { projectId: "p1", types })).toBe(false);
+    // Returned to the Draft Step on an older Version: it left Draft, with no number yet (ADR 0030, RP-1316).
+    expect(resumableDraft({ ...draft, creationDate: "2026-11-17T08:00:00.000Z" }, { projectId: "p1", types })).toBe(false);
     // Another Member's Draft of the same Company: seen, but not theirs to edit.
     expect(resumableDraft({ ...draft, actions: { saveAnswers: false } }, { projectId: "p1", types })).toBe(false);
   });

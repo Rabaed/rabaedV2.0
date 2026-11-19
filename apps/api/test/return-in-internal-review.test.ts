@@ -97,12 +97,13 @@ beforeAll(async () => {
 });
 
 describe("a Return to the Contractor Engineer (seam 1)", () => {
-  it("stays in Internal Review with its number, held by Hafiz, who replaces the Datasheet; it freezes at the Submit", async () => {
+  it("stays in Internal Review with no number yet, held by Hafiz, who replaces the Datasheet; it freezes and is numbered at the Submit", async () => {
     const id = await raise(hafiz, "Cable tray");
     const first = await attach(hafiz, id, "datasheet.pdf");
     await take(hafiz, id, "send_for_review");
+    // No number until the first Submit (ADR 0030).
     const number = (await detail(ali, id)).documentNumber;
-    expect(number).not.toBeNull();
+    expect(number).toBeNull();
     // Sent for Review, nobody changes the Documents, but they aren't frozen yet.
     expect(await documents(hafiz, id)).toMatchObject({ documents: [{ id: first, frozen: false }], canChange: false });
     expect((await hafiz.delete(`/v1/work-items/${id}/documents/${first}`)).json()).toEqual({ error: "not_editable" });
@@ -134,7 +135,9 @@ describe("a Return to the Contractor Engineer (seam 1)", () => {
     expect(await documents(hafiz, id)).toMatchObject({ documents: [{ id: second, frozen: true }], canChange: false });
     expect(await documents(k1Manager, id)).toMatchObject({ documents: [{ id: second, fileName: "datasheet rev 2.pdf", frozen: true }] });
     expect((await detail(k1Manager, id)).answers.model).toBe("Cable tray, corrected");
-    expect((await detail(k1Manager, id)).documentNumber).toBe(number);
+    const submitted = (await detail(ali, id)).documentNumber;
+    expect(submitted).toMatch(/-\d{4}$/);
+    expect((await detail(k1Manager, id)).documentNumber).toBe(submitted);
   });
 
   it("goes the first time to its author, Omar, not to Hafiz; the second time to whoever held it", async () => {

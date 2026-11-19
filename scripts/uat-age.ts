@@ -82,13 +82,13 @@ function spanOf(ms: number): string {
 /** What the tool will do to one item, printed before it writes; its Subject only where item text may be printed. */
 export function describeChange(item: AgedItem, { itemText }: { itemText: boolean } = { itemText: true }): string {
   const { own, others } = item.stepAge;
-  return `${item.documentNumber}${itemText ? ` "${item.subject}"` : ""}: Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
+  return `${item.documentNumber ?? "No number yet"}${itemText ? ` "${item.subject}"` : ""}: Step Age ${own.from} → ${own.to} for its holder's Company, ${others.from} → ${others.to} for the other Companies; every time of it moves back ${spanOf(item.shiftMs)}`;
 }
 
 /** The rows it changed (or would), by table. */
 export function describeRows(aged: AgedRows, dryRun: boolean): string {
   const rows = Object.entries(aged.rows).filter(([, n]) => n > 0).map(([table, n]) => `${table} ${n}`);
-  return `${aged.documentNumber}: ${dryRun ? "would change" : "changed"} ${rows.join(", ")}`;
+  return `${aged.documentNumber ?? "No number yet"}: ${dryRun ? "would change" : "changed"} ${rows.join(", ")}`;
 }
 
 async function main(argv: string[]): Promise<number> {

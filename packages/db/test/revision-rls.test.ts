@@ -646,14 +646,15 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     expect(await createReplacement(k1.member, randomUUID())).toEqual({ outcome: "not_found", work_item_id: null });
   });
 
-  it("takes a new Document Number at its first Send, and reaches the rejected item's Linked from once Submitted (E1, E3)", async () => {
+  it("takes a new Document Number at its first Submit, and reaches the rejected item's Linked from once Submitted (E1, E3)", async () => {
     expect(await take(c1.member, replacement, "send_for_review")).toBe("applied");
-    const rows = await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${replacement}`);
-    const number = rows[0]!.document_number;
-    expect(number).not.toContain("Rev"); // not hidden-from: the number's text: a number of its own, not a Rev of the rejected item's
+    const numberNow = async () => (await call<{ document_number: string | null }>(c1.member, sql`select document_number from work_item where id = ${replacement}`))[0]!.document_number;
+    expect(await numberNow(), "Send for Review gives no number (ADR 0030)").toBeNull();
     expect(await linkedFrom(k1.member, rejected)).toEqual([]); // not hidden-from: Sent for review, not yet Submitted, so in nobody's Linked from; K1 reads it after the Submit below
     expect(await pickUp(c1Pm, replacement)).toBe("picked_up");
     expect(await take(c1Pm, replacement, "submit")).toBe("applied");
+    const number = (await numberNow())!;
+    expect(number).not.toContain("Rev"); // not hidden-from: the number's text: a number of its own, not a Rev of the rejected item's
     for (const who of [c1.member, k1.member, ow.member]) {
       expect(await linkedFrom(who, rejected)).toEqual([{ document_number: number }]);
       expect((await links(who, replacement)).map((l) => l.kind)).toEqual(["replaces"]);

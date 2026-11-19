@@ -147,6 +147,33 @@ export const PageUngrouped: Story = {
   },
 };
 
+/** An item not yet Submitted (ADR 0030, RP-1316): "No number yet" where the number goes, never a bare Subject. */
+export const NoNumberYet: Story = {
+  args: {} as NotificationRowProps,
+  render: (_args, context) => (
+    <NotificationCard>
+      <NotificationRow
+        href="#4"
+        icon="users"
+        tone="brand"
+        layout="page"
+        what={storyText(context, b("Reached you at Contractor PM review", "وصل إليك في مراجعة مدير مشروع المقاول"))}
+        documentNumber={null}
+        noNumber={storyText(context, b("No number yet", "بلا رقم بعد"))}
+        subject={storyText(context, b("Busbar trunking — Level 3", "مجاري القضبان — الطابق 3"))}
+        project={storyText(context, copy.tower)}
+        time={storyText(context, b("5 min", "5 د"))}
+        dateTime="2026-11-06T08:55:00.000Z"
+        unread
+        unreadLabel={storyText(context, copy.unread)}
+      />
+    </NotificationCard>
+  ),
+  play: async (context) => {
+    await expect(within(context.canvasElement).getByRole("link")).toHaveTextContent(storyText(context, b("No number yet", "بلا رقم بعد")));
+  },
+};
+
 /** Nothing to show: its own words, never a blank page. */
 export const Empty: Story = {
   args: {} as NotificationRowProps,

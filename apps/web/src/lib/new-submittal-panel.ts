@@ -102,6 +102,8 @@ export function resumableDraft(
     projectId: string;
     type: { code: string };
     documentNumber: string | null;
+    /** Set once it first left Draft (the raiser reads it): an item Returned to the Draft Step on an older Version has it, with no number yet (ADR 0030). */
+    creationDate: string | null;
     revisionNo: number;
     stage: { category: string };
     actions: { saveAnswers: boolean };
@@ -113,6 +115,7 @@ export function resumableDraft(
     item.projectId === projectId &&
     item.stage.category === "draft" &&
     item.documentNumber === null &&
+    item.creationDate === null &&
     item.revisionNo === 0 &&
     item.actions.saveAnswers &&
     types.some((t) => t.code === item.type.code)

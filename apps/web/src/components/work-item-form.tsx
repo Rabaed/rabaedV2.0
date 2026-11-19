@@ -36,7 +36,7 @@ import { formBesideReplyChecklists, type AnsweredChecklists } from "@/lib/checkl
 import { useFormRendererLabels } from "@/lib/form-labels";
 import { autosavesNow, unsavedAfterSave } from "@/lib/form-unsaved";
 import { linkSearch } from "@/lib/link-search";
-import { saveButton } from "@/lib/save-button";
+import { isFirstDraft, saveButton } from "@/lib/save-button";
 import { useDocuments, useImageUrls } from "./use-documents";
 
 // A Work Item's Form on its page: the answers being edited, their errors, and
@@ -71,8 +71,10 @@ type WorkItemFormState = {
   checklistTemplatesFixed: boolean;
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
-  /** The item's Document Number; none while it is a Draft (a Revision Draft included). */
+  /** The item's Document Number; none until its first Submit (ADR 0030), a Draft's included. */
   documentNumber: string | null;
+  /** A Draft that never left Draft (`isFirstDraft`): "Save and close". */
+  firstDraft: boolean;
   /** The number and Subject of each item its link questions chose that the viewer sees. */
   linkTargets: LinkTargetNames;
   /** Where each chosen item the viewer can't see opens, by its Document Number: its Link's page (RP-521). */
@@ -125,7 +127,7 @@ export function useSaveDraft(locale: Locale) {
   const form = useWorkItemForm();
   const router = useRouter();
   if (!form) return null;
-  const button = saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending });
+  const button = saveButton({ draft: form.firstDraft, dirty: form.dirty, pending: form.pending });
   const run = async () => {
     if (!button.closes) return void (await form.save(false));
     if (await form.save(true)) router.push(`/projects/${form.projectId}/work-items`);
@@ -314,6 +316,7 @@ export function WorkItemFormProvider({
         checklistTemplatesFixed,
         projectId,
         documentNumber,
+        firstDraft: isFirstDraft({ workItemId, documentNumber, autosave }),
         linkTargets,
         hiddenLinks,
         answers,

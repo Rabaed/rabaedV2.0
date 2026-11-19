@@ -703,8 +703,10 @@ export interface WorkItemTable {
   workflow_version_id: string;
   form_version_id: string;
   document_number: string | null;
-  /** The Creation Date, set with the Document Number; the raiser's Participant only, through app.work_item_creation_date. */
+  /** When the Document Number came: the first Submit (ADR 0030), or for a follow-up item when it was raised. */
   numbered_at: Timestamp | null;
+  /** The Creation Date: the first exit from Draft (RP-1316); the raiser's Participant only, through app.work_item_creation_date. */
+  left_draft_at: Timestamp | null;
   /** The Submission Date: the first Submit out of the raiser's Participant, never changed (ADR 0014). */
   submitted_at: Timestamp | null;
   /** How many times it has arrived at a Participant or closed (RP-309); never granted to the app role. */

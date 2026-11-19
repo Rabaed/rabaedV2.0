@@ -150,10 +150,10 @@ describe("Cancel", () => {
     expect((await history(at.c1Engineer, id)).map((e) => [e.type, e.outcome])).toEqual([["transition", "cancelled"]]);
   });
 
-  it("from Internal Review closes it the same way, keeping the number it got leaving Draft", async () => {
+  it("from Internal Review closes it the same way, with no number: it never had one (ADR 0030)", async () => {
     const id = await inReview("Pumps");
     const number = (await detail(at.c1Pm, id)).documentNumber;
-    expect(number).not.toBeNull();
+    expect(number).toBeNull();
     expect((await actionsOf(at.c1Pm, id)).map((t) => t.key)).toContain("cancel_review");
 
     await take(at.c1Pm, id, "cancel_review");

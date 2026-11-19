@@ -2,7 +2,7 @@
 // "Settled 2026-10-05 (Document numbering)"; visibility.md, Document Numbers,
 // scenarios 53 and 54): the Project Admin saves the Project's Numbering Pattern
 // and per-Type overrides, every Project Member reads them, anyone else gets a
-// 404 that names nothing; and items first leaving Draft are numbered under the
+// 404 that names nothing; and items are numbered at their first Submit (ADR 0030) under the
 // pattern in effect then.
 import { randomUUID } from "node:crypto";
 import { expectHiddenFrom } from "@rabaed/db/test-support";
@@ -40,14 +40,16 @@ async function tower(code: string) {
   const c2ParticipantId = await api.addParticipant(c1.caller, t.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
   const c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
-  // C2's internal review needs someone to hold it.
-  await projectMember(api, c2, c2ParticipantId, ["project_manager"]);
+  // C2's internal review needs someone to hold it, and Submits it (ADR 0030: the Submit numbers it).
+  const c2Pm = await projectMember(api, c2, c2ParticipantId, ["project_manager"]);
+  // The current MAR's Submit reaches the Consultant's engineer.
+  await projectMember(api, k1, t.k1ParticipantId!, ["engineer"]);
   const location = async (locationCode: string, parentId: string | null) =>
     (await c1.caller.post(`/v1/projects/${t.projectId}/locations`, { code: locationCode, name: bilingual(locationCode), parentId })).json()
       .id as string;
   const zone = await location("Z1", null);
   const building = await location("B1", zone);
-  return { ...t, c2Engineer, zone, building };
+  return { ...t, c2Engineer, c2Pm, zone, building };
 }
 
 const settingsOf = (by: Caller, at: Tower) => by.get(`/v1/projects/${at.projectId}/numbering`);
@@ -73,8 +75,11 @@ function counterLeaks(value: unknown, counters: readonly string[], path = ""): s
   });
 }
 
-/** `engineer` raises a MAR (at `location`, Building A by default) and sends it for review; returns its Document Number. */
-async function numbered(at: Tower, engineer: Caller, location = at.buildingA): Promise<string> {
+/**
+ * `engineer` raises a MAR (at `location`, Building A by default) and sends it for review, and their Company's PM
+ * Submits it, which numbers it (ADR 0030; Send for Review numbers nothing); returns its Document Number.
+ */
+async function numbered(at: Tower & { c2Engineer: Caller; c2Pm: Caller }, engineer: Caller, location = at.buildingA): Promise<string> {
   const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
     type: "MAR",
     title: "Cable trays",
@@ -84,6 +89,10 @@ async function numbered(at: Tower, engineer: Caller, location = at.buildingA): P
   const id = res.json().id as string;
   await attachDatasheet(engineer, id);
   await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
+  expect((await engineer.get(`/v1/work-items/${id}`)).json().documentNumber, "no number at Send for Review").toBeNull();
+  const pm = engineer === at.c2Engineer ? at.c2Pm : at.c1Pm;
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
+  await ok(pm.post(`/v1/work-items/${id}/transitions`, { transition: "submit", confirmed: true, idempotencyKey: randomUUID() }));
   return (await engineer.get(`/v1/work-items/${id}`)).json().documentNumber as string;
 }
 

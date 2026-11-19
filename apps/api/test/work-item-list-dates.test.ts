@@ -42,11 +42,11 @@ const row = (l: WorkItemList, id: string): WorkItemRow => l.items.find((i) => i.
 
 /** What the database recorded: the migrator reads every column. */
 async function recorded(id: string) {
-  const { rows } = await sql<{ created_at: Date; numbered_at: Date | null; submitted_at: Date | null }>`
-    select created_at, numbered_at, submitted_at from work_item where id = ${id}::uuid
+  const { rows } = await sql<{ created_at: Date; left_draft_at: Date | null; submitted_at: Date | null }>`
+    select created_at, left_draft_at, submitted_at from work_item where id = ${id}::uuid
   `.execute(migrator);
   const r = rows[0]!;
-  return { createdAt: r.created_at.toISOString(), numberedAt: r.numbered_at?.toISOString() ?? null, submittedAt: r.submitted_at?.toISOString() ?? null };
+  return { createdAt: r.created_at.toISOString(), leftDraftAt: r.left_draft_at?.toISOString() ?? null, submittedAt: r.submitted_at?.toISOString() ?? null };
 }
 
 /** The Saudi calendar day of a time, as the filter takes it. */
@@ -118,8 +118,8 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
   it("gives the raiser's Company both dates and another Company the Submission Date only", async () => {
     const mine = await list(c1Engineer);
     const r = await recorded(first);
-    expect(row(mine, first)).toMatchObject({ submissionDate: r.submittedAt, creationDate: r.numberedAt });
-    expect(r.numberedAt).not.toBe(r.submittedAt);
+    expect(row(mine, first)).toMatchObject({ submissionDate: r.submittedAt, creationDate: r.leftDraftAt });
+    expect(r.leftDraftAt).not.toBe(r.submittedAt);
     const theirs = await list(k1Engineer);
     expect(row(theirs, first)).toMatchObject({ submissionDate: r.submittedAt, creationDate: null });
     expect(row(theirs, second)).toMatchObject({ submissionDate: secondSubmitted, creationDate: null });
@@ -129,7 +129,7 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
 
   it("leaves the Submission Date empty until the first Submit, and the Creation Date until it has a number", async () => {
     const mine = await list(c1Engineer);
-    expect(row(mine, numbered)).toMatchObject({ submissionDate: null, creationDate: (await recorded(numbered)).numberedAt });
+    expect(row(mine, numbered)).toMatchObject({ submissionDate: null, creationDate: (await recorded(numbered)).leftDraftAt });
     expect(row(mine, started)).toMatchObject({ submissionDate: null, creationDate: null });
   });
 

@@ -180,6 +180,9 @@ describe("scenario RP-412-2: C1 has issued two MAR numbers; the counters are its
       );
       expect(draft!.outcome).toBe("created");
       expect(await t.take(t.c1.members.engineer, draft!.work_item_id, "send_for_review")).toBe("applied");
+      // The PM's Submit numbers it (ADR 0030).
+      expect(await t.pickUp(t.c1.members.project_manager, draft!.work_item_id)).toBe("picked_up");
+      expect(await t.take(t.c1.members.project_manager, draft!.work_item_id, "submit")).toBe("applied");
     }
     counterKey = (await migrator.query("select counter_key from numbering_counter where project_id = $1", [t.projectId])).rows[0].counter_key as string;
   });

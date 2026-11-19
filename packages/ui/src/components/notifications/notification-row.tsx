@@ -20,6 +20,8 @@ export type NotificationRowProps = {
   what: ReactNode;
   /** Shown left-to-right in both languages; null while the item has none. */
   documentNumber: string | null;
+  /** "No number yet", shown in its place for an item not yet Submitted (ADR 0030); left out where no item is named (a Package, the Project). */
+  noNumber?: string;
   /** The item's Subject, or a Package's name. */
   subject: string;
   /** The Project's name. */
@@ -53,6 +55,7 @@ export function NotificationRow({
   tone,
   what,
   documentNumber,
+  noNumber,
   subject,
   project,
   watching,
@@ -96,13 +99,20 @@ export function NotificationRow({
           )}
         </span>
         <span className="min-w-0 truncate text-[12.5px] text-text-secondary">
-          {documentNumber && (
+          {documentNumber ? (
             <>
               <bdi dir="ltr" className="font-bold text-text tabular-nums">
                 {documentNumber}
               </bdi>
               {" · "}
             </>
+          ) : (
+            noNumber && (
+              <>
+                <span className="font-bold text-text">{noNumber}</span>
+                {" · "}
+              </>
+            )
           )}
           {subject}
         </span>

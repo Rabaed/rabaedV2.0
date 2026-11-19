@@ -82,6 +82,10 @@ beforeAll(async () => {
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marWorkflowId = mar.rows[0]!.workflow_definition_id;
+  // A Library copy takes only a source its Authorized Person reads (RP-1323): MAR's Rabaed Default,
+  // which MAR runs on a Tower they are both on, built before TMC marks any default.
+  const setup = await buildTower(api, { c1: tmc, k1 }, "CD0");
+  await api.addProjectMember(k1.caller, setup.k1ParticipantId!, k1.company.authorizedPerson.id);
   tmcRoute = await libraryRoute(tmc, TMC_ROUTE);
   k1Route = await libraryRoute(k1, label("Beta Build MAR route"));
 

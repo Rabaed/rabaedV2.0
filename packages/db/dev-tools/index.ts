@@ -12,9 +12,11 @@ export { AgeRefused, ageItems, ITEM_TIME_MAPS, ITEM_TIMES, type AgedRows, type A
 /** An item that may be what an `--item` named: its Document Number or Subject comes close. */
 export interface AgeCandidate {
   id: string;
-  /** Null for a Draft. */
+  /** Null for a Draft, and for an item in Internal Review before its first Submit (ADR 0030). */
   documentNumber: string | null;
   subject: string;
+  /** It has left Draft (a Creation Date or a number): only such an item has a Step Age. */
+  leftDraft: boolean;
   closed: boolean;
   /** When it reached its current Step: its own Company's Step Age (ADR 0020). */
   stepEnteredAt: Date;
@@ -27,8 +29,9 @@ const containing = (text: string) => `%${text.trim().replace(/[\\%_]/g, (c) => `
 
 /** The items whose Document Number or Subject contains one of `texts` (any case), for uat:age to choose among. As the migrator. */
 export async function findAgeCandidates(db: Db, texts: string[]): Promise<AgeCandidate[]> {
-  const { rows } = await sql<{ id: string; document_number: string | null; title: string; closed: boolean; step_entered_at: Date; participant_entered_at: Date }>`
-    select id, document_number, title, closed_at is not null or discarded_at is not null as closed, step_entered_at, participant_entered_at
+  const { rows } = await sql<{ id: string; document_number: string | null; title: string; left_draft: boolean; closed: boolean; step_entered_at: Date; participant_entered_at: Date }>`
+    select id, document_number, title, left_draft_at is not null or document_number is not null as left_draft,
+      closed_at is not null or discarded_at is not null as closed, step_entered_at, participant_entered_at
     from work_item w
     where exists (select 1 from unnest(${texts.map(containing)}::text[]) p where w.document_number ilike p or w.title ilike p)
     -- Exact matches first, so the limit never hides the one asked for.
@@ -40,6 +43,7 @@ export async function findAgeCandidates(db: Db, texts: string[]): Promise<AgeCan
     id: r.id,
     documentNumber: r.document_number,
     subject: r.title,
+    leftDraft: r.left_draft,
     closed: r.closed,
     stepEnteredAt: r.step_entered_at,
     participantEnteredAt: r.participant_entered_at,

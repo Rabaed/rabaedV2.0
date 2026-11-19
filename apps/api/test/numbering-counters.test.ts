@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { buildTower, inInternalReview, type Company, type Tower } from "./support/tower.ts";
+import { buildTower, inInternalReview, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -24,10 +24,20 @@ const previewOf = (by: Caller, query: string, projectId = tower.projectId) =>
 
 const documentNumber = async (id: string) => (await tower.c1Engineer.get(`/v1/work-items/${id}`)).json().documentNumber as string;
 
+/** A MAR Submitted to K1 by C1's PM: the Submit numbers it (ADR 0030). */
+async function submittedMar(title: string): Promise<string> {
+  const id = await inInternalReview(tower, tower.c1Engineer, title, { type: "MAR" });
+  await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  await take(tower.c1Pm, id, "submit");
+  return id;
+}
+
 beforeAll(async () => {
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
   tower = await buildTower(api, { c1, k1 }, "NUM");
+  // The current MAR's Submit reaches the Consultant's engineer.
+  await projectMember(api, k1, tower.k1ParticipantId!, ["engineer"]);
   counters = `/v1/projects/${tower.projectId}/numbering/counters`;
 });
 
@@ -37,9 +47,9 @@ describe("a starting number", () => {
     expect(set.statusCode, set.body).toBe(200);
     expect(set.json()).toEqual({ counterKey: "NUM-MAR-01", nextNumber: "NUM-MAR-01-0144" });
 
-    const first = await inInternalReview(tower, tower.c1Engineer, "Cable trays", { type: "MAR" });
+    const first = await submittedMar("Cable trays");
     expect(await documentNumber(first)).toBe("NUM-MAR-01-0144");
-    const second = await inInternalReview(tower, tower.c1Engineer, "Busbars", { type: "MAR" });
+    const second = await submittedMar("Busbars");
     expect(await documentNumber(second)).toBe("NUM-MAR-01-0145");
   });
 

@@ -135,11 +135,13 @@ async function fillProject(projectId: string, creator: string) {
     sql`select app.confirm_document_upload(${item}::uuid, ${upload.document_id}::uuid, 1024, 'application/pdf', sha256('datasheet.pdf'::bytea), now()) as outcome`,
     "confirmed",
   );
-  // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
+  // Keeps the idempotency key and queues a notification to the Step Pool. It numbers nothing: the first Submit
+  // does (ADR 0030, RP-1316), and this Project has no one to Submit to, so its counter row is written below.
   await expectOutcome(
     sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     "applied",
   );
+  await migrator.query("insert into numbering_counter (project_id, counter_key, last_value) values ($1, 'MAR-01', 1)", [projectId]);
 
   await migrator.query(
     `insert into notification (member_id, project_id, work_item_id, outbox_id, kind, step_id)

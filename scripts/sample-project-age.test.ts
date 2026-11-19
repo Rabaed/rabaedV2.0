@@ -9,6 +9,7 @@ const candidate = (documentNumber: string | null, over: Partial<AgeCandidate> = 
   id: `id-${documentNumber}`,
   documentNumber,
   subject: `Subject of ${documentNumber}`,
+  leftDraft: documentNumber !== null,
   closed: false,
   stepEnteredAt: new Date(now.getTime() - 3_600_000),
   participantEnteredAt: new Date(now.getTime() - 3_600_000),

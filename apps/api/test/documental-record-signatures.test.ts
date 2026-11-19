@@ -352,10 +352,11 @@ describe("every page after the first", () => {
     expect(made.b.pages.length).toBeGreaterThanOrEqual(3);
     expect(header(made.b.pages[0]!)).toBe(false);
     for (const page of made.b.pages.slice(1)) expect(header(page), page.slice(0, 80)).toBe(true);
-    // A Cancelled record's badge is its name; its Document Number is the one it got leaving the Draft.
-    const cancelledNumber = (await detail(c1Pm, made.cancelled.id)).documentNumber!;
+    // A Cancelled record's badge is its name. Cancelled in Internal Review, it never had a Document Number
+    // (ADR 0030): the header prints "—" in its place (its "No number yet" wording is RP-1319's).
+    expect((await detail(c1Pm, made.cancelled.id)).documentNumber).toBeNull();
     expect(made.cancelled.pages.length).toBeGreaterThanOrEqual(2);
-    const cancelledParts = [TYPE, "Signature trays cancelled", cancelledNumber].map(squeeze);
+    const cancelledParts = [TYPE, "Signature trays cancelled", "—"].map(squeeze);
     for (const page of made.cancelled.pages.slice(1)) {
       expect(page.includes(cancelledParts.join("·")) || page.includes([...cancelledParts].reverse().join("·")), page.slice(0, 80)).toBe(true);
     }

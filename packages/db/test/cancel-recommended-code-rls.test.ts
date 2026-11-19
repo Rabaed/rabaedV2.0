@@ -195,17 +195,16 @@ afterAll(async () => {
 });
 
 describe("Cancel", () => {
-  it("from Draft closes the item cancelled with no Document Number; from Internal Review, keeping its number", async () => {
+  it("from Draft, and from Internal Review, closes the item cancelled with no Document Number (ADR 0030: numbered at the first Submit)", async () => {
     const fromDraft = await draft("Cancelled Draft");
     expect(await takeable(c1.member, fromDraft)).toContain("cancel");
     expect(await take(c1.member, fromDraft, "cancel")).toBe("applied");
     expect(await recorded(fromDraft)).toEqual({ outcome: "cancelled", document_number: null, closed: true });
 
     const fromReview = await inReview("Cancelled in review");
-    const { document_number: number } = await recorded(fromReview);
-    expect(number).not.toBeNull();
+    expect((await recorded(fromReview)).document_number, "Send for Review gives no number (RP-1316)").toBeNull();
     expect(await take(c1Pm, fromReview, "cancel_review")).toBe("applied");
-    expect(await recorded(fromReview)).toEqual({ outcome: "cancelled", document_number: number, closed: true });
+    expect(await recorded(fromReview)).toEqual({ outcome: "cancelled", document_number: null, closed: true });
   });
 
   it("is neither offered nor taken once the item has been Submitted, even back at the raiser's Steps", async () => {

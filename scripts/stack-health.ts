@@ -13,7 +13,7 @@ import { isValidLane, lanePorts } from "./lanes.ts";
 // Two users:
 // - the UAT harness (planning/uat/round-0/harness/run.ts) writes no result while this finds a problem;
 // - `node scripts/stack-health.ts --lane 7 --alert`, run every 5 minutes by Windows Task Scheduler,
-//   shows the owner a message box while lane 7's api or db is down.
+//   shows the owner a message box while lane 7's api, web or db is down (web since RP-1183, when lane 7's apps became a service: `pnpm lane7:apps`).
 //
 // node scripts/stack-health.ts [--lane <n>] [--alert]
 // Without --lane it reads API_URL and POSTGRES_PORT from the worktree's .env (lane 7's when unset).
@@ -22,16 +22,17 @@ import { isValidLane, lanePorts } from "./lanes.ts";
 // It also holds the UAT harness's small helpers, so the unit suite reaches them: the case loop (runWhileUp), the
 // staged screenshots (RP-1161, RP-1266) and the retry of an api read a page reload cut short (RP-1268).
 
-export type StackTarget = { apiUrl: string; dbHost: string; dbPort: number };
+/** `webUrl` is checked when set (RP-1183); the lanes' targets always set it. */
+export type StackTarget = { apiUrl: string; webUrl?: string; dbHost: string; dbPort: number };
 export type CheckOptions = { timeoutMs?: number };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const UAT_LANE = 7;
 
-/** Lane n's api and Postgres on this machine. */
+/** Lane n's api, web and Postgres on this machine. */
 export function targetOfLane(n: number): StackTarget {
-  const { api, postgres } = lanePorts(n);
-  return { apiUrl: `http://127.0.0.1:${api}`, dbHost: "127.0.0.1", dbPort: postgres };
+  const { api, web, postgres } = lanePorts(n);
+  return { apiUrl: `http://127.0.0.1:${api}`, webUrl: `http://127.0.0.1:${web}`, dbHost: "127.0.0.1", dbPort: postgres };
 }
 
 /** The stack a worktree's .env names (API_URL, POSTGRES_PORT); lane 7's for what it leaves out. */
@@ -39,9 +40,11 @@ export function targetOfEnv(env: Record<string, string | undefined>): StackTarge
   const uat = targetOfLane(UAT_LANE);
   const apiUrl = env.API_URL ?? uat.apiUrl;
   if (!/^https?:\/\/[^/]/.test(apiUrl)) throw new Error(`API_URL "${apiUrl}" is not an http address; fix .env (pnpm lane:env writes it).`);
+  const webUrl = env.WEB_URL ?? uat.webUrl!;
+  if (!/^https?:\/\/[^/]/.test(webUrl)) throw new Error(`WEB_URL "${webUrl}" is not an http address; fix .env (pnpm lane:env writes it).`);
   const port = env.POSTGRES_PORT ?? String(uat.dbPort);
   if (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535) throw new Error(`POSTGRES_PORT "${port}" is not a port; fix .env (pnpm lane:env writes it).`);
-  return { apiUrl: apiUrl.replace(/\/+$/, ""), dbHost: uat.dbHost, dbPort: Number(port) };
+  return { apiUrl: apiUrl.replace(/\/+$/, ""), webUrl: webUrl.replace(/\/+$/, ""), dbHost: uat.dbHost, dbPort: Number(port) };
 }
 
 const seconds = (ms: number) => `${ms / 1000} s`;
@@ -69,6 +72,19 @@ async function apiProblem(apiUrl: string, timeoutMs: number): Promise<string | u
   return `api at ${apiUrl} answers /health with ${response.status}: ${detail}`;
 }
 
+/** The web answers GET / with anything but a server error: a redirect to the sign-in page is up (RP-1183). */
+async function webProblem(webUrl: string, timeoutMs: number): Promise<string | undefined> {
+  let response: Response;
+  try {
+    response = await fetch(`${webUrl}/`, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    const why = (error as Error).name === "TimeoutError" ? `no answer in ${seconds(timeoutMs)}` : reason(error);
+    return `web at ${webUrl} is not answering (${why})`;
+  }
+  await response.body?.cancel();
+  return response.status < 500 ? undefined : `web at ${webUrl} answers / with ${response.status}`;
+}
+
 /** Postgres's SSLRequest: length 8, code 80877103. A server answers one byte, "S" or "N". */
 const SSL_REQUEST = Buffer.from([0, 0, 0, 8, 0x04, 0xd2, 0x16, 0x2f]);
 
@@ -93,9 +109,13 @@ function dbProblem(host: string, port: number, timeoutMs: number): Promise<strin
   });
 }
 
-/** What is down in the stack: one line each for the api and the db, none when both are up. */
+/** What is down in the stack: one line each for the api, the web (when the target names one) and the db; none when all are up. */
 export async function stackProblems(target: StackTarget, { timeoutMs = DEFAULT_TIMEOUT_MS }: CheckOptions = {}): Promise<string[]> {
-  const found = await Promise.all([apiProblem(target.apiUrl, timeoutMs), dbProblem(target.dbHost, target.dbPort, timeoutMs)]);
+  const found = await Promise.all([
+    apiProblem(target.apiUrl, timeoutMs),
+    target.webUrl === undefined ? undefined : webProblem(target.webUrl, timeoutMs),
+    dbProblem(target.dbHost, target.dbPort, timeoutMs),
+  ]);
   return found.filter((p): p is string => p !== undefined);
 }
 
@@ -275,7 +295,7 @@ async function main(): Promise<void> {
   const problems = await stackProblems(target);
   const stamp = new Date().toISOString();
   if (problems.length === 0) {
-    console.log(`${stamp} ${name} is up: api ${target.apiUrl}, db ${target.dbHost}:${target.dbPort}.`);
+    console.log(`${stamp} ${name} is up: api ${target.apiUrl}, ${target.webUrl ? `web ${target.webUrl}, ` : ""}db ${target.dbHost}:${target.dbPort}.`);
     return;
   }
   console.error(`${stamp} ${name} is down:\n${problems.map((p) => `  - ${p}`).join("\n")}`);

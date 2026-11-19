@@ -33,7 +33,7 @@ const AUDIT = "kept: the audit trail keeps the true history";
 export const ITEM_TIMES: Readonly<Record<string, TableTimes>> = {
   work_item: {
     rows: (item) => sql`id = ${item}::uuid`,
-    moved: ["created_at", "numbered_at", "submitted_at", "participant_entered_at", "step_entered_at", "updated_at"],
+    moved: ["created_at", "numbered_at", "left_draft_at", "submitted_at", "participant_entered_at", "step_entered_at", "updated_at"],
     kept: { closed_at: "kept: only open items are aged", discarded_at: "kept: only open items are aged" },
   },
   document: {
@@ -82,7 +82,9 @@ export const ITEM_TIME_MAPS = ["field_times", "field_times_as_arrived"] as const
 
 export interface AgeItem {
   id: string;
-  documentNumber: string;
+  /** Null before the item's first Submit (ADR 0030): `subject` names it then. */
+  documentNumber: string | null;
+  subject: string;
   shiftMs: number;
   /** When it reached its Step as the shift was worked out: a Transition since makes the shift wrong. */
   stepEnteredAt: Date;
@@ -90,7 +92,7 @@ export interface AgeItem {
 
 export interface AgedRows {
   id: string;
-  documentNumber: string;
+  documentNumber: string | null;
   /** Rows changed, by table; none left out. */
   rows: Record<string, number>;
 }
@@ -155,18 +157,20 @@ async function blockers(trx: Transaction<Database>, item: string): Promise<strin
   ].filter((x): x is string => x !== undefined);
 }
 
-async function ageOne(trx: Transaction<Database>, { id, documentNumber, shiftMs, stepEnteredAt }: AgeItem): Promise<AgedRows> {
+async function ageOne(trx: Transaction<Database>, { id, documentNumber, subject, shiftMs, stepEnteredAt }: AgeItem): Promise<AgedRows> {
+  // Before its first Submit an item has no number (ADR 0030): its Subject names it, as --item does.
+  const named = documentNumber ?? `"${subject}"`;
   // The shared answers as text: a trip through JavaScript's numbers could change them (1.50, large integers).
   const { rows: locked } = await sql<{ open: boolean; step_entered_at: Date; data_as_arrived: string | null; built_ins_as_arrived: string | null; arrivals: number }>`
-    select closed_at is null and discarded_at is null and document_number is not null as open, step_entered_at,
+    select closed_at is null and discarded_at is null and (left_draft_at is not null or document_number is not null) as open, step_entered_at,
       data_as_arrived::text as data_as_arrived, built_ins_as_arrived::text as built_ins_as_arrived, arrivals
     from work_item where id = ${id}::uuid for update`.execute(trx);
   const item = locked[0];
-  if (!item?.open) throw new AgeRefused(`${documentNumber} is no longer open and numbered: nothing was changed`);
-  if (item.step_entered_at.getTime() !== stepEnteredAt.getTime()) throw new AgeRefused(`${documentNumber} moved to another Step meanwhile: run it again; nothing was changed`);
+  if (!item?.open) throw new AgeRefused(`${named} is no longer open and past its Draft: nothing was changed`);
+  if (item.step_entered_at.getTime() !== stepEnteredAt.getTime()) throw new AgeRefused(`${named} moved to another Step meanwhile: run it again; nothing was changed`);
   const blocking = await blockers(trx, id);
   if (blocking.length > 0) {
-    throw new AgeRefused(`${documentNumber} has ${blocking.join(", ")} at its current Step: moving its times would act as if it left. Age it after its next Transition; nothing was changed`);
+    throw new AgeRefused(`${named} has ${blocking.join(", ")} at its current Step: moving its times would act as if it left. Age it after its next Transition; nothing was changed`);
   }
   const before = await fingerprint(trx, id);
   const shift = shiftOf(shiftMs);
@@ -182,9 +186,9 @@ async function ageOne(trx: Transaction<Database>, { id, documentNumber, shiftMs,
   await sql`update work_item set data_as_arrived = ${item.data_as_arrived}::jsonb,
       built_ins_as_arrived = ${item.built_ins_as_arrived}::jsonb, arrivals = ${item.arrivals}
     where id = ${id}::uuid`.execute(trx);
-  if ((await fingerprint(trx, id)) !== before) throw new Error(`${documentNumber}: a row besides its times changed; everything was rolled back`);
+  if ((await fingerprint(trx, id)) !== before) throw new Error(`${named}: a row besides its times changed; everything was rolled back`);
   const { rows: chain } = await sql<{ intact: boolean }>`select app.work_item_chain_intact(${id}::uuid) as intact`.execute(trx);
-  if (!chain[0]?.intact) throw new Error(`${documentNumber}: its audit chain no longer checks; everything was rolled back`);
+  if (!chain[0]?.intact) throw new Error(`${named}: its audit chain no longer checks; everything was rolled back`);
   return { id, documentNumber, rows: changed };
 }
 

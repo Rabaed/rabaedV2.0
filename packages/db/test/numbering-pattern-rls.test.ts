@@ -64,6 +64,9 @@ async function tower(code: string) {
   const projectId = created!.project_id;
   const p1 = await one("select id from participant where project_id = $1", [projectId]);
   const p2 = await joinProject(app, projectId, { adminId: c1.ap, crNumber: c2.cr, role: "contractor" }, c2.ap);
+  // K1, the Consultant a MAR is Submitted to: the Submit numbers it (ADR 0030). Joined after C2, so C1 and C2 keep 01 and 02.
+  const k1 = await company("K1");
+  const pk = await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap);
   const value = async (kind: string, valueCode: string, parent: string | null) => {
     const [row] = await call<{ value_id: string }>(
       c1.ap,
@@ -78,9 +81,10 @@ async function tower(code: string) {
     c1.ap,
     sql`select scope_id from app.add_scope(${projectId}::uuid, ${trade}::uuid, null, '{"en": "S", "ar": "ن"}'::jsonb)`,
   );
-  for (const [co, p] of [
-    [c1, p1],
-    [c2, p2],
+  for (const [co, p, positions] of [
+    [c1, p1, ["engineer", "project_manager"]],
+    [c2, p2, ["engineer", "project_manager"]],
+    [k1, pk, ["engineer", "manager"]],
   ] as const) {
     expect(await outcome(co.ap, sql`select app.add_project_member(${p}::uuid, ${co.member}::uuid, now()) as outcome`)).toBe("added");
     for (const kind of ["trade", "location"]) {
@@ -90,11 +94,11 @@ async function tower(code: string) {
       ).toBe("set");
     }
     expect(
-      await outcome(co.ap, sql`select app.set_project_member_positions(${p}::uuid, ${co.member}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`),
+      await outcome(co.ap, sql`select app.set_project_member_positions(${p}::uuid, ${co.member}::uuid, ${[...positions]}::text[]) as outcome`),
     ).toBe("set");
   }
 
-  /** `as` raises a MAR at `location` (B1 by default) and sends it for review; returns its Document Number. */
+  /** `as` raises a MAR at `location` (B1 by default), sends it for review, and as its PM Submits it to K1, which numbers it (ADR 0030); returns its Document Number. */
   async function numbered(as: string, location: string | null = building): Promise<string> {
     const [draft] = await call<{ outcome: string; work_item_id: string }>(
       as,
@@ -108,6 +112,13 @@ async function tower(code: string) {
       await outcome(
         as,
         sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+      ),
+    ).toBe("applied");
+    expect(await outcome(as, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
+    expect(
+      await outcome(
+        as,
+        sql`select app.take_transition(${item}::uuid, 'submit', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
       ),
     ).toBe("applied");
     return (await migrator.query("select document_number from work_item where id = $1", [item])).rows[0].document_number as string;
@@ -288,7 +299,7 @@ describe("app.set_numbering_pattern (RP-313)", () => {
   });
 });
 
-describe("the first exit from Draft", () => {
+describe("the first Submit (ADR 0030; until RP-1316, the first exit from Draft)", () => {
   it("numbers under the Rabaed Default while the Project has no pattern", async () => {
     const t = await tower("TWR");
     expect([await t.numbered(t.c1.member), await t.numbered(t.c2.member), await t.numbered(t.c1.member)]).toEqual([

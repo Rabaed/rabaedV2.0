@@ -140,7 +140,7 @@ describe("Send for Review", () => {
     await drainOutbox(worker);
 
     const [n] = await about(pm, id);
-    expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: "TWR-MARV-01-0001", readAt: null });
+    expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: null, readAt: null });
     expect(n!.step).toEqual({ name: { en: "Contractor review", ar: "مراجعة المقاول" } });
     const read = (who: Member) => about(who, id);
     await expectHiddenFrom({ read, target: id, idOf: (n) => n.workItemId!, seenBy: pm, hiddenFrom: [engineer, pmNarrowed, manager, k1Engineer, c2Engineer, pmRemoved], name: named });
