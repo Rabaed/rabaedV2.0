@@ -167,7 +167,7 @@ defineCase("SUB-05", async (t) => {
   const r = ev.find((e) => e.reason === "Add emergency duration");
   t.check("The reason is in TMC's history marked internal", r?.audience === "internal", JSON.stringify(r)?.slice(0, 200));
   const { text } = await H.viewItem(t, "hafiz", id, "hafiz-after-return");
-  t.check("The page reads With Hafiz Hamdan - TMC Constructions", /With\s+(HH\s+)?Hafiz Hamdan(\s*·\s*TMC Constructions)?/.test(text));
+  t.check("The page reads With Hafiz Hamdan", /With\s+(HH\s+)?Hafiz Hamdan(\s*·\s*TMC Constructions)?/.test(text));
   const list = await H.listItems(tm.api.hafiz!, tm.projectId, "q=UAT%20SUB-05");
   t.check("Step Age counts from the Return (a fresh item: first week)", list.find((i) => i.id === id)?.stepAgeWeeks !== undefined, String(list.find((i) => i.id === id)?.stepAgeWeeks));
 });
