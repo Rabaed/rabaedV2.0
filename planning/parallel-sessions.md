@@ -51,7 +51,13 @@ One session named `Orchestrator`, in its own worktree (`EnterWorktree` named `or
 1. **Assigns epics.** The owner says which Main grills which epic; the Orchestrator labels the Epic `main-m` and moves it when the owner reassigns it. A Main whose epic is done gets its next one here.
 2. **Keeps the rule files:** `CODING_STANDARDS.md`, this file and `docs/agents/*`, in docs-only PRs of its own (label `docs-only`, `pnpm queue <number> --no-review`). It owns the standing epic RP-567 (Agent tooling & retro): it files the retro and tooling Tasks there and hands RP-567 to a Main with room like any other epic, whose lanes build them.
 3. **Settles claims between Mains** on RP-603 when two Mains need the same shared module (rule 12), and decides who merges first. When two open PRs share a file, the Orchestrator sets the merge order before either verifies (`pnpm check:claims` lists them, RP-1172).
-4. **Housekeeping**, from its own worktree (the prune never removes the stack of the folder it runs in): `pnpm worktrees:prune`, `pnpm lanes:prune`, archiving finished sessions, checking that the lanes' ports and stacks are free.
+4. **Takes Dependabot PRs** with no question to the owner (owner's standing yes, RP-1325). `review-post.ts` needs a branch named after a ticket, which a Dependabot branch never is, so each bump goes through a replacement PR:
+   - file a Task under RP-567;
+   - check that each pinned SHA is the release tag's commit (dereference an annotated tag);
+   - `git switch -c RP-nnn-<slug>` at Dependabot's head, unchanged, push, and open the PR with `<!-- implement: RP-nnn -->` in its body;
+   - claim the changed workflow files on RP-603, run `pnpm verify --pr <n>`, post the review with `node scripts/review-post.ts`, and queue once CI adds `reviewed`.
+   Dependabot's own PR shows as merged once its commit is on main (#743 through #769, RP-1324). A bump whose release notes change the action's inputs, or that needs edits beyond the pins, goes to the owner first.
+5. **Housekeeping**, from its own worktree (the prune never removes the stack of the folder it runs in): `pnpm worktrees:prune`, `pnpm lanes:prune`, archiving finished sessions, checking that the lanes' ports and stacks are free.
 
 ## How to start every implementing ticket
 
