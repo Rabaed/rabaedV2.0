@@ -353,13 +353,14 @@ describe("every page after the first", () => {
     expect(header(made.b.pages[0]!)).toBe(false);
     for (const page of made.b.pages.slice(1)) expect(header(page), page.slice(0, 80)).toBe(true);
     // A Cancelled record's badge is its name. Cancelled in Internal Review, it never had a Document Number
-    // (ADR 0030): the header prints "—" in its place (its "No number yet" wording is RP-1319's).
+    // (ADR 0030): the header prints "No number yet" in its place, in the record's languages (RP-1319).
+    // pdfjs gives the Arabic back in its shaped forms, so the English words are what's matched.
     expect((await detail(c1Pm, made.cancelled.id)).documentNumber).toBeNull();
     expect(made.cancelled.pages.length).toBeGreaterThanOrEqual(2);
-    const cancelledParts = [TYPE, "Signature trays cancelled", "—"].map(squeeze);
-    for (const page of made.cancelled.pages.slice(1)) {
-      expect(page.includes(cancelledParts.join("·")) || page.includes([...cancelledParts].reverse().join("·")), page.slice(0, 80)).toBe(true);
-    }
+    const [type, subject] = [TYPE, "Signature trays cancelled"].map(squeeze);
+    // The number's slot, next to the Subject: "No number yet" (with its Arabic), never "—".
+    const slot = new RegExp(`${type}·${subject}·Nonumberyet|Nonumberyet[^·]*·${subject}·${type}`);
+    for (const page of made.cancelled.pages.slice(1)) expect(page, page.slice(0, 80)).toMatch(slot);
     expect(made.cancelled.pages.slice(1).every((p) => p.includes("Cancelled"))).toBe(true);
   });
 });
