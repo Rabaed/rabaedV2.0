@@ -3452,6 +3452,7 @@
     "testKey": "Test record: not a valid record",
     "testKeyHint": "This record was made on Rabaed UAT, for testing, and sealed with a test key. It proves nothing.",
     "documentNumber": "Document Number",
+    "noNumber": "No number yet",
     "project": "Project",
     "outcome": "Outcome",
     "sealed": "Sealed",
@@ -3466,7 +3467,7 @@
     "noFile": "This PDF could not be read. Choose another.",
     "form": {
       "title": "Verify a record by its code",
-      "hint": "Type the Verification Code printed under the record's QR and in its footer, with its Document Number.",
+      "hint": "Type the Verification Code printed under the record's QR and in its footer, with its Document Number. A record that reads \"No number yet\" needs its code only.",
       "code": "Verification Code",
       "documentNumber": "Document Number",
       "submit": "Verify"

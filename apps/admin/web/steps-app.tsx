@@ -48,7 +48,8 @@ interface PoolMember {
 
 interface WorkItemStep {
   workItemId: string;
-  documentNumber: string;
+  /** Null before the item's first Submit (ADR 0030). */
+  documentNumber: string | null;
   title: string;
   typeName: BilingualText;
   closed: boolean;
@@ -84,7 +85,7 @@ function Steps({ locale }: { locale: Locale }) {
   const [reason, setReason] = useState("");
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [number, setNumber] = useState("");
+  const [typedItem, setTypedItem] = useState("");
   /** The item shown, with the Project it was found on. */
   const [found, setFound] = useState<(WorkItemStep & { projectId: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +93,7 @@ function Steps({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
   const [handing, setHanding] = useState<Handing | null>(null);
   const why = reason.trim();
-  const numberText = number.trim();
+  const itemText = typedItem.trim();
 
   async function loadProjects() {
     if (!why) return;
@@ -107,16 +108,16 @@ function Steps({ locale }: { locale: Locale }) {
   }
 
   /**
-   * Finds the item numbered `documentNumber` on Project `inProject`: by default what the form says; after a
-   * reassign, the item just shown, whatever the form says now. `quiet` keeps the notice.
+   * Finds `item` (a Document Number, an id or a link) on Project `inProject`: by default what the form says;
+   * after a reassign, the item just shown by its id, whatever the form says now. `quiet` keeps the notice.
    */
-  async function find({ inProject = projectId, documentNumber = numberText, quiet = false } = {}) {
-    if (!why || !inProject || !documentNumber) return;
+  async function find({ inProject = projectId, item = itemText, quiet = false } = {}) {
+    if (!why || !inProject || !item) return;
     setBusy(true);
     setError(null);
     if (!quiet) setNotice(null);
     try {
-      const query = new URLSearchParams({ projectId: inProject, documentNumber, reason: why });
+      const query = new URLSearchParams({ projectId: inProject, item, reason: why });
       setFound({ ...(await api<WorkItemStep>("GET", `/v1/steps?${query.toString()}`)), projectId: inProject });
     } catch (e) {
       setFound(null);
@@ -179,12 +180,12 @@ function Steps({ locale }: { locale: Locale }) {
               />
             </label>
             <div className="min-w-[260px]">
-              <Field label={w.documentNumber}>
-                {/* A Document Number always reads left to right. */}
-                <Input dir="ltr" value={number} onChange={(e) => setNumber(e.target.value)} placeholder={w.documentNumberPlaceholder} />
+              <Field label={w.findBy}>
+                {/* A Document Number, an id or a link always reads left to right. */}
+                <Input dir="ltr" value={typedItem} onChange={(e) => setTypedItem(e.target.value)} placeholder={w.findByPlaceholder} />
               </Field>
             </div>
-            <Button type="submit" disabled={busy || !why || !projectId || !numberText}>
+            <Button type="submit" disabled={busy || !why || !projectId || !itemText}>
               {w.find}
             </Button>
           </form>
@@ -208,9 +209,13 @@ function Steps({ locale }: { locale: Locale }) {
         <section aria-labelledby="stuck-item" className="flex max-w-[860px] flex-col gap-4 rounded-lg border border-border bg-surface p-5">
           <h2 id="stuck-item" className="text-h4 font-bold">
             {w.itemHeading}{" "}
-            <span dir="ltr" className="whitespace-nowrap">
-              {found.documentNumber}
-            </span>
+            {found.documentNumber ? (
+              <span dir="ltr" className="whitespace-nowrap">
+                {found.documentNumber}
+              </span>
+            ) : (
+              <span className="text-muted">{w.noNumber}</span>
+            )}
           </h2>
           <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-[14px]">
             <dt className="text-muted">{w.subject}</dt>
@@ -312,7 +317,7 @@ function Steps({ locale }: { locale: Locale }) {
             return (w.refusals as Record<string, string>)[code] ?? w.reassignFailed;
           }
           setNotice(to ? fill(w.reassigned, { name: to.name[locale] }) : w.returned);
-          void find({ inProject: found!.projectId, documentNumber: found!.documentNumber, quiet: true });
+          void find({ inProject: found!.projectId, item: found!.workItemId, quiet: true });
           return null;
         }}
       />

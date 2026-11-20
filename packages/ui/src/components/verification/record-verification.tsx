@@ -27,6 +27,8 @@ export type RecordVerificationLabels = {
   testKey: string;
   testKeyHint: string;
   documentNumber: string;
+  /** "No number yet": in the number's place for a record of an item never Submitted (ADR 0030). */
+  noNumber: string;
   project: string;
   outcome: string;
   sealed: string;
@@ -193,7 +195,7 @@ export function RecordVerificationView({
       <TitledCard title={<bdi dir="auto">{v.subject}</bdi>} level={2}>
         <KeyValues
           items={[
-            { key: "number", label: labels.documentNumber, value: v.documentNumber ? <DocNo value={v.documentNumber} /> : "—" },
+            { key: "number", label: labels.documentNumber, value: v.documentNumber ? <DocNo value={v.documentNumber} /> : labels.noNumber },
             { key: "project", label: labels.project, value: printed(v.project) },
             {
               key: "outcome",
@@ -278,7 +280,8 @@ export function VerificationCodeForm({
             className="font-mono tracking-wider"
           />
         </Field>
-        <Field label={labels.documentNumber} required>
+        {/* Not required: a record that reads "No number yet" is verified by its code alone (RP-1319). */}
+        <Field label={labels.documentNumber}>
           <Input name="documentNumber" dir="ltr" maxLength={200} autoComplete="off" spellCheck={false} defaultValue={defaultDocumentNumber} />
         </Field>
         <Button type="submit" className="w-full sm:w-fit">

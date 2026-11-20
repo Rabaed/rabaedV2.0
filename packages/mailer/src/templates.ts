@@ -269,8 +269,8 @@ const participantWithdrawnTemplates: { "participant-withdrawn": Template<EmailTe
 };
 
 // Notification emails (RP-357; visibility.md "Notifications and emails", V14).
-// The subject is the Document Number, the Subject and what happened, nothing
-// else. The body names another Company by name only, and of its people only the
+// The subject is the Document Number (or "No number yet" before the item's
+// first Submit, ADR 0030), the Subject and what happened, nothing else. The body names another Company by name only, and of its people only the
 // signer of a final Code; it links to the item.
 
 const notificationCopy = {
@@ -337,9 +337,9 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   // The item's Document Number, or a Package Submit's Package number: both left to right.
   const number = values.package?.number ?? values.documentNumber;
   return {
-    subject: [number && isolate(number), subject, happened].filter(Boolean).join(" · "),
+    subject: [number ? isolate(number) : noNumber[locale], subject, happened].filter(Boolean).join(" · "),
     paragraphs: [
-      itemLine(number, subject),
+      itemLine(locale, number, subject),
       [happened],
       ...details,
       [copy.open],
@@ -439,7 +439,7 @@ const reportCopy = {
 
 function reportItem(locale: Locale, item: StepAgeReportItem): Paragraph {
   const holder = item.with ? (item.with.kind === "own" ? item.with.step[locale] : item.with.companyName[locale]) : null;
-  return itemLine(item.documentNumber, [item.subject, item.stage[locale], ...(holder ? [reportCopy[locale].with(holder)] : [])].join(" · "));
+  return itemLine(locale, item.documentNumber, [item.subject, item.stage[locale], ...(holder ? [reportCopy[locale].with(holder)] : [])].join(" · "));
 }
 
 const reportTemplates: { "step-age-report": Template<StepAgeReportValues> } = {
@@ -478,7 +478,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
         ...projects.flatMap((project) => [
           [project.name[locale]],
           ...project.items.flatMap((item): Paragraph[] => [
-            itemLine(item.packageNumber ?? item.documentNumber, item.subject),
+            itemLine(locale, item.packageNumber ?? item.documentNumber, item.subject),
             ...item.entries.map(entryLine),
             [{ ltr: webLink(item.link), link: true }],
           ]),
@@ -532,9 +532,12 @@ function webLink(link: string): string {
   return url.href;
 }
 
-/** An item's line: its number (left to right: a Document Number, or a Package's), when it has one, then `rest` (its Subject, and more). */
-function itemLine(number: string | null, rest: string): Paragraph {
-  return number ? [{ ltr: number, inline: true }, ` · ${rest}`] : [rest];
+/** What an item with no Document Number yet shows in its number's place: it is not Submitted yet (ADR 0030). As the web says it. */
+const noNumber = { en: "No number yet", ar: "بلا رقم بعد" } satisfies Record<Locale, string>;
+
+/** An item's line: its number (left to right: a Document Number, or a Package's), or "No number yet", then `rest` (its Subject, and more). */
+function itemLine(locale: Locale, number: string | null, rest: string): Paragraph {
+  return [number ? { ltr: number, inline: true } : noNumber[locale], ` · ${rest}`];
 }
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */

@@ -12,6 +12,7 @@ export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
     testKey: "Test record: not a valid record",
     testKeyHint: "This record was made on Rabaed UAT, for testing, and sealed with a test key. It proves nothing.",
     documentNumber: "Document Number",
+    noNumber: "No number yet",
     project: "Project",
     outcome: "Outcome",
     sealed: "Sealed",
@@ -32,6 +33,7 @@ export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
     testKey: "سجل تجريبي: ليس سجلاً معتمداً",
     testKeyHint: "أُنشئ هذا السجل في بيئة الاختبار في ربائد (UAT) وخُتم بمفتاح تجريبي. وهو للاختبار فقط ولا يُثبت شيئاً.",
     documentNumber: "رقم المستند",
+    noNumber: "بلا رقم بعد",
     project: "المشروع",
     outcome: "النتيجة",
     sealed: "تاريخ التوثيق",
@@ -50,14 +52,14 @@ export const verificationLabels: Record<Locale, RecordVerificationLabels> = {
 export const codeFormLabels: Record<Locale, VerificationCodeFormLabels> = {
   en: {
     title: "Verify a record by its code",
-    hint: "Type the Verification Code printed under the record's QR and in its footer, with its Document Number.",
+    hint: "Type the Verification Code printed under the record's QR and in its footer, with its Document Number. A record that reads \"No number yet\" needs its code only.",
     code: "Verification Code",
     documentNumber: "Document Number",
     submit: "Verify",
   },
   ar: {
     title: "تحقق من سجل برمزه",
-    hint: "اكتب رمز التحقق المطبوع أسفل رمز QR في السجل وفي تذييله، مع رقم المستند.",
+    hint: "اكتب رمز التحقق المطبوع أسفل رمز QR في السجل وفي تذييله، مع رقم المستند. السجل المكتوب فيه «بلا رقم بعد» يكفيه رمزه.",
     code: "رمز التحقق",
     documentNumber: "رقم المستند",
     submit: "تحقق",

@@ -6,7 +6,7 @@ import type { Locale } from "@rabaed/domain";
 const en = {
   title: "Stuck Steps",
   subtitle:
-    "Find an item by its Project and Document Number, see who holds its Step, and hand the Step to another Member of the same Company's Step Pool, or back to that pool. It never goes to another Company, and no Transition is taken.",
+    "Find an item by its Project and its Document Number, or its link before its first Submit, see who holds its Step, and hand the Step to another Member of the same Company's Step Pool, or back to that pool. It never goes to another Company, and no Transition is taken.",
   reason: "Reason",
   reasonPlaceholder: "e.g. K1's manager is on leave and the MAR has waited two weeks, case #5310",
   reasonKept: "Logged with every read and every change on this page.",
@@ -15,10 +15,11 @@ const en = {
   loadFailed: "Couldn't load this. Try again.",
   project: "Project",
   chooseProject: "Choose a Project",
-  documentNumber: "Document Number",
-  documentNumberPlaceholder: "e.g. TWR-TMC-MAR-0012",
+  findBy: "Document Number or link",
+  findByPlaceholder: "e.g. TWR-TMC-MAR-0012, or the item's link",
   find: "Find",
-  notFound: "This Project has no item with that Document Number.",
+  notFound: "This Project has no item with that Document Number or link.",
+  noNumber: "No number yet",
   findFailed: "Couldn't find the item. Try again.",
   // The item
   itemHeading: "Item",
@@ -75,7 +76,7 @@ export type StepsWords = typeof en;
 const ar: StepsWords = {
   title: "الخطوات المتوقفة",
   subtitle:
-    "ابحث عن عنصر بمشروعه ورقم مستنده، واعرف من يتولّى خطوته، وسلّم الخطوة إلى عضو آخر من مجموعة الخطوة في الشركة نفسها، أو أعدها إلى تلك المجموعة. لا تنتقل أبداً إلى شركة أخرى، ولا يُتّخذ أي انتقال.",
+    "ابحث عن عنصر بمشروعه ورقم مستنده، أو برابطه قبل تقديمه الأول، واعرف من يتولّى خطوته، وسلّم الخطوة إلى عضو آخر من مجموعة الخطوة في الشركة نفسها، أو أعدها إلى تلك المجموعة. لا تنتقل أبداً إلى شركة أخرى، ولا يُتّخذ أي انتقال.",
   reason: "السبب",
   reasonPlaceholder: "مثال: مدير K1 في إجازة وطلب اعتماد المواد ينتظر منذ أسبوعين، التذكرة #5310",
   reasonKept: "يُسجَّل مع كل قراءة وكل إجراء في هذه الصفحة.",
@@ -84,10 +85,11 @@ const ar: StepsWords = {
   loadFailed: "تعذّر التحميل. حاول مرة أخرى.",
   project: "المشروع",
   chooseProject: "اختر مشروعاً",
-  documentNumber: "رقم المستند",
-  documentNumberPlaceholder: "مثال: TWR-TMC-MAR-0012",
+  findBy: "رقم المستند أو الرابط",
+  findByPlaceholder: "مثال: TWR-TMC-MAR-0012، أو رابط العنصر",
   find: "بحث",
-  notFound: "لا يوجد في هذا المشروع عنصر بهذا الرقم.",
+  notFound: "لا يوجد في هذا المشروع عنصر بهذا الرقم أو الرابط.",
+  noNumber: "بلا رقم بعد",
   findFailed: "تعذّر العثور على العنصر. حاول مرة أخرى.",
   itemHeading: "العنصر",
   subject: "الموضوع",

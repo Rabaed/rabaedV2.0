@@ -201,3 +201,4 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 | 20271231 | RP-1316 | 11 | number_at_first_submit (given by Main 1; 20271229 is planned for RP-1306, 20271230 for RP-1315) |
 | 20271230 | RP-1315 | 42 | checklist_template_scope (20271229 left to RP-1306's open lane 54) |
 | 20271229 | RP-1306 | 54 | approved_supplier_approvals |
+| 20280101 | RP-1319 | 12 | no_number_file_names_admin_search_verification |
