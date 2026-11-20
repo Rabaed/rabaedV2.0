@@ -1,5 +1,5 @@
 -- RP-1319: before its first Submit an item has no Document Number (ADR 0030, RP-1316). This is what
--- RP-1316 left: the file names of its Working Copy and Documental Record, Rabaed Admin's lookup of a
+-- RP-1316 left: the file names of its Working Copy and Documental Record, Rabaed Admin's search of a
 -- stuck Step, and the public verification of a Record that never got a number (owner's decisions in
 -- RP-1319's description and comments 15938 and 15987). Each function is redefined from its newest
 -- body on main with only the change named here; every check, signature and grant stays.
@@ -11,7 +11,7 @@
 --   The Subject is already in the PDF the name is for, so the name tells its reader nothing new.
 -- * app.request_working_copy, app.documental_record_file, app.linked_documental_record_file: the
 --   file name only, through that helper.
--- * app.work_item_step_for_engineer(project, lookup): the lookup is the item's Document Number or its
+-- * app.work_item_step_for_engineer(project, item): the item it looks for is the item's Document Number or its
 --   id (Rabaed Admin takes the id out of the item's link, as the app links to it), on that Project
 --   only. An item that never left Draft is still not found by its id (V1, ADR 0019: a Draft is its
 --   author's alone), as it was never found by a number. No Subject search, and still rabaed_admin's
@@ -145,7 +145,7 @@ create or replace function app.linked_documental_record_file(p_work_item_id uuid
 revoke all on function app.linked_documental_record_file(uuid, uuid) from public;
 grant execute on function app.linked_documental_record_file(uuid, uuid) to rabaed_app;
 
--- From 20271124000000_admin_reassign_step.sql; the lookup only (its Document Number, or its id once it left Draft).
+-- From 20271124000000_admin_reassign_step.sql; how it finds the item only (its Document Number, or its id once it left Draft).
 create or replace function app.work_item_step_for_engineer(p_project_id uuid, p_document_number text)
   returns table (
     work_item_id uuid, document_number text, title text, type_name jsonb, closed boolean,
@@ -157,8 +157,8 @@ create or replace function app.work_item_step_for_engineer(p_project_id uuid, p_
 as $$
   #variable_conflict use_column
   declare
-    v_lookup text := btrim(coalesce(p_document_number, ''));
-    v_id uuid := case when v_lookup ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then v_lookup::uuid end;
+    v_sought text := btrim(coalesce(p_document_number, ''));
+    v_id uuid := case when v_sought ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then v_sought::uuid end;
   begin
   return query
   select w.id, w.document_number, w.title, t.name, w.closed_at is not null,
@@ -179,7 +179,7 @@ as $$
   left join project_role r on r.id = p.project_role_id
   where w.project_id = p_project_id
     and (
-      (w.document_number is not null and upper(w.document_number) = upper(v_lookup))
+      (w.document_number is not null and upper(w.document_number) = upper(v_sought))
       or (w.id = v_id and app.left_draft(w.left_draft_at, w.document_number))
     )
     and w.discarded_at is null;

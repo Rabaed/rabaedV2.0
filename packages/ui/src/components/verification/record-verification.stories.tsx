@@ -46,6 +46,19 @@ export const Genuine: Story = {
   },
 };
 
+/** A record of an item cancelled before its first Submit (ADR 0030, RP-1319): "No number yet" in the number's place, and nothing more. */
+export const NoNumberYet: Story = {
+  args: { verification: { ...storyVerification(), documentNumber: null } },
+  play: async (context) => {
+    const l = verificationLabels[storyLocale(context)];
+    await expect(await screen.findByRole("status")).toHaveTextContent(l.genuine);
+    const page = screen.getByTestId("record-verification");
+    await expect(page).toHaveTextContent(l.noNumber);
+    await expect(page).not.toHaveTextContent("TWR-MAR-01-0007");
+    await expect(page).not.toHaveTextContent("—");
+  },
+};
+
 /** A record printed in Arabic only: its names show in Arabic on the English page too, as the record printed them. */
 export const PrintedInArabicOnly: Story = {
   args: { verification: storyArabicOnlyVerification() },

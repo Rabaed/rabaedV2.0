@@ -8,7 +8,7 @@ const bilingual = z.object({ en: z.string(), ar: z.string() });
 const projects = z.object({ projects: z.array(z.object({ id: z.uuid(), name: bilingual, code: z.string() })) });
 const workItemStep = z.object({
   workItemId: z.uuid(),
-  documentNumber: z.string(),
+  documentNumber: z.string().nullable(),
   title: z.string(),
   typeName: bilingual,
   closed: z.boolean(),
@@ -25,8 +25,8 @@ const workItemStep = z.object({
     .nullable(),
 });
 
-// A stuck Step from Rabaed Admin (RP-1162, UAT ADM-10): find an item by Project and Document
-// Number, read its Step and holder, and reassign it within the holding Participant's pool, each
+// A stuck Step from Rabaed Admin (RP-1162, UAT ADM-10): find an item by Project and its Document
+// Number, id or link (RP-1319: before its first Submit it has no number), read its Step and holder, and reassign it within the holding Participant's pool, each
 // with the Engineer's reason in admin_action (V9).
 export const stepRoutes =
   (ctx: AdminContext): FastifyPluginAsyncZod =>
@@ -39,13 +39,13 @@ export const stepRoutes =
       "/v1/steps",
       {
         schema: {
-          querystring: z.object({ projectId: z.uuid(), documentNumber: z.string().trim().min(1).max(200), reason: engineerReason }),
+          querystring: z.object({ projectId: z.uuid(), item: z.string().trim().min(1).max(2000), reason: engineerReason }),
           response: { 200: workItemStep },
         },
       },
       async (request) => {
-        const { projectId, documentNumber, reason } = request.query;
-        const found = await findWorkItemStep(ctx.db, ctx.requireEngineer(request), projectId, documentNumber, reason);
+        const { projectId, item, reason } = request.query;
+        const found = await findWorkItemStep(ctx.db, ctx.requireEngineer(request), projectId, item, reason);
         if (!found) throw new HttpError(404, "not_found");
         return found;
       },

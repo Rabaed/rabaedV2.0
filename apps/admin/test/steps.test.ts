@@ -5,11 +5,12 @@
 // is an admin_action with its reason. Another Company's Member is never accepted. K1's history
 // reads "by Rabaed" with no person; C1 reads nothing of it (seam 1 and seam 2 have the rest:
 // apps/api/test/admin-reassign-step.test.ts, packages/db/test/admin-reassign-step-rls.test.ts).
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "../../api/test/support/harness.ts";
-import { buildTower, detail, memberOnProject, submitted, type Tower } from "../../api/test/support/tower.ts";
+import { buildTower, detail, draft, inInternalReview, memberOnProject, submitted, type Tower } from "../../api/test/support/tower.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 // With the file store: a MAR's Draft attaches its datasheet.
@@ -43,7 +44,7 @@ const actionsOf = (engineerId: string, action: "read_work_item_step" | "reassign
     .orderBy("seq")
     .execute();
 const find = (number: string, why = reason) =>
-  engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&documentNumber=${encodeURIComponent(number)}&reason=${encodeURIComponent(why)}`);
+  engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&item=${encodeURIComponent(number)}&reason=${encodeURIComponent(why)}`);
 /** The Engineer's reassign of the MAR's Step; `why` null sends no reason at all. */
 const reassign = (toMemberId: string | null, why: string | null = reason) =>
   engineer.browser.post(`/v1/work-items/${mar}/step/reassign`, why === null ? { toMemberId } : { toMemberId, reason: why });
@@ -72,8 +73,8 @@ describe("finding a stuck Step (RP-1162)", () => {
 
   it("needs a reason, and is refused to anyone not signed in", async () => {
     expect((await find(documentNumber, "  ")).statusCode).toBe(400);
-    expect((await engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&documentNumber=${encodeURIComponent(documentNumber)}`)).statusCode).toBe(400);
-    expect((await admin.browser().get(`/v1/steps?projectId=${tower.projectId}&documentNumber=x&reason=x`)).statusCode).toBe(401);
+    expect((await engineer.browser.get(`/v1/steps?projectId=${tower.projectId}&item=${encodeURIComponent(documentNumber)}`)).statusCode).toBe(400);
+    expect((await admin.browser().get(`/v1/steps?projectId=${tower.projectId}&item=x&reason=x`)).statusCode).toBe(401);
     expect((await admin.browser().post(`/v1/work-items/${mar}/step/reassign`, { toMemberId: null, reason: "x" })).statusCode).toBe(401);
   });
 
@@ -98,8 +99,41 @@ describe("finding a stuck Step (RP-1162)", () => {
   it("is the plain 404 for a number the Project never issued, logged against the Project", async () => {
     expect((await find("NOPE-0000")).statusCode).toBe(404);
     expect((await actionsOf(engineer.id, "read_work_item_step")).at(-1)).toEqual(
-      expect.objectContaining({ target_kind: "project", target_id: tower.projectId, after: { documentNumber: "NOPE-0000", found: false } }),
+      expect.objectContaining({ target_kind: "project", target_id: tower.projectId, after: { sought: "NOPE-0000", found: false } }),
     );
+  });
+});
+
+describe("finding an item before its first Submit, with no number yet (RP-1319, ADR 0030)", () => {
+  let inReview = "";
+  beforeAll(async () => {
+    inReview = await inInternalReview(tower, c1Engineer.caller, "Busbar trunking, no number yet");
+    expect((await detail(tower.c1Pm, inReview)).documentNumber).toBeNull();
+  });
+
+  it("finds it by its link, as the app links to it, or by its id: no number, C1's own Step and pool", async () => {
+    for (const typed of [
+      `https://rabaed.test/en/work-items/${inReview}`,
+      `https://rabaed.test/ar/work-items/${inReview.toUpperCase()}?tab=history`,
+      `  ${inReview}  `,
+    ]) {
+      const res = await find(typed);
+      expect(res.statusCode, typed).toBe(200);
+      const found = res.json();
+      expect(found).toMatchObject({ workItemId: inReview, documentNumber: null, title: "Busbar trunking, no number yet", closed: false });
+      expect(found.step).toMatchObject({ draft: false, participant: { id: tower.c1ParticipantId } });
+      expect(found.step.pool.map((m: { memberId: string }) => m.memberId)).not.toContain(khalid.id);
+    }
+    expect((await actionsOf(engineer.id, "read_work_item_step")).at(-1)).toEqual(
+      expect.objectContaining({ target_kind: "work_item", target_id: inReview, reason, after: { documentNumber: null, found: true } }),
+    );
+  });
+
+  it("is the plain 404 by its Subject, for a made-up item's link, and for a Draft's link: a Draft is its author's alone", async () => {
+    const aDraft = await draft(tower, c1Engineer.caller, "Draft busbar");
+    for (const typed of ["Busbar trunking, no number yet", `https://rabaed.test/en/work-items/${randomUUID()}`, `https://rabaed.test/en/work-items/${aDraft}`]) {
+      expect((await find(typed)).statusCode, typed).toBe(404);
+    }
   });
 });
 

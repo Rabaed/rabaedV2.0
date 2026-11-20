@@ -27,6 +27,8 @@ export type RecordVerificationLabels = {
   testKey: string;
   testKeyHint: string;
   documentNumber: string;
+  /** "No number yet": in the number's place for a record of an item never Submitted (ADR 0030). */
+  noNumber: string;
   project: string;
   outcome: string;
   sealed: string;
@@ -193,7 +195,7 @@ export function RecordVerificationView({
       <TitledCard title={<bdi dir="auto">{v.subject}</bdi>} level={2}>
         <KeyValues
           items={[
-            { key: "number", label: labels.documentNumber, value: v.documentNumber ? <DocNo value={v.documentNumber} /> : "—" },
+            { key: "number", label: labels.documentNumber, value: v.documentNumber ? <DocNo value={v.documentNumber} /> : labels.noNumber },
             { key: "project", label: labels.project, value: printed(v.project) },
             {
               key: "outcome",

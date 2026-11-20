@@ -24,7 +24,7 @@ describe("an item with no number yet", () => {
     expect(line).not.toContain("—");
     // The running header and the title read it too.
     expect(page).toMatch(/<title>[^<]*No number yet<\/title>/);
-    expect(page).not.toMatch(/content: "[^"]*⁦—⁩/);
+    expect(page).not.toContain("\u2066—\u2069");
   });
 
   it("prints it in the record's one language", () => {

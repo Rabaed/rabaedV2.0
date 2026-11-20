@@ -5,7 +5,8 @@ import { sql } from "kysely";
 import { asEngineer } from "./admin-action.ts";
 
 // A stuck Step from Rabaed Admin (RP-1162, UAT ADM-10; workflow-engine.md §5.6, ADR 0018): a
-// Rabaed Engineer finds an item by its Project and Document Number, reads its current Step and
+// Rabaed Engineer finds an item by its Project and its Document Number, or, before its first
+// Submit, when it has none (ADR 0030, RP-1319), by its id or its link; reads its current Step and
 // holder, and hands the Step to another Member of the same holding Participant's pool, or back
 // to that pool. Never to another Company, never a Transition. Every read and every reassign goes
 // through asEngineer with the Engineer's reason (visibility.md V9). The holding Participant's
@@ -39,7 +40,8 @@ export interface PoolMember {
 
 export interface WorkItemStep {
   readonly workItemId: string;
-  readonly documentNumber: string;
+  /** Null before the item's first Submit (ADR 0030). */
+  readonly documentNumber: string | null;
   readonly title: string;
   readonly typeName: BilingualText;
   readonly closed: boolean;
@@ -58,12 +60,30 @@ export interface WorkItemStep {
   } | null;
 }
 
-/** Item `documentNumber` on Project `projectId`, with its Step and holder; null for a number the Project never issued. Logged as a read. */
-export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: string, documentNumber: string, reason: string): Promise<WorkItemStep | null> {
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/**
+ * What the Engineer typed, as the search reads it: an item's id from its link (`…/work-items/<id>…`,
+ * as the app links to it) or typed alone, else a Document Number, trimmed. Never a Subject (owner,
+ * RP-1319): the database matches a number or an id only.
+ */
+export function soughtItem(typed: string): string {
+  const text = typed.trim();
+  const inLink = new RegExp(`/work-items/(${UUID.source})(?![0-9a-f-])`, "i").exec(text);
+  if (inLink) return inLink[1]!.toLowerCase();
+  return new RegExp(`^${UUID.source}$`, "i").test(text) ? text.toLowerCase() : text;
+}
+
+/**
+ * The item `sought` names on Project `projectId` (its Document Number, its id or its link: soughtItem), with
+ * its Step and holder; null for an item the Project doesn't have, or a Draft. Logged as a read.
+ */
+export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: string, sought: string, reason: string): Promise<WorkItemStep | null> {
+  const typed = soughtItem(sought);
   return asEngineer(adminDb, { engineerId, action: "read_work_item_step", reason }, async (trx) => {
     const { rows } = await sql<{
       work_item_id: string;
-      document_number: string;
+      document_number: string | null;
       title: string;
       type_name: BilingualText;
       closed: boolean;
@@ -76,9 +96,9 @@ export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: str
       role_name: BilingualText | null;
       holder_member_id: string | null;
       pool: { member_id: string; name: BilingualText; email: string }[];
-    }>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${documentNumber})`.execute(trx);
+    }>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${typed})`.execute(trx);
     const r = rows[0];
-    if (!r) return { target: { kind: "project", id: projectId }, after: { documentNumber, found: false }, result: null };
+    if (!r) return { target: { kind: "project", id: projectId }, after: { sought: typed, found: false }, result: null };
     const step =
       r.assignment_status && r.step_name && r.participant_id && r.company_name && r.role_name
         ? {

@@ -19,6 +19,7 @@ function useLabels(): { record: RecordVerificationLabels; form: VerificationCode
       testKey: t("testKey"),
       testKeyHint: t("testKeyHint"),
       documentNumber: t("documentNumber"),
+      noNumber: t("noNumber"),
       project: t("project"),
       outcome: t("outcome"),
       sealed: t("sealed"),

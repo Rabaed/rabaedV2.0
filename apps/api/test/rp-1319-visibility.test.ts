@@ -11,7 +11,7 @@ import { createDb } from "@rabaed/db";
 import { expectHiddenFrom, testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
+import { createTestApi, expectHidden, readById, type Caller, type TestApi } from "./support/harness.ts";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const urls = testDatabaseUrls();
@@ -84,14 +84,14 @@ async function workingCopyName(by: Caller, id: string): Promise<string | null> {
 const copyOf = (id: string) => async (by: Caller) => {
   const res = await by.post(`/v1/work-items/${id}/working-copy`);
   if (res.statusCode === 200) return [{ id }];
-  await expectHidden(res, `working copy of ${id}`);
+  await expectHidden(res, `working copy of ${id}`); // not hidden-from: the read expectHiddenFrom calls, which proves the row first
   return [];
 };
 /** Item `id`'s Documental Record link for expectHiddenFrom. */
 const recordOf = (id: string) => async (by: Caller) => {
   const res = await by.get(`/v1/work-items/${id}/documental-record`);
   if (res.statusCode === 200) return [{ id, name: fileNameOf(res.json().url) }];
-  await expectHidden(res, `documental record of ${id}`);
+  await expectHidden(res, `documental record of ${id}`); // not hidden-from: the read expectHiddenFrom calls, which proves the row first
   return [];
 };
 
@@ -159,32 +159,27 @@ describe("RP-1319-2: the Documental Record of an item cancelled before its first
 
 describe("RP-1319-3: Rabaed Admin finds an item in Internal Review by its id", () => {
   type Found = { work_item_id: string; document_number: string | null; title: string; participant_id: string | null; draft_step: boolean };
-  const lookUp = async (projectId: string, lookup: string) =>
-    (await sql<Found>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${lookup})`.execute(adminDb)).rows;
+  const find = async (projectId: string, sought: string) =>
+    (await sql<Found>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${sought})`.execute(adminDb)).rows;
 
   it("RP-1319-3: finds it by its id on its Project, with C1's Step; not on another Project, and not by a Subject", async () => {
     const id = await inReview("Lighting control panels");
-    expect(await lookUp(at.projectId, id)).toEqual([expect.objectContaining({ work_item_id: id, document_number: null, participant_id: at.c1ParticipantId, draft_step: false })]);
-    expect(await lookUp(at.projectId, ` ${id.toUpperCase()} `)).toHaveLength(1);
-    expect(await lookUp(randomUUID(), id)).toEqual([]); // not hidden-from: the item's id on a Project that has no such item
-    expect(await lookUp(at.projectId, "Lighting control panels")).toEqual([]); // not hidden-from: there is no Subject search (owner, 2026-11-17)
+    expect(await find(at.projectId, id)).toEqual([expect.objectContaining({ work_item_id: id, document_number: null, participant_id: at.c1ParticipantId, draft_step: false })]);
+    expect((await find(at.projectId, ` ${id.toUpperCase()} `)).map((r) => r.work_item_id)).toEqual([id]);
+    expect(await find(randomUUID(), id)).toEqual([]); // not hidden-from: the item's id on a Project that has no such item
+    expect(await find(at.projectId, "Lighting control panels")).toEqual([]); // not hidden-from: there is no Subject search (owner, 2026-11-17)
   });
 
   it("RP-1319-3: never finds a Draft by its id: a Draft is its author's alone", async () => {
     const id = await draft(at, at.c1Engineer, "Draft lighting", MAR);
-    expect(await lookUp(at.projectId, id)).toEqual([]); // not hidden-from: Rabaed Admin's lookup; the test above finds an item that left Draft
+    expect(await find(at.projectId, id)).toEqual([]); // not hidden-from: Rabaed Admin's search; the test above finds an item that left Draft
   });
 
-  it("RP-1319-3: the lookup reads nothing for the app role, and K1, the Owner Representative and C2 still don't see the item", async () => {
+  it("RP-1319-3: the search reads nothing for the app role, and K1, the Owner Representative and C2 still don't see the item", async () => {
     const id = await inReview("Earthing pits");
     await expect(sql`select * from app.work_item_step_for_engineer(${at.projectId}::uuid, ${id})`.execute(worker)).rejects.toThrow(/permission denied/);
     await expectHiddenFrom({
-      read: async (by: Caller) => {
-        const res = await by.get(`/v1/work-items/${id}`);
-        if (res.statusCode === 200) return [{ id }];
-        await expectHidden(res, "the item");
-        return [];
-      },
+      read: readById(`/v1/work-items/${id}`),
       target: id,
       seenBy: at.c1Engineer,
       hiddenFrom: [at.k1Manager, orEngineer, c2Engineer],

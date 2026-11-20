@@ -1,5 +1,5 @@
 // Seam 2 for RP-1319 (ADR 0030; visibility.md V1, the Working Copy, Documental Record and Verification
-// page rows; docs/visibility/scenarios/RP-1319.md; migration 20280101000000_no_number_file_names_admin_lookup_verification.sql),
+// page rows; docs/visibility/scenarios/RP-1319.md; migration 20280101000000_no_number_file_names_admin_search_verification.sql),
 // as the app role and Rabaed Admin's role. Before its first Submit an item has no Document Number:
 // app.request_working_copy, app.documental_record_file and app.linked_documental_record_file name its
 // file by its Type and Subject, to the Members who see it only; app.work_item_step_for_engineer finds it
@@ -154,21 +154,21 @@ describe("RP-1319-2: the Documental Record's file of an item cancelled before it
 
 describe("RP-1319-3: app.work_item_step_for_engineer finds an item in Internal Review by its id", () => {
   type Found = { work_item_id: string; document_number: string | null; participant_id: string | null; draft_step: boolean; assignment_status: string | null };
-  const lookUp = async (projectId: string, lookup: string) =>
-    (await sql<Found>`select work_item_id, document_number, participant_id, draft_step, assignment_status from app.work_item_step_for_engineer(${projectId}::uuid, ${lookup})`.execute(adminDb)).rows;
+  const find = async (projectId: string, sought: string) =>
+    (await sql<Found>`select work_item_id, document_number, participant_id, draft_step, assignment_status from app.work_item_step_for_engineer(${projectId}::uuid, ${sought})`.execute(adminDb)).rows;
 
   it("RP-1319-3: by its id on its Project, with C1's Step and no number; not on another Project, not by its Subject", async () => {
     const id = await inReview("Lighting control panels");
-    expect(await lookUp(tower.projectId, id)).toEqual([{ work_item_id: id, document_number: null, participant_id: tower.c1.participantId, draft_step: false, assignment_status: "picked_up" }]);
-    expect(await lookUp(tower.projectId, `  ${id.toUpperCase()}  `)).toHaveLength(1);
-    expect(await lookUp(randomUUID(), id)).toEqual([]); // not hidden-from: the id on a Project that has no such item
-    expect(await lookUp(tower.projectId, "Lighting control panels")).toEqual([]); // not hidden-from: there is no Subject search (owner, 2026-11-17)
-    expect(await lookUp(tower.projectId, randomUUID())).toEqual([]); // not hidden-from: a made-up id
+    expect(await find(tower.projectId, id)).toEqual([{ work_item_id: id, document_number: null, participant_id: tower.c1.participantId, draft_step: false, assignment_status: "picked_up" }]);
+    expect((await find(tower.projectId, `  ${id.toUpperCase()}  `)).map((r) => r.work_item_id)).toEqual([id]);
+    expect(await find(randomUUID(), id)).toEqual([]); // not hidden-from: the id on a Project that has no such item
+    expect(await find(tower.projectId, "Lighting control panels")).toEqual([]); // not hidden-from: there is no Subject search (owner, 2026-11-17)
+    expect(await find(tower.projectId, randomUUID())).toEqual([]); // not hidden-from: a made-up id
   });
 
   it("RP-1319-3: never a Draft, by its id or otherwise: a Draft is its author's alone (V1)", async () => {
     const id = await draft("Draft lighting");
-    expect(await lookUp(tower.projectId, id)).toEqual([]); // not hidden-from: Rabaed Admin's lookup; the test above finds an item that left Draft
+    expect(await find(tower.projectId, id)).toEqual([]); // not hidden-from: Rabaed Admin's search; the test above finds an item that left Draft
   });
 
   it("RP-1319-3: still finds a numbered item by its Document Number", async () => {
@@ -176,14 +176,14 @@ describe("RP-1319-3: app.work_item_step_for_engineer finds an item in Internal R
     expect(await tower.pickUp(c1Pm, id)).toBe("picked_up");
     await step(c1Pm, id, "submit");
     const number = (await numberOf(id))!;
-    expect(await lookUp(tower.projectId, number.toLowerCase())).toEqual([expect.objectContaining({ work_item_id: id, document_number: number })]);
-    expect(await lookUp(tower.projectId, id)).toEqual([expect.objectContaining({ work_item_id: id, document_number: number })]);
+    expect(await find(tower.projectId, number.toLowerCase())).toEqual([expect.objectContaining({ work_item_id: id, document_number: number })]);
+    expect(await find(tower.projectId, id)).toEqual([expect.objectContaining({ work_item_id: id, document_number: number })]);
   });
 
   it("RP-1319-3: is refused to the app role, as every Member and with no Member set", async () => {
     const id = await inReview("Earthing pits");
     for (const as of [c1Pm, k1, c2]) {
-      await expect(tower.call(as, sql`select * from app.work_item_step_for_engineer(${tower.projectId}::uuid, ${id})`), whoIs(as)).rejects.toThrow(/permission denied/);
+      await expect(tower.call(as, sql<{ work_item_id: string }>`select * from app.work_item_step_for_engineer(${tower.projectId}::uuid, ${id})`), whoIs(as)).rejects.toThrow(/permission denied/);
     }
     await expect(sql`select * from app.work_item_step_for_engineer(${tower.projectId}::uuid, ${id})`.execute(app)).rejects.toThrow(/permission denied/);
   });
