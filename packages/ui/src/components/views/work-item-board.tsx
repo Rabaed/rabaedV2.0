@@ -27,6 +27,7 @@ import { useMediaQuery } from "../../lib/use-media-query.ts";
 import { PHONE, VIEW_ICONS_ONLY } from "../../lib/widths.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
+import { revisionStateWord } from "../doc-no/doc-no.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { BottomSheetContent, Sheet, SheetClose, SheetTrigger } from "../overlay/sheet.tsx";
@@ -50,6 +51,8 @@ export type WorkItemBoardLabels = {
   revisionNoNumber: (revision: string) => string;
   /** After a Revision Draft's base number and its revision (RP-1300): "Draft", as in "UAT01-MAR-01-0005 Rev 1 · Draft". */
   revisionDraft: string;
+  /** The same once it left Draft, before its first Submit (RP-1314): "UAT01-MAR-01-0005 Rev 1 · Internal Review". */
+  revisionInternalReview: string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
   /** A Step whose Participant was withdrawn (RP-952): "Waiting for a new ‹role›", its Project Role's name. */
@@ -718,9 +721,9 @@ export function cardContent(
     // The R badge carries the Revision, so the number leaves out its " Rev n"; a Revision Draft's keeps it (RP-1300).
     number: cardNumber(card.documentNumber, card.revisionNo),
     noNumberLabel: card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber,
-    // A Revision Draft reads its chain's base number from the start (RP-1300).
+    // A Revision not yet Submitted reads its chain's base number from the start, and where it stands (RP-1300, RP-1314).
     ...(card.documentNumber === null && card.baseNumber !== undefined
-      ? { revisionDraft: { base: card.baseNumber, revision: card.revisionNo, draft: labels.revisionDraft } }
+      ? { revisionDraft: { base: card.baseNumber, revision: card.revisionNo, state: revisionStateWord(labels, card.baseState ?? "draft") } }
       : {}),
     title: card.title,
     badge: badgeOf(card, locale, labels, outcomes),

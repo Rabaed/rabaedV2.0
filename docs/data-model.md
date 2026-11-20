@@ -30,7 +30,7 @@ Don't read this doc whole: find your heading with `grep -n '^#' docs/data-model.
 - **Nothing is hard-deleted.** Rows are deactivated, withdrawn, cancelled or closed.
 - **Every table carries** `created_at`, `created_by`, `updated_at`. Change history for regulated tables goes to the audit log (§9).
 - `→` means foreign key.
-- **Finding a function's current body.** The `app.*` functions are redefined across many migrations (the newest by file name wins). `pnpm db:fn <name>` prints the newest definition and the migration and line it is in; `--list` shows every redefinition in order.
+- **Finding a function's current body.** The `app.*` functions are redefined across many migrations (the newest by file name wins). `pnpm db:fn sees_work_item` (the function's name, with or without `app.`) prints the newest definition and the migration and line it is in; `--list` shows every redefinition in order.
 
 ## Core relationships
 
@@ -394,7 +394,7 @@ Status is recomputed on Submit, when a submittal, Revision or replacement joins 
 
 ### Creating a Draft
 
-Pointers only (RP-1024); the code holds the rules. Find each `app.*` function's newest body with `pnpm db:fn <name>`.
+Pointers only (RP-1024); the code holds the rules. Find each `app.*` function's newest body with `pnpm db:fn` and its name (`pnpm db:fn sees_work_item`).
 
 - **"+ New"**: `POST /v1/projects/:projectId/work-items` (`apps/api/src/routes/work-items.ts`) → `createWorkItem` / `createWorkItemIn` (`apps/api/src/work-items/work-items.ts`) → `app.create_work_item`, then `app.save_work_item_answers` and `app.sync_work_item_checklists` (`syncChecklists`).
 - **Inside `app.create_work_item`**, in order: the caller's active Participant; the Form, `app.new_item_form_version`; the Workflow, `app.new_item_workflow_version`; its Draft Step, `app.is_draft_step`; the raise rule (next line); `app.check_work_item_built_ins`, `app.set_work_item_built_ins`; the `work_item_access` row (`raised`), the `step_assignment` (`picked_up`) and the `created` event.

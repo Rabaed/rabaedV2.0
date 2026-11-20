@@ -76,3 +76,4 @@ export * from "./company-default.ts";
 export * from "./verification.ts";
 export * from "./env.ts";
 export * from "./visitor.ts";
+export * from "./revision-base.ts";

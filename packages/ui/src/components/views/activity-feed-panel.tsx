@@ -5,15 +5,18 @@ import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { TitledCard } from "../data/titled-card.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { ItemNumber, type RevisionStateLabels } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { moduleName } from "../../lib/module-name.ts";
 
-/** The panel's words, from the app's messages. What happened, for events that are not a Transition, reads after the Company's name. */
-export type ActivityFeedPanelLabels = {
+/**
+ * The panel's words, from the app's messages. What happened, for events that are not a Transition, reads after the
+ * Company's name. `RevisionStateLabels`: a Revision not yet Submitted reads "<base> Rev 1 · Internal Review" (RP-1314).
+ */
+export type ActivityFeedPanelLabels = RevisionStateLabels & {
   title: string;
   module: string;
   type: string;
@@ -162,7 +165,13 @@ export function ActivityFeedPanel({
                   <p className="break-words">
                     <span className="font-semibold">{e.by.companyName?.[locale]}</span>
                     {e.by.memberName && <span className="text-muted"> · {e.by.memberName[locale]}</span>} {whatHappened(e, locale, labels)}{" "}
-                    {e.workItem.documentNumber ? <DocNo value={e.workItem.documentNumber} /> : <span className="text-muted">({t("noNumber")})</span>}
+                    <ItemNumber
+                      documentNumber={e.workItem.documentNumber}
+                      revisionBase={e.workItem.revisionBase}
+                      labels={labels}
+                      locale={locale}
+                      noNumber={<span className="text-muted">({t("noNumber")})</span>}
+                    />
                     <span> · {e.workItem.title}</span>
                   </p>
                   <p className="text-sm text-muted">

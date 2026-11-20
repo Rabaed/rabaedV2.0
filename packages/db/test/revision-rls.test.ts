@@ -843,3 +843,58 @@ describe("Search by the base number (RP-1300-2, RP-1300-4)", () => {
     expect((await found(base)(k1.member)).map((r) => r.id).sort()).toEqual([original, draft].sort());
   });
 });
+
+// RP-1314 (owner's decision 2026-11-20, RP-1314 comment 15985; docs/visibility/scenarios/RP-1314.md): before its own
+// first Submit a Revision reads "<base> Rev n · Draft" or "· Internal Review". The api reads that from two existing
+// reads, app.revision_chain (the base) and app.work_item_creation_date (never left Draft or not), for the Activity Feed,
+// the Handover dialog and the notifications as for the item and the List. Both answer C1 only.
+// labelOf reads the two functions as the api's revisionBases does (query.ts), minus its filters on the base's number: here the
+// point is what each function answers to whom, not the api's shaping.
+describe("a Revision's base number and state before its first Submit, as the api reads them (RP-1314-1, RP-1314-2, RP-1314-3)", () => {
+  let original = "";
+  let reviewing = "";
+  let base = "";
+  const labelOf = (as: string, id: string) =>
+    call<{ base_number: string; revision_no: number; left_draft: boolean }>(
+      as,
+      sql`select base.document_number as base_number, own.revision_no, app.work_item_creation_date(own.work_item_id) is not null as left_draft
+        from app.revision_chain(${id}::uuid) own cross join app.revision_chain(${id}::uuid) base
+        where own.work_item_id = ${id}::uuid and own.document_number is null and base.revision_no = 0`,
+    );
+
+  beforeAll(async () => {
+    const [made] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Busbar RP-1314', app.latest_form_version(${TYPE}), '{"model": "BB-4"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    original = made!.work_item_id;
+    expect(await take(c1.member, original, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, original)).toBe("picked_up");
+    expect(await take(c1Pm, original, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, original)).toBe("picked_up");
+    expect(await take(k1.member, original, "revise_c")).toBe("applied");
+    reviewing = (await createRevision(c1.member, original)).work_item_id!;
+    base = (await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${original}`))[0]!.document_number;
+  });
+
+  it("gives C1 the base number and Draft, then Internal Review once it left Draft (RP-1314-1, RP-1314-2)", async () => {
+    expect(await labelOf(c1.member, reviewing)).toEqual([{ base_number: base, revision_no: 1, left_draft: false }]);
+    expect(await take(c1.member, reviewing, "send_for_review")).toBe("applied");
+    for (const as of [c1.member, c1Pm]) expect(await labelOf(as, reviewing)).toEqual([{ base_number: base, revision_no: 1, left_draft: true }]);
+  });
+
+  it("gives K1, the Owner and the Owner Representative nothing of it from its id (RP-1314-1, RP-1314-2)", async () => {
+    const read = async (as: string) => ((await labelOf(as, reviewing)).length > 0 ? [{ id: reviewing }] : []);
+    await expectHiddenFrom({ read, target: reviewing, seenBy: [c1.member, c1Pm], hiddenFrom: [k1.member, ow.member, orA.member], label: "the Revision's base number and state" });
+    for (const as of [k1.member, ow.member, orA.member]) expect(await call(as, sql`select app.work_item_creation_date(${reviewing}::uuid) as d`)).toEqual([{ d: null }]); // not hidden-from: a scalar read, null for an item they do not see
+  });
+
+  it("gives nothing once it is Submitted: it has its own number (RP-1314-3)", async () => {
+    expect(await pickUp(c1Pm, reviewing)).toBe("picked_up");
+    expect(await take(c1Pm, reviewing, "submit")).toBe("applied");
+    for (const as of [c1.member, k1.member]) expect(await labelOf(as, reviewing)).toEqual([]); // not hidden-from: the row needs no number, and it has one now
+    expect(await call(k1.member, sql`select document_number from work_item where id = ${reviewing}`)).toEqual([{ document_number: `${base} Rev 1` }]);
+  });
+});

@@ -1,7 +1,9 @@
 import type { ActivityFeedEntry } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
+import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
+import { revisionDraftText } from "../doc-no/doc-no.tsx";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { activityFeedPanelLabels } from "../../storybook/views.ts";
 import { ActivityFeedPanel } from "./activity-feed-panel.tsx";
@@ -109,6 +111,50 @@ export const Panel: Story = {
     await expect(feed.getByRole("link", { name: storyText(context, copy.viewAll) })).toHaveAttribute("href", "/projects/p/activity");
     await userEvent.click(feed.getByRole("button", { name: storyText(context, copy.loadMore) }));
     await expect(context.args.onLoadMore).toHaveBeenCalled();
+  },
+};
+
+/** Rev 1 of a MAR in Internal Review and Rev 2 of another still a Draft, neither Submitted yet (RP-1314). */
+const revisionEntries: ActivityFeedEntry[] = [
+  entry(6, {
+    minutesAgo: 10,
+    audience: "internal",
+    by: { companyName: c1, memberName: b("Omar Fahad", "عمر فهد") },
+    transition: b("Send for Review", "إرسال للمراجعة"),
+    workItem: {
+      id: id(6),
+      documentNumber: null,
+      revisionBase: { baseNumber: "TWR-C1-EL-MAR-0005", revisionNo: 1, state: "internal_review" },
+      title: "Earthing rods",
+      type: mar,
+    },
+  }),
+  entry(7, {
+    minutesAgo: 30,
+    type: "internal_note",
+    transition: null,
+    audience: "internal",
+    by: { companyName: c1, memberName: b("Sara Al Harbi", "سارة الحربي") },
+    workItem: { id: id(7), documentNumber: null, revisionBase: { baseNumber: "TWR-C1-EL-MAR-0002", revisionNo: 2, state: "draft" }, title: "Switchgear", type: mar },
+  }),
+  entries[2]!,
+];
+
+/**
+ * A Revision not yet Submitted reads its chain's base number, its revision and where it stands (RP-1314, owner's
+ * decision 2026-11-20), as its page does: "· Internal Review" or "· Draft". An item never numbered still reads
+ * "No number yet". The base number reads left to right in Arabic too.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: { entries: revisionEntries, hasMore: false },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const l = activityFeedPanelLabels[locale];
+    const links = context.canvas.getAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/work-items/"));
+    await expect(links[0]).toHaveTextContent(revisionDraftText("TWR-C1-EL-MAR-0005", 1, l.revisionInternalReview, locale));
+    await expect(links[1]).toHaveTextContent(revisionDraftText("TWR-C1-EL-MAR-0002", 2, l.revisionDraft, locale));
+    await expect(links[2]).toHaveTextContent(l.noNumber);
+    await expectLaidOutLeftToRight(within(links[0]!).getByText("TWR-C1-EL-MAR-0005"));
   },
 };
 

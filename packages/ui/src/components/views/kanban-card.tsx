@@ -62,7 +62,7 @@ export type KanbanCardProps = {
    * A Revision Draft (RP-1300): its chain's base number, its revision and the word for Draft, shown in place of
    * `noNumberLabel` ("UAT01-MAR-01-0005 Rev 1 · Draft"). Only while `number` is null.
    */
-  revisionDraft?: { base: string; revision: number; draft: string };
+  revisionDraft?: { base: string; revision: number; state: string };
   /** The Subject. */
   title: string;
   /** The item's page. */

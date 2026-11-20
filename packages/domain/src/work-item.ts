@@ -11,6 +11,7 @@ import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 import { workItemPackage } from "./package.ts";
 import { baseRoles } from "./project.ts";
 import { replyChecklistRead } from "./reply-checklist.ts";
+import { revisionBaseState } from "./revision-base.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -107,6 +108,8 @@ export const workItemSummary = z.object({
    * for every other item.
    */
   baseNumber: z.string().optional(),
+  /** With `baseNumber` only: where it stands until its own first Submit, "· Draft" or "· Internal Review" (RP-1314). */
+  baseState: revisionBaseState.optional(),
   stage,
   trade: dimensionValueRef,
   location: dimensionValueRef.nullable(),

@@ -30,6 +30,7 @@ const copy = {
   location: { en: "Location", ar: "الموقع" },
   noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
   draft: { en: "Draft", ar: "مسودة" },
+  internalReview: { en: "Internal Review", ar: "المراجعة الداخلية" },
   pending: { en: "Pending", ar: "قيد المراجعة" },
   sendForReview: { en: "Send for review", ar: "إرسال للمراجعة" },
 };
@@ -66,7 +67,8 @@ const rows: Row[] = [
 
 /**
  * `vacant`: the first row's Step is a Vacancy (RP-952), with no holder. `revisionDraft`: the second row is
- * Rev 1 still in Draft (RP-1300), with no number of its own yet, only its chain's base number.
+ * Rev 1 still in Draft (RP-1300), with no number of its own yet, only its chain's base number; `"internal_review"`:
+ * the same, sent for review but not yet Submitted (RP-1314).
  */
 function PanelDemo({
   context,
@@ -79,13 +81,14 @@ function PanelDemo({
   start: string;
   startOpen?: boolean;
   vacant?: boolean;
-  revisionDraft?: boolean;
+  revisionDraft?: boolean | "internal_review";
 }) {
   const locale = storyLocale(context);
   const [open, setOpen] = useState<string | null>(startOpen ? start : null);
   const ids = useSubmittalPanelIds();
   const found = rows.find((r) => r.id === open);
   const draftBase = revisionDraft && found?.id === "r2" ? "TWR-TMC-EL-MAR-042" : null;
+  const state = revisionDraft === "internal_review" ? copy.internalReview[locale] : copy.draft[locale];
   const row = found && draftBase ? { ...found, documentNumber: null, stepAgeWeeks: null } : found;
   const position = row ? submittalPanelPosition(rows.map((r) => r.id), row.id) : null;
   const number = row ? submittalPanelNumber(row.documentNumber, row.revisionNo) : null;
@@ -102,7 +105,7 @@ function PanelDemo({
           labels={panelLabels(locale)}
           crumb={
             draftBase ? (
-              <RevisionDraftNumber base={draftBase} revision={row.revisionNo} draft={copy.draft[locale]} locale={locale} />
+              <RevisionDraftNumber base={draftBase} revision={row.revisionNo} state={state} locale={locale} />
             ) : number === null ? (
               copy.noNumber[locale]
             ) : number.revisionNo === null ? (
@@ -121,7 +124,7 @@ function PanelDemo({
               locale={locale}
               number={number}
               noNumber={copy.noNumber[locale]}
-              revisionDraft={draftBase ? { base: draftBase, revisionNo: row.revisionNo, draft: copy.draft[locale] } : undefined}
+              revisionDraft={draftBase ? { base: draftBase, revisionNo: row.revisionNo, draft: state } : undefined}
               subject={row.title}
               numberId={ids.numberId}
               subjectId={ids.subjectId}
@@ -212,6 +215,23 @@ export const RevisionDraft: Story = {
     await expect(panel.querySelector(".sdp-crumb")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${draft}`);
     await expect(panel.querySelector(".sdp-rev")).toHaveTextContent(storyText(context, { en: "Rev 1", ar: "مراجعة 1" }));
     await expect(panel).not.toHaveTextContent(storyText(context, copy.noNumber));
+    const number = within(panel.querySelector<HTMLElement>(".sdp-number")!).getByText("TWR-TMC-EL-MAR-042");
+    await expect(getComputedStyle(number).direction).toBe("ltr");
+  },
+};
+
+/**
+ * A Revision in Internal Review, not yet Submitted (RP-1314, owner's decision 2026-11-20): "· Internal Review" in
+ * place of "· Draft", in the header and the breadcrumb; the base number left to right in Arabic too.
+ */
+export const RevisionInInternalReview: Story = {
+  render: (_args, context) => <PanelDemo context={context} start="r2" revisionDraft="internal_review" />,
+  play: async (context) => {
+    const panel = panelOf(context);
+    const state = storyText(context, { en: "Rev 1 · Internal Review", ar: "مراجعة 1 · المراجعة الداخلية" });
+    await expect(panel.querySelector(".sdp-number")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${state}`);
+    await expect(panel.querySelector(".sdp-crumb")).toHaveTextContent(`TWR-TMC-EL-MAR-042 ${state}`);
+    await expect(panel).not.toHaveTextContent(storyText(context, { en: "· Draft", ar: "· مسودة" }));
     const number = within(panel.querySelector<HTMLElement>(".sdp-number")!).getByText("TWR-TMC-EL-MAR-042");
     await expect(getComputedStyle(number).direction).toBe("ltr");
   },

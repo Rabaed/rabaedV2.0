@@ -2,11 +2,12 @@ import { stepAgeWeeks, type Locale, type ProjectVacancies } from "@rabaed/domain
 import type { ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { ItemNumber, type RevisionStateLabels } from "../doc-no/doc-no.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { PoolMark, vacancyIcon } from "../views/kanban-card.tsx";
 
-export type VacanciesListLabels = {
+/** `RevisionStateLabels`: a Revision not yet Submitted would read "<base> Rev 1 · Internal Review" (RP-1314). */
+export type VacanciesListLabels = RevisionStateLabels & {
   /** One line under the title: what a Vacancy is. */
   description: string;
   /** "Waiting for a new Consultant". */
@@ -52,7 +53,14 @@ export function VacanciesList({ vacancies, projectName, now, locale, labels, hre
               <div className="min-w-0 space-y-1">
                 {v.item ? (
                   <Link href={hrefFor(v.item.id)} className={cn("block min-w-0 rounded-sm text-sm hover:underline", focusRing)}>
-                    {v.item.documentNumber ? <DocNo value={v.item.documentNumber} className="font-semibold" /> : <span className="text-muted">{labels.noNumber}</span>}
+                    <ItemNumber
+                      documentNumber={v.item.documentNumber}
+                      revisionBase={v.item.revisionBase}
+                      labels={labels}
+                      locale={locale}
+                      className="font-semibold"
+                      noNumber={<span className="text-muted">{labels.noNumber}</span>}
+                    />
                     <span className="text-text-secondary"> · {v.item.title}</span>
                   </Link>
                 ) : (

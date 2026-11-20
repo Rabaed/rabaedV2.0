@@ -1,6 +1,7 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { BilingualText, HandoverPick, HandoverReason, HandoverStep } from "@rabaed/domain";
+import type { BilingualText, HandoverPick, HandoverReason, HandoverStep, RevisionBase } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
+import { revisionBases, withRevisionBase } from "../work-items/query.ts";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
 
@@ -103,7 +104,9 @@ async function inTransaction<T extends { ok: boolean }>(
   const steps = rows.map((r) => ({ row: r, from: r.holder!.id, to: pickFor.get(r.assignment_id) }));
   // Every Step needs a pick from its candidates, a single one included: it is shown, pre-filled.
   if (steps.some(({ row, to }) => !row.candidates.some((c) => c.id === to))) {
-    throw new HandoverRefused({ ok: false, reason: "handover_needed", handovers: rows.map(toStep) });
+    // A Revision not yet Submitted reads as its page does (RP-1314), on the items the rows already name to the viewer.
+    const bases = await revisionBases(trx, rows.flatMap((r) => (r.work_item_id !== null && r.document_number === null ? [r.work_item_id] : [])));
+    throw new HandoverRefused({ ok: false, reason: "handover_needed", handovers: rows.map((r) => toStep(r, bases)) });
   }
   for (const { row, from, to } of steps) {
     const { rows: done } = await sql<{ outcome: string }>`
@@ -115,12 +118,15 @@ async function inTransaction<T extends { ok: boolean }>(
   return result;
 }
 
-function toStep(r: NeededRow): HandoverStep {
+function toStep(r: NeededRow, bases: ReadonlyMap<string, RevisionBase>): HandoverStep {
   return {
     assignmentId: r.assignment_id,
     project: { id: r.project_id, name: r.project_name },
     step: r.step_name,
-    item: r.work_item_id === null ? null : { id: r.work_item_id, documentNumber: r.document_number, title: r.title ?? "" },
+    item:
+      r.work_item_id === null
+        ? null
+        : { id: r.work_item_id, documentNumber: r.document_number, ...withRevisionBase(bases, r.work_item_id), title: r.title ?? "" },
     holder: r.holder!,
     candidates: r.candidates,
   };

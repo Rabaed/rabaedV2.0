@@ -1,7 +1,9 @@
 import type { ActivityFeedEntry, Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
+import { revisionDraftText } from "../doc-no/doc-no.tsx";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { activityFeedPanelLabels } from "../../storybook/views.ts";
 import { ActivityFeedPage, type ActivityFeedPageLabels } from "./activity-feed-page.tsx";
@@ -174,6 +176,60 @@ export const Empty: Story = {
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {
+    await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
+  },
+};
+
+/** Rev 1 of a MAR in Internal Review and Rev 2 of another still a Draft, neither Submitted yet (RP-1314). */
+const revisionEntries: ActivityFeedEntry[] = [
+  entry(6, {
+    minutesAgo: 10,
+    audience: "internal",
+    by: { companyName: c1, memberName: omar },
+    transition: b("Send for Review", "إرسال للمراجعة"),
+    workItem: {
+      id: id(6),
+      documentNumber: null,
+      revisionBase: { baseNumber: "TWR-C1-EL-MAR-0005", revisionNo: 1, state: "internal_review" },
+      title: "Earthing rods",
+      type: mar,
+    },
+  }),
+  entry(7, {
+    minutesAgo: 30,
+    type: "internal_note",
+    transition: null,
+    audience: "internal",
+    by: { companyName: c1, memberName: sara },
+    workItem: { id: id(7), documentNumber: null, revisionBase: { baseNumber: "TWR-C1-EL-MAR-0002", revisionNo: 2, state: "draft" }, title: "Switchgear", type: mar },
+  }),
+  entry(8, { minutesAgo: 50, audience: "internal", by: { companyName: c1, memberName: omar }, workItem: { id: id(8), documentNumber: null, title: "Chillers", type: mar } }),
+];
+
+/**
+ * A Revision not yet Submitted reads its chain's base number, its revision and where it stands (RP-1314, owner's
+ * decision 2026-11-20), as its page does: "· Internal Review" or "· Draft". An item never numbered still reads
+ * "No number yet". The base number reads left to right in Arabic too.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: { entries: revisionEntries, hasMore: false },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const labels = pageLabels(locale);
+    const links = context.canvas.getAllByRole("link");
+    await expect(links[0]).toHaveTextContent(revisionDraftText("TWR-C1-EL-MAR-0005", 1, labels.revisionInternalReview, locale));
+    await expect(links[1]).toHaveTextContent(revisionDraftText("TWR-C1-EL-MAR-0002", 2, labels.revisionDraft, locale));
+    await expect(links[2]).toHaveTextContent(labels.noNumber);
+    await expectLaidOutLeftToRight(within(links[0]!).getByText("TWR-C1-EL-MAR-0005"));
+  },
+};
+
+/** The same on a phone: the label wraps with the line, and nothing scrolls sideways. */
+export const RevisionsBeforeSubmitPhone: Story = {
+  ...RevisionsBeforeSubmit,
+  parameters: phone,
+  play: async (context) => {
+    await RevisionsBeforeSubmit.play!(context);
     await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
   },
 };

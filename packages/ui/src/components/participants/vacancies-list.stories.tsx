@@ -1,7 +1,9 @@
 import type { Locale, ProjectVacancies } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
+import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { revisionDraftText } from "../doc-no/doc-no.tsx";
 import { VacanciesList, type VacanciesListLabels } from "./vacancies-list.tsx";
 
 // The Project's Vacancies, for the Host Company's Project Admin (RP-952): the Step each waits at,
@@ -39,6 +41,8 @@ function labelsFor(locale: Locale): VacanciesListLabels {
     waitingFor: (role) => (en ? `Waiting for a new ${role}` : `بانتظار ${role} الجديد`),
     hiddenItem: (step, project) => (en ? `An item at ${step} on ${project}` : `عنصر عند ${step} في ${project}`),
     noNumber: en ? "No number yet" : "بلا رقم بعد",
+    revisionDraft: en ? "Draft" : "مسودة",
+    revisionInternalReview: en ? "Internal Review" : "المراجعة الداخلية",
     empty: copy.empty[locale],
   };
 }
@@ -50,7 +54,7 @@ const meta = {
     return (
       <div className="max-w-[880px] p-4">
         <VacanciesList
-          vacancies={args.empty ? [] : vacancies}
+          vacancies={args.empty ? [] : (args.rows ?? vacancies)}
           projectName={locale === "en" ? "Riyadh Gate Tower" : "برج بوابة الرياض"}
           now={now}
           locale={locale}
@@ -60,7 +64,7 @@ const meta = {
       </div>
     );
   },
-} satisfies Meta<{ empty?: boolean }>;
+} satisfies Meta<{ empty?: boolean; rows?: ProjectVacancies["vacancies"] }>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -80,6 +84,30 @@ export const Listed: Story = {
     // Step Age dots, never a date or "overdue": 2 weeks and 6 weeks (4+).
     await expect(within(seen!).getByRole("img").querySelectorAll("[data-filled]")).toHaveLength(2);
     await expect(within(unseen!).getAllByRole("img").at(-1)!.querySelectorAll("[data-filled]")).toHaveLength(4);
+  },
+};
+
+/**
+ * The list takes the label every other screen gives a Revision not yet Submitted (RP-1314): "<base> Rev 1 · Draft" or
+ * "· Internal Review". The api never lists one today (such a Revision is never a Vacancy, pinned by seam 1); this keeps
+ * the list reading as the others if that changes. An item never numbered still reads "No number yet".
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: {
+    rows: [
+      { ...vacancies[0]!, item: { id: "00000000-0000-4000-8000-000000000b03", documentNumber: null, revisionBase: { baseNumber: "TWR-TMC-EL-MAR-0005", revisionNo: 1, state: "internal_review" }, title: "Earthing rods" } },
+      { ...vacancies[0]!, id: "00000000-0000-4000-8000-000000000a04", item: { id: "00000000-0000-4000-8000-000000000b04", documentNumber: null, revisionBase: { baseNumber: "TWR-TMC-EL-MAR-0002", revisionNo: 2, state: "draft" }, title: "Switchgear" } },
+      { ...vacancies[0]!, id: "00000000-0000-4000-8000-000000000a05", item: { id: "00000000-0000-4000-8000-000000000b05", documentNumber: null, title: "Chillers" } },
+    ],
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const l = labelsFor(locale);
+    const rows = within(within(context.canvasElement).getByRole("list")).getAllByRole("listitem");
+    await expect(rows[0]).toHaveTextContent(revisionDraftText("TWR-TMC-EL-MAR-0005", 1, l.revisionInternalReview, locale));
+    await expect(rows[1]).toHaveTextContent(revisionDraftText("TWR-TMC-EL-MAR-0002", 2, l.revisionDraft, locale));
+    await expect(rows[2]).toHaveTextContent(l.noNumber);
+    await expectLaidOutLeftToRight(within(rows[0]!).getByText("TWR-TMC-EL-MAR-0005"));
   },
 };
 
