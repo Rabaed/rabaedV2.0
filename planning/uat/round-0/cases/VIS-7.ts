@@ -35,10 +35,11 @@ defineCase("VIS-39", async (t) => {
       yousefBlocked = `${r.status} ${r.text.slice(0, 120)}`;
       break;
     }
+    // Should Beta Build ever have a PM here: no number yet in Internal Review, so read it after that PM's Submit.
     yNums.push(await numberOf(yousef, id));
   }
   if (yousefBlocked) {
-    t.note(`Yousef's send for review was refused (${yousefBlocked}): Beta Build has no Project Manager to hold the next Step, so Beta Build cannot number items on this Project; the independent counters are compared through Beta Build's Participant series and the Project Admin's counters.`);
+    t.note(`Yousef's send for review was refused (${yousefBlocked}): Beta Build has no Project Manager to hold the next Step, so no Beta Build item reaches its first Submit, where a number is given (ADR 0030); the independent counters are compared through Beta Build's Participant series and the Project Admin's counters.`);
   } else {
     t.check("Yousef's three MARs are numbered in Beta Build's own series, a different series from TMC's", yNums.every((n) => !!n) && seriesOf(yNums[0]) !== seriesOf(hNums[0]) && seqOf(yNums[1]) > seqOf(yNums[0]), yNums.join(", "));
     t.check("Beta Build's numbers do not carry TMC's volume (its sequence is far from TMC's)", Math.abs(seqOf(yNums[0]) - seqOf(hNums[0])) > 0 || seriesOf(yNums[0]) !== seriesOf(hNums[0]), `${yNums[0]} vs ${hNums[0]}`);

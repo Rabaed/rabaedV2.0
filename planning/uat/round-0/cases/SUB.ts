@@ -1,12 +1,10 @@
 import type { Page } from "playwright";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, listRows, openList, settle, takeTransition } from "../harness/helpers.ts";
+import { Api, POP_UP, go, listRows, openList, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 import { defaultListColumns } from "../../../../packages/domain/src/list-columns.ts";
 
-// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
 
 /** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
 async function chooseCode(page: Page, name: RegExp): Promise<void> {
@@ -151,7 +149,7 @@ defineCase("SUB-04", async (t) => {
   // The number comes at the first Submit.
   await H.must(tm.api.ali!, id, "submit", { answers: { cover_note: "UAT SUB-04 cover note" } });
   const numbered = (await H.detail(tm.api.ali!, id)).documentNumber as string;
-  t.check("At Ali's Submit the item gets a Document Number TWR-MAR-01-nnnn", H.NUMBER_RE.test(numbered ?? ""), String(numbered));
+  t.check("At Ali's Submit the item gets a Document Number TWR-MAR-01-nnnn", H.NUMBER_RE.test(numbered), String(numbered));
   await go(page, `/work-items/${id}`);
   await settle(page);
   t.check("The Document Number is left to right (dir=ltr)", !!numbered && (await page.locator(`[dir="ltr"]`, { hasText: numbered }).count()) > 0);

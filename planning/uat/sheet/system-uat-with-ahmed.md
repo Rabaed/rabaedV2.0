@@ -2811,7 +2811,7 @@ The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailb
 - **Steps:**
   1. Hafiz saves a Draft, sends it, Ali Submits.
   2. Compare the item page and List for TMC and for DCL; look at the ids in the address bar and in links.
-  3. Check the order of un-numbered Drafts.
+  3. Sort the List by Document Number and check the order of the items with no number yet (Drafts and items in Internal Review).
   4. Needs AGE for the date checks.
 - **Expected result:** TMC sees Creation Date (when it first left Draft) and Submission Date; DCL sees only the Submission Date and no Creation Date in any form. Ids carry no time. Items with no number yet (Drafts and items in Internal Review) come last, ordered by Subject. Answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date. The stored earlier times are covered by the automated suite.
 

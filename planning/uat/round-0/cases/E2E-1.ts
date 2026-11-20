@@ -1,12 +1,10 @@
 import type { Page } from "playwright";
 import { defineCase, type CaseApi } from "../harness/case.ts";
-import { Api, go, settle, takeTransition } from "../harness/helpers.ts";
+import { Api, POP_UP, go, settle, takeTransition } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 import { act, moduleItems } from "../harness/helpers-sng.ts";
 import { pdfPages, recordPdf, until } from "../harness/helpers-not.ts";
 
-// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
 
 /** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
 async function chooseCode(page: Page, name: RegExp): Promise<void> {
@@ -191,7 +189,7 @@ async function marToMohammed(s: Story, subject: string, code: "A" | "B" | "C" | 
   await H.pickUp(ali, id);
   await H.must(ali, id, "submit", { answers: { cover_note: `UAT cover note ${subject}` }, internalNote: words.inote });
   const number = (await H.detail(ali, id)).documentNumber as string;
-  s.ck("SUB-07", "Hand-over 3, Ali Submits: the item gets its Document Number", H.NUMBER_RE.test(number ?? ""), `${number}`);
+  s.ck("SUB-07", "Hand-over 3, Ali Submits: the item gets its Document Number", H.NUMBER_RE.test(number), `${number}`);
   const ad = await H.detail(ahmed, id);
   s.ck("SUB-07", "Hand-over 3, Ali to DCL: Ahmed reads it with the Cover Note and Ali's Company only", ad.stage.name.en === "Pending Approval" && !!ad.submissionDate);
   const at = await s.open("ahmed", id, "ahmed-receives-submit");
@@ -273,7 +271,7 @@ defineCase("J1", async (t) => {
   });
   const tmcAfter = await H.detail(ali, id);
   const number = tmcAfter.documentNumber as string;
-  s.ck("SUB-07", "Hand-over 5, Ali Submits: the item gets its Document Number at this Submit", H.NUMBER_RE.test(number ?? ""), `${number}`);
+  s.ck("SUB-07", "Hand-over 5, Ali Submits: the item gets its Document Number at this Submit", H.NUMBER_RE.test(number), `${number}`);
   await s.open("ali", id, "ali-after-submit-numbered");
   s.ck("SUB-07", "The Document Number is left to right on the page", (await s.page("ali").locator(`[dir="ltr"]`, { hasText: number }).count()) > 0);
   s.ck("SUB-07", "Hand-over 5, Ali to DCL: Pending Approval, TMC reads With Design Consultants LLC and no person", tmcAfter.stage.name.en === "Pending Approval" && tmcAfter.heldBy?.companyName?.en === "Design Consultants LLC" && tmcAfter.heldBy?.memberName === null, JSON.stringify(tmcAfter.heldBy));
@@ -535,7 +533,7 @@ defineCase("J4", async (t) => {
   await s.hidden("VIS-40", "The replacement in TMC's Internal Review", newId, ["mohammed", "faisal", "yousef"]);
   await H.must(ali, newId, "submit", { answers: { cover_note: "Replacement for the rejected MAR." }, internalNote: w.inote });
   const replNumber = (await H.detail(ali, newId)).documentNumber as string;
-  s.ck("SUB-14", "At its first Submit the replacement gets a new Document Number with no Rev suffix", H.NUMBER_RE.test(replNumber ?? "") && replNumber !== number, `${replNumber}`);
+  s.ck("SUB-14", "At its first Submit the replacement gets a new Document Number with no Rev suffix", H.NUMBER_RE.test(replNumber) && replNumber !== number, `${replNumber}`);
   const mText = await s.open("mohammed", newId, "mohammed-receives-replacement");
   s.ck("VIS-40", "Hand-over 8, Ali submits the replacement: Mohammed now reads it (positive control)", (await s.status("mohammed", newId)) === 200 && mText.includes(subject));
   await s.dclClean("VIS-40", "Hand-over 8", newId, ["mohammed"], [w.inote], mText);

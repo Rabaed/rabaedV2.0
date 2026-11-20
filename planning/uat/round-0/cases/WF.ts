@@ -1,11 +1,9 @@
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
 import type { Api } from "../harness/helpers.ts";
-import { go, settle } from "../harness/helpers.ts";
+import { POP_UP, go, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 
-// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
 
 // Part WF (Workflows). Workflows of my own are named "UAT WF-nn ..."; a Workflow bound to the MAR for a
 // short while is bound as an exception for one Participant (never over the Project's MAR binding, which

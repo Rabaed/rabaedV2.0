@@ -256,7 +256,7 @@ defineCase("J9", async (t) => {
   await c.show(t, ap, `/work-items/${wir}`);
   await takeTransition(ap, "Submit", { fill: async (d) => { await d.locator("section[aria-labelledby=transition-section-cover] textarea").first().fill("Trays ready from 09:00; the engineer may start on Floor 02."); } });
   const num = (await H.detail(ali, wir)).documentNumber as string;
-  t.check("[INS-08] At Ali's Submit the WIR is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num ?? ""), `${num}`);
+  t.check("[INS-08] At Ali's Submit the WIR is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num), `${num}`);
   const ahmed = await c.api("ahmed");
   const dAhmed = await H.detail(ahmed, wir);
   t.check("[INS-08] After Ali's Submit the WIR is at the Consultant Engineer Step with Ahmed, Pending Approval", dAhmed.step.key === "consultant_engineer" && dAhmed.stage.key === "pending_approval", `${dAhmed.step.key} ${dAhmed.stage.key}`);

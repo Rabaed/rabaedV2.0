@@ -375,7 +375,7 @@ defineCase("INS-08", async (t) => {
   t.check("Still not readable by the Consultant (internal review)", (await status(ahmed!, id)) === 404);
   await mustAct(ali!, id, "submit", { answers: { cover_note: "Ready from 09:00." } });
   const num = (await H.detail(ali!, id)).documentNumber as string;
-  t.check("At Ali's Submit it is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num ?? ""), `${num}`);
+  t.check("At Ali's Submit it is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num), `${num}`);
   const d = await H.detail(ahmed!, id);
   t.check("After the Submit it reaches the Consultant Engineer Step: Ahmed holds it or may pick it up", d.step.key === "consultant_engineer" && (d.actions.pickUp === true || d.heldBy?.memberName?.en === "Ahmed bin Said"), `${d.step.key} pickUp=${d.actions.pickUp} holder=${d.heldBy?.memberName?.en}`);
   t.check("Pending Approval for everyone who reads it, Mohammed included", d.stage.key === "pending_approval" && (await stageOf(mo!, id)) === "pending_approval");
