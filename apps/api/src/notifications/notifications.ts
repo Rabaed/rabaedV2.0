@@ -9,6 +9,7 @@ import {
   type OutcomeKind,
 } from "@rabaed/domain";
 import { sql } from "kysely";
+import { revisionBases, withRevisionBase } from "../work-items/query.ts";
 
 // In-app notifications. The worker writes them (app.deliver_notification); a
 // Member reads only their own bell's (RLS on notification: in-app, not
@@ -104,6 +105,8 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       left join lateral app.notification_package(n.id) k on n.package_id is not null
       order by n.created_at desc, n.id desc
     `.execute(trx);
+    // A Revision not yet Submitted reads as its page does now (RP-1314), on the items these rows already name.
+    const bases = await revisionBases(trx, rows.flatMap((r) => (r.work_item_id !== null && r.document_number === null ? [r.work_item_id] : [])));
     const { rows: count } = await sql<{ unread: number }>`
       select count(*)::int as unread from notification where read_at is null
     `.execute(trx);
@@ -135,6 +138,7 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
           kind: r.kind,
           workItemId: r.work_item_id!,
           documentNumber: r.document_number,
+          ...withRevisionBase(bases, r.work_item_id!),
           title: r.title!,
           revisionNo: r.revision_no ?? 0,
           step: r.step_name ? { name: r.step_name } : null,

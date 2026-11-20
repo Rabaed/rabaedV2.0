@@ -133,6 +133,7 @@ const items: WorkItemRow[] = [
     documentNumber: null,
     // Rev 1 of "Earthing rods" (Code C), still a Draft: it reads its chain's base number from the start (RP-1300).
     baseNumber: "TWR-TMC-EL-MAR-0005",
+    baseState: "draft",
     revisionNo: 1,
     submissionDate: null,
     creationDate: null,
@@ -334,6 +335,34 @@ export const CancelledRow: Story = {
     await expect(cellOf(context, "Cable glands", b("Step Age", "عمر الخطوة"))).toHaveTextContent("—");
     await expect(cellOf(context, "Cable glands", b("Step Age", "عمر الخطوة")).querySelector("[role=img]")).toBeNull();
     await expect(cellOf(context, "Cable glands", copy.withColumn)).toHaveTextContent("—");
+  },
+};
+
+// Rev 1 of "Earthing rods" (row 7) still a Draft, and Rev 2 of "Switchgear" sent for review, not yet Submitted.
+const revisionDraftRow = items.find((i) => i.baseNumber !== undefined)!;
+const revisionInReview = row(9, {
+  title: "Switchgear, 400 V",
+  documentNumber: null,
+  baseNumber: "TWR-TMC-EL-MAR-0002",
+  baseState: "internal_review",
+  revisionNo: 2,
+  submissionDate: null,
+  stage: stages.internal,
+  with: { kind: "own", companyName: ownCompany, step: { key: "pm_review", name: b("Contractor PM review", "مراجعة مدير مشروع المقاول") }, holder: null, role: null },
+});
+
+/**
+ * Revisions not yet Submitted (RP-1314, owner's decision 2026-11-20): each reads its chain's base number, its revision
+ * and where it stands, "· Draft" or "· Internal Review", the base number left to right in Arabic too.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: { list: { ...list, items: [revisionDraftRow, revisionInReview], stages: list.stages.map((s) => ({ ...s, count: s.key === "draft" || s.key === "internal_review" ? 1 : 0 })) } },
+  play: async (context) => {
+    const draft = cellOf(context, "Earthing rods, galvanised", copy.number);
+    await expect(draft).toHaveTextContent(storyText(context, b("TWR-TMC-EL-MAR-0005 Rev 1 · Draft", "TWR-TMC-EL-MAR-0005 مراجعة 1 · مسودة")));
+    const review = cellOf(context, "Switchgear, 400 V", copy.number);
+    await expect(review).toHaveTextContent(storyText(context, b("TWR-TMC-EL-MAR-0002 Rev 2 · Internal Review", "TWR-TMC-EL-MAR-0002 مراجعة 2 · المراجعة الداخلية")));
+    await expectLaidOutLeftToRight(within(review).getByText("TWR-TMC-EL-MAR-0002"));
   },
 };
 

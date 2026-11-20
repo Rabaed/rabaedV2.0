@@ -93,6 +93,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
   // One Submittal view (RP-1237 row 1): a Submittal's own link lands on its List with the item open in the panel at Full.
   if (item.module === "submittals") return redirect({ href: itemLanding(item.projectId, item.id), locale });
+  // Where a Revision not yet Submitted stands, after its base number (RP-1314): "Draft" or "Internal Review".
+  const revisionState = tViews(item.baseState === "internal_review" ? "list.revisionInternalReview" : "list.revisionDraft");
   const [suppliers, checklistTemplates] = await Promise.all([
     getSupplierChoices(item.projectId),
     getChecklistTemplateChoices(item.projectId, item.checklistCopies),
@@ -459,7 +461,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               ) : item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
               ) : item.baseNumber !== undefined && chain ? (
-                // A Revision Draft reads its chain's base number from the start, with the Revision list (RP-1300).
+                // A Revision not yet Submitted reads its chain's base number from the start, with the Revision list and
+                // where it stands, "Draft" or "Internal Review" (RP-1300, RP-1314).
                 <>
                   <DocNo value={item.baseNumber} />
                   <WorkItemRevisionPicker
@@ -470,10 +473,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                     outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
                   />
                   {" "}
-                  <span className="text-muted">· {tViews("list.revisionDraft")}</span>
+                  <span className="text-muted">· {revisionState}</span>
                 </>
               ) : item.baseNumber !== undefined ? (
-                <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} draft={tViews("list.revisionDraft")} locale={locale} draftClassName="text-muted" />
+                <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} state={revisionState} locale={locale} stateClassName="text-muted" />
               ) : item.revisionNo > 0 ? (
                 tViews("list.revisionNoNumber", { revision: formatNumber(item.revisionNo, locale) })
               ) : (

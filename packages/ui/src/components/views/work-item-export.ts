@@ -1,7 +1,7 @@
 import { listColumnKeys, riyadhDay, type ListColumnKey, type ListColumnLayout, type Locale, type WorkItemRow } from "@rabaed/domain";
 import type { ExportFormat } from "./list-menus.tsx";
 import { placesOf } from "./work-item-board.tsx";
-import { cellText, listDate, type WorkItemTableLabels, type WorkItemTableProps } from "./work-item-table.tsx";
+import { cellText, listDate, type CellTextLabels, type WorkItemTableProps } from "./work-item-table.tsx";
 
 // Export (RP-409, owner decision 2026-10-10): the List's rows as a file, either "what you see"
 // (the columns the viewer shows, in their order) or "the whole table" (every List field), each
@@ -17,7 +17,7 @@ export type ExportColumn = { header: string; cell: (row: WorkItemRow) => ExportC
 
 export type ExportContext = {
   locale: Locale;
-  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "revisionDraft" | "notPickedUp" | "waitingFor" | "cancelled" | "code" | "revision">;
+  labels: CellTextLabels;
   filters: WorkItemTableProps["filters"];
   headerOf: (key: ListColumnKey) => string;
   /** The file's and its sheet's name, without an extension, e.g. "Submittals". */

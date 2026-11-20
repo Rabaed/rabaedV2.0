@@ -27,6 +27,8 @@ import {
   type BilingualText,
   type ListColumnLayout,
   type Outcome,
+  type RevisionBase,
+  type RevisionBaseState,
   type RaisedFromSource,
   type Locale,
   type WorkItemCursorSort,
@@ -105,6 +107,8 @@ type Row = {
   document_number: string | null;
   /** A Revision Draft's chain base number (RP-1300); null for every other item. */
   base_number: string | null;
+  /** With `base_number`: where it stands until its own first Submit (RP-1314). */
+  base_state: RevisionBaseState | null;
   /** What the Document Number sort reads: the number, else a Revision Draft's base " Rev n"; null for any other Draft. */
   sort_number: string | null;
   revision_no: number;
@@ -182,7 +186,7 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
       -- A Revision Draft's chain base number (RP-1300), and the number it sorts by: its own, else base " Rev n".
-      b.base_number, coalesce(w.document_number, b.base_number || ' Rev ' || w.revision_no) as sort_number,
+      b.base_number, b.base_state, coalesce(w.document_number, b.base_number || ' Rev ' || w.revision_no) as sort_number,
       w.revision_no, w.outcome, w.paper_ref, w.closed_at,
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
@@ -236,7 +240,9 @@ function visibleRows(seen: RawBuilder<unknown>): RawBuilder<unknown> {
     -- 2026-11-13): the original's, through app.revision_chain, which gives only Revisions the reader sees (V1).
     cross join lateral (
       select case when w.document_number is null and w.revision_no > 0
-        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number
+        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number,
+        -- Where it stands until then (RP-1314): Draft while it never left Draft, else Internal Review.
+        ${revisionBaseStateOf(sql.ref("w.document_number"), sql.ref("w.creation_date"))} as base_state
     ) b
     -- No Step while another Company holds it (db-mask: app.work_items_seen; RP-1192).
     left join workflow_step s on s.id = w.step_id
@@ -332,6 +338,41 @@ export function chainConditionSql(when: CodeCCondition): RawBuilder<boolean> {
  */
 export const neverLeftDraft = (documentNumber: RawBuilder<unknown>, creationDate: RawBuilder<unknown>): RawBuilder<boolean> =>
   sql<boolean>`(${documentNumber} is null and ${creationDate} is null)`;
+
+/**
+ * Where an item with no number stands (RP-1314, owner's decision 2026-11-20): `draft` while it never left Draft,
+ * else `internal_review` (a Return never makes it a Draft again, GLOSSARY › Draft). Null once it has a number. Only
+ * the raiser's Participant sees an item before its first Submit (ADR 0030), and its Creation Date is theirs to read.
+ */
+export const revisionBaseStateOf = (documentNumber: RawBuilder<unknown>, creationDate: RawBuilder<unknown>): RawBuilder<RevisionBaseState | null> =>
+  sql<RevisionBaseState | null>`(case when ${documentNumber} is not null then null when ${creationDate} is null then 'draft' else 'internal_review' end)`;
+
+/**
+ * The label of each of `ids` that is a Revision not yet Submitted (RP-1314): its chain's base number, its revision and
+ * where it stands, as its own page reads it. For the reads whose rows carry only a Document Number (the Activity Feed,
+ * the Handover dialog, the notifications), on the ids they already gave the viewer. Through the same two reads as the
+ * page, app.revision_chain and app.work_item_creation_date, which each check app.sees_work_item: an item the viewer
+ * doesn't see, or whose original they don't, gets nothing (V1).
+ */
+export async function revisionBases(trx: Trx, ids: readonly string[]): Promise<Map<string, RevisionBase>> {
+  if (ids.length === 0) return new Map();
+  const { rows } = await sql<{ id: string; base_number: string; revision_no: number; base_state: RevisionBaseState }>`
+    select i.id, base.document_number as base_number, own.revision_no,
+      ${revisionBaseStateOf(sql.ref("own.document_number"), sql`app.work_item_creation_date(i.id)`)} as base_state
+    from unnest(${[...new Set(ids)]}::uuid[]) as i (id)
+    cross join lateral app.revision_chain(i.id) own
+    cross join lateral app.revision_chain(i.id) base
+    where own.work_item_id = i.id and own.document_number is null and own.revision_no > 0
+      and base.revision_no = 0 and base.document_number is not null
+  `.execute(trx);
+  return new Map(rows.map((r) => [r.id, { baseNumber: r.base_number, revisionNo: r.revision_no, state: r.base_state }]));
+}
+
+/** `{ revisionBase }` for item `id` when `revisionBases` gave it one, else nothing: the field is left out, never null. */
+export const withRevisionBase = (bases: ReadonlyMap<string, RevisionBase>, id: string): { revisionBase?: RevisionBase } => {
+  const base = bases.get(id);
+  return base ? { revisionBase: base } : {};
+};
 
 /**
  * The Dashboard bucket of a row of `visibleRows` (as `r`), or null: the domain's
@@ -638,7 +679,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     type: { code: r.type_code, name: r.type_name },
     title: r.title,
     documentNumber: r.document_number,
-    ...(r.base_number ? { baseNumber: r.base_number } : {}),
+    ...(r.base_number ? { baseNumber: r.base_number, baseState: r.base_state! } : {}),
     revisionNo: r.revision_no,
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },

@@ -65,7 +65,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
 });
 
 // Each story names what differs from the default card by a key below; the render builds it in the story's language.
-type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "revisionDraft" | "package" | "cut" | "cutPool" | "vacancy";
+type Variant = "default" | "revision" | "codeA" | "codeB" | "codeC" | "codeD" | "aged" | "company" | "pool" | "contractor" | "noNumber" | "revisionDraft" | "revisionInReview" | "package" | "cut" | "cutPool" | "vacancy";
 type StoryArgs = KanbanCardProps & { variant?: Variant };
 
 const meta = {
@@ -130,10 +130,18 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       return { owner: { kind: "vacancy", name: locale === "en" ? "Waiting for a new Consultant" : "بانتظار الاستشاري الجديد" } };
     case "noNumber":
       return { number: null, place: [], date: undefined, stepAgeWeeks: null };
+    case "revisionInReview":
+      return {
+        number: null,
+        revisionDraft: { base: "UAT01-MAR-01-0005", revision: 1, state: locale === "en" ? "Internal Review" : "المراجعة الداخلية" },
+        badge: { kind: "revision", label: "R1" },
+        date: undefined,
+        stepAgeWeeks: 1,
+      };
     case "revisionDraft":
       return {
         number: null,
-        revisionDraft: { base: "UAT01-MAR-01-0005", revision: 1, draft: locale === "en" ? "Draft" : "مسودة" },
+        revisionDraft: { base: "UAT01-MAR-01-0005", revision: 1, state: locale === "en" ? "Draft" : "مسودة" },
         badge: { kind: "revision", label: "R1" },
         date: undefined,
         stepAgeWeeks: null,
@@ -276,6 +284,21 @@ export const RevisionDraft: Story = {
     const c = card(context);
     await expect(c).toHaveTextContent(locale === "en" ? "UAT01-MAR-01-0005 Rev 1 · Draft" : "UAT01-MAR-01-0005 مراجعة 1 · مسودة");
     await expect(c).not.toHaveTextContent(locale === "en" ? "No number yet" : "بلا رقم بعد");
+    await expect(within(c).getByText("UAT01-MAR-01-0005")).toHaveAttribute("dir", "ltr");
+  },
+};
+
+/**
+ * A Revision sent for review, not yet Submitted (RP-1314, owner's decision 2026-11-20): its base number with its
+ * revision and "Internal Review", never "Draft" once it left Draft; it ages at its Step. Left to right in Arabic too.
+ */
+export const RevisionInInternalReview: Story = {
+  args: { variant: "revisionInReview" },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const c = card(context);
+    await expect(c).toHaveTextContent(locale === "en" ? "UAT01-MAR-01-0005 Rev 1 · Internal Review" : "UAT01-MAR-01-0005 مراجعة 1 · المراجعة الداخلية");
+    await expect(c).not.toHaveTextContent(locale === "en" ? "· Draft" : "· مسودة");
     await expect(within(c).getByText("UAT01-MAR-01-0005")).toHaveAttribute("dir", "ltr");
   },
 };
