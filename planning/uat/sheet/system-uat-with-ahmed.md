@@ -124,7 +124,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. In the List and on the Kanban, find the Draft beside UAT01-MAR-01-0002; then search the List for UAT01-MAR-01-0002.
   4. Open the Draft and its Revision drop-down.
   5. Send for Review.
-- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. From the start it reads UAT01-MAR-01-0002 Rev 1 · Draft, its base number left to right, in the Panel, the List and the Kanban, where it sits beside its chain; the search for UAT01-MAR-01-0002 finds it too. The Draft's drop-down lists the original and Revision 1; after the send Revision 1 reads UAT01-MAR-01-0002 Rev 1, whole and left to right, and is with Ali. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
+- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. From the start it reads UAT01-MAR-01-0002 Rev 1 · Draft, its base number left to right, in the Panel, the List and the Kanban, where it sits beside its chain; the search for UAT01-MAR-01-0002 finds it too. The Draft's drop-down lists the original and Revision 1; after the send, in Internal Review, it reads UAT01-MAR-01-0002 Rev 1 · Internal Review and is with Ali; once Ali Submits it, Revision 1 reads UAT01-MAR-01-0002 Rev 1, whole and left to right. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
 
 ### SUB-16 Delete discards a Draft only
 
