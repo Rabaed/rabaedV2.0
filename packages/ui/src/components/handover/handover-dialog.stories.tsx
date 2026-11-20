@@ -5,6 +5,7 @@ import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
+import { revisionDraftText } from "../doc-no/doc-no.tsx";
 import { HandoverDialog, type HandoverDialogLabels, type HandoverDialogProps } from "./handover-dialog.tsx";
 
 // The Handover dialog (RP-108): deactivating Ali Sonour, who holds a Step at
@@ -15,6 +16,8 @@ const labels: Record<Locale, HandoverDialogLabels> = {
     title: "Hand over Ali Sonour's Steps",
     description: "Ali Sonour holds these. Choose who takes each one before Ali Sonour is deactivated.",
     noNumber: "No number yet",
+    revisionDraft: "Draft",
+    revisionInternalReview: "Internal Review",
     hiddenItem: (step, project) => `An item at ${step} on ${project}`,
     newHolder: "New holder",
     choose: "Choose who takes it",
@@ -26,6 +29,8 @@ const labels: Record<Locale, HandoverDialogLabels> = {
     title: "تسليم خطوات Ali Sonour",
     description: "هذه الخطوات لدى Ali Sonour. اختر من يتولى كل خطوة قبل إيقاف Ali Sonour.",
     noNumber: "بلا رقم بعد",
+    revisionDraft: "مسودة",
+    revisionInternalReview: "المراجعة الداخلية",
     hiddenItem: (step, project) => `بند في ${step} ضمن ${project}`,
     newHolder: "المتولّي الجديد",
     choose: "اختر من يتولاها",
@@ -143,6 +148,54 @@ export const HiddenItemAndSeveralHolders: Story = {
     await expect(within(panel).getByText(heldBy[locale](khalid.fullName[locale]))).toBeVisible();
     await expect(within(panel).getByText(heldBy[locale](ali.fullName[locale]))).toBeVisible();
     await expect(within(panel).getAllByText(/TWR-MAR-CCM-/)).toHaveLength(1);
+  },
+};
+
+const revisionSteps: HandoverDialogProps["steps"] = [
+  {
+    assignmentId: "00000000-0000-4000-8000-0000000000c4",
+    project,
+    step: { en: "Draft", ar: "مسودة" },
+    item: {
+      id: "00000000-0000-4000-8000-0000000000d4",
+      documentNumber: null,
+      revisionBase: { baseNumber: "TWR-MAR-CCM-0005", revisionNo: 1, state: "draft" },
+      title: "Earthing rods",
+    },
+    holder: ali,
+    candidates: [saad],
+  },
+  {
+    assignmentId: "00000000-0000-4000-8000-0000000000c5",
+    project,
+    step: { en: "Contractor PM review", ar: "مراجعة مدير مشروع المقاول" },
+    item: {
+      id: "00000000-0000-4000-8000-0000000000d5",
+      documentNumber: null,
+      revisionBase: { baseNumber: "TWR-MAR-CCM-0003", revisionNo: 2, state: "internal_review" },
+      title: "Switchgear",
+    },
+    holder: ali,
+    candidates: [badr],
+  },
+  steps[1]!,
+];
+
+/**
+ * Revisions not yet Submitted (RP-1314, owner's decision 2026-11-20): each reads its chain's base number, its
+ * revision and where it stands, "· Draft" or "· Internal Review", as its page does; the base number left to right.
+ * An item never numbered still reads "No number yet". Left open for the screenshot.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: { steps: revisionSteps },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const l = labels[locale];
+    const rows = within(await screen.findByTestId("handover-steps")).getAllByRole("listitem");
+    await expect(rows[0]).toHaveTextContent(revisionDraftText("TWR-MAR-CCM-0005", 1, l.revisionDraft, locale));
+    await expect(rows[1]).toHaveTextContent(revisionDraftText("TWR-MAR-CCM-0003", 2, l.revisionInternalReview, locale));
+    await expect(rows[2]).toHaveTextContent(l.noNumber);
+    await expectLaidOutLeftToRight(within(rows[1]!).getByText("TWR-MAR-CCM-0003"));
   },
 };
 

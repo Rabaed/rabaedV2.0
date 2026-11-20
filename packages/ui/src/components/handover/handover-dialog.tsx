@@ -3,12 +3,13 @@
 import { sortedByName, type HandoverPick, type HandoverStep, type Locale } from "@rabaed/domain";
 import { useState } from "react";
 import { Button } from "../button/button.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { ItemNumber, type RevisionStateLabels } from "../doc-no/doc-no.tsx";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 
-export type HandoverDialogLabels = {
+/** `RevisionStateLabels`: a Revision not yet Submitted reads "<base> Rev 1 · Internal Review" (RP-1314). */
+export type HandoverDialogLabels = RevisionStateLabels & {
   /** The heading, e.g. "Hand over Ali Sonour's Steps". */
   title: string;
   /** What happens, e.g. "Ali Sonour holds these. Pick who takes each one before they are deactivated." */
@@ -71,7 +72,7 @@ export function HandoverDialog({ open, onOpenChange, steps, locale, labels, onCo
                   <p className="text-sm text-muted">
                     {s.project.name[locale]}
                     {" · "}
-                    {s.item.documentNumber ? <DocNo value={s.item.documentNumber} /> : labels.noNumber}
+                    <ItemNumber documentNumber={s.item.documentNumber} revisionBase={s.item.revisionBase} labels={labels} locale={locale} noNumber={labels.noNumber} />
                   </p>
                   <p className="font-medium">{s.item.title}</p>
                   <p className="text-sm">{s.step[locale]}</p>

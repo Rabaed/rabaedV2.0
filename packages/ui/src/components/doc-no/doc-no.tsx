@@ -1,5 +1,5 @@
-import { directionOf, formatNumber, type Locale } from "@rabaed/domain";
-import type { ComponentProps } from "react";
+import { directionOf, formatNumber, type Locale, type RevisionBase, type RevisionBaseState } from "@rabaed/domain";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 
 // The revision suffix (GLOSSARY.md, Revision) is fixed product wording, so every Module words it the same.
@@ -62,40 +62,83 @@ export function DocNo({ value, rev, locale = "en", className, revClassName, ...p
   );
 }
 
+/** The reader's words for where a Revision not yet Submitted stands (RP-1314): "Draft" and "Internal Review". */
+export type RevisionStateLabels = { revisionDraft: string; revisionInternalReview: string };
+
+/** The word for `state` (RP-1314): "Draft" while it never left Draft, "Internal Review" once it has. */
+export const revisionStateWord = (labels: RevisionStateLabels, state: RevisionBaseState): string =>
+  state === "internal_review" ? labels.revisionInternalReview : labels.revisionDraft;
+
 /**
- * A Revision Draft's number (RP-1300, owner's decision 2026-11-13): its chain's base number, known from the
- * start, with its revision and the reader's word for Draft, "UAT01-MAR-01-0005 Rev 1 · Draft". Its own number
- * (base " Rev n") is issued only when it first leaves Draft, so until then this is what it reads.
+ * A Revision's number before its own first Submit (RP-1300, RP-1314; owner's decisions 2026-11-13 and 2026-11-20):
+ * its chain's base number, known from the start, with its revision and where it stands, "UAT01-MAR-01-0005 Rev 1 ·
+ * Draft" or "UAT01-MAR-01-0005 Rev 1 · Internal Review". Its own number (base " Rev n") is issued only at that
+ * Submit (ADR 0030), so until then this is what it reads.
  */
 export function RevisionDraftNumber({
   base,
   revision,
-  draft,
+  state,
   locale,
   className,
   revClassName,
-  draftClassName,
+  stateClassName,
 }: {
   /** The chain's base number, the original's Document Number. */
   base: string;
   revision: number;
-  /** The word for Draft, in the reader's language. */
-  draft: string;
+  /** The word for where it stands (`revisionStateWord`), in the reader's language. */
+  state: string;
   locale: Locale;
   className?: string;
   revClassName?: string;
-  draftClassName?: string;
+  stateClassName?: string;
 }) {
   return (
     // Isolated in the reader's direction, as DocNo with a revision is, so "· Draft" follows the revision in any container.
     <bdi dir={directionOf(locale)} className="whitespace-nowrap">
       <DocNo value={base} rev={formatNumber(revision, locale)} locale={locale} className={className} revClassName={revClassName} />
       {" "}
-      <span className={draftClassName}>· {draft}</span>
+      <span className={stateClassName}>· {state}</span>
     </bdi>
   );
 }
 
-/** `RevisionDraftNumber` as text, for Export and Group by: "UAT01-MAR-01-0005 Rev 1 · Draft". */
-export const revisionDraftText = (base: string, revision: number, draft: string, locale: Locale) =>
-  `${base} ${revisionWord[locale]} ${formatNumber(revision, locale)} · ${draft}`;
+/** `RevisionDraftNumber` as text, for Export and Group by: "UAT01-MAR-01-0005 Rev 1 · Internal Review". */
+export const revisionDraftText = (base: string, revision: number, state: string, locale: Locale) =>
+  `${base} ${revisionWord[locale]} ${formatNumber(revision, locale)} · ${state}`;
+
+/** A List row's `baseNumber` and `baseState` as one `RevisionBase` (RP-1314); undefined for a row with neither. */
+export const rowRevisionBase = (
+  row: { documentNumber: string | null; baseNumber?: string | undefined; baseState?: RevisionBaseState | undefined; revisionNo: number } | undefined,
+): RevisionBase | undefined =>
+  row && row.documentNumber === null && row.baseNumber !== undefined
+    ? { baseNumber: row.baseNumber, revisionNo: row.revisionNo, state: row.baseState ?? "draft" }
+    : undefined;
+
+/**
+ * An item's number where a screen names it (the Handover dialog, the Activity Feed, the bulk pop-up, Vacancies, a
+ * notification): its own, else a Revision's base number and state (RP-1314), else `noNumber` ("No number yet").
+ */
+export function ItemNumber({
+  documentNumber,
+  revisionBase,
+  labels,
+  locale,
+  className,
+  noNumber,
+}: {
+  documentNumber: string | null;
+  revisionBase?: RevisionBase | undefined;
+  labels: RevisionStateLabels;
+  locale: Locale;
+  /** Classes for the number, as the screen's own DocNo has them. */
+  className?: string;
+  /** What an item with no number at all shows: the screen's own "No number yet". */
+  noNumber: ReactNode;
+}) {
+  if (documentNumber) return <DocNo value={documentNumber} className={className} />;
+  if (revisionBase)
+    return <RevisionDraftNumber base={revisionBase.baseNumber} revision={revisionBase.revisionNo} state={revisionStateWord(labels, revisionBase.state)} locale={locale} className={className} />;
+  return <>{noNumber}</>;
+}

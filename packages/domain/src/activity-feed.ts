@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { moduleKeySchema } from "./module.ts";
+import { revisionBase } from "./revision-base.ts";
 import { fromBase64Url, toBase64Url } from "./work-item-query.ts";
 import { workItemEventTypes, workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
@@ -103,6 +104,8 @@ export const activityFeed = z.object({
       workItem: z.object({
         id: z.uuid(),
         documentNumber: z.string().nullable(),
+        /** A Revision not yet Submitted: its base number, revision and state, as its page reads it (RP-1314). */
+        revisionBase: revisionBase.optional(),
         title: z.string(),
         type: z.object({ code: z.string(), name: bilingualText }),
       }),

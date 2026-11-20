@@ -22,6 +22,8 @@ export type NotificationRowProps = {
   documentNumber: string | null;
   /** "No number yet", shown in its place for an item not yet Submitted (ADR 0030); left out where no item is named (a Package, the Project). */
   noNumber?: string;
+  /** In place of `noNumber` for a Revision not yet Submitted: "<base> Rev 1 · Internal Review" (RP-1314, `RevisionDraftNumber`). */
+  revisionNumber?: ReactNode;
   /** The item's Subject, or a Package's name. */
   subject: string;
   /** The Project's name. */
@@ -56,6 +58,7 @@ export function NotificationRow({
   what,
   documentNumber,
   noNumber,
+  revisionNumber,
   subject,
   project,
   watching,
@@ -104,6 +107,11 @@ export function NotificationRow({
               <bdi dir="ltr" className="font-bold text-text tabular-nums">
                 {documentNumber}
               </bdi>
+              {" · "}
+            </>
+          ) : revisionNumber ? (
+            <>
+              <span className="font-bold text-text">{revisionNumber}</span>
               {" · "}
             </>
           ) : (

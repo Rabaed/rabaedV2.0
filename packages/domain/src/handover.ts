@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { revisionBase } from "./revision-base.ts";
 
 // Handover (RP-108, ADR 0018; workflow-engine.md §9): before a Member is
 // deactivated, removed from a Project, or leaves a Step Pool through a change of
@@ -43,6 +44,8 @@ export const handoverStep = z.object({
       id: z.uuid(),
       /** Null while it has no number yet (a Draft). */
       documentNumber: z.string().nullable(),
+      /** A Revision not yet Submitted: its base number, revision and state, as its page reads it (RP-1314). */
+      revisionBase: revisionBase.optional(),
       title: z.string(),
     })
     .nullable(),

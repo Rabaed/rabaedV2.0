@@ -79,6 +79,7 @@ function usePackageLabels(): PackagePageLabels {
       noNumber: v("list.noNumber"),
       revisionNoNumber: (revision) => v("list.revisionNoNumber", { revision }),
       revisionDraft: v("list.revisionDraft"),
+      revisionInternalReview: v("list.revisionInternalReview"),
       notPickedUp: v("list.notPickedUp"),
       waitingFor: (role) => v("list.waitingFor", { role }),
       // Cancelled is named once, with the notifications; every other outcome by its Type's set (RP-429).

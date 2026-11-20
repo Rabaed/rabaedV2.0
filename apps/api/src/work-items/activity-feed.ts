@@ -13,6 +13,7 @@ import {
   type WorkItemOutcome,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
+import { revisionBases, withRevisionBase } from "./query.ts";
 
 // The Activity Feed (RP-353, spec RP-344; visibility.md "Activity Feed"): the
 // Project's Work Item events as the Member may see them, through
@@ -59,6 +60,8 @@ export async function activityFeedPage(
   const page = rows.slice(0, q.limit);
   const last = page.at(-1);
   const chips = await outcomeChips(trx, page.filter((r) => r.outcome !== null).map((r) => r.id));
+  // A Revision not yet Submitted reads as its page does (RP-1314), on the items this page already names.
+  const bases = await revisionBases(trx, page.filter((r) => r.document_number === null).map((r) => r.work_item_id));
   return {
     entries: page.map((r) => ({
       id: r.id,
@@ -69,7 +72,13 @@ export async function activityFeedPage(
       transition: r.transition_label,
       outcome: r.outcome,
       outcomeChip: chips.get(r.id) ?? null,
-      workItem: { id: r.work_item_id, documentNumber: r.document_number, title: r.title, type: { code: r.type_code, name: r.type_name } },
+      workItem: {
+        id: r.work_item_id,
+        documentNumber: r.document_number,
+        ...withRevisionBase(bases, r.work_item_id),
+        title: r.title,
+        type: { code: r.type_code, name: r.type_name },
+      },
       onItem: r.on_item,
       byMe: r.by_me,
     })),

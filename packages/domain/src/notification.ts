@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
+import { revisionBase } from "./revision-base.ts";
 import { workItemOutcome } from "./work-item.ts";
 
 /**
@@ -37,6 +38,8 @@ export const itemNotification = z.object({
   workItemId: z.uuid(),
   /** Null while the item has none (a Revision still in Draft). */
   documentNumber: z.string().nullable(),
+  /** A Revision not yet Submitted: its base number, revision and state, as its page reads it now (RP-1314). */
+  revisionBase: revisionBase.optional(),
   title: z.string(),
   project: notificationProject,
   /** The item's Revision number: 0 for the original, 1 for Rev 1… */

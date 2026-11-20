@@ -8,12 +8,16 @@ import { TransitionOpening } from "@/components/transition-opening";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
 import { messageKeys } from "@/lib/message-keys";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 
 /** Bulk Transitions' words, from the app's messages (packages.bulk). */
 function useBulkLabels(): PackageBulkLabels {
   const t = useTranslations("packages.bulk");
   const keys = messageKeys((key) => t(key));
+  const revisionStates = useRevisionStateLabels();
   return {
+    // A Revision not yet Submitted: "<base> Rev 1 · Internal Review", as its row reads (RP-1314).
+    ...revisionStates,
     bar: t("bar"),
     waiting: (n, count) => t("waiting", { n, count }),
     selected: (n) => t("selected", { n }),

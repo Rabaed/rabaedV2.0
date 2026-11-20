@@ -7,6 +7,7 @@ import {
   ErrorState,
   Outcome,
   RevisionDraftNumber,
+  revisionStateWord,
   StagePill,
   SubmittalPanel,
   SubmittalPanelFacts,
@@ -29,6 +30,7 @@ import {
   writeSubmittalPanelPreferences,
   type SubmittalPanelSizeLabels,
 } from "@rabaed/ui";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -174,6 +176,8 @@ export function SubmittalPanelHost({
   const item = read?.item ?? null;
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
+  // Where a Revision not yet Submitted stands, after its base number (RP-1314): "Draft" or "Internal Review".
+  const revisionState = revisionStateWord(useRevisionStateLabels(), item?.baseState ?? "draft");
   const { shown: place, numbered: numberPlace, codes: placeCodes } = submittalPanelPlace(item?.location ?? null, filters.locations, locale);
   // The route strip and the Workflow map (RP-1064); the map also says which Review Code each Transition issues.
   const { route, workflow, openMap, map } = useSubmittalPanelRoute(item, locale, refreshKey);
@@ -220,8 +224,8 @@ export function SubmittalPanelHost({
         layout={phone ? "page" : "slide-over"}
         crumb={
           !item ? null : number === null && item.baseNumber !== undefined ? (
-            // A Revision Draft (RP-1300): its chain's base number, its revision and "Draft".
-            <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} draft={tList("revisionDraft")} locale={locale} />
+            // A Revision not yet Submitted (RP-1300, RP-1314): its chain's base number, its revision and where it stands.
+            <RevisionDraftNumber base={item.baseNumber} revision={item.revisionNo} state={revisionState} locale={locale} />
           ) : number === null ? (
             t("noNumber")
           ) : number.revisionNo === null ? (
@@ -249,8 +253,8 @@ export function SubmittalPanelHost({
               locale={locale}
               number={number}
               noNumber={t("noNumber")}
-              // A Revision Draft reads its chain's base number from the start (RP-1300).
-              revisionDraft={item.baseNumber !== undefined && item.documentNumber === null ? { base: item.baseNumber, revisionNo: item.revisionNo, draft: tList("revisionDraft") } : undefined}
+              // A Revision not yet Submitted reads its chain's base number from the start, and where it stands (RP-1300, RP-1314).
+              revisionDraft={item.baseNumber !== undefined && item.documentNumber === null ? { base: item.baseNumber, revisionNo: item.revisionNo, draft: revisionState } : undefined}
               subject={item.title}
               numberId={ids.numberId}
               subjectId={ids.subjectId}
