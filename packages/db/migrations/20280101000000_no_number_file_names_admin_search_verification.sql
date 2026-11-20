@@ -7,7 +7,8 @@
 -- * app.record_file_name (new, invoker sql helper, no grant): a numbered item's file is named by its
 --   Document Number, as before ("TWR-MAR-01-0001 - Working Copy.pdf", "TWR-MAR-01-0001.pdf"); an item
 --   with no number by its Work Item Type and Subject ("MAR - Cable trays - Working Copy.pdf",
---   "MAR - Cable trays.pdf"), never the bare Type code. Characters a file name can't hold become "_".
+--   "MAR - Cable trays.pdf"), never the bare Type code. Characters a file name can't hold become "_", and the Subject is cut to
+--   100 characters (under 255 bytes in all), never left empty.
 --   The Subject is already in the PDF the name is for, so the name tells its reader nothing new.
 -- * app.request_working_copy, app.documental_record_file, app.linked_documental_record_file: the
 --   file name only, through that helper.
@@ -27,8 +28,12 @@ create function app.record_file_name(p_document_number text, p_type_code text, p
   as $$
     select case
       when p_document_number is not null then p_document_number || p_suffix
+      -- At most 100 characters of the Subject, so even an Arabic one (2 bytes a character) keeps the name
+      -- under the 255 bytes a file system allows; never empty.
       else p_type_code || ' - '
-        || btrim(regexp_replace(regexp_replace(p_subject, '[\\/:*?"<>|[:cntrl:]]', '_', 'g'), '\s+', ' ', 'g'))
+        || coalesce(nullif(btrim(left(btrim(
+             regexp_replace(regexp_replace(coalesce(p_subject, ''), '[\\/:*?"<>|[:cntrl:]]', '_', 'g'), '\s+', ' ', 'g')
+           ), 100)), ''), '_')
         || p_suffix
     end
   $$;

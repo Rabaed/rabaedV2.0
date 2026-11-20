@@ -152,6 +152,27 @@ describe("RP-1319-2: the Documental Record's file of an item cancelled before it
   });
 });
 
+describe("app.record_file_name: a file name a file system holds", () => {
+  const name = async (subject: string) =>
+    (await migrator.query("select app.record_file_name(null, 'MAR', $1, ' - Working Copy.pdf') as n", [subject])).rows[0].n as string;
+
+  it("cuts a long Subject to 100 characters, so even an Arabic one stays under 255 bytes", async () => {
+    const arabic = await name("ب".repeat(400));
+    expect(arabic).toBe(`MAR - ${"ب".repeat(100)} - Working Copy.pdf`);
+    expect(Buffer.byteLength(arabic, "utf8")).toBeLessThan(255);
+    expect(await name(`${"a".repeat(99)} b`)).toBe(`MAR - ${"a".repeat(99)} - Working Copy.pdf`);
+  });
+
+  it("is never left empty: a Subject of only characters a name can't hold, or only spaces", async () => {
+    expect(await name('/:*?"<>|')).toBe("MAR - ________ - Working Copy.pdf");
+    expect(await name("   ")).toBe("MAR - _ - Working Copy.pdf");
+  });
+
+  it("keeps a Document Number's name as before", async () => {
+    expect((await migrator.query("select app.record_file_name('TWR-MAR-01-0001', 'MAR', 'x', '.pdf') as n")).rows[0].n).toBe("TWR-MAR-01-0001.pdf");
+  });
+});
+
 describe("RP-1319-3: app.work_item_step_for_engineer finds an item in Internal Review by its id", () => {
   type Found = { work_item_id: string; document_number: string | null; participant_id: string | null; draft_step: boolean; assignment_status: string | null };
   const find = async (projectId: string, sought: string) =>
