@@ -481,7 +481,7 @@ Rabaed Admin is at the address in section 2.1; sign-in is a password plus a code
 
 ### 5.13 UI and UX against the design (Part UX, label `uat-part-ux`)
 
-One Test Case per built page or flow, run with the ui-ux-tester agent (report only, it changes no file) and a person. Reference order: the owner anatomy pages in `D:\Artifacts` (render them, never commit them), then the kit in `design/reference/claude-design/`, then the design prompt; GLOSSARY.md and visibility.md beat all three. Rule-forced deviations are correct (section 3.2). Result: Done when the page matches; **In Review** when it matches but has UX recommendations for the owner; **Failed** when it has UI issues (each a Bug, section 10.4). Shoot with `pnpm screens /work-items --as hafiz` at 1366 and 1920, EN and AR, plus 375 where the scenario says.
+One Test Case per built page or flow, run with the ui-ux-tester agent (report only, it changes no file) and a person. Reference order: the owner anatomy pages in `D:\Artifacts` (render them, never commit them), then the kit in `design/reference/claude-design/`, then the design prompt; GLOSSARY.md and visibility.md beat all three. Rule-forced deviations are correct (section 3.2). Result: Done when the page matches; **In Review** when it matches but has UX recommendations for the owner; **Failed** when it has UI issues (each a Bug, section 10.4). Shoot with `pnpm screens /work-items/42 --as hafiz` at 1366 and 1920, EN and AR, plus 375 where the scenario says.
 
 | ID | Title | Who | Steps | Expected | Pri | Mode | Waits | Covers |
 |---|---|---|---|---|---|---|---|---|
