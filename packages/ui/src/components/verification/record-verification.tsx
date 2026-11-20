@@ -280,7 +280,8 @@ export function VerificationCodeForm({
             className="font-mono tracking-wider"
           />
         </Field>
-        <Field label={labels.documentNumber} required>
+        {/* Not required: a record that reads "No number yet" is verified by its code alone (RP-1319). */}
+        <Field label={labels.documentNumber}>
           <Input name="documentNumber" dir="ltr" maxLength={200} autoComplete="off" spellCheck={false} defaultValue={defaultDocumentNumber} />
         </Field>
         <Button type="submit" className="w-full sm:w-fit">

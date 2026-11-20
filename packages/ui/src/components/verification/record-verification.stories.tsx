@@ -139,6 +139,8 @@ export const CodeForm: Story = {
     const l = codeFormLabels[storyLocale(context)];
     await expect(screen.getByRole("textbox", { name: l.code })).toHaveAttribute("dir", "ltr");
     await expect(screen.getByRole("textbox", { name: l.documentNumber })).toHaveAttribute("dir", "ltr");
+    // A record that reads "No number yet" is verified by its code alone (RP-1319): the number may be left empty.
+    await expect(screen.getByRole("textbox", { name: l.documentNumber })).not.toBeRequired();
     await expect(screen.getByRole("button", { name: l.submit })).toBeInTheDocument();
     await expect(screen.queryByRole("alert")).toBeNull();
   },

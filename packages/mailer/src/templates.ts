@@ -337,7 +337,7 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   // The item's Document Number, or a Package Submit's Package number: both left to right.
   const number = values.package?.number ?? values.documentNumber;
   return {
-    subject: [number ? isolate(number) : noNumber[locale], subject, happened].join(" · "),
+    subject: [number ? isolate(number) : noNumber[locale], subject, happened].filter(Boolean).join(" · "),
     paragraphs: [
       itemLine(locale, number, subject),
       [happened],

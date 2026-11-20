@@ -85,7 +85,7 @@ function Steps({ locale }: { locale: Locale }) {
   const [reason, setReason] = useState("");
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [number, setNumber] = useState("");
+  const [typedItem, setTypedItem] = useState("");
   /** The item shown, with the Project it was found on. */
   const [found, setFound] = useState<(WorkItemStep & { projectId: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +93,7 @@ function Steps({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
   const [handing, setHanding] = useState<Handing | null>(null);
   const why = reason.trim();
-  const numberText = number.trim();
+  const itemText = typedItem.trim();
 
   async function loadProjects() {
     if (!why) return;
@@ -111,7 +111,7 @@ function Steps({ locale }: { locale: Locale }) {
    * Finds `item` (a Document Number, an id or a link) on Project `inProject`: by default what the form says;
    * after a reassign, the item just shown by its id, whatever the form says now. `quiet` keeps the notice.
    */
-  async function find({ inProject = projectId, item = numberText, quiet = false } = {}) {
+  async function find({ inProject = projectId, item = itemText, quiet = false } = {}) {
     if (!why || !inProject || !item) return;
     setBusy(true);
     setError(null);
@@ -182,10 +182,10 @@ function Steps({ locale }: { locale: Locale }) {
             <div className="min-w-[260px]">
               <Field label={w.findBy}>
                 {/* A Document Number, an id or a link always reads left to right. */}
-                <Input dir="ltr" value={number} onChange={(e) => setNumber(e.target.value)} placeholder={w.findByPlaceholder} />
+                <Input dir="ltr" value={typedItem} onChange={(e) => setTypedItem(e.target.value)} placeholder={w.findByPlaceholder} />
               </Field>
             </div>
-            <Button type="submit" disabled={busy || !why || !projectId || !numberText}>
+            <Button type="submit" disabled={busy || !why || !projectId || !itemText}>
               {w.find}
             </Button>
           </form>

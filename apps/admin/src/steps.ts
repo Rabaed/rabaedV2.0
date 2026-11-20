@@ -75,11 +75,11 @@ export function soughtItem(typed: string): string {
 }
 
 /**
- * The item `sought` names on Project `projectId` (its Document Number, its id or its link: soughtItem), with
+ * The item `typed` names on Project `projectId` (its Document Number, its id or its link: soughtItem), with
  * its Step and holder; null for an item the Project doesn't have, or a Draft. Logged as a read.
  */
-export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: string, sought: string, reason: string): Promise<WorkItemStep | null> {
-  const typed = soughtItem(sought);
+export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: string, typed: string, reason: string): Promise<WorkItemStep | null> {
+  const sought = soughtItem(typed);
   return asEngineer(adminDb, { engineerId, action: "read_work_item_step", reason }, async (trx) => {
     const { rows } = await sql<{
       work_item_id: string;
@@ -96,9 +96,9 @@ export function findWorkItemStep(adminDb: Db, engineerId: string, projectId: str
       role_name: BilingualText | null;
       holder_member_id: string | null;
       pool: { member_id: string; name: BilingualText; email: string }[];
-    }>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${typed})`.execute(trx);
+    }>`select * from app.work_item_step_for_engineer(${projectId}::uuid, ${sought})`.execute(trx);
     const r = rows[0];
-    if (!r) return { target: { kind: "project", id: projectId }, after: { sought: typed, found: false }, result: null };
+    if (!r) return { target: { kind: "project", id: projectId }, after: { sought, found: false }, result: null };
     const step =
       r.assignment_status && r.step_name && r.participant_id && r.company_name && r.role_name
         ? {
