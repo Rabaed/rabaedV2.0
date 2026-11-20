@@ -172,7 +172,7 @@ export async function detail(api: Api, itemId: string): Promise<ApiReply> {
   return api.get(`/work-items/${itemId}`);
 }
 
-export type Row = { id: string; title: string; documentNumber: string | null; stage: { key: string; name: { en: string } }; with: { kind: string; companyName: { en: string }; step?: { key: string; name: { en: string } }; holder?: { name: { en: string } } | null } | null; revisionNo: number; outcome: string | null; creationDate: string | null; submissionDate: string | null; stepAgeWeeks: number | null; trade: { code: string }; location: { code: string } | null; raiserCompanyName?: { en: string }; closedBy?: unknown };
+export type Row = { id: string; title: string; documentNumber: string | null; baseNumber?: string; stage: { key: string; name: { en: string } }; with: { kind: string; companyName: { en: string }; step?: { key: string; name: { en: string } }; holder?: { name: { en: string } } | null } | null; revisionNo: number; outcome: string | null; creationDate: string | null; submissionDate: string | null; stepAgeWeeks: number | null; trade: { code: string }; location: { code: string } | null; raiserCompanyName?: { en: string }; closedBy?: unknown };
 
 /** One page of the List as the person reads it. `query` is the raw query string (without the ?). */
 export async function listOf(api: Api, projectId: string, query = "", module = "", allRevisions = true): Promise<{ status: number; items: Row[]; stages: { key: string; count: number }[]; filters: Record<string, any>; text: string }> {

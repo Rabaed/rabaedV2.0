@@ -1,11 +1,9 @@
 import type { Page } from "playwright";
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { go, settle } from "../harness/helpers.ts";
+import { POP_UP, go, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 
-// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
 
 /** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
 async function chooseCode(page: Page, name: RegExp): Promise<void> {

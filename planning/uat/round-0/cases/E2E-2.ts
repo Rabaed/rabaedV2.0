@@ -244,8 +244,9 @@ defineCase("J9", async (t) => {
   await c.show(t, hp, `/work-items/${wir}`);
   await requiredLinksOff(t, c);
   await takeTransition(hp, /Send for Review/i);
-  const num = (await H.detail(ali, wir)).documentNumber as string;
-  t.check("[INS-08] Sent for review, the WIR is numbered TWR-WIR-nn-nnnn and sits in TMC's Internal Review", /^TWR-WIR-\d\d-\d{4}$/.test(num) && (await stageOf(ali, wir)) === "internal_review", `${num}`);
+  const unnumbered = (await H.detail(ali, wir)).documentNumber;
+  // ADR 0030 (RP-1316): the WIR gets its number at Ali's Submit, not here.
+  t.check("[INS-08] Sent for review, the WIR sits in TMC's Internal Review with no number yet", unnumbered === null && (await stageOf(ali, wir)) === "internal_review", `${unnumbered}`);
   await t.shot(hp, "2-hafiz-sent-for-review");
 
   lap("step 3");
@@ -254,6 +255,8 @@ defineCase("J9", async (t) => {
   await ali.post(`/work-items/${wir}/pick-up`);
   await c.show(t, ap, `/work-items/${wir}`);
   await takeTransition(ap, "Submit", { fill: async (d) => { await d.locator("section[aria-labelledby=transition-section-cover] textarea").first().fill("Trays ready from 09:00; the engineer may start on Floor 02."); } });
+  const num = (await H.detail(ali, wir)).documentNumber as string;
+  t.check("[INS-08] At Ali's Submit the WIR is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num), `${num}`);
   const ahmed = await c.api("ahmed");
   const dAhmed = await H.detail(ahmed, wir);
   t.check("[INS-08] After Ali's Submit the WIR is at the Consultant Engineer Step with Ahmed, Pending Approval", dAhmed.step.key === "consultant_engineer" && dAhmed.stage.key === "pending_approval", `${dAhmed.step.key} ${dAhmed.stage.key}`);

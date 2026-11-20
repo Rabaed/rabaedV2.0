@@ -161,6 +161,12 @@ export async function itemSubject(page: Page): Promise<string> {
 }
 
 /**
+ * A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which
+ * is a dialog too, nor the Next dev server's own overlay (`data-nextjs-dialog`, Next 16.4's "Security Insight").
+ */
+export const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
+
+/**
  * Takes a Transition from the open item page: clicks its button in the main region, fills the
  * Internal Note if given, confirms in the pop-up, and waits for the dialog to close. The
  * pop-up's confirm button has the Transition's own name.
@@ -168,7 +174,7 @@ export async function itemSubject(page: Page): Promise<string> {
 export async function takeTransition(page: Page, name: string | RegExp, options: { note?: string; fill?: (dialog: Locator) => Promise<void> } = {}): Promise<void> {
   await page.getByRole("main").getByRole("button", { name, exact: typeof name === "string" }).first().click();
   // The pop-up, not the Submittal Panel (RP-1237) the item opens in: both are dialogs.
-  const dialog = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
+  const dialog = page.locator(POP_UP);
   await dialog.waitFor({ state: "visible" });
   if (options.note) await dialog.getByRole("textbox").first().fill(options.note);
   if (options.fill) await options.fill(dialog);

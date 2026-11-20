@@ -75,7 +75,8 @@ defineCase("NOT-01", async (t) => {
   const row = page.getByTestId("notification-list").getByRole("link").filter({ hasText: title }).first();
   const rowText = (await row.innerText()).replace(/\s+/g, " ");
   c.check("the entry reads 'Reached you at <Step>'", /Reached you at Contractor PM/.test(rowText), rowText);
-  c.check("the entry shows the Document Number", /TWR-MAR-01-\d{4}/.test(rowText), rowText);
+  // Hafiz's item is in TMC's Internal Review: no number until Ali's Submit (ADR 0030, RP-1316).
+  c.check("the entry names the item by No number yet and its Subject", /No number yet/.test(rowText) && rowText.includes(title) && !/TWR-MAR-01-\d{4}/.test(rowText), rowText);
   await t.shot(page, "notifications-page");
   await row.click();
   // A Submittal opens in the Submittal Panel on the List (?open=<id>, RP-1237).
@@ -237,7 +238,8 @@ defineCase("NOT-04", async (t) => {
     c.check("Pause all email: no email, but the bell filled", (await mailsAbout(emailOf.ali!, paused.title)).length === 0 && (await notificationsFor(ali, paused.id)).length > 0);
     const ar = (await mailsAbout(emailOf.ali!, arabic.title))[0];
     c.check("language Arabic: the email comes in Arabic", !!ar && /[؀-ۿ]/.test(ar.text) && /dir="rtl"/.test(ar.html), ar?.subject);
-    c.check("... with Latin digits and the Document Number left to right", !!ar && !ARABIC_INDIC.test(ar.text) && /<bdi dir="ltr">TWR-MAR-01-\d{4}/.test(ar.html));
+    // The item is in TMC's Internal Review, so it has no number yet (ADR 0030, RP-1316): the email must not carry one.
+    c.check("... with Latin digits, and no Document Number before the first Submit", !!ar && !ARABIC_INDIC.test(ar.text) && !/TWR-MAR-01-\d{4}/.test(ar.text));
     await t.shot(page, "profile-after");
   } finally {
     await restoreSettings(ali, before);

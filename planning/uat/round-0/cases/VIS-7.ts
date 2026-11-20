@@ -22,6 +22,7 @@ defineCase("VIS-39", async (t) => {
   for (let i = 1; i <= 3; i++) {
     const id = await createMar(crew, `UAT VIS-39 Hafiz ${i} ${tag}`, { location: "T2F01" });
     await sendForReview(crew, id);
+    await aliSubmit(crew, id); // ADR 0030 (RP-1316): the number comes at the first Submit.
     hNums.push(await numberOf(hafiz, id));
   }
   t.check("Hafiz's three MARs are numbered in TMC's series, one after another", hNums.every((n) => !!n) && seqOf(hNums[1]) > seqOf(hNums[0]) && seqOf(hNums[2]) > seqOf(hNums[1]) && new Set(hNums.map(seriesOf)).size === 1, hNums.join(", "));
@@ -34,10 +35,11 @@ defineCase("VIS-39", async (t) => {
       yousefBlocked = `${r.status} ${r.text.slice(0, 120)}`;
       break;
     }
+    // Should Beta Build ever have a PM here: no number yet in Internal Review, so read it after that PM's Submit.
     yNums.push(await numberOf(yousef, id));
   }
   if (yousefBlocked) {
-    t.note(`Yousef's send for review was refused (${yousefBlocked}): Beta Build has no Project Manager to hold the next Step, so Beta Build cannot number items on this Project; the independent counters are compared through Beta Build's Participant series and the Project Admin's counters.`);
+    t.note(`Yousef's send for review was refused (${yousefBlocked}): Beta Build has no Project Manager to hold the next Step, so no Beta Build item reaches its first Submit, where a number is given (ADR 0030); the independent counters are compared through Beta Build's Participant series and the Project Admin's counters.`);
   } else {
     t.check("Yousef's three MARs are numbered in Beta Build's own series, a different series from TMC's", yNums.every((n) => !!n) && seriesOf(yNums[0]) !== seriesOf(hNums[0]) && seqOf(yNums[1]) > seqOf(yNums[0]), yNums.join(", "));
     t.check("Beta Build's numbers do not carry TMC's volume (its sequence is far from TMC's)", Math.abs(seqOf(yNums[0]) - seqOf(hNums[0])) > 0 || seriesOf(yNums[0]) !== seriesOf(hNums[0]), `${yNums[0]} vs ${hNums[0]}`);
@@ -89,9 +91,10 @@ defineCase("VIS-40", async (t) => {
     t.check(`${who}: the rejected MAR's history shows no replacement`, !/replace/i.test(hist.text), "");
   }
   await sendForReview(crew, repl);
-  const replNumber = await numberOf(hafiz, repl);
+  t.check("Sent for Review the replacement has no number yet (ADR 0030)", !(await numberOf(hafiz, repl)));
   await aliSubmit(crew, repl);
-  t.check("The replacement takes a new Document Number at its first send (no Rev)", !!replNumber && !/Rev/.test(replNumber) && replNumber !== (await numberOf(hafiz, rejected)), `${replNumber} vs ${await numberOf(hafiz, rejected)}`);
+  const replNumber = await numberOf(hafiz, repl);
+  t.check("The replacement takes a new Document Number at its first Submit (no Rev)", !!replNumber && !/Rev/.test(replNumber) && replNumber !== (await numberOf(hafiz, rejected)), `${replNumber} vs ${await numberOf(hafiz, rejected)}`);
   const mohammed = await crew.as("mohammed");
   const from = ((await mohammed.get(`/work-items/${rejected}/linked-from`)).body as any).items as any[];
   t.check("Once Submitted it appears in the rejected MAR's Linked from by number and Subject", from.some((i) => i.documentNumber === replNumber), JSON.stringify(from));

@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import { pageAs, urlOf, webUrl } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
-import { Api, go, openProject, settle } from "../harness/helpers.ts";
+import { Api, POP_UP, go, openProject, settle } from "../harness/helpers.ts";
 import { ARABIC_INDIC, emailOf, mailsAbout, marContext, recordPdf, pdfPages, tracker } from "../harness/helpers-not.ts";
 
 // Part I18N: Arabic and English, RTL, Latin digits, Document Numbers left to right, phone width 375,
@@ -281,7 +281,7 @@ defineCase("I18N-04", async (t) => {
   await main.getByRole("button", { name: "إرسال للمراجعة" }).first().click();
   await page.waitForTimeout(1500);
   // The pop-up, not the Submittal Panel the item opens in (RP-1237).
-  const dlg = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
+  const dlg = page.locator(POP_UP);
   const open = (await dlg.count()) > 0;
   if (open) {
     const fill = await dlg.innerText();

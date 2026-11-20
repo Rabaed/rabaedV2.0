@@ -136,7 +136,6 @@ function uat01(): Staged[] {
     // Drafts of Hafiz's own, one per case that changes it; the sheet names each by its Subject.
     s(["SUB-04"], mar("SUB-04 Lighting control panel – ready to send", "P01", "draft", P.lightingPanel)),
     s(["SUB-02"], mar("SUB-02 Lighting fixtures – incomplete", "A02", "draft", P.fixtures, { bare: true })),
-    s(["SUB-03"], mar("SUB-03 Panel lights – to fill in", "A02", "draft", P.fixtures, { bare: true })),
     s(["SUB-16"], mar("SUB-16 Draft to delete", "A04", "draft", P.wiring)),
     s(["WF-16"], mar("WF-16 Draft to cancel", "A04", "draft", P.wiring)),
     s(["FRM-06"], mar("FRM-06 Draft for a photo from the phone", "A05", "draft", P.downlights)),

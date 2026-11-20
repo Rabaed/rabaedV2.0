@@ -5,7 +5,7 @@ import { Api } from "../harness/helpers.ts";
 import { bindSendBack } from "../harness/fixtures-sb.ts";
 import {
   Crew, ahmedSendsToManager, aliSubmit, closedMar, createMar, detail, expectVisible, historyOf, leakProbe, leakSummary, leaked, listOf, listAll, must, pageIsNotFound,
-  photoBytes, pdfBytes, pickUp, searchRows, sendForReview, sleep, submittedMar, takeKind, takeOk, transitionsOf, upload,
+  photoBytes, pdfBytes, pickUp, searchRows, sendForReview, sleep, submittedMar, takeKind, takeOk, transitionsOf, upload, type Row,
 } from "../harness/helpers-vis.ts";
 
 // VIS-13 .. VIS-19: Revisions across Locations, Send Back, dates, Step Age, Dashboard, List and Kanban.
@@ -214,14 +214,17 @@ defineCase("VIS-16", async (t) => {
   t.check("On the item page TMC reads both dates; DCL reads no Creation Date", !!dh.creationDate && !!dh.submissionDate && da.creationDate === null && !!da.submissionDate, JSON.stringify({ h: dh.creationDate, a: da.creationDate }));
   const daText = JSON.stringify(da) + (await (await crew.as("ahmed")).get(`/work-items/${id}/history`)).text;
   t.check("No Creation Date of TMC anywhere in DCL's reads of the item", !daText.includes(dh.creationDate), "");
-  const rows = await listAll(hafiz, pid, "");
-  const first = rows.findIndex((r) => r.documentNumber === null);
+  // Sorted by Document Number. Since ADR 0030 (RP-1316) the items in Internal Review have no number either; a
+  // Revision Draft has none of its own but sorts beside its chain by its base number (RP-1300), so it is not in the tail.
+  const rows = await listAll(hafiz, pid, "sort=documentNumber");
+  const unnumbered = (r: Row) => r.documentNumber === null && !r.baseNumber;
+  const first = rows.findIndex(unnumbered);
   const tail = first === -1 ? [] : rows.slice(first);
-  t.check("Un-numbered Drafts come last in Hafiz's List", first !== -1 && tail.every((r) => r.documentNumber === null), `${rows.length} rows, first Draft at ${first}`);
+  t.check("Items with no number yet (Drafts and Internal Review) come last in Hafiz's List", first !== -1 && tail.every(unnumbered), `${rows.length} rows, first with no number at ${first}`);
   const mine = tail.filter((r) => r.title === sa || r.title === sb).map((r) => r.title);
   const subjects = tail.map((r) => r.title);
   const sorted = [...subjects].sort();
-  t.check("The un-numbered Drafts are ordered by Subject", JSON.stringify(subjects) === JSON.stringify(sorted) && mine.filter((x, i) => mine.indexOf(x) === i).join() === [sa, sb].join(), `${subjects.slice(0, 6).join(" | ")}`);
+  t.check("The items with no number yet are ordered by Subject", JSON.stringify(subjects) === JSON.stringify(sorted) && mine.filter((x, i) => mine.indexOf(x) === i).join() === [sa, sb].join(), `${subjects.slice(0, 6).join(" | ")}`);
   const version = (u: string) => u[14];
   t.check("Ids carry no time: item ids are random (version 4), not time-ordered", [id, draftA, draftB].every((u) => version(u) === "4"), [id, draftA, draftB].map(version).join(","));
   const { context, page } = await pageAs("ahmed");

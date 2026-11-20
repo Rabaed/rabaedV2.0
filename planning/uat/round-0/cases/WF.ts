@@ -1,11 +1,9 @@
 import { pageAs } from "../harness/browser.ts";
 import { defineCase } from "../harness/case.ts";
 import type { Api } from "../harness/helpers.ts";
-import { go, settle } from "../harness/helpers.ts";
+import { POP_UP, go, settle } from "../harness/helpers.ts";
 import * as H from "../harness/helpers-sub.ts";
 
-// A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
 
 // Part WF (Workflows). Workflows of my own are named "UAT WF-nn ..."; a Workflow bound to the MAR for a
 // short while is bound as an exception for one Participant (never over the Project's MAR binding, which
@@ -510,10 +508,13 @@ defineCase("WF-15", async (t) => {
 });
 
 defineCase("WF-16", async (t) => {
-  const tm = await H.team("hafiz", "ali", "ahmed", "mohammed");
+  const tm = await H.team("hafiz", "ali", "ahmed", "mohammed", "faisal");
   const hafiz = tm.api.hafiz!;
   const ali = tm.api.ali!;
   const cancelKinds = (d: H.Json) => (d.actions.transitions as H.Json[]).filter((x) => x.kind === "cancel").map((x) => x.key);
+  // TMC's last number before the Cancels in Internal Review (ADR 0030: the number comes at the first Submit).
+  const before = await H.submittedMar(tm, `UAT WF-16 numbered before ${H.stamp()}`);
+  const beforeNumber = (await H.detail(hafiz, before)).documentNumber as string;
   // 1. Draft
   const draft = await H.createItem(hafiz, tm, "MAR", `UAT WF-16 Cancel draft ${H.stamp()}`, await H.marAnswers(tm));
   const { page } = await pageAs("hafiz");
@@ -557,6 +558,20 @@ defineCase("WF-16", async (t) => {
   t.check("Once Submitted no Cancel is offered to Ali or Hafiz", cancelKinds(as).length === 0 && cancelKinds(hs).length === 0, `${H.offered(as).join(",")} | ${H.offered(hs).join(",")}`);
   const refused = await H.move(ali, sub, "cancel_review");
   t.check("A Cancel sent anyway is refused", refused.status >= 400, String(refused.status));
+  // 3b. No gap in TMC's numbers (RP-1316-1): the two items cancelled in Internal Review never had a number.
+  const cancelled = [await H.detail(hafiz, second), await H.detail(hafiz, third)];
+  t.check("The items cancelled in Internal Review have no Document Number", cancelled.every((c) => c.documentNumber === null), JSON.stringify(cancelled.map((c) => c.documentNumber)));
+  const subNumber = (await H.detail(hafiz, sub)).documentNumber as string;
+  const seq = (n: string) => Number(n.slice(-4));
+  t.check("The next Submit takes the number right after the last one", H.NUMBER_RE.test(beforeNumber) && H.NUMBER_RE.test(subNumber) && seq(subNumber) === seq(beforeNumber) + 1, `${beforeNumber} then ${subNumber}`);
+  for (const reader of ["ahmed", "faisal"] as const) {
+    const api = tm.api[reader]!;
+    // Each number is looked up by search: the List's first page is not enough once the Project holds many items.
+    const reads = await Promise.all([beforeNumber, subNumber].map(async (n) => (await H.listItems(api, tm.projectId, "q=" + encodeURIComponent(n))).some((r) => r.documentNumber === n)));
+    t.check(`${reader === "ahmed" ? "The Consultant (Ahmed)" : "The Owner (Faisal)"} reads both numbers in a row, with no gap`, reads.every(Boolean) && seq(subNumber) === seq(beforeNumber) + 1, `${beforeNumber} ${reads[0]}, ${subNumber} ${reads[1]}`);
+    const hidden = [(await api.get(`/work-items/${second}`)).status, (await api.get(`/work-items/${third}`)).status];
+    t.check(`${reader === "ahmed" ? "Ahmed" : "Faisal"} gets the plain 404 for both cancelled items`, hidden.every((s) => s === 404), hidden.join(","));
+  }
   // 4. Revision
   const rev = await H.submittedMar(tm, `UAT WF-16 Cancel revision ${H.stamp()}`);
   const ver = { sample_checked: true, matches_specification: false, verification_note: "UAT" };

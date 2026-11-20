@@ -1,6 +1,6 @@
 # Rabaed UAT test sheet: System UAT with Ahmed
 
-Built 2026-11-19. 263 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
+Built 2026-11-20. 263 Test Cases. The UAT: https://rabaed-uat-web.vercel.app/en (English) and https://rabaed-uat-web.vercel.app/ar (Arabic).
 
 ## How to use this file
 
@@ -67,7 +67,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > Material Approval Request (a new Draft, on the MAR Form Version 8; not the seeded Draft "SUB-03 Panel lights – to fill in", which keeps the Version it was seeded on). Subject "UAT SUB-03 Panel lights", Trade Electrical Works, Location Tower A Level 02, Approved supplier Qassim Electrical Trading, Manufacturer Philips, Description, Model "CoreLine Panel", Specification section "26 51 00".
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals > New Submittal > Material Approval Request (a new Draft, on the MAR Form Version 8). Subject "UAT SUB-03 Panel lights", Trade Electrical Works, Location Tower A Level 02, Approved supplier Qassim Electrical Trading, Manufacturer Philips, Description, Model "CoreLine Panel", Specification section "26 51 00".
   2. Under Items, Add row three times: "Recessed panel" 200 Pieces, "Surface panel" 40 Pieces, and "Emergency exit sign" with no Quantity and no Unit.
   3. Save and close, then open the Draft again from the list.
   4. Add a PDF under Datasheet (PDF) and a JPEG with EXIF under Sample photo.
@@ -81,7 +81,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-04 Lighting control panel – ready to send" (complete, with its Datasheet).
   2. Send for Review.
-- **Expected result:** The item gets the next number in TMC's MAR sequence (UAT01-MAR-01-0013 if no other case has sent one yet), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour", no Pick up button. Nothing outside TMC.
+- **Expected result:** It reads "No number yet" and its Subject: it gets the next number in TMC's MAR sequence only at Ali's Submit (SUB-07), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour", no Pick up button. Nothing outside TMC.
 
 ### SUB-05 A Return stays in Internal Review
 
@@ -89,7 +89,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open "SUB-05 Emergency luminaires – returned by Ali". Ali Returned it with the reason "Add the model's test certificate and resend."
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open "SUB-05 Emergency luminaires – returned by Ali" (No number yet). Ali Returned it with the reason "Add the model's test certificate and resend."
 - **Expected result:** The item is in the Internal Review Stage at the Contractor Engineer Step, still has no Document Number, "SUB-05 Emergency luminaires – returned by Ali", and is with Hafiz ("With Hafiz Hamdan"); it is never a Draft again. Ali's reason is in TMC's history, marked internal. Step Age counts from the Return.
 
 ### SUB-06 Documents change until the Submit
@@ -98,7 +98,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open "SUB-06 LED downlights – change the Datasheet", returned to Hafiz.
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open "SUB-06 LED downlights – change the Datasheet" (No number yet), returned to Hafiz.
   2. Remove the Datasheet and add a corrected PDF.
   3. Send for Review again.
 - **Expected result:** Hafiz can swap Documents while the item is in TMC: the corrected PDF replaces the old one. After the send the item, "SUB-06 LED downlights – change the Datasheet", still has no Document Number and is with Ali ("With Ali Sonour"). Documents freeze at the Submit, not before.
@@ -111,7 +111,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0001, which Mohammed closed at Code D (Rejected) with Remarks.
   2. Choose Create replacement.
-- **Expected result:** The item is closed at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to UAT01-MAR-01-0001, and gets a new Document Number with no Rev suffix at its first send.
+- **Expected result:** The item is closed at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to UAT01-MAR-01-0001, and gets a new Document Number with no Rev suffix at its first Submit.
 
 ### SUB-15 Create a Revision of a Code C item
 
@@ -124,7 +124,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
   3. In the List and on the Kanban, find the Draft beside UAT01-MAR-01-0002; then search the List for UAT01-MAR-01-0002.
   4. Open the Draft and its Revision drop-down.
   5. Send for Review.
-- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. From the start it reads UAT01-MAR-01-0002 Rev 1 · Draft, its base number left to right, in the Panel, the List and the Kanban, where it sits beside its chain; the search for UAT01-MAR-01-0002 finds it too. The Draft's drop-down lists the original and Revision 1; after the send Revision 1 reads UAT01-MAR-01-0002 Rev 1, whole and left to right, and is with Ali. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
+- **Expected result:** The Draft starts with TMC's answers and the copied Datasheet. From the start it reads UAT01-MAR-01-0002 Rev 1 · Draft, its base number left to right, in the Panel, the List and the Kanban, where it sits beside its chain; the search for UAT01-MAR-01-0002 finds it too. The Draft's drop-down lists the original and Revision 1; after the send, in Internal Review, it reads UAT01-MAR-01-0002 Rev 1 · Internal Review and is with Ali; once Ali Submits it, Revision 1 reads UAT01-MAR-01-0002 Rev 1, whole and left to right. Choosing the original shows its own answers, Code C, Remarks and history. A Revision uses no counter: the next new MAR still takes the next number.
 
 ### SUB-16 Delete discards a Draft only
 
@@ -165,9 +165,10 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "WF-16 Draft to cancel" and Cancel; confirm.
-  2. Open "WF-16 Wiring devices – Cancel at your Step", back with Hafiz at the Contractor Engineer Step, and Cancel; confirm.
+  2. Open "WF-16 Wiring devices – Cancel at your Step" (No number yet), back with Hafiz at the Contractor Engineer Step, and Cancel; confirm.
   3. Open UAT01-MAR-01-0007, Submitted to Design Consultants, and look for Cancel.
-- **Expected result:** Cancel is offered at the Draft and at the Contractor Engineer Step and asks for confirmation; each item goes to the Cancelled Stage with no outcome. Once Submitted (UAT01-MAR-01-0007), Cancel is no longer offered. A Revision never offers Cancel. Carried over from RP-463 B-09 (RP-490).
+  4. Back in the Submittals List, read TMC's Document Numbers in order.
+- **Expected result:** Cancel is offered at the Draft and at the Contractor Engineer Step and asks for confirmation; each item goes to the Cancelled Stage with no outcome. Neither cancelled item ever had a Document Number, so TMC's numbers on UAT 01 run UAT01-MAR-01-0001 to 0008 with no gap; the Consultant and the Owner read the same numbers with no gap (the harness checks this as Ahmed and Faisal). Once Submitted (UAT01-MAR-01-0007), Cancel is no longer offered. A Revision never offers Cancel. Carried over from RP-463 B-09 (RP-490).
 
 ### FRM-01 The three submittal Forms carry the documented fields
 
@@ -257,7 +258,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0003 (closed at Code C), UAT01-MAR-01-0004 (closed at Code D) and "SIG-05 Earthing – Cancelled" (Cancelled).
+  1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0003 (closed at Code C), UAT01-MAR-01-0004 (closed at Code D) and "SIG-05 Earthing – Cancelled" (Cancelled in Internal Review, No number yet).
   2. Download each one's Documental Record (PDF).
 - **Expected result:** Each closed with its record whatever the outcome; the outcome in each PDF matches the item: Code C, Code D, Cancelled.
 
@@ -429,7 +430,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a Draft an import made.
   2. Read its history.
-- **Expected result:** It is an ordinary Draft: Hafiz edits it, sends it, and it gets its number at the first send. Its created event, internal to TMC, names the import.
+- **Expected result:** It is an ordinary Draft: Hafiz edits it and sends it; it reads No number yet in Internal Review and gets its number at its first Submit. Its created event, internal to TMC, names the import.
 
 ### IMP-08 Download the rows left out and import again
 
@@ -507,10 +508,10 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Sign in as:** Hafiz (TMC engineer)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a MAR in Draft ("Lighting control panel – Hafiz's own Draft"), in internal review ("SUB-05 Emergency luminaires – returned by Ali"), Submitted (UAT01-MAR-01-0007) and closed (UAT01-MAR-01-0005), EN and AR.
+  1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a MAR in Draft ("Lighting control panel – Hafiz's own Draft"), in internal review ("SUB-05 Emergency luminaires – returned by Ali", No number yet), Submitted (UAT01-MAR-01-0007) and closed (UAT01-MAR-01-0005), EN and AR.
   2. Open every Transition pop-up Hafiz is offered (Send for Review, Cancel) and close it without confirming.
   3. Open View workflow (map and list).
-- **Expected result:** Laid out as design/prompts/work-item-page.md and workflow-view.html: header (Document Number left to right, Stage, With, Step Age), Form, Attachments and Links, history; each pop-up asks for confirmation and shows its Action Form; required fields and errors are clear.
+- **Expected result:** Laid out as design/prompts/work-item-page.md and workflow-view.html: header (Document Number left to right, or "No number yet" with the Subject before the first Submit; Stage, With, Step Age), Form, Attachments and Links, history; each pop-up asks for confirmation and shows its Action Form; required fields and errors are clear.
 
 ### UX-07 New work item and the Form while filling it
 
@@ -639,9 +640,9 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open "SUB-07 Wiring devices – ready to Submit", which Hafiz sent for review and is with you.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open "SUB-07 Wiring devices – ready to Submit" (No number yet), which Hafiz sent for review and is with you.
   2. Submit; Cover Note "Sockets for Level 2, as drawing E-201"; Internal Note "Quantities checked against the BOQ"; confirm.
-- **Expected result:** "SUB-07 Wiring devices – ready to Submit" is in Pending Approval. Ali reads "With Design Consultants LLC", never a Consultant's name (V14). In the history the Submit shows the Cover Note, and the Internal Note is marked internal, TMC's only (V5). The Submission Date is set.
+- **Expected result:** "SUB-07 Wiring devices – ready to Submit" gets its Document Number at this Submit and is in Pending Approval. Ali reads "With Design Consultants LLC", never a Consultant's name (V14). In the history the Submit shows the Cover Note, and the Internal Note is marked internal, TMC's only (V5). The Submission Date is set.
 
 ### SUB-18 Download gives the item as it last arrived
 
@@ -695,7 +696,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Kanban: columns are the Stages with counts.
-  2. Drag "SUB-25 Emergency luminaires – move on the Kanban" from Internal Review to Pending Approval, or use Move to.
+  2. Drag "SUB-25 Emergency luminaires – move on the Kanban" (No number yet) from Internal Review to Pending Approval, or use Move to.
   3. Open the filter panel (Owner, Role, Created date).
 - **Expected result:** Dropping or choosing a move opens the same Action Form as the item page (the Submit pop-up); the card moves after confirm; a move that is not allowed is not offered. Internal Review shows TMC's own Steps with counts (Engineer, PM). Design Consultants is one lane by its name (V14).
 
@@ -757,7 +758,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
   1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals > Packages: open "PKG-03 Package to fill" > Add submittals.
-  2. Pick the Drafts "PKG-03 Earthing – Draft 1" and "PKG-03 Busbar trunking – Draft 2" and "PKG-03 Smoke detectors – in Internal Review".
+  2. Pick the Drafts "PKG-03 Earthing – Draft 1" and "PKG-03 Busbar trunking – Draft 2" and "PKG-03 Smoke detectors – in Internal Review" (No number yet).
   3. Try to add "PKG-03 Wiring devices – in another Package", which is in "PKG-03 Package holding a Draft".
 - **Expected result:** Only TMC's own submittals Ali can see are offered, with search and a Trade filter. The Draft already in PKG-03 Package holding a Draft is marked and cannot be picked: a submittal belongs to at most one Package.
 
@@ -822,7 +823,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
 - **Sign in as:** Ali (TMC PM)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open "SIG-01 Cable trays – Submit in its pop-up" and choose Submit.
+  1. Projects > UAT 02 · Contractor Project Manager (Ali) > Submittals: open "SIG-01 Cable trays – Submit in its pop-up" (No number yet) and choose Submit.
   2. Look for a Sign button or checkbox.
   3. Confirm.
 - **Expected result:** The pop-up keeps the Transition's own label; there is no separate signing step. Taking it without confirming (API without confirmed true) is refused not_confirmed. After confirm the history records who, from which Participant and when.
@@ -952,7 +953,7 @@ Every case here is run in **UAT 02 · Contractor Project Manager (Ali)**, as the
   1. Look at the bell badge: Hafiz's items in Projects > UAT 02 · Contractor Project Manager (Ali) ("SUB-07 Wiring devices – ready to Submit", "SIG-01 Cable trays – Submit in its pop-up" and "SUB-25 Emergency luminaires – move on the Kanban") reached you when he sent them for review.
   2. Open Notifications; open one entry.
   3. Mark all as read.
-- **Expected result:** The badge counts unread; each entry reads Reached you at <Step> and opens the item; Mark all as read clears the badge. In-app notifications are always sent: there is no in-app switch.
+- **Expected result:** The badge counts unread; each entry reads Reached you at <Step> and opens the item, and names Hafiz's items by "No number yet" and their Subject (they get a number only at Ali's Submit); Mark all as read clears the badge. In-app notifications are always sent: there is no in-app switch.
 
 ### I18N-07 Desktop 1366 and 1920
 
@@ -1882,7 +1883,7 @@ Every case here is run in **UAT 09 · Contractor Engineer, Podium only (Omar)**,
 - **Sign in as:** Omar (TMC engineer, Podium only)
 - **Start at:** https://rabaed-uat-web.vercel.app/en
 - **Steps:**
-  1. Projects > UAT 09 · Contractor Engineer, Podium only (Omar) > Submittals: open "WF-12 Lighting control panel – returned by Ali to Hafiz", at Podium Level 01, which you cover too. Hafiz sent it for review and Ali Returned it.
+  1. Projects > UAT 09 · Contractor Engineer, Podium only (Omar) > Submittals: open "WF-12 Lighting control panel – returned by Ali to Hafiz" (No number yet), at Podium Level 01, which you cover too. Hafiz sent it for review and Ali Returned it.
 - **Expected result:** It went back to Hafiz, who sent it, not to Omar: Omar reads it but is offered no Send for Review and no pick-up, and it is not in his Need My Action.
 
 ### FRM-11 Member and Participant fields offer only what the filler may see
@@ -2155,7 +2156,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
 - **Steps:**
   1. Hafiz raises a Civil WIR, sends it; Ali Submits it.
   2. Ahmed picks it up.
-- **Expected result:** The WIR numbers like a submittal and reaches the Consultant Engineer pool. The Consultant fills the checklist on site (INS-09).
+- **Expected result:** The WIR numbers like a submittal: No number yet in TMC's Internal Review, its number at Ali's Submit. It reaches the Consultant Engineer pool. The Consultant fills the checklist on site (INS-09).
 
 ### INS-10 Raise Snags from failed items
 
@@ -2327,7 +2328,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
   1. Saeed saves a draft of a Tower Workflow and a draft renaming a running Workflow.
   2. Bind Beta Build MARs to an exception Workflow (WF-08).
   3. Ali, Yousef and Ahmed open Settings > Workflows and the API.
-- **Expected result:** Nobody but the Project Admin reads a draft; the rename stays hidden until published; everyone reads published Versions whole. TMC and DCL read the exception Workflow as a definition but never its binding; only Yousef and the Project Admin learn which Participant it binds.
+- **Expected result:** Nobody but the Project Admin reads a draft; the rename stays hidden until published; everyone reads the published Versions of the Workflows in use for them. Ali (TMC) and Ahmed (DCL) get the plain 404 for Beta Build's exception Workflow (the Workflow, its map and its Versions), as for a made-up id, and never learn its binding; only Yousef and the Project Admin read it and learn which Participant it binds.
 
 ### VIS-28 A Company's Library is private until used on a Project
 
@@ -2351,7 +2352,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
   1. Publish with a Change Note naming Beta Build on an exception Workflow.
   2. Hafiz and Yousef each raise a Draft.
   3. Reopen the publish dialog and Versions.
-- **Expected result:** The Change Note naming a Participant on an exception is refused; N items keep their Version counts only the items the reader sees; only authors read Change Notes.
+- **Expected result:** The Change Note naming a Participant on an exception is refused; N items keep their Version counts only the items the reader sees; only authors read Change Notes. Ali gets the plain 404 for the exception Workflow's Versions (RP-1309), so he counts none of Yousef's items.
 
 ### VIS-32 Pending invitations: one answer whatever the CR number
 
@@ -2400,7 +2401,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
   2. Hafiz creates the replacement and keeps it Draft.
   3. The others read the rejected MAR Links, Linked from, History and search.
   4. Hafiz sends and Ali Submits it.
-- **Expected result:** While it is a Draft nobody else reads anything of it and the rejected MAR Links and Linked from do not name it; it takes a new Document Number at its first send (no Rev). Once Submitted it appears in the rejected MAR Linked from by number and Subject and lists the rejected MAR under Links.
+- **Expected result:** While it is a Draft nobody else reads anything of it and the rejected MAR Links and Linked from do not name it; it takes a new Document Number at its first Submit (no Rev). Once Submitted it appears in the rejected MAR Linked from by number and Subject and lists the rejected MAR under Links.
 
 ### VIS-41 The Handover list shows only the Authorized Person's own Company
 
@@ -2810,9 +2811,9 @@ The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailb
 - **Steps:**
   1. Hafiz saves a Draft, sends it, Ali Submits.
   2. Compare the item page and List for TMC and for DCL; look at the ids in the address bar and in links.
-  3. Check the order of un-numbered Drafts.
+  3. Sort the List by Document Number and check the order of the items with no number yet (Drafts and items in Internal Review).
   4. Needs AGE for the date checks.
-- **Expected result:** TMC sees Creation Date (when it got its number) and Submission Date; DCL sees only the Submission Date and no Creation Date in any form. Ids carry no time. Un-numbered Drafts come last, ordered by Subject. Answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date. The stored earlier times are covered by the automated suite.
+- **Expected result:** TMC sees Creation Date (when it first left Draft) and Submission Date; DCL sees only the Submission Date and no Creation Date in any form. Ids carry no time. Items with no number yet (Drafts and items in Internal Review) come last, ordered by Subject. Answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date. The stored earlier times are covered by the automated suite.
 
 ### VIS-17 Step Age and With are counted per Company
 

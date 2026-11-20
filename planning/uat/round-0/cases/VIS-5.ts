@@ -119,13 +119,23 @@ defineCase("VIS-27", async (t) => {
       return { ws, mar, wf, bld };
     };
     const s = await sees("saeed");
+    t.check("Saeed (Project Admin) reads the exception Workflow's Version 1", (await saeed.get(`/workflows/${copy.id}/versions/1`)).status === 200);
     t.check("Saeed (Project Admin) reads the draft rename and the exception with the Participant", s.wf.text.includes(renamed) && (s.mar?.exceptions ?? []).some((e) => e.participantId === beta), `${s.mar?.exceptions.length}`);
     for (const who of ["ali", "ahmed", "yousef"]) {
       const r = await sees(who);
       t.check(`${who} cannot read the draft or its rename; the builder is 404`, r.bld.status === 404 && !r.wf.text.includes(renamed), `${r.bld.status}`);
       // RP-1309 (after RP-1299): the exception's Workflow is read only by those who read the exception (V15).
       if (who === "yousef") t.check("Yousef reads the exception Workflow as a definition (published Version whole)", r.wf.status === 200 && r.wf.text.includes("steps"), `${r.wf.status}`);
-      else t.check(`${who} gets the plain 404 for the exception Workflow, as for a made-up id (RP-1309, V15)`, r.wf.status === 404, `${r.wf.status}`);
+      else {
+        t.check(`${who} gets the plain 404 for the exception Workflow, as for a made-up id (RP-1309, V15)`, r.wf.status === 404, `${r.wf.status}`);
+        // RP-1309 hides its map and its Versions too; a copy is published as Version 1 (Saeed's read below is the control).
+        const api = await crew.as(who);
+        const hidden = [(await api.get(`/workflows/${copy.id}/map`)).status, (await api.get(`/workflows/${copy.id}/versions/1`)).status];
+        t.check(`${who} gets the plain 404 for the exception Workflow's map and its Version 1`, hidden.every((x) => x === 404), hidden.join(","));
+        const own = (r.mar as any)?.workflow as { id: string; versionNo: number } | undefined;
+        const ownRead = own ? (await api.get(`/workflows/${own.id}/versions/${own.versionNo}`)).status : 0;
+        t.check(`${who} still reads the published Version of the MAR Workflow in use for them (positive control)`, ownRead === 200, `${own?.id} v${own?.versionNo}: ${ownRead}`);
+      }
       const ex = (r.mar?.exceptions ?? []).length;
       if (who === "yousef") t.check("Yousef (the bound Participant) learns of the binding", (r.mar?.exceptions ?? []).some((e) => e.participantId === beta), `${ex}`);
       else t.check(`${who} never learns of the binding (no exception row, no Participant)`, ex === 0 && !JSON.stringify(r.ws).includes(beta) && !JSON.stringify(r.ws).includes("Beta Build"), `${ex}`);

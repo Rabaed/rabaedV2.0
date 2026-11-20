@@ -255,7 +255,11 @@ defineCase("IMP-07", async (t) => {
   t.check("The import's mention is internal to TMC: Beta Build and the Consultant cannot read the history", (await tm.api.yousef!.get(`/work-items/${id}/history`)).status === 404 && /import/i.test(dcl));
   const send = await H.move(hafiz, id, "send_for_review");
   const sent = await H.detail(hafiz, id);
-  t.check("Hafiz sends it and it gets its number at the first send", send.status === 204 && /^TWR-MAR-\d\d-\d{4}$/.test(sent.documentNumber ?? ""), `${send.status} ${sent.documentNumber} ${send.text.slice(0, 120)}`);
+  // ADR 0030 (RP-1316): Send for Review gives no number; the first Submit does.
+  t.check("Hafiz sends it: in Internal Review it has no number yet", send.status === 204 && sent.documentNumber === null, `${send.status} ${sent.documentNumber} ${send.text.slice(0, 120)}`);
+  const submit = await H.move(tm.api.ali!, id, "submit", { answers: { cover_note: "UAT IMP-07 imported Draft" } });
+  const numbered = (await H.detail(hafiz, id)).documentNumber as string | null;
+  t.check("At Ali's Submit it gets its number, like any item", submit.status === 204 && /^TWR-MAR-\d\d-\d{4}$/.test(numbered ?? ""), `${submit.status} ${numbered} ${submit.text.slice(0, 120)}`);
   const { page } = await pageAs("hafiz");
   await go(page, `/work-items/${id}`);
   await settle(page);
