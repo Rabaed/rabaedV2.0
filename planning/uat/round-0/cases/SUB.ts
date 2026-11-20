@@ -135,11 +135,11 @@ defineCase("SUB-04", async (t) => {
   await settle(hp);
   await takeTransition(hp, "Send for Review");
   const d = await H.detail(tm.api.ali!, id);
-  t.check("The item gets a Document Number TWR-MAR-01-nnnn", H.NUMBER_RE.test(d.documentNumber ?? ""), d.documentNumber);
+  // ADR 0030 (RP-1316): Send for Review gives no number; it comes at Ali's Submit (below).
+  t.check("Sent for Review it has no number yet", d.documentNumber === null, String(d.documentNumber));
   t.check('Ali holds it at once: "With Ali Sonour", no Pick up', d.heldBy?.memberName?.en === "Ali Sonour" && d.actions.pickUp === false, JSON.stringify(d.heldBy));
   const { page, text } = await H.viewItem(t, "ali", id, "ali-item");
-  t.check("The page shows the number and Ali Sonour - TMC Constructions", text.includes(d.documentNumber) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(text), text.match(/With[^\n]*\n[^\n]*/)?.[0]);
-  t.check("The Document Number is left to right (dir=ltr)", (await page.locator(`[dir="ltr"]`, { hasText: d.documentNumber }).count()) > 0);
+  t.check("The page shows No number yet, the Subject and Ali Sonour - TMC Constructions", /No number yet/.test(text) && text.includes(subject) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(text), text.match(/With[^\n]*\n[^\n]*/)?.[0]);
   let got: H.Json | undefined;
   for (let i = 0; i < 15 && !got; i++) {
     const notes = ((await tm.api.ali!.get("/notifications")).body as H.Json).notifications as H.Json[];
@@ -148,6 +148,13 @@ defineCase("SUB-04", async (t) => {
   }
   t.check("Ali's bell shows Step reached within seconds", !!got, got ? "arrived" : "none after 15 s");
   t.check("Nothing outside TMC: Yousef and Ahmed get the plain 404", (await tm.api.yousef!.get(`/work-items/${id}`)).status === 404 && (await tm.api.ahmed!.get(`/work-items/${id}`)).status === 404);
+  // The number comes at the first Submit.
+  await H.must(tm.api.ali!, id, "submit", { answers: { cover_note: "UAT SUB-04 cover note" } });
+  const numbered = (await H.detail(tm.api.ali!, id)).documentNumber as string;
+  t.check("At Ali's Submit the item gets a Document Number TWR-MAR-01-nnnn", H.NUMBER_RE.test(numbered ?? ""), String(numbered));
+  await go(page, `/work-items/${id}`);
+  await settle(page);
+  t.check("The Document Number is left to right (dir=ltr)", !!numbered && (await page.locator(`[dir="ltr"]`, { hasText: numbered }).count()) > 0);
 });
 
 defineCase("SUB-05", async (t) => {
@@ -160,7 +167,7 @@ defineCase("SUB-05", async (t) => {
   await takeTransition(ap, "Return", { note: undefined, fill: async (dlg) => { await dlg.getByRole("textbox").first().fill("Add emergency duration"); } });
   const d = await H.detail(tm.api.hafiz!, id);
   t.check("Stays in Internal Review at the Contractor Engineer Step", d.stage.key === "internal_review" && d.step.key === "contractor_engineer", `${d.stage.key}/${d.step.key}`);
-  t.check("Keeps its Document Number", d.documentNumber === num);
+  t.check("Still No number yet: a Return in Internal Review gives none (ADR 0030)", num === null && d.documentNumber === null, `${num} / ${d.documentNumber}`);
   t.check('Goes back to Hafiz ("With Hafiz Hamdan")', d.heldBy?.memberName?.en === "Hafiz Hamdan");
   t.check("It is never a Draft again", d.stage.key !== "draft");
   const ev = await H.eventsOf(tm.api.hafiz!, id);
@@ -382,8 +389,10 @@ defineCase("SUB-14", async (t) => {
   await t.shot(page, "replacement-draft");
   await H.addDatasheet(tm.api.hafiz!, newId!).catch(() => undefined);
   await H.must(tm.api.hafiz!, newId!, "send_for_review");
+  t.check("Sent for Review it has no number yet (ADR 0030)", (await H.detail(tm.api.hafiz!, newId!)).documentNumber === null);
+  await H.must(tm.api.ali!, newId!, "submit", { answers: { cover_note: "UAT SUB-14 replacement" } });
   const sent = await H.detail(tm.api.hafiz!, newId!);
-  t.check("At its first send it gets a new Document Number with no Rev suffix", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.documentNumber !== d.documentNumber, sent.documentNumber);
+  t.check("At its first Submit it gets a new Document Number with no Rev suffix", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.documentNumber !== d.documentNumber, sent.documentNumber);
 });
 
 defineCase("SUB-15", async (t) => {

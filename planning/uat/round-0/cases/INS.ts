@@ -369,10 +369,13 @@ defineCase("INS-08", async (t) => {
   const id = await draftWir(tm, `UAT INS-08 WIR ${tag}`);
   t.check("A Draft WIR has no number and DCL cannot read it", (await H.detail(hafiz!, id)).documentNumber === null && (await status(ahmed!, id)) === 404);
   await mustAct(hafiz!, id, "send_for_review");
-  const num = (await H.detail(ali!, id)).documentNumber as string;
-  t.check("Sent for review, it is numbered like a submittal (TWR-WIR-nn-nnnn) and Ali holds it", /^TWR-WIR-\d\d-\d{4}$/.test(num) && (await H.detail(ali!, id)).stage.key === "internal_review", num);
+  const sent = await H.detail(ali!, id);
+  // ADR 0030 (RP-1316): the number comes at the first Submit.
+  t.check("Sent for review, Ali reads it in Internal Review with no number yet", sent.documentNumber === null && sent.stage.key === "internal_review", `${sent.documentNumber}`);
   t.check("Still not readable by the Consultant (internal review)", (await status(ahmed!, id)) === 404);
   await mustAct(ali!, id, "submit", { answers: { cover_note: "Ready from 09:00." } });
+  const num = (await H.detail(ali!, id)).documentNumber as string;
+  t.check("At Ali's Submit it is numbered like a submittal (TWR-WIR-nn-nnnn)", /^TWR-WIR-\d\d-\d{4}$/.test(num ?? ""), `${num}`);
   const d = await H.detail(ahmed!, id);
   t.check("After the Submit it reaches the Consultant Engineer Step: Ahmed holds it or may pick it up", d.step.key === "consultant_engineer" && (d.actions.pickUp === true || d.heldBy?.memberName?.en === "Ahmed bin Said"), `${d.step.key} pickUp=${d.actions.pickUp} holder=${d.heldBy?.memberName?.en}`);
   t.check("Pending Approval for everyone who reads it, Mohammed included", d.stage.key === "pending_approval" && (await stageOf(mo!, id)) === "pending_approval");

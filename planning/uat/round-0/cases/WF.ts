@@ -568,9 +568,9 @@ defineCase("WF-16", async (t) => {
   t.check("The next Submit takes the number right after the last one", H.NUMBER_RE.test(beforeNumber) && H.NUMBER_RE.test(subNumber) && seq(subNumber) === seq(beforeNumber) + 1, `${beforeNumber} then ${subNumber}`);
   for (const reader of ["ahmed", "faisal"] as const) {
     const api = tm.api[reader]!;
-    const numbers = (await H.listItems(api, tm.projectId)).map((r) => r.documentNumber as string | null).filter((n): n is string => !!n && H.NUMBER_RE.test(n));
-    const between = numbers.filter((n) => seq(n) > seq(beforeNumber) && seq(n) < seq(subNumber));
-    t.check(`${reader === "ahmed" ? "The Consultant (Ahmed)" : "The Owner (Faisal)"} reads both numbers in a row, with no gap`, numbers.includes(beforeNumber) && numbers.includes(subNumber) && between.length === 0, `${beforeNumber}, ${subNumber}; between: ${between.join(",")}`);
+    // Each number is looked up by search: the List's first page is not enough once the Project holds many items.
+    const reads = await Promise.all([beforeNumber, subNumber].map(async (n) => (await H.listItems(api, tm.projectId, "q=" + encodeURIComponent(n))).some((r) => r.documentNumber === n)));
+    t.check(`${reader === "ahmed" ? "The Consultant (Ahmed)" : "The Owner (Faisal)"} reads both numbers in a row, with no gap`, reads.every(Boolean) && seq(subNumber) === seq(beforeNumber) + 1, `${beforeNumber} ${reads[0]}, ${subNumber} ${reads[1]}`);
     const hidden = [(await api.get(`/work-items/${second}`)).status, (await api.get(`/work-items/${third}`)).status];
     t.check(`${reader === "ahmed" ? "Ahmed" : "Faisal"} gets the plain 404 for both cancelled items`, hidden.every((s) => s === 404), hidden.join(","));
   }

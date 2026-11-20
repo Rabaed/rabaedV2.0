@@ -183,12 +183,15 @@ async function marToMohammed(s: Story, subject: string, code: "A" | "B" | "C" | 
   await H.addDatasheet(hafiz, id);
   await s.hidden("VIS-01", "Hand-over 1, a Draft in TMC", id, ["yousef", "ahmed", "faisal"]);
   await H.must(hafiz, id, "send_for_review");
-  const number = (await H.detail(ali, id)).documentNumber as string;
+  const unnumbered = (await H.detail(ali, id)).documentNumber;
   const txt = await s.open("ali", id, "ali-holds-after-send");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it", H.NUMBER_RE.test(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(txt), `${number}`);
+  // ADR 0030 (RP-1316): no number in Internal Review; it comes at Ali's Submit.
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: no Document Number yet, and Ali holds it", unnumbered === null && /No number yet/.test(txt) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(txt), `${unnumbered}`);
   await s.hidden("VIS-01", "Hand-over 2, in TMC's Internal Review", id, ["yousef", "ahmed", "faisal", "noura"]);
   await H.pickUp(ali, id);
   await H.must(ali, id, "submit", { answers: { cover_note: `UAT cover note ${subject}` }, internalNote: words.inote });
+  const number = (await H.detail(ali, id)).documentNumber as string;
+  s.ck("SUB-07", "Hand-over 3, Ali Submits: the item gets its Document Number", H.NUMBER_RE.test(number ?? ""), `${number}`);
   const ad = await H.detail(ahmed, id);
   s.ck("SUB-07", "Hand-over 3, Ali to DCL: Ahmed reads it with the Cover Note and Ali's Company only", ad.stage.name.en === "Pending Approval" && !!ad.submissionDate);
   const at = await s.open("ahmed", id, "ahmed-receives-submit");
@@ -240,17 +243,16 @@ defineCase("J1", async (t) => {
   // 2. Send for Review: Ali holds it at once.
   await takeTransition(s.page("hafiz"), "Send for Review");
   const sent = await H.detail(ali, id);
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the item has a Document Number and Ali holds it with no Pick up", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.heldBy?.memberName?.en === "Ali Sonour" && sent.actions.pickUp === false, `${sent.documentNumber}`);
-  const number = sent.documentNumber as string;
+  // ADR 0030 (RP-1316): the number comes at the first Submit, so Internal Review reads "No number yet".
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: no Document Number yet, and Ali holds it with no Pick up", sent.documentNumber === null && sent.heldBy?.memberName?.en === "Ali Sonour" && sent.actions.pickUp === false, `${sent.documentNumber}`);
   const aliSend = await s.open("ali", id, "ali-holds-after-send");
-  s.ck("SUB-04", "Ali's page reads the number and With Ali Sonour", aliSend.includes(number) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliSend));
-  s.ck("SUB-04", "The Document Number is left to right on the page", (await s.page("ali").locator(`[dir="ltr"]`, { hasText: number }).count()) > 0);
+  s.ck("SUB-04", "Ali's page reads No number yet, the Subject and With Ali Sonour", /No number yet/.test(aliSend) && aliSend.includes(subject) && /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliSend));
   await s.hidden("VIS-01", "Hand-over 2, in TMC's Internal Review", id, ["yousef", "ahmed", "faisal", "noura"], true);
 
   // 3. Ali Returns with a reason.
   await takeTransition(s.page("ali"), "Return", { fill: async (d) => void (await d.getByRole("textbox").first().fill(w.ret)) });
   const back = await H.detail(hafiz, id);
-  s.ck("SUB-05", "Hand-over 3, Ali back to Hafiz: the Return stays in Internal Review at the Contractor Engineer Step, same number, never a Draft", back.stage.key === "internal_review" && back.step.key === "contractor_engineer" && back.documentNumber === number && back.heldBy?.memberName?.en === "Hafiz Hamdan", `${back.stage.key}/${back.step.key}`);
+  s.ck("SUB-05", "Hand-over 3, Ali back to Hafiz: the Return stays in Internal Review at the Contractor Engineer Step, still no number, never a Draft", back.stage.key === "internal_review" && back.step.key === "contractor_engineer" && back.documentNumber === null && back.heldBy?.memberName?.en === "Hafiz Hamdan", `${back.stage.key}/${back.step.key}`);
   const ev = await H.eventsOf(hafiz, id);
   s.ck("SUB-05", "The reason is in TMC's history, marked internal", ev.some((e) => e.reason === w.ret && e.audience === "internal"));
   await s.open("hafiz", id, "hafiz-after-return");
@@ -259,7 +261,7 @@ defineCase("J1", async (t) => {
   // 4. Hafiz resends; Ali holds again.
   await takeTransition(s.page("hafiz"), /Send for Review/);
   const again = await H.detail(ali, id);
-  s.ck("SUB-05", "Hand-over 4, Hafiz resends: Ali holds it again, same number", again.heldBy?.memberName?.en === "Ali Sonour" && again.documentNumber === number, `${again.heldBy?.memberName?.en}`);
+  s.ck("SUB-05", "Hand-over 4, Hafiz resends: Ali holds it again, still no number", again.heldBy?.memberName?.en === "Ali Sonour" && again.documentNumber === null, `${again.heldBy?.memberName?.en}`);
   await s.open("ali", id, "ali-holds-after-resend");
 
   // 5. Ali Submits with a Cover Note and an Internal Note.
@@ -270,6 +272,10 @@ defineCase("J1", async (t) => {
     },
   });
   const tmcAfter = await H.detail(ali, id);
+  const number = tmcAfter.documentNumber as string;
+  s.ck("SUB-07", "Hand-over 5, Ali Submits: the item gets its Document Number at this Submit", H.NUMBER_RE.test(number ?? ""), `${number}`);
+  await s.open("ali", id, "ali-after-submit-numbered");
+  s.ck("SUB-07", "The Document Number is left to right on the page", (await s.page("ali").locator(`[dir="ltr"]`, { hasText: number }).count()) > 0);
   s.ck("SUB-07", "Hand-over 5, Ali to DCL: Pending Approval, TMC reads With Design Consultants LLC and no person", tmcAfter.stage.name.en === "Pending Approval" && tmcAfter.heldBy?.companyName?.en === "Design Consultants LLC" && tmcAfter.heldBy?.memberName === null, JSON.stringify(tmcAfter.heldBy));
   const ahmedText = await s.open("ahmed", id, "ahmed-receives-submit");
   s.ck("SUB-07", "Hand-over 5: Ahmed reads the Cover Note and TMC Constructions as the sender", ahmedText.includes(cover) && /TMC Constructions/.test(ahmedText));
@@ -524,15 +530,17 @@ defineCase("J4", async (t) => {
   await H.addDatasheet(hafiz, newId).catch(() => undefined);
   await H.must(hafiz, newId, "send_for_review");
   const sent = await H.detail(ali, newId);
-  s.ck("SUB-14", "Hand-over 7, Hafiz sends it: a new Document Number with no Rev suffix, Ali holds it", H.NUMBER_RE.test(sent.documentNumber ?? "") && sent.documentNumber !== number && sent.heldBy?.memberName?.en === "Ali Sonour", `${sent.documentNumber}`);
+  s.ck("SUB-14", "Hand-over 7, Hafiz sends it: Ali holds it, no number yet in Internal Review", sent.documentNumber === null && sent.heldBy?.memberName?.en === "Ali Sonour", `${sent.documentNumber}`);
   await s.open("ali", newId, "ali-holds-replacement");
   await s.hidden("VIS-40", "The replacement in TMC's Internal Review", newId, ["mohammed", "faisal", "yousef"]);
   await H.must(ali, newId, "submit", { answers: { cover_note: "Replacement for the rejected MAR." }, internalNote: w.inote });
+  const replNumber = (await H.detail(ali, newId)).documentNumber as string;
+  s.ck("SUB-14", "At its first Submit the replacement gets a new Document Number with no Rev suffix", H.NUMBER_RE.test(replNumber ?? "") && replNumber !== number, `${replNumber}`);
   const mText = await s.open("mohammed", newId, "mohammed-receives-replacement");
   s.ck("VIS-40", "Hand-over 8, Ali submits the replacement: Mohammed now reads it (positive control)", (await s.status("mohammed", newId)) === 200 && mText.includes(subject));
   await s.dclClean("VIS-40", "Hand-over 8", newId, ["mohammed"], [w.inote], mText);
   const mFrom = JSON.stringify((await mohammed.get(`/work-items/${id}/linked-from`)).body);
-  s.ck("VIS-40", "Once Submitted the rejected MAR's Linked from names the replacement by number and Subject", mFrom.includes(sent.documentNumber) && mFrom.includes(subject), mFrom.slice(0, 200));
+  s.ck("VIS-40", "Once Submitted the rejected MAR's Linked from names the replacement by number and Subject", !!replNumber && mFrom.includes(replNumber) && mFrom.includes(subject), mFrom.slice(0, 200));
   await s.sees("VIS-40", "Hand-over 8", newId, ["faisal"]);
   await s.hidden("VIS-40", "Hand-over 8", newId, ["yousef", "noura"], true);
   await s.listCheck("SUB-23", "ali", "work-items", subject, "the rejected MAR and its replacement");
@@ -565,9 +573,11 @@ defineCase("J5", async (t) => {
   await H.must(hafiz, id, "send_for_review");
   await H.pickUp(ali, id);
   const aliText = await s.open("ali", id, "ali-holds-sar");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the SAR is numbered and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /TWR-SAR-/.test(aliText));
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the SAR reads No number yet and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /No number yet/.test(aliText) && !/TWR-SAR-/.test(aliText));
   await s.hidden("VIS-01", "Hand-over 2", id, ["yousef", "ahmed", "faisal"]);
   await H.must(ali, id, "submit", { answers: { cover_note: "Supplier approval for the risers." }, internalNote: inote });
+  const sarNumber = (await H.detail(ali, id)).documentNumber;
+  s.ck("SUB-20", "At Ali's Submit the SAR is numbered TWR-SAR-nn-nnnn", /^TWR-SAR-\d\d-\d{4}$/.test(sarNumber ?? ""), `${sarNumber}`);
   const at = await s.open("ahmed", id, "ahmed-receives-sar");
   await s.dclClean("SUB-20", "Hand-over 3, Ali to DCL", id, ["ahmed"], [inote], at);
   await s.hidden("SUB-20", "Hand-over 3", id, ["yousef"], true);
@@ -640,9 +650,11 @@ defineCase("J6", async (t) => {
   await H.must(hafiz, id, "send_for_review");
   await H.pickUp(ali, id);
   const aliText = await s.open("ali", id, "ali-holds-dar");
-  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the DAR is numbered and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /TWR-DAR-/.test(aliText));
+  s.ck("SUB-04", "Hand-over 2, Hafiz to Ali: the DAR reads No number yet and Ali holds it", /With\s+(AS\s+)?Ali Sonour(\s*·\s*TMC Constructions)?/.test(aliText) && /No number yet/.test(aliText) && !/TWR-DAR-/.test(aliText));
   await s.hidden("VIS-01", "Hand-over 2", id, ["yousef", "mohammed", "noura", "faisal"]);
   await H.must(ali, id, "submit", { answers: { cover_note: "For the Owner." }, internalNote: inote });
+  const darNumber = (await H.detail(ali, id)).documentNumber;
+  s.ck("SUB-21", "At Ali's Submit the DAR is numbered TWR-DAR-nn-nnnn", /^TWR-DAR-\d\d-\d{4}$/.test(darNumber ?? ""), `${darNumber}`);
   const mText = await s.open("mohammed", id, "mohammed-receives-dar");
   await s.dclClean("SUB-21", "Hand-over 3, Ali to DCL", id, ["mohammed"], [inote], mText);
   await s.sees("VIS-02", "Hand-over 3 (Tower 2)", id, ["noura"]);

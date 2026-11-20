@@ -22,6 +22,7 @@ defineCase("VIS-39", async (t) => {
   for (let i = 1; i <= 3; i++) {
     const id = await createMar(crew, `UAT VIS-39 Hafiz ${i} ${tag}`, { location: "T2F01" });
     await sendForReview(crew, id);
+    await aliSubmit(crew, id); // ADR 0030 (RP-1316): the number comes at the first Submit.
     hNums.push(await numberOf(hafiz, id));
   }
   t.check("Hafiz's three MARs are numbered in TMC's series, one after another", hNums.every((n) => !!n) && seqOf(hNums[1]) > seqOf(hNums[0]) && seqOf(hNums[2]) > seqOf(hNums[1]) && new Set(hNums.map(seriesOf)).size === 1, hNums.join(", "));
@@ -89,9 +90,10 @@ defineCase("VIS-40", async (t) => {
     t.check(`${who}: the rejected MAR's history shows no replacement`, !/replace/i.test(hist.text), "");
   }
   await sendForReview(crew, repl);
-  const replNumber = await numberOf(hafiz, repl);
+  t.check("Sent for Review the replacement has no number yet (ADR 0030)", !(await numberOf(hafiz, repl)));
   await aliSubmit(crew, repl);
-  t.check("The replacement takes a new Document Number at its first send (no Rev)", !!replNumber && !/Rev/.test(replNumber) && replNumber !== (await numberOf(hafiz, rejected)), `${replNumber} vs ${await numberOf(hafiz, rejected)}`);
+  const replNumber = await numberOf(hafiz, repl);
+  t.check("The replacement takes a new Document Number at its first Submit (no Rev)", !!replNumber && !/Rev/.test(replNumber) && replNumber !== (await numberOf(hafiz, rejected)), `${replNumber} vs ${await numberOf(hafiz, rejected)}`);
   const mohammed = await crew.as("mohammed");
   const from = ((await mohammed.get(`/work-items/${rejected}/linked-from`)).body as any).items as any[];
   t.check("Once Submitted it appears in the rejected MAR's Linked from by number and Subject", from.some((i) => i.documentNumber === replNumber), JSON.stringify(from));

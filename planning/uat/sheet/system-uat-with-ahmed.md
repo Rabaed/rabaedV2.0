@@ -81,7 +81,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open the Draft "SUB-04 Lighting control panel – ready to send" (complete, with its Datasheet).
   2. Send for Review.
-- **Expected result:** The item gets the next number in TMC's MAR sequence (UAT01-MAR-01-0013 if no other case has sent one yet), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour", no Pick up button. Nothing outside TMC.
+- **Expected result:** It reads "No number yet" and its Subject: it gets the next number in TMC's MAR sequence only at Ali's Submit (SUB-07), shown left to right. Ali is TMC's only PM, so it is his at once: "With Ali Sonour", no Pick up button. Nothing outside TMC.
 
 ### SUB-05 A Return stays in Internal Review
 
@@ -111,7 +111,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. Projects > UAT 01 · Contractor Engineer (Hafiz) > Submittals: open UAT01-MAR-01-0001, which Mohammed closed at Code D (Rejected) with Remarks.
   2. Choose Create replacement.
-- **Expected result:** The item is closed at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to UAT01-MAR-01-0001, and gets a new Document Number with no Rev suffix at its first send.
+- **Expected result:** The item is closed at D. Hafiz is offered Create replacement (no Revision). The replacement is a new Draft with the same Subject, a Replaces Link to UAT01-MAR-01-0001, and gets a new Document Number with no Rev suffix at its first Submit.
 
 ### SUB-15 Create a Revision of a Code C item
 
@@ -430,7 +430,7 @@ Every case here is run in **UAT 01 · Contractor Engineer (Hafiz)**, as the one 
 - **Steps:**
   1. In Projects > UAT 01 · Contractor Engineer (Hafiz) open a Draft an import made.
   2. Read its history.
-- **Expected result:** It is an ordinary Draft: Hafiz edits it, sends it, and it gets its number at the first send. Its created event, internal to TMC, names the import.
+- **Expected result:** It is an ordinary Draft: Hafiz edits it and sends it; it reads No number yet in Internal Review and gets its number at its first Submit. Its created event, internal to TMC, names the import.
 
 ### IMP-08 Download the rows left out and import again
 
@@ -2156,7 +2156,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
 - **Steps:**
   1. Hafiz raises a Civil WIR, sends it; Ali Submits it.
   2. Ahmed picks it up.
-- **Expected result:** The WIR numbers like a submittal and reaches the Consultant Engineer pool. The Consultant fills the checklist on site (INS-09).
+- **Expected result:** The WIR numbers like a submittal: No number yet in TMC's Internal Review, its number at Ali's Submit. It reaches the Consultant Engineer pool. The Consultant fills the checklist on site (INS-09).
 
 ### INS-10 Raise Snags from failed items
 
@@ -2401,7 +2401,7 @@ Every case here is run in **UAT 10 · Consultant Engineer, Mechanical only (Sara
   2. Hafiz creates the replacement and keeps it Draft.
   3. The others read the rejected MAR Links, Linked from, History and search.
   4. Hafiz sends and Ali Submits it.
-- **Expected result:** While it is a Draft nobody else reads anything of it and the rejected MAR Links and Linked from do not name it; it takes a new Document Number at its first send (no Rev). Once Submitted it appears in the rejected MAR Linked from by number and Subject and lists the rejected MAR under Links.
+- **Expected result:** While it is a Draft nobody else reads anything of it and the rejected MAR Links and Linked from do not name it; it takes a new Document Number at its first Submit (no Rev). Once Submitted it appears in the rejected MAR Linked from by number and Subject and lists the rejected MAR under Links.
 
 ### VIS-41 The Handover list shows only the Authorized Person's own Company
 
@@ -2813,7 +2813,7 @@ The UAT owner runs these: they need the owner's machine, Rabaed Admin or a mailb
   2. Compare the item page and List for TMC and for DCL; look at the ids in the address bar and in links.
   3. Check the order of un-numbered Drafts.
   4. Needs AGE for the date checks.
-- **Expected result:** TMC sees Creation Date (when it got its number) and Submission Date; DCL sees only the Submission Date and no Creation Date in any form. Ids carry no time. Un-numbered Drafts come last, ordered by Subject. Answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date. The stored earlier times are covered by the automated suite.
+- **Expected result:** TMC sees Creation Date (when it first left Draft) and Submission Date; DCL sees only the Submission Date and no Creation Date in any form. Ids carry no time. Items with no number yet (Drafts and items in Internal Review) come last, ordered by Subject. Answer times and Saved read the Creation Date or later; a Revision follows its own Creation Date. The stored earlier times are covered by the automated suite.
 
 ### VIS-17 Step Age and With are counted per Company
 
