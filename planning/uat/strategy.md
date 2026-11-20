@@ -56,7 +56,7 @@ UAT runs on **lane 7**, the Main 7 stack. Lane 7 is a legacy single-digit lane, 
 
 **When Docker stops (RP-1099).** Lane 7's worktree has a `docker-compose.override.yml`, its copy of `docker-compose.uat.yml`, so Postgres, Mailpit and the file store restart on their own when Docker starts again; a new lane 7 worktree needs that copy again (`docker inspect rabaed-lane7-db-1 --format "{{.HostConfig.RestartPolicy.Name}}"` says `unless-stopped`). The apps are not containers: after a reboot, run `pnpm dev:apps` (not `pnpm demo`, which resets the database). A scheduled task, "Rabaed lane 7 health", runs `node scripts/stack-health.ts --lane 7 --alert` every 5 minutes, only while the owner is signed in, one run at a time, and shows the owner a message box while the api or the database is down. The UAT harness writes no result while either is down.
 
-**Scripted sign-in** (automated suite and API checks): `pnpm demo:session <name>` writes a Playwright storage-state file for `hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `noura` or `nasser`. The record is sealed locally on lane 7 (`RECORD_SEALING=local`), so a PDF seal shows an unverified signer by design (ADR 0023).
+**Scripted sign-in** (automated suite and API checks): `pnpm demo:session hafiz` writes a Playwright storage-state file for `hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `noura` or `nasser`. The record is sealed locally on lane 7 (`RECORD_SEALING=local`), so a PDF seal shows an unverified signer by design (ADR 0023).
 
 ### 2.2 Seed people
 
@@ -112,7 +112,7 @@ The scenario matrix in `docs/visibility.md` uses invented Companies. In UAT:
 | FX-OW | UAT Owner Co as Owner, with a PM | ADM-02, PAR-16 | VIS-02, VIS-14, VIS-24, VIS-40 |
 | FX-OR | Faisal Tower 1 only, Noura Tower 2 only | VIS-13 | VIS-13, VIS-15 |
 | FX-SB | a Project copy of the MAR Workflow with a Send Back from Consultant Engineer to the Contractor Draft Step, in two versions (After a Send Back: Comment only, and Edit the Form) | WF-09 | VIS-14, VIS-15, NOT-09 |
-| AGE | items whose Step Age is 1, 4 and 5 weeks | `pnpm uat:age --lane 7 --item <Document Number> --weeks N` (RP-922, the UAT test tool; until it is Done these Test Cases stay `blocked`) | WF-15, VIS-16, VIS-17, NOT-07 |
+| AGE | items whose Step Age is 1, 4 and 5 weeks | `pnpm uat:age --lane 7 --item TWR-MAR-CCM-0001 --weeks 4` (the item's Document Number) (RP-922, the UAT test tool; until it is Done these Test Cases stay `blocked`) | WF-15, VIS-16, VIS-17, NOT-07 |
 | JOBS | the daily digest and the weekly Step Age report run on demand | `pnpm uat:run-job digest/weekly-report --lane 7` (RP-922; `blocked` until it is Done) | NOT-06, NOT-07 |
 
 ### 2.6 Browsers, widths, languages
@@ -162,7 +162,7 @@ The ui-ux-tester pass is recorded in Part UX (section 5.13): one Test Case per b
 
 Stable journeys and visibility checks are automated with Playwright against the lane 7 demo, so each round re-runs them with a video.
 
-1. A **test-automator agent** designs the suite from this plan: one test per scenario marked `Automate` or `Both`, signing in with `pnpm demo:session <name>` storage states, one browser context per person, page objects for the List, Kanban, item page, Settings and Rabaed Admin, a helper that asserts the plain 404 page, and a helper that reads Mailpit.
+1. A **test-automator agent** designs the suite from this plan: one test per scenario marked `Automate` or `Both`, signing in with `pnpm demo:session hafiz` storage states, one browser context per person, page objects for the List, Kanban, item page, Settings and Rabaed Admin, a helper that asserts the plain 404 page, and a helper that reads Mailpit.
 2. Its design is filed as **ready-for-agent Tasks under epic RP-403** (UAT browser tests with video), one Task per Part, each naming the scenario ids it covers and the fixtures it needs. Fixtures that are API calls (narrowing, inviting, publishing a Workflow) are made by setup code, not by clicking.
 3. A lane builds them through `/mattpocock-skills:implement` (rule 15), never by hand. A Task is Done when its tests pass on a freshly seeded lane and the video shows the run.
 4. A test never reads a password: it takes a session from `pnpm demo:session`. A test never depends on another test's data; each creates its own `UAT <id>` items.
@@ -481,7 +481,7 @@ Rabaed Admin is at the address in section 2.1; sign-in is a password plus a code
 
 ### 5.13 UI and UX against the design (Part UX, label `uat-part-ux`)
 
-One Test Case per built page or flow, run with the ui-ux-tester agent (report only, it changes no file) and a person. Reference order: the owner anatomy pages in `D:\Artifacts` (render them, never commit them), then the kit in `design/reference/claude-design/`, then the design prompt; GLOSSARY.md and visibility.md beat all three. Rule-forced deviations are correct (section 3.2). Result: Done when the page matches; **In Review** when it matches but has UX recommendations for the owner; **Failed** when it has UI issues (each a Bug, section 10.4). Shoot with `pnpm screens <route> --as <person>` at 1366 and 1920, EN and AR, plus 375 where the scenario says.
+One Test Case per built page or flow, run with the ui-ux-tester agent (report only, it changes no file) and a person. Reference order: the owner anatomy pages in `D:\Artifacts` (render them, never commit them), then the kit in `design/reference/claude-design/`, then the design prompt; GLOSSARY.md and visibility.md beat all three. Rule-forced deviations are correct (section 3.2). Result: Done when the page matches; **In Review** when it matches but has UX recommendations for the owner; **Failed** when it has UI issues (each a Bug, section 10.4). Shoot with `pnpm screens /work-items --as hafiz` at 1366 and 1920, EN and AR, plus 375 where the scenario says.
 
 | ID | Title | Who | Steps | Expected | Pri | Mode | Waits | Covers |
 |---|---|---|---|---|---|---|---|---|
@@ -967,7 +967,7 @@ Rounds 1 to 5 run in the order the epics finish, not the order above. Scenarios 
 - **One Test Case per scenario**, summary "<id> <title>" (example: "VIS-01 A new Draft is TMC's alone"). Labels: `uat`, the Part label (`uat-part-sub`, `uat-part-wf`, `uat-part-frm`, `uat-part-par`, `uat-part-pkg`, `uat-part-sig`, `uat-part-sng`, `uat-part-ins`, `uat-part-imp`, `uat-part-not`, `uat-part-i18n`, `uat-part-adm`, `uat-part-vis`), and `blocked` only while blocked. Jira priority from the scenario (Highest, High, Medium, Low).
 - **Description**, as in the earlier round:
 
-```
+```markdown
 **Part X: <Part name>** · Scenario `<id>` · Covers: Visibility | Journey | Regression | Design | Arabic
 **Who:** <people>
 ## Steps
