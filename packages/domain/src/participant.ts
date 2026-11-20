@@ -3,6 +3,7 @@ import { bilingualText, crNumber, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { withHandovers } from "./handover.ts";
 import { baseRoles } from "./project.ts";
+import { revisionBase } from "./revision-base.ts";
 import { dimensionValues, visibility } from "./visibility.ts";
 
 /** A Participant's Project Role: its base role and its name on the Project. */
@@ -77,7 +78,18 @@ export const projectVacancies = z.object({
   vacancies: z.array(
     z.object({
       id: z.uuid(),
-      item: z.object({ id: z.uuid(), documentNumber: z.string().nullable(), title: z.string() }).nullable(),
+      item: z
+        .object({
+          id: z.uuid(),
+          documentNumber: z.string().nullable(),
+          /**
+           * A Revision not yet Submitted, as every screen names it (RP-1314). The api never sets it today: such a Revision
+           * is held only inside its raiser, whose withdrawal cancels or discards it, so it is never a Vacancy.
+           */
+          revisionBase: revisionBase.optional(),
+          title: z.string(),
+        })
+        .nullable(),
       projectRole,
       step: z.object({ name: bilingualText }),
       vacantSince: z.iso.datetime(),

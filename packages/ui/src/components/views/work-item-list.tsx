@@ -143,6 +143,8 @@ export type WorkItemListLabels = {
   revisionNoNumber: (revision: string) => string;
   /** After a Revision Draft's base number and its revision (RP-1300): "Draft", as in "UAT01-MAR-01-0005 Rev 1 · Draft". */
   revisionDraft: string;
+  /** The same once it left Draft, before its first Submit (RP-1314): "UAT01-MAR-01-0005 Rev 1 · Internal Review". */
+  revisionInternalReview: string;
   empty: string;
   search: string;
   /** The search box's placeholder, e.g. "Search this list". */

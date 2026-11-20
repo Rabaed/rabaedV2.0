@@ -33,6 +33,7 @@ import {
   type TransitionRules,
   type Validation,
   type BilingualText,
+  type RevisionBaseState,
   type CreateWorkItemRequest,
   type FieldError,
   type FieldStamps,
@@ -71,7 +72,7 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 import { itemChecklistCopies, projectChecklistTemplates } from "../projects/checklist-templates.ts";
 import { arrivalRecommendedCode, heldReplyChecklists, incompleteReplyChecklists, transitionChecklists } from "./reply-checklists.ts";
 import { projectRequiredKeys } from "../projects/required-fields.ts";
-import { itemRaisedFrom, neverLeftDraft } from "./query.ts";
+import { itemRaisedFrom, neverLeftDraft, revisionBaseStateOf } from "./query.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -574,6 +575,8 @@ type SummaryRow = {
   step_entered_at: Date | null;
   /** A Revision Draft's chain base number (RP-1300); null for every other item. */
   base_number: string | null;
+  /** With `base_number`: where it stands until its own first Submit (RP-1314). */
+  base_state: RevisionBaseState | null;
 };
 
 /** The visible Work Items matching `where`, as list rows. */
@@ -588,7 +591,9 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       -- A Revision not yet numbered reads its chain's base number from the start (RP-1300): the original's,
       -- through app.revision_chain, which gives only Revisions the reader sees (V1).
       case when w.document_number is null and w.revision_no > 0
-        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number
+        then (select c.document_number from app.revision_chain(w.id) c where c.revision_no = 0) end as base_number,
+      -- Where it stands until then (RP-1314): Draft while it never left Draft, else Internal Review.
+      ${revisionBaseStateOf(sql.ref("w.document_number"), sql`app.work_item_creation_date(w.id)`)} as base_state
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
@@ -614,7 +619,7 @@ function toSummary(r: SummaryRow, now: Date): WorkItemSummary {
     type: { code: r.type_code, name: r.type_name },
     title: r.title,
     documentNumber: r.document_number,
-    ...(r.base_number ? { baseNumber: r.base_number } : {}),
+    ...(r.base_number ? { baseNumber: r.base_number, baseState: r.base_state! } : {}),
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,

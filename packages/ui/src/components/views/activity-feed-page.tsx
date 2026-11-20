@@ -6,7 +6,7 @@ import { cn } from "../../lib/cn.ts";
 import { moduleIcons, moduleName } from "../../lib/module-name.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { toneClasses } from "../data/tone.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { ItemNumber, type RevisionStateLabels } from "../doc-no/doc-no.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
@@ -15,7 +15,9 @@ import { codeLookColour } from "../status/code-badge.tsx";
 import { whatHappened, type ActivityEventLabels, type ActivityFeedFilters } from "./activity-feed-panel.tsx";
 
 /** The page's words, from the app's messages. */
-export type ActivityFeedPageLabels = ActivityEventLabels & {
+export type ActivityFeedPageLabels = ActivityEventLabels &
+  /** A Revision not yet Submitted reads "<base> Rev 1 · Internal Review" (RP-1314). */
+  RevisionStateLabels & {
   title: string;
   /** The line under the heading, the Project's name in it. */
   description: string;
@@ -241,11 +243,14 @@ function Entry({
           <b className="font-bold text-text">{who}</b>
           {/* Isolated, so a label ending in a Latin Code ("… · C") keeps its place in Arabic. */}
           {e.byMe && person && <b className="font-bold text-text"> {labels.you}</b>} <bdi>{whatHappened(e, locale, labels)}</bdi>{" "}
-          {e.workItem.documentNumber ? (
-            <DocNo value={e.workItem.documentNumber} className="font-bold text-text" />
-          ) : (
-            <span className="text-muted">({labels.noNumber})</span>
-          )}
+          <ItemNumber
+            documentNumber={e.workItem.documentNumber}
+            revisionBase={e.workItem.revisionBase}
+            labels={labels}
+            locale={locale}
+            className="font-bold text-text"
+            noNumber={<span className="text-muted">({labels.noNumber})</span>}
+          />
           <span> · {e.workItem.title}</span>
         </p>
         <div className="flex flex-wrap items-center gap-1.5">

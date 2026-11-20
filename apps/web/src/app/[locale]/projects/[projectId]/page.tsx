@@ -210,6 +210,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               waitingFor: (role) => tViews("list.waitingFor", { role }),
               hiddenItem: (step, projectName) => tVacancies("hiddenItem", { step, project: projectName }),
               noNumber: tViews("list.noNumber"),
+              revisionDraft: tViews("list.revisionDraft"),
+              revisionInternalReview: tViews("list.revisionInternalReview"),
               empty: tVacancies("empty"),
             }}
           />

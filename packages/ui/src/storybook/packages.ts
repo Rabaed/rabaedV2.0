@@ -38,6 +38,7 @@ const table = (locale: Locale) => {
     noNumber: l.noNumber,
     revisionNoNumber: l.revisionNoNumber,
     revisionDraft: l.revisionDraft,
+    revisionInternalReview: l.revisionInternalReview,
     notPickedUp: l.notPickedUp,
     waitingFor: l.waitingFor,
     cancelled: l.cancelled,

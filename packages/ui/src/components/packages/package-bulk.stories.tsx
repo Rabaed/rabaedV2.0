@@ -1,7 +1,9 @@
 import { defaultOutcomeSets, formSchema, type BulkOffer, type PackageDetail, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
+import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { storyLocale } from "../../storybook/locale.ts";
+import { revisionDraftText } from "../doc-no/doc-no.tsx";
 import { overlay } from "../../storybook/overlay.ts";
 import { actionFormLabels } from "../../storybook/form-engine.ts";
 import { packageBulkLabels } from "../../storybook/package-bulk.ts";
@@ -331,6 +333,43 @@ export const RefusedByRule: Story = {
   play: async (context) => {
     const alert = await refuse(context);
     await expect(alert).toHaveTextContent(storyLocale(context) === "en" ? "Enter the cost impact before you submit." : "أدخل الأثر المالي قبل التقديم.");
+  },
+};
+
+// Two of the Package's submittals are Revisions not yet Submitted (RP-1314): Sanitary ware's Rev 1 in Internal Review,
+// Mirror lights' Rev 2 still a Draft. Each has no number of its own yet, only its chain's base number.
+const reviewing = { ...itemOf({ ...ware, documentNumber: null, baseNumber: "TWR-MAR-AFC-0004", baseState: "internal_review", revisionNo: 1 }, codes) };
+const drafting = { ...itemOf({ ...lights, documentNumber: null, baseNumber: "TWR-MAR-AFC-0002", baseState: "draft", revisionNo: 2 }, codes) };
+const revisionsPkg: PackageDetail = { ...pkg, items: pkg.items.map((i) => (i.id === ware.id ? reviewing : i.id === lights.id ? drafting : i)) };
+
+/**
+ * The pop-up names a Revision not yet Submitted by its chain's base number, its revision and where it stands, as its
+ * row does (RP-1314, owner's decision 2026-11-20): "· Internal Review" or "· Draft". Refused by it, the alert names it
+ * the same way, though the refusal carries only its (missing) number. Left open for the screenshot.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  parameters: overlay,
+  args: {
+    pkg: revisionsPkg,
+    onTake: fn(async (): Promise<BulkTakeResult> => ({
+      ok: false,
+      reason: "bulk_refused",
+      stoppedBy: { id: ware.id, documentNumber: null, title: ware.title, reason: "no_signature" },
+    })),
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const l = labelsOf(context);
+    const reviewText = revisionDraftText("TWR-MAR-AFC-0004", 1, l.revisionInternalReview, locale);
+    const dialog = within(await openCodeA(context));
+    const applies = within(dialog.getByRole("list", { name: l.appliesTo })).getAllByRole("listitem");
+    await expect(applies.find((li) => li.textContent?.includes(ware.title))).toHaveTextContent(reviewText);
+    await expect(applies.find((li) => li.textContent?.includes(lights.title))).toHaveTextContent(revisionDraftText("TWR-MAR-AFC-0002", 2, l.revisionDraft, locale));
+    await userEvent.type(await dialog.findByRole("textbox", { name: /Remarks|الملاحظات/ }), "Approved.");
+    await userEvent.click(dialog.getByRole("button", { name: codes[0]!.label[locale] }));
+    const alert = await dialog.findByRole("alert");
+    await expect(within(alert).getByRole("link", { name: new RegExp(ware.title) })).toHaveTextContent(reviewText);
+    await expectLaidOutLeftToRight(within(alert).getByText("TWR-MAR-AFC-0004"));
   },
 };
 

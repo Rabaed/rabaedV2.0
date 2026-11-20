@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
+import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
-import { storyText } from "../../storybook/locale.ts";
+import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { RevisionDraftNumber, revisionDraftText } from "../doc-no/doc-no.tsx";
 import { NotificationCard, NotificationEmpty, NotificationGroup } from "./notification-list.tsx";
 import { NotificationMenu } from "./notification-menu.tsx";
 import { NotificationRow, type NotificationRowProps } from "./notification-row.tsx";
@@ -173,6 +175,55 @@ export const NoNumberYet: Story = {
     await expect(within(context.canvasElement).getByRole("link")).toHaveTextContent(storyText(context, b("No number yet", "بلا رقم بعد")));
   },
 };
+
+const states = { revisionDraft: b("Draft", "مسودة"), revisionInternalReview: b("Internal Review", "المراجعة الداخلية") };
+
+/**
+ * A new Revision not yet Submitted (RP-1314, owner's decision 2026-11-20): its chain's base number, its revision and
+ * where it stands, "· Internal Review" (a `revision_created`) or "· Draft", as its page reads, in place of "No number
+ * yet". The base number reads left to right in Arabic too.
+ */
+export const RevisionsBeforeSubmit: Story = {
+  args: {} as NotificationRowProps,
+  render: (_args, context) => {
+    const locale = storyLocale(context);
+    const row = (n: number, base: string, revision: number, state: keyof typeof states, what: Text, subject: Text) => (
+      <NotificationRow
+        href={`#${n}`}
+        icon="git-branch"
+        tone="violet"
+        layout="page"
+        what={storyText(context, what)}
+        documentNumber={null}
+        noNumber={storyText(context, b("No number yet", "بلا رقم بعد"))}
+        revisionNumber={<RevisionDraftNumber base={base} revision={revision} state={states[state][locale]} locale={locale} />}
+        subject={storyText(context, subject)}
+        project={storyText(context, copy.tower)}
+        time={storyText(context, b("5 min", "5 د"))}
+        dateTime="2026-11-06T08:55:00.000Z"
+        unread
+        unreadLabel={storyText(context, copy.unread)}
+      />
+    );
+    return (
+      <NotificationCard>
+        {row(5, "TWR-TMC-EL-MAR-0005", 1, "revisionInternalReview", b("New Revision 1", "مراجعة جديدة 1"), b("Earthing rods", "قضبان التأريض"))}
+        {row(6, "TWR-TMC-EL-MAR-0002", 2, "revisionDraft", b("Reached you at Draft", "وصل إليك في المسودة"), b("Switchgear", "لوحات التوزيع"))}
+      </NotificationCard>
+    );
+  },
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const links = within(context.canvasElement).getAllByRole("link");
+    await expect(links[0]).toHaveTextContent(revisionDraftText("TWR-TMC-EL-MAR-0005", 1, states.revisionInternalReview[locale], locale));
+    await expect(links[1]).toHaveTextContent(revisionDraftText("TWR-TMC-EL-MAR-0002", 2, states.revisionDraft[locale], locale));
+    await expect(links[0]).not.toHaveTextContent(storyText(context, b("No number yet", "بلا رقم بعد")));
+    await expectLaidOutLeftToRight(within(links[0]!).getByText("TWR-TMC-EL-MAR-0005"));
+  },
+};
+
+/** The same on a phone: the line keeps the base number whole. */
+export const RevisionsBeforeSubmitPhone: Story = { ...RevisionsBeforeSubmit, parameters: phone };
 
 /** Nothing to show: its own words, never a blank page. */
 export const Empty: Story = {

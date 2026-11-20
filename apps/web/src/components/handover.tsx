@@ -4,6 +4,7 @@ import { formatNumber, type BilingualText, type HandoverPick, type HandoverStep,
 import { HandoverDialog } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 
 /** What the change does: its confirm button says so. */
 export type HandoverAction = "deactivate" | "remove" | "save";
@@ -48,6 +49,7 @@ type RefusalBody = {
  */
 export function useHandover() {
   const t = useTranslations("handover");
+  const revisionStates = useRevisionStateLabels();
   const locale = useLocale() as Locale;
   const [asking, setAsking] = useState<{ request: HandoverRequest; steps: HandoverStep[] } | null>(null);
   const [pending, setPending] = useState(false);
@@ -114,6 +116,8 @@ export function useHandover() {
         title: one ? t("title", { name: one }) : t("titleSeveral"),
         description: one ? t(`description.${asking.request.action}`, { name: one }) : t("descriptionSeveral"),
         noNumber: t("noNumber"),
+        // A Revision not yet Submitted: "<base> Rev 1 · Internal Review", as its page reads (RP-1314).
+        ...revisionStates,
         hiddenItem: (step, project) => t("hiddenItem", { step, project }),
         ...(one ? {} : { heldBy: (name: string) => t("heldBy", { name }) }),
         newHolder: t("newHolder"),

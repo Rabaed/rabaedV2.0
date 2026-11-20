@@ -5,6 +5,7 @@ import { ActivityFeedPage, ActivityFeedPanel, type ActivityFeedFilters, type Act
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 
 /**
  * The feed's entries, live: the first page comes from the server; filters and older pages are read in
@@ -55,6 +56,8 @@ function useActivityFeed(projectId: string, initial: ActivityFeed) {
 function useEventLabels() {
   const t = useTranslations("workItemViews.activityFeed");
   return {
+    // A Revision not yet Submitted: "<base> Rev 1 · Internal Review", as its page reads (RP-1314).
+    ...useRevisionStateLabels(),
     pickedUp: t("pickedUp"),
     returnedToPool: t("returnedToPool"),
     assigned: t("assigned"),

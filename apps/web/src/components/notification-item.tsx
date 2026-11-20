@@ -1,9 +1,10 @@
 "use client";
 
 import { formatDate, type Locale, type Notification } from "@rabaed/domain";
-import { NotificationRow } from "@rabaed/ui";
+import { NotificationRow, RevisionDraftNumber, revisionStateWord } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 import { notificationHref, notificationLook, timeLabel, whatHappened } from "@/lib/notifications";
 
 /** Marks notification `id` read; the request finishes even as the page navigates away. */
@@ -32,6 +33,9 @@ export function NotificationItem({ n, now, layout, onOpen }: { n: Notification; 
   const [number, subject] =
     n.kind === "package_submitted" ? [n.package.number, n.package.name[locale]] : n.kind === "participant_withdrawn" ? [null, ""] : [n.documentNumber, n.title];
   const full = formatDate(new Date(n.createdAt), locale, { dateStyle: "medium", timeStyle: "short" });
+  // A Revision not yet Submitted reads its base number and where it stands, as its page does (RP-1314).
+  const revisionStates = useRevisionStateLabels();
+  const base = "revisionBase" in n ? n.revisionBase : undefined;
   return (
     <NotificationRow
       href={notificationHref(n)}
@@ -42,6 +46,9 @@ export function NotificationItem({ n, now, layout, onOpen }: { n: Notification; 
       documentNumber={number}
       // An item not yet Submitted has no number (ADR 0030): it reads "No number yet", as everywhere else.
       noNumber={n.kind === "package_submitted" || n.kind === "participant_withdrawn" ? undefined : t("noNumber")}
+      revisionNumber={
+        base && <RevisionDraftNumber base={base.baseNumber} revision={base.revisionNo} state={revisionStateWord(revisionStates, base.state)} locale={locale} />
+      }
       subject={subject}
       project={n.project.name[locale]}
       watching={n.kind === "watched_event" ? t("watching") : undefined}

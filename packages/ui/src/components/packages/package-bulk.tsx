@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, type ComponentType, type ElementType, type
 import { cn } from "../../lib/cn.ts";
 import { sayRefusal } from "../../lib/refusal.ts";
 import { Button } from "../button/button.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
+import { ItemNumber, rowRevisionBase, type RevisionStateLabels } from "../doc-no/doc-no.tsx";
 import { ActionForm, type ActionFormLabels } from "../form-engine/action-form.tsx";
 import { Field } from "../form/field.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -64,7 +64,8 @@ export type BulkTakeRequest = {
   idempotencyKey: string;
 };
 
-export type PackageBulkLabels = {
+/** `RevisionStateLabels`: a Revision not yet Submitted reads "<base> Rev 1 · Internal Review" (RP-1314). */
+export type PackageBulkLabels = RevisionStateLabels & {
   /** The bar's name. */
   bar: string;
   /** In the bar while nothing is selected (RP-1143): "n submittals are waiting for you"; `count` chooses the plural. */
@@ -337,7 +338,14 @@ function BulkTransitionDialog({
           <ul aria-label={labels.appliesTo} className="flex max-h-40 flex-col overflow-y-auto rounded-md border border-border">
             {items.map((i) => (
               <li key={i.id} className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm not-first:border-t not-first:border-border-subtle">
-                {i.documentNumber ? <DocNo value={i.documentNumber} className="font-ui font-normal text-muted" /> : <span className="shrink-0 text-muted">{labels.noNumber}</span>}
+                <ItemNumber
+                  documentNumber={i.documentNumber}
+                  revisionBase={rowRevisionBase(i)}
+                  labels={labels}
+                  locale={locale}
+                  className="font-ui font-normal text-muted"
+                  noNumber={<span className="shrink-0 text-muted">{labels.noNumber}</span>}
+                />
                 <span dir="auto" className="truncate font-medium text-text">
                   {i.title}
                 </span>
@@ -383,7 +391,15 @@ function BulkTransitionDialog({
               <p className="text-sm text-text">{labels.stoppedBy}</p>
               <div className="flex flex-col rounded-sm bg-surface px-3 py-2 text-sm">
                 <Link href={itemHref(stopped.id)} className={cn("flex min-w-0 items-center gap-2 font-semibold text-text hover:text-brand-fg", focusRing)}>
-                  {stopped.documentNumber ? <DocNo value={stopped.documentNumber} className="font-ui font-normal text-muted" /> : <span className="text-muted">{labels.noNumber}</span>}
+                  {/* The refusal names it by its number only; its label is the dialog's own row's (RP-1314). */}
+                  <ItemNumber
+                    documentNumber={stopped.documentNumber}
+                    revisionBase={rowRevisionBase(items.find((i) => i.id === stopped.id))}
+                    labels={labels}
+                    locale={locale}
+                    className="font-ui font-normal text-muted"
+                    noNumber={<span className="text-muted">{labels.noNumber}</span>}
+                  />
                   <span dir="auto" className="truncate">
                     {stopped.title}
                   </span>
