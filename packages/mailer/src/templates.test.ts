@@ -317,9 +317,26 @@ describe("notification emails", () => {
     },
   );
 
-  it("leaves the Document Number out while the item has none", () => {
-    const email = renderEmail("notification-step-reached", "en", { ...examples["notification-step-reached"], documentNumber: null });
-    expect(email.subject).toBe("Cable trays <Level 2> · Reached you at Contractor review");
+  it.each(notificationTemplates.filter((t) => t !== "notification-package-submitted").flatMap((template) => locales.map((locale) => [template, locale] as const)))(
+    "%s in %s, before the item's first Submit (ADR 0030, RP-1319): the subject and body read \"No number yet\" and the Subject, with no blank and no other number",
+    (template, locale) => {
+      const noNumber = locale === "en" ? "No number yet" : "بلا رقم بعد";
+      const { subject, text, html } = renderEmail(template, locale, { ...examples[template], documentNumber: null } as never);
+      const parts = subject.split(" · ");
+      expect(parts).toHaveLength(3);
+      expect(parts[0]).toBe(noNumber);
+      expect(parts[1]).toBe("Cable trays <Level 2>");
+      expect(parts.every((p) => p.trim() !== "")).toBe(true);
+      expect(text).toContain(`${noNumber} · Cable trays <Level 2>`);
+      expect(html).toContain(`${noNumber} · Cable trays &lt;Level 2&gt;`);
+      for (const part of [subject, text, html]) expect(part).not.toContain(DOC);
+    },
+  );
+
+  it("before the first Submit, a Step reached reads \"No number yet\" in English and Arabic", () => {
+    const values = { ...examples["notification-step-reached"], documentNumber: null };
+    expect(renderEmail("notification-step-reached", "en", values).subject).toBe("No number yet · Cable trays <Level 2> · Reached you at Contractor review");
+    expect(renderEmail("notification-step-reached", "ar", values).subject).toBe("بلا رقم بعد · Cable trays <Level 2> · وصلك في مراجعة المقاول");
   });
 
   it("a Step reached: names the recipient's own Step", () => {
@@ -430,6 +447,16 @@ describe("the daily digest (RP-358)", () => {
     }
   });
 
+  it.each(locales)("in %s: an item with no number yet (ADR 0030, RP-1319) reads \"No number yet\" and its Subject", (locale) => {
+    const { text, html } = renderEmail("daily-digest", locale, digest);
+    const noNumber = locale === "en" ? "No number yet" : "بلا رقم بعد";
+    expect(text).toContain(`${noNumber} · Pumps (Revision in Draft)`);
+    expect(html).toContain(`${noNumber} · Pumps (Revision in Draft)`);
+    // Items with a number keep it, and no line is left with a blank before the Subject.
+    expect(text).not.toMatch(/(^|\n) · /);
+    expect(text).not.toContain(`${noNumber} · Cable trays`);
+  });
+
   it("names another Company only by name, with the signer of a final Code (V14)", () => {
     for (const locale of locales) {
       const { text } = renderEmail("daily-digest", locale, digest);
@@ -527,6 +554,15 @@ describe("weekly Step Age report", () => {
       expect(text).toContain(locale === "en" ? "Pending approval" : "بانتظار الاعتماد");
     }
     expect(en().text).toContain("With Khatib Consultants");
+  });
+
+  it("shows an item in Internal Review with no number yet (ADR 0030, RP-1319) as \"No number yet\" and its Subject, in English and Arabic", () => {
+    const internal = { ...report, items: [{ ...report.items[1]!, documentNumber: null }] };
+    const enText = renderEmail("step-age-report", "en", internal).text;
+    expect(enText).toContain("No number yet · Pumps · Internal review · With Contractor review");
+    expect(enText).not.toContain("TWR-MAR-01-0002");
+    const arText = renderEmail("step-age-report", "ar", internal).text;
+    expect(arText).toContain("بلا رقم بعد · Pumps · المراجعة الداخلية · لدى مراجعة المقاول");
   });
 
   it("links to the List of the report's items, and of those 4 weeks or more", () => {

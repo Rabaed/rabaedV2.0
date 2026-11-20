@@ -90,7 +90,9 @@ export function recordHtml(
   const when = (iso: string) => dateText(iso, primary, true);
 
   // A Revision's stored number already ends in " Rev n" (workflow-engine.md, Revisions), so it prints as it is (RP-1059).
-  const number = data.documentNumber ?? "—";
+  // Before its first Submit an item has none (ADR 0030): "No number yet" prints in its place, in the record's languages.
+  const number = data.documentNumber;
+  const noNumber = locales.map((l) => WORDS.noNumber[l]);
   // One line on every page: "Issued electronically through Rabaed · code · page X of Y", with the Arabic
   // beside it in a bilingual record. The code is printed once; each part is bidi-isolated, so the order holds.
   const LRI = "\u2066";
@@ -245,7 +247,8 @@ export function recordHtml(
     : copy?.stage
       ? texts(copy.stage).map((n) => `${FSI}${n}${PDI}`).join(" / ")
       : "";
-  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${LRI}${number}${PDI}  ·  ${outcomeBadge}`);
+  const numberPart = number !== null ? `${LRI}${number}${PDI}` : noNumber.map((n) => `${FSI}${n}${PDI}`).join(" / ");
+  const headerContent = cssString(`${LRI}${data.type.code}${PDI}  ·  ${FSI}${data.subject}${PDI}  ·  ${numberPart}  ·  ${outcomeBadge}`);
 
   const image = (key: string | null | undefined, cls: string) => {
     const src = key ? images.get(key) : undefined;
@@ -380,7 +383,7 @@ export function recordHtml(
 <html lang="${language === "en" ? "en" : "ar"}" dir="${dir}">
 <head>
 <meta charset="utf-8">
-<title>${html(`${data.type.code} ${number}`)}</title>
+<title>${html(`${data.type.code} ${number ?? noNumber.join(" / ")}`)}</title>
 <style>
 ${fonts.css}
 @page {
@@ -506,7 +509,7 @@ ${copy ? `<div class="watermark">${txt(copy.watermark)}</div>` : ""}
   <h1>${txt(data.type.name)} <span class="badge">${ltr(data.type.code)}</span></h1>
   <dl>
     <dt>${heading("subject")}</dt><dd><bdi>${html(data.subject)}</bdi></dd>
-    <dt>${heading("number")}</dt><dd>${ltr(number)}</dd>
+    <dt>${heading("number")}</dt><dd>${number !== null ? ltr(number) : paired((l) => WORDS.noNumber[l])}</dd>
   </dl>
   ${revisionLine}
 </section>

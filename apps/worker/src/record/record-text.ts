@@ -39,6 +39,8 @@ export const WORDS = {
   project: { ar: "المشروع", en: "Project" },
   subject: { ar: "الموضوع", en: "Subject" },
   number: { ar: "رقم المستند", en: "Document Number" },
+  /** In the number's place before an item's first Submit (ADR 0030, RP-1319), as the web says it. */
+  noNumber: { ar: "بلا رقم بعد", en: "No number yet" },
   participants: { ar: "المشاركون", en: "Participants" },
   classification: { ar: "التصنيف", en: "Classification" },
   trade: { ar: "التخصص", en: "Trade" },
