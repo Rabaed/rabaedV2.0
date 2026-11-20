@@ -281,7 +281,7 @@ defineCase("I18N-04", async (t) => {
   await main.getByRole("button", { name: "إرسال للمراجعة" }).first().click();
   await page.waitForTimeout(1500);
   // The pop-up, not the Submittal Panel the item opens in (RP-1237).
-  const dlg = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
+  const dlg = page.locator('[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]');
   const open = (await dlg.count()) > 0;
   if (open) {
     const fill = await dlg.innerText();

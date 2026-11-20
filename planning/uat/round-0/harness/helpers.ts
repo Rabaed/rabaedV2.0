@@ -168,7 +168,7 @@ export async function itemSubject(page: Page): Promise<string> {
 export async function takeTransition(page: Page, name: string | RegExp, options: { note?: string; fill?: (dialog: Locator) => Promise<void> } = {}): Promise<void> {
   await page.getByRole("main").getByRole("button", { name, exact: typeof name === "string" }).first().click();
   // The pop-up, not the Submittal Panel (RP-1237) the item opens in: both are dialogs.
-  const dialog = page.locator('[role="dialog"]:not([data-submittal-panel]), dialog[open]');
+  const dialog = page.locator('[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]');
   await dialog.waitFor({ state: "visible" });
   if (options.note) await dialog.getByRole("textbox").first().fill(options.note);
   if (options.fill) await options.fill(dialog);

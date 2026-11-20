@@ -24,7 +24,7 @@ import {
 } from "../harness/helpers-not.ts";
 
 // A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
 
 // Part SIG: signing, the Documental Record, Working Copy, Verification page, Signature and Stamp.
 // Built on main now: RP-85 (Signature), RP-617 (logo and Stamp), RP-151 (record page 1), RP-650

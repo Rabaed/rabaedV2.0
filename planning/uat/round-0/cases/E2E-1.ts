@@ -6,7 +6,7 @@ import { act, moduleItems } from "../harness/helpers-sng.ts";
 import { pdfPages, recordPdf, until } from "../harness/helpers-not.ts";
 
 // A pop-up over the Submittal Panel (RP-1237): the Action Form (a <dialog>) or a sheet, never the panel, which is a dialog too.
-const POP_UP = '[role="dialog"]:not([data-submittal-panel]), dialog[open]';
+const POP_UP = '[role="dialog"]:not([data-submittal-panel]):not([data-nextjs-dialog]), dialog[open]';
 
 /** Issues a Review Code in the Submittal Panel (RP-1237): the codes are in the "Issue Review Code" menu. */
 async function chooseCode(page: Page, name: RegExp): Promise<void> {
