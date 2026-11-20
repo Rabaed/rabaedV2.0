@@ -54,8 +54,8 @@ One session named `Orchestrator`, in its own worktree (`EnterWorktree` named `or
 4. **Takes Dependabot PRs** with no question to the owner (owner's standing yes, RP-1325). `review-post.ts` needs a branch named after a ticket, which a Dependabot branch never is, so each bump goes through a replacement PR:
    - file a Task under RP-567;
    - check that each pinned SHA is the release tag's commit (dereference an annotated tag);
-   - `git switch -c RP-nnn-<slug>` at Dependabot's head, unchanged, push, and open the PR with `<!-- implement: RP-nnn -->` in its body;
-   - claim the changed workflow files on RP-603, run `pnpm verify --pr <n>`, post the review with `node scripts/review-post.ts`, and queue once CI adds `reviewed`.
+   - branch at Dependabot's head, unchanged (`git switch -c RP-1324-pnpm-action-setup-6-1-1` for #743), push, and open the PR with `<!-- implement: RP-nnn -->` in its body;
+   - claim the changed workflow files on RP-603, run `pnpm verify --pr` with the new PR's number (`pnpm verify --pr 769`), post the review with `node scripts/review-post.ts`, and queue once CI adds `reviewed`.
    Dependabot's own PR shows as merged once its commit is on main (#743 through #769, RP-1324). A bump whose release notes change the action's inputs, or that needs edits beyond the pins, goes to the owner first.
 5. **Housekeeping**, from its own worktree (the prune never removes the stack of the folder it runs in): `pnpm worktrees:prune`, `pnpm lanes:prune`, archiving finished sessions, checking that the lanes' ports and stacks are free.
 
