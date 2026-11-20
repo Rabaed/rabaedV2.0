@@ -4,14 +4,15 @@
 // The item, its List row and Kanban card carry `baseState` beside `baseNumber`; the Handover dialog's rows, the
 // Activity Feed's entries, a Package's items and the notifications carry the same as `revisionBase`. All of it comes
 // through app.revision_chain and app.work_item_creation_date, which answer only for a reader who sees the Revision,
-// so no other Company reads any of it.
+// so no other Company reads any of it (V1): not K1, the Consultant, nor C2, a second Contractor. A Revision before its
+// first Submit is never a Vacancy: it is held inside its raiser, whose withdrawal cancels or discards it (RP-952).
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, expectHiddenFrom, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { ActivityFeed, HandoverStep, Notification, NotificationList, PackageDetail, WorkItemBoard, WorkItemList } from "@rabaed/domain";
+import type { ActivityFeed, HandoverStep, Notification, NotificationList, PackageDetail, ProjectVacancies, WorkItemBoard, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { all, bilingual, detail, memberOnProject, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { all, bilingual, detail, memberOnProject, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -26,9 +27,16 @@ let c1: Company;
 let own = ""; // C1's Participant.
 let engineer: { id: string; caller: Caller }; // C1 engineer: raises the MARs and their Revisions.
 let pm: { id: string; caller: Caller }; // C1 PM: Submits, and picks up the Revision in Internal Review.
+let pm2: { id: string; caller: Caller }; // C1's second PM: takes the PM's Step over when the PM's Trade narrows.
+let neverNumbered = ""; // C1's MAR Draft, never numbered and no Revision: "No number yet".
 let k1Company: Company;
 let k1Participant = "";
 let k1Manager: { id: string; caller: Caller }; // K1: issues the Codes.
+let c2Company: Company; // A second Contractor on the Project.
+let c2Participant = "";
+let c2Engineer: Caller;
+let c2Pm: Caller;
+let mechanical = "";
 let projectId = "";
 let electrical = "";
 let buildingA = "";
@@ -50,6 +58,7 @@ const cards = async (by: Caller) =>
   ((await ok(by.get(`/v1/projects/${projectId}/work-items/kanban`), 200)).json() as WorkItemBoard).columns.flatMap((c) => c.lanes.flatMap((l) => l.cards));
 const feed = async (by: Caller) => ((await ok(by.get(`/v1/projects/${projectId}/activity`), 200)).json() as ActivityFeed).entries;
 const notifications = async (by: Caller): Promise<Notification[]> => ((await ok(by.get("/v1/notifications"), 200)).json() as NotificationList).notifications;
+const readItem = (id: string) => async (by: Caller) => ((await by.get(`/v1/work-items/${id}`)).statusCode === 200 ? [{ id }] : []);
 const itemOf = (n: Notification) => ("workItemId" in n && n.workItemId !== null ? n : null);
 
 /** The Steps a removal from C1's Participant asks a new holder for (409 handover_needed), the removal left undone. */
@@ -76,8 +85,14 @@ beforeAll(async () => {
   pm = await memberOnProject(api, c1, own, ["project_manager"]);
   // Someone to hand each Step to, so a removal asks for a Handover rather than refusing.
   await projectMember(api, c1, own, ["engineer"]);
-  await projectMember(api, c1, own, ["project_manager"]);
+  pm2 = await memberOnProject(api, c1, own, ["project_manager"]);
   k1Manager = await memberOnProject(api, k1Company, k1Participant, ["manager"]);
+  mechanical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "ME", name: bilingual("Mechanical") })).json().id;
+  c2Company = await api.authorizedPerson();
+  c2Participant = await api.addParticipant(c1.caller, projectId, c2Company.company, "contractor");
+  await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
+  c2Engineer = await projectMember(api, c2Company, c2Participant, ["engineer"]);
+  c2Pm = await projectMember(api, c2Company, c2Participant, ["project_manager"]);
 
   // Two MARs, each closed at Code C and revised: one Revision stays a Draft, the other goes to Internal Review.
   for (const [key, title] of [["draft", "Cable trays"], ["review", "Switchgear"]] as const) {
@@ -89,6 +104,7 @@ beforeAll(async () => {
     bases[key] = (await detail(engineer.caller, id)).documentNumber!;
     revisions[key] = (await ok(engineer.caller.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
   }
+  neverNumbered = (await ok(engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Busbar", answers: { ...complete, trade: electrical, location: buildingA } }), 201)).json().id;
   await drainOutbox(worker);
   await take(engineer.caller, revisions.review, "send_for_review");
   await ok(pm.caller.post(`/v1/work-items/${revisions.review}/pick-up`));
@@ -111,6 +127,25 @@ describe("the item, its List row and Kanban card (RP-1314-1)", () => {
 
   it("is on no item with a number of its own", async () => {
     for (const r of (await list(engineer.caller)).filter((x) => x.documentNumber !== null)) expect(r.baseState, r.title).toBeUndefined(); // not hidden-from: a field of rows C1 reads
+  });
+});
+
+describe("another Contractor, C2 (RP-1314-1, RP-1314-2)", () => {
+  it("reads neither Revision, and no base number or state on any row, entry or notification it reads (V1)", async () => {
+    await expectHiddenFrom({ read: list, target: revisions.review, seenBy: [engineer.caller], hiddenFrom: [c2Engineer, c2Pm], label: "the List" });
+    await expectHiddenFrom({
+      read: async (by) => (await feed(by)).map((e) => ({ id: e.workItem.id })),
+      target: revisions.review,
+      seenBy: [engineer.caller],
+      hiddenFrom: [c2Engineer, c2Pm],
+      label: "the Activity Feed",
+    });
+    for (const by of [c2Engineer, c2Pm]) {
+      // not hidden-from: fields, on whatever rows, entries and notifications C2 does read
+      expect((await list(by)).some((r) => r.baseNumber !== undefined || r.baseState !== undefined)).toBe(false);
+      expect((await feed(by)).some((e) => e.workItem.revisionBase !== undefined)).toBe(false);
+      expect((await notifications(by)).some((n) => "revisionBase" in n && n.revisionBase !== undefined)).toBe(false);
+    }
   });
 });
 
@@ -139,6 +174,10 @@ describe("the Handover dialog (RP-1314-2)", () => {
   it("names each Revision by its base number and state when its holder is removed", async () => {
     const byEngineer = await handovers(c1.caller, own, engineer.id);
     expect(byEngineer.find((s) => s.item?.id === revisions.draft)?.item).toMatchObject({ documentNumber: null, revisionBase: draftLabel() });
+    // An item never numbered, not a Revision, still reads "No number yet": no base number.
+    const plain = byEngineer.find((s) => s.item?.id === neverNumbered)?.item;
+    expect(plain).toMatchObject({ documentNumber: null, title: "Busbar" });
+    expect(plain).not.toHaveProperty("revisionBase"); // not hidden-from: a field of an item C1 reads, which has no base
     const byPm = await handovers(c1.caller, own, pm.id);
     expect(byPm.find((s) => s.item?.id === revisions.review)?.item).toMatchObject({ documentNumber: null, revisionBase: reviewLabel() });
   });
@@ -173,9 +212,28 @@ describe("the notifications (RP-1314-2)", () => {
   });
 });
 
+describe("a notification about the Revision once its reader no longer sees it (RP-1314-2)", () => {
+  it("gains no base number or state", async () => {
+    // The PM's Trade narrowed to Mechanical: the Electrical Revision is out of their sight (V1), its notification kept.
+    // The PM's Step on it goes to the second PM (the Handover the narrowing asks for).
+    const narrowed = { trade: only(mechanical), location: all };
+    const asked = await c1.caller.request("PUT", `/v1/participants/${own}/members/${pm.id}/visibility`, narrowed);
+    expect(asked.statusCode, asked.body).toBe(409);
+    const picks = (asked.json() as { handovers: HandoverStep[] }).handovers.map((h) => ({ assignmentId: h.assignmentId, toMemberId: pm2.id }));
+    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm.id}/visibility`, { ...narrowed, handovers: picks }));
+    try {
+      await expectHiddenFrom({ read: readItem(revisions.review), target: revisions.review, seenBy: [engineer.caller], hiddenFrom: [pm.caller], label: "the Revision" });
+      // not hidden-from: a field, on the notification rows the PM still has
+      for (const n of (await notifications(pm.caller)).filter((x) => itemOf(x)?.workItemId === revisions.review)) expect(n).not.toHaveProperty("revisionBase");
+    } finally {
+      await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm.id}/visibility`, { trade: all, location: all }));
+    }
+  });
+});
+
 describe("once Submitted (RP-1314-3)", () => {
   beforeAll(async () => {
-    await take(pm.caller, revisions.review, "submit");
+    await take(pm2.caller, revisions.review, "submit");
     await drainOutbox(worker);
   });
 
@@ -183,7 +241,40 @@ describe("once Submitted (RP-1314-3)", () => {
     const d = await detail(engineer.caller, revisions.review);
     expect(d.documentNumber).toBe(`${bases.review} Rev 1`);
     expect(d.baseState).toBeUndefined(); // not hidden-from: a field of an item C1 reads, which now has its own number
-    for (const e of (await feed(engineer.caller)).filter((x) => x.workItem.id === revisions.review)) expect(e.workItem.revisionBase).toBeUndefined();
+    const entries = (await feed(engineer.caller)).filter((x) => x.workItem.id === revisions.review);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) expect(e.workItem.revisionBase).toBeUndefined(); // not hidden-from: a field, on entries C1 reads (counted above)
     for (const n of (await notifications(pm.caller)).filter((x) => itemOf(x)?.workItemId === revisions.review)) expect(n).not.toHaveProperty("revisionBase");
+  });
+});
+
+describe("the Vacancies list (no read changed: RP-952's withdrawal, pinned)", () => {
+  // C2's two Revisions not yet Submitted, one a Draft and one in Internal Review, then C2 withdrawn by the Host (C1).
+  const c2Revisions: string[] = [];
+
+  beforeAll(async () => {
+    for (const [title, send] of [["Chillers", false], ["Pumps", true]] as const) {
+      const id = (await ok(c2Engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }), 201)).json().id as string;
+      await attachDatasheet(c2Engineer, id);
+      await take(c2Engineer, id, "send_for_review");
+      await ok(c2Pm.post(`/v1/work-items/${id}/pick-up`));
+      await take(c2Pm, id, "submit");
+      await ok(k1Manager.caller.post(`/v1/work-items/${id}/pick-up`));
+      await take(k1Manager.caller, id, "revise_c", { remarks: "Resubmit" });
+      const rev = (await ok(c2Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
+      if (send) {
+        await take(c2Engineer, rev, "send_for_review");
+        await ok(c2Pm.post(`/v1/work-items/${rev}/pick-up`));
+      }
+      c2Revisions.push(rev);
+    }
+    expect((await detail(c2Engineer, c2Revisions[1]!)).baseState).toBe("internal_review");
+    await ok(c1.caller.post(`/v1/participants/${c2Participant}/withdraw`));
+  });
+
+  it("holds neither of a withdrawn raiser's Revisions not yet Submitted: they are cancelled or discarded, never vacant", async () => {
+    const { vacancies } = (await ok(c1.caller.get(`/v1/projects/${projectId}/vacancies`), 200)).json() as ProjectVacancies;
+    // Nothing else on this Project is held by C2, so its withdrawal leaves no Vacancy at all.
+    expect(vacancies).toEqual([]); // not hidden-from: the whole list, the Host Admin's own read; nothing else on the Project could be vacant
   });
 });

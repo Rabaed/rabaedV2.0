@@ -105,8 +105,12 @@ export function listNotifications(db: Db, memberId: string): Promise<Notificatio
       left join lateral app.notification_package(n.id) k on n.package_id is not null
       order by n.created_at desc, n.id desc
     `.execute(trx);
-    // A Revision not yet Submitted reads as its page does now (RP-1314), on the items these rows already name.
-    const bases = await revisionBases(trx, rows.flatMap((r) => (r.work_item_id !== null && r.document_number === null ? [r.work_item_id] : [])));
+    // A Revision not yet Submitted reads as its page does now (RP-1314), on the items these rows already name: one
+    // batched read, for the rows with no number that are a Revision (an original, revision 0, has no base).
+    const bases = await revisionBases(
+      trx,
+      rows.flatMap((r) => (r.work_item_id !== null && r.document_number === null && (r.revision_no ?? 0) > 0 ? [r.work_item_id] : [])),
+    );
     const { rows: count } = await sql<{ unread: number }>`
       select count(*)::int as unread from notification where read_at is null
     `.execute(trx);

@@ -848,6 +848,8 @@ describe("Search by the base number (RP-1300-2, RP-1300-4)", () => {
 // first Submit a Revision reads "<base> Rev n · Draft" or "· Internal Review". The api reads that from two existing
 // reads, app.revision_chain (the base) and app.work_item_creation_date (never left Draft or not), for the Activity Feed,
 // the Handover dialog and the notifications as for the item and the List. Both answer C1 only.
+// labelOf reads the two functions as the api's revisionBases does (query.ts), minus its filters on the base's number: here the
+// point is what each function answers to whom, not the api's shaping.
 describe("a Revision's base number and state before its first Submit, as the api reads them (RP-1314-1, RP-1314-2, RP-1314-3)", () => {
   let original = "";
   let reviewing = "";

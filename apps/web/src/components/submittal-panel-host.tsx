@@ -7,6 +7,7 @@ import {
   ErrorState,
   Outcome,
   RevisionDraftNumber,
+  revisionStateWord,
   StagePill,
   SubmittalPanel,
   SubmittalPanelFacts,
@@ -29,6 +30,7 @@ import {
   writeSubmittalPanelPreferences,
   type SubmittalPanelSizeLabels,
 } from "@rabaed/ui";
+import { useRevisionStateLabels } from "@/lib/revision-state-labels";
 import { useTranslations } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -175,7 +177,7 @@ export function SubmittalPanelHost({
   const position = submittalPanelPosition(order, shownId);
   const number = item ? submittalPanelNumber(item.documentNumber, item.revisionNo) : null;
   // Where a Revision not yet Submitted stands, after its base number (RP-1314): "Draft" or "Internal Review".
-  const revisionState = tList(item?.baseState === "internal_review" ? "revisionInternalReview" : "revisionDraft");
+  const revisionState = revisionStateWord(useRevisionStateLabels(), item?.baseState ?? "draft");
   const { shown: place, numbered: numberPlace, codes: placeCodes } = submittalPanelPlace(item?.location ?? null, filters.locations, locale);
   // The route strip and the Workflow map (RP-1064); the map also says which Review Code each Transition issues.
   const { route, workflow, openMap, map } = useSubmittalPanelRoute(item, locale, refreshKey);

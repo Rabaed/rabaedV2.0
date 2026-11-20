@@ -10,7 +10,7 @@ import {
   watchOutcomeNames,
   type Locale,
 } from "@rabaed/domain";
-import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, RevisionDraftNumber, SentBackNotice, SnagTypeChip, StagePill, stageColour, submittalPanelNumber } from "@rabaed/ui";
+import { AgeDots, cn, DocNo, Icon, Outcome, outcomesOfType, PackageChip, RevisionDraftNumber, revisionStateWord, SentBackNotice, SnagTypeChip, StagePill, stageColour, submittalPanelNumber } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
@@ -94,7 +94,10 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   // One Submittal view (RP-1237 row 1): a Submittal's own link lands on its List with the item open in the panel at Full.
   if (item.module === "submittals") return redirect({ href: itemLanding(item.projectId, item.id), locale });
   // Where a Revision not yet Submitted stands, after its base number (RP-1314): "Draft" or "Internal Review".
-  const revisionState = tViews(item.baseState === "internal_review" ? "list.revisionInternalReview" : "list.revisionDraft");
+  const revisionState = revisionStateWord(
+    { revisionDraft: tViews("list.revisionDraft"), revisionInternalReview: tViews("list.revisionInternalReview") },
+    item.baseState ?? "draft",
+  );
   const [suppliers, checklistTemplates] = await Promise.all([
     getSupplierChoices(item.projectId),
     getChecklistTemplateChoices(item.projectId, item.checklistCopies),
